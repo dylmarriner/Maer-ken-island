@@ -1,0 +1,48 @@
+[package]
+name = "mk_engine"
+version = "0.1.0"
+edition = "2021"
+authors = ["Maer'Ken Execution Team"]
+description = "Phase 2+ physical world engine for Marr'Kena MK-I simulation"
+
+[dependencies]
+mk_core = { path = "../mk_core" }
+mk_interventions = { path = "../mk_interventions" }
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+blake3.workspace = true
+bincode.workspace = true
+rand_chacha.workspace = true
+rand_core.workspace = true
+rand.workspace = true
+rusqlite.workspace = true
+aes-gcm.workspace = true
+aead.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+ureq.workspace = true
+
+[dev-dependencies]
+tempfile = "3"
+
+[[test]]
+name = "orbit"
+path = "tests/orbit.rs"
+
+[[test]]
+name = "insolation"
+path = "tests/insolation.rs"
+
+[[test]]
+name = "tides"
+path = "tests/tides.rs"
+
+[[bin]]
+name = "mk_phase7_artifacts"
+path = "src/bin/mk_phase7_artifacts.rs"
+
+[lints]
+workspace = true

@@ -1,0 +1,116 @@
+{
+  "schema_version": "2.0.0",
+  "agent_id": "template_intuitive_autonomous",
+  "vitals": {
+    "pulse": 68,
+    "bloodPressure": {
+      "systolic": 115,
+      "diastolic": 74
+    },
+    "spO2": 0.99,
+    "temperature": 36.6,
+    "glucose": 4.9,
+    "energy": 0.72,
+    "fatigue": 0.28,
+    "arousal": 0.52,
+    "tension": 0.32
+  },
+  "physiology": {
+    "hydration": 0.68,
+    "wastePressure": {
+      "bladder": 0.12,
+      "bowel": 0.18
+    },
+    "hygiene": 0.78,
+    "hormones": {
+      "testosterone": 0.85,
+      "estrogen": 0.68,
+      "progesterone": 0.62,
+      "oxytocin": 0.75,
+      "vasopressin": 0.70,
+      "dopamine": 0.80,
+      "serotonin": 0.65,
+      "cortisol": 0.42,
+      "adrenaline": 0.55,
+      "melatonin": 0.48
+    },
+    "metabolism": {
+      "glucose": 0.62,
+      "atp": 0.68,
+      "calorieIntake": 1850,
+      "calorieBurn": 1650
+    }
+  },
+  "appearance": {
+    "height": 165,
+    "weight": 58,
+    "build": "athletic",
+    "hairColor": "black",
+    "eyeColor": "brown"
+  },
+  "dna": {
+    "strandA": {
+      "openness": 0.8,
+      "extraversion": 0.7,
+      "plasticity": 0.75,
+      "DOPAMINE_BASE": 0.68,
+      "SEROTONIN_BASE": 0.52,
+      "NOREPINEPHRINE_BASE": 0.65,
+      "CORTISOL_SENS": 0.45,
+      "NOVELTY_SEEK": 0.75,
+      "RUMINATION": 0.48,
+      "EXEC_CONTROL": 0.78,
+      "THREAT_BIAS": 0.35,
+      "EPISODIC_GAIN": 0.72,
+      "MEM_DECAY": 0.28,
+      "TRAUMA_STICKY": 0.25,
+      "ATTACHMENT": 0.62,
+      "TRUST_GAIN": 0.58,
+      "TRUST_DECAY": 0.42,
+      "JEALOUSY": 0.31,
+      "FATIGUE_SENS": 0.38,
+      "PAIN_SENS": 0.35
+    },
+    "strandB": {
+      "openness": 0.75,
+      "extraversion": 0.65,
+      "plasticity": 0.70,
+      "DOPAMINE_BASE": 0.70,
+      "SEROTONIN_BASE": 0.50,
+      "NOREPINEPHRINE_BASE": 0.63,
+      "CORTISOL_SENS": 0.48,
+      "NOVELTY_SEEK": 0.85,
+      "RUMINATION": 0.45,
+      "EXEC_CONTROL": 0.75,
+      "THREAT_BIAS": 0.38,
+      "EPISODIC_GAIN": 0.68,
+      "MEM_DECAY": 0.30,
+      "TRAUMA_STICKY": 0.28,
+      "ATTACHMENT": 0.65,
+      "TRUST_GAIN": 0.60,
+      "TRUST_DECAY": 0.40,
+      "JEALOUSY": 0.33,
+      "FATIGUE_SENS": 0.31,
+      "PAIN_SENS": 0.27
+    },
+    "chromosomes": {
+      "pair23": {
+        "A": "X",
+        "B": "X"
+      }
+    },
+    "expression": {
+      "mode": "weighted",
+      "weights": {
+        "A": 0.52,
+        "B": 0.48
+      },
+      "rules": {
+        "NOVELTY_SEEK": "max",
+        "EXEC_CONTROL": "blend",
+        "ATTACHMENT": "max",
+        "TRUST_GAIN": "average"
+      }
+    }
+  }
+}

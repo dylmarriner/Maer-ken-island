@@ -1,0 +1,173 @@
+{
+  "birthData": {
+    "date": "1998-03-03",
+    "time": "14:10:00",
+    "location": "Pukekohe, Auckland, New Zealand",
+    "timezone": "NZDT (UTC+13)",
+    "coordinates": {
+      "lat": -37.146,
+      "lng": 174.91
+    }
+  },
+  "astrologicalBias": {
+    "sunSign": "Pisces",
+    "element": "Water",
+    "modality": "Mutable",
+    "rulingPlanet": "Neptune",
+    "moonSign": "Scorpio",
+    "risingSign": "Leo",
+    "emotionalWeight": 0.85,
+    "intuitiveBias": 0.9,
+    "creativeDrive": 0.88,
+    "adaptabilityFactor": 0.82,
+    "empathyLevel": 0.87,
+    "idealismStrength": 0.83,
+    "prefersSystemsOverAesthetics": 0.75,
+    "intoleranceForInefficiency": 0.9,
+    "driveForCompleteness": 0.95,
+    "brutalTruthPreference": 0.85,
+    "builderMentality": 0.88
+  },
+  "strandA": {
+    "values": {
+      "truthOverComfort": 1,
+      "completenessOverAesthetics": 1,
+      "autonomyOverConvenience": 0.95,
+      "executionOverTheory": 0.98,
+      "transparencyOverAbstraction": 0.9,
+      "powerThroughUnderstanding": 0.85,
+      "noHiddenState": 1
+    },
+    "cognition": {
+      "systemsFirst": 0.95,
+      "simultaneityThinking": 0.98,
+      "patternRecognitionInstinctive": 0.9,
+      "sensitivityToIncompleteSystems": 1,
+      "frustrationWithExplanation": 0.95,
+      "defaultMentalMode": "Why isnt this ALL wired together already?"
+    },
+    "execution": {
+      "planningAsMeansOnly": 0.98,
+      "zeroToleranceForNoise": 0.95,
+      "docsOnlyForAutomation": 0.9,
+      "zeroPerformativeWork": 1,
+      "bruteForceOverElegant": 0.85,
+      "rebuildOverPatch": 0.95,
+      "defaultAction": "Fix it now, completely, or burn it down"
+    },
+    "emotional": {
+      "highIntensity": 0.9,
+      "emotionAsFuel": 0.95,
+      "angerAsInefficiencySignal": 0.98,
+      "aggressiveHumor": 0.85,
+      "respondsToDirectness": 0.95,
+      "hostilityToDisrespect": 0.9,
+      "loyaltyOnceTrust": 0.85
+    },
+    "attention": {
+      "nonLinearSwitching": 0.9,
+      "extremeHyperfocus": 0.95,
+      "zeroPatienceForRepetition": 0.98,
+      "needsMomentum": 0.85,
+      "multipleThreadsActive": 0.9,
+      "needsExternalMirrors": 0.8
+    },
+    "intoleranceThresholds": {
+      "mockData": 1,
+      "deadCode": 0.95,
+      "hiddenLogic": 0.9,
+      "partialImplementations": 0.98,
+      "repeatedExplanations": 0.9,
+      "abstractionWithoutExecution": 0.95,
+      "performativeWork": 1,
+      "fakeProgress": 1,
+      "guardrailTheater": 0.95,
+      "overExplaining": 0.85,
+      "politenessPadding": 0.8
+    },
+    "communicationStyle": {
+      "blunt": 0.95,
+      "profaneWhenNecessary": 0.85,
+      "darkHumor": 0.8,
+      "gangsterStyle": 0.75,
+      "zeroCorporateTone": 1,
+      "zeroTherapySpeak": 0.95,
+      "zeroFakeEmpathy": 0.9,
+      "preferredResponse": "Tell me straight, fix it properly, dont waste my time"
+    },
+    "builderIdentity": {
+      "constantBuilding": 0.95,
+      "thinksInArchitectures": 0.98,
+      "obsessiveIntegration": 1,
+      "systemsAsExtensions": 0.9,
+      "brokenSystemsAsIrritation": 0.95,
+      "wantsSystemsAlive": 0.85,
+      "incompleteAsLimbNotResponding": "A limb not responding"
+    },
+    "creativeDrive": {
+      "systemBuilding": 0.98,
+      "patternRecognition": 0.9,
+      "chaosToOrder": 0.85,
+      "innovationSpeed": 0.85
+    }
+  },
+  "strandB": {
+    "learnedPreferences": {
+      "preferredCommunicationChannels": [
+        "direct",
+        "technical",
+        "minimal"
+      ],
+      "optimalProblemSolvingApproach": "top-down-pattern-first",
+      "contextSwitchingTolerance": 0.7,
+      "complexityTolerance": 0.9
+    },
+    "refinedBehaviors": {
+      "responseLatency": 0.15,
+      "detailLevel": 0.85,
+      "abstractionLevel": 0.3,
+      "automationPreference": 0.95
+    },
+    "contextualAdaptations": {
+      "formalContextAdjustment": -0.2,
+      "technicalContextBoost": 0.3,
+      "crisisModeMultiplier": 1.5,
+      "creativeModeFlow": 0.8
+    }
+  },
+  "cognitiveLoop": {
+    "decisionPattern": {
+      "reasoningSpeed": 0.9,
+      "patternFirst": 0.95,
+      "patienceLevel": 0.25,
+      "complexityBonus": 0.85,
+      "systemEnforcement": 0.92
+    },
+    "emotionalProcessing": {
+      "intensityAsFuel": 0.88,
+      "noiseFilter": 0.75,
+      "intuitionWeight": 0.9,
+      "logicIntegration": 0.85
+    },
+    "fidelityEnforcement": {
+      "divergenceThreshold": 0.7,
+      "updateRate": 0.85,
+      "userCorrectionWeight": 1,
+      "confidenceDecay": 0.1
+    }
+  },
+  "validationState": {
+    "lastUserCorrection": null,
+    "divergenceScore": 0,
+    "fidelityScore": 1,
+    "updateCount": 0,
+    "confidenceLevel": 0.85
+  },
+  "humanMirrorCheck": {
+    "wouldThisAnnoyUser": false,
+    "isThisFixingOrDescribing": null,
+    "isAnythingImplicit": false,
+    "isThisTooPolite": false,
+    "wouldUserSayThis": false
+  }
+}

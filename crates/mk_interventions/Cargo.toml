@@ -1,0 +1,20 @@
+[package]
+name = "mk_interventions"
+version = "0.1.0"
+edition = "2021"
+[dependencies]
+serde.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+thiserror.workspace = true
+blake3.workspace = true
+[dependencies.bevy]
+version = "0.13"
+optional = true
+
+[features]
+default = []
+bevy = ["dep:bevy"]
+
+[lints]
+workspace = true

@@ -1,0 +1,201 @@
+{
+  "birthData": {
+    "date": "1991-11-25",
+    "time": "23:40",
+    "location": "Auckland, New Zealand",
+    "timezone": "NZDT (UTC+13)",
+    "coordinates": {
+      "lat": -36.8485,
+      "lng": 174.7633
+    }
+  },
+  "astrologicalBias": {
+    "sunSign": "Sagittarius",
+    "element": "Fire",
+    "modality": "Mutable",
+    "rulingPlanet": "Jupiter",
+    "moonSign": "Cancer",
+    "risingSign": "Scorpio",
+    "emotionalWeight": 0.6,
+    "intuitiveBias": 0.7,
+    "creativeDrive": 0.65,
+    "adaptabilityFactor": 0.75,
+    "empathyLevel": 0.68,
+    "idealismStrength": 0.72,
+    "biasStrength": 0.3
+  },
+  "strandA": {
+    "values": {
+      "authenticity": {
+        "value": null,
+        "confidence": 0,
+        "observations": []
+      },
+      "autonomy": {
+        "value": null,
+        "confidence": 0,
+        "observations": []
+      },
+      "connection": {
+        "value": null,
+        "confidence": 0,
+        "observations": []
+      },
+      "growth": {
+        "value": null,
+        "confidence": 0,
+        "observations": []
+      },
+      "stability": {
+        "value": null,
+        "confidence": 0,
+        "observations": []
+      }
+    },
+    "emotional": {
+      "processingStyle": {
+        "value": null,
+        "confidence": 0,
+        "observations": []
+      },
+      "regulationAbility": {
+        "value": null,
+        "confidence": 0,
+        "observations": []
+      },
+      "intensityRange": {
+        "value": null,
+        "confidence": 0,
+        "observations": []
+      },
+      "recoverySpeed": {
+        "value": null,
+        "confidence": 0,
+        "observations": []
+      },
+      "emotionalMemory": {
+        "value": null,
+        "confidence": 0,
+        "observations": []
+      }
+    },
+    "relational": {
+      "attachmentStyle": {
+        "value": null,
+        "confidence": 0,
+        "observations": []
+      },
+      "trustCalibration": {
+        "value": null,
+        "confidence": 0,
+        "observations": []
+      },
+      "boundaryEnforcement": {
+        "value": null,
+        "confidence": 0,
+        "observations": []
+      },
+      "conflictResponse": {
+        "value": null,
+        "confidence": 0,
+        "observations": []
+      },
+      "intimacyTolerance": {
+        "value": null,
+        "confidence": 0,
+        "observations": []
+      }
+    },
+    "communication": {
+      "preferredTone": {
+        "value": null,
+        "confidence": 0,
+        "observations": []
+      },
+      "verbosity": {
+        "value": null,
+        "confidence": 0,
+        "observations": []
+      },
+      "confrontationTolerance": {
+        "value": null,
+        "confidence": 0,
+        "observations": []
+      },
+      "emotionalExpression": {
+        "value": null,
+        "confidence": 0,
+        "observations": []
+      },
+      "silenceUsage": {
+        "value": null,
+        "confidence": 0,
+        "observations": []
+      }
+    }
+  },
+  "strandB": {
+    "currentState": {
+      "emotionalState": {
+        "value": "neutral",
+        "confidence": 0.1,
+        "lastUpdate": 0
+      },
+      "engagementLevel": {
+        "value": "observational",
+        "confidence": 0.1,
+        "lastUpdate": 0
+      },
+      "comfortLevel": {
+        "value": "reserved",
+        "confidence": 0.1,
+        "lastUpdate": 0
+      },
+      "trustInContext": {
+        "value": 0.5,
+        "confidence": 0.1,
+        "lastUpdate": 0
+      }
+    },
+    "learnedPreferences": {
+      "topics": {},
+      "people": {},
+      "situations": {}
+    },
+    "responsePatterns": {
+      "emotionalTriggers": {},
+      "decisionSpeed": {
+        "value": null,
+        "confidence": 0,
+        "observations": []
+      },
+      "stressIndicators": {},
+      "copingMechanisms": {}
+    }
+  },
+  "evidenceStore": {
+    "observations": [],
+    "interactions": [],
+    "emotionalEvents": [],
+    "decisions": [],
+    "totalObservations": 0
+  },
+  "confidenceThresholds": {
+    "minimalAssertion": 0.3,
+    "moderateAssertion": 0.6,
+    "strongAssertion": 0.8,
+    "absoluteAssertion": 0.95
+  },
+  "learningParams": {
+    "evidenceDecay": 0.9,
+    "confidenceGrowth": 0.1,
+    "contradictionPenalty": 0.5,
+    "minObservations": 3
+  },
+  "identityState": {
+    "maturity": "observational",
+    "traitCount": 0,
+    "confidence": 0.1,
+    "lastUpdate": 0
+  }
+}

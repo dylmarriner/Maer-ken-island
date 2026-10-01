@@ -1,0 +1,108 @@
+{
+  "schema_version": "2.0.0",
+  "agent_id": "template_analytical_sensitive",
+  "biosys": {
+    "metabolic_baselines": {
+      "atp": 0.72,
+      "glucose": 0.68,
+      "oxygen": 0.95
+    },
+    "endocrine_baselines": {
+      "testosterone": 0.71,
+      "estrogen": 0.45,
+      "progesterone": 0.42,
+      "oxytocin": 0.58,
+      "vasopressin": 0.52,
+      "dopamine": 0.71,
+      "serotonin": 0.45,
+      "cortisol": 0.58,
+      "adrenaline": 0.48,
+      "melatonin": 0.35
+    },
+    "drive_sensitivities": {
+      "hunger": 0.65,
+      "thirst": 0.70,
+      "fatigue": 0.82,
+      "somnolence": 0.45,
+      "libido": 0.55
+    },
+    "processing_rates": {
+      "atp_consumption_rate": 0.085,
+      "glucose_atp_conversion": 0.92,
+      "oxygen_efficiency": 0.88,
+      "waste_production_rate": 0.06
+    }
+  },
+  "psychesys": {
+    "urge_processing": {
+      "biological_to_psychological_weight": 0.75,
+      "emotional_amplification": 1.15,
+      "cognitive_filter_strength": 0.42
+    },
+    "urge_sensitivities": {
+      "survival_urgency": 0.68,
+      "social_urgency": 0.85,
+      "achievement_urgency": 0.72,
+      "exploration_urgency": 0.58,
+      "reproduction_urgency": 0.45
+    },
+    "emotional_processing": {
+      "affect_intensity": 1.35,
+      "emotional_decay_rate": 0.28,
+      "mood_stability": 0.35
+    },
+    "memory_integration": {
+      "experience_weight": 0.82,
+      "trauma_amplification": 1.45,
+      "positive_bias": -0.15
+    }
+  },
+  "chaossys": {
+    "chaos_bounds": {
+      "survival_chaos": { "min": -0.12, "max": 0.18 },
+      "social_chaos": { "min": -0.25, "max": 0.35 },
+      "achievement_chaos": { "min": -0.15, "max": 0.28 },
+      "exploration_chaos": { "min": -0.08, "max": 0.42 },
+      "reproduction_chaos": { "min": -0.05, "max": 0.15 }
+    },
+    "randomness_profile": {
+      "entropy_level": 0.68,
+      "predictability": 0.35,
+      "creativity_factor": 1.25,
+      "stability_factor": 0.42
+    },
+    "chaos_responses": {
+      "stress_amplification": 0.85,
+      "opportunity_seeking": 0.72,
+      "risk_tolerance": 0.38,
+      "adaptation_rate": 0.58
+    }
+  },
+  "willsys": {
+    "willpower_profile": {
+      "baseline_threshold": 0.45,
+      "threshold_range": { "min": 0.22, "max": 0.78 },
+      "decay_rate": 0.085,
+      "recovery_rate": 0.12,
+      "fatigue_sensitivity": 0.72
+    },
+    "interrupt_processing": {
+      "urgency_weight": 0.82,
+      "chaos_weight": 0.35,
+      "context_modulation": 0.55,
+      "interrupt_cooldown": 450
+    },
+    "agency_patterns": {
+      "autonomy_drive": 0.78,
+      "compliance_tendency": 0.28,
+      "initiative_probability": 0.42,
+      "persistence_factor": 0.38
+    },
+    "cognitive_access": {
+      "attention_threshold": 0.52,
+      "working_memory_capacity": 4,
+      "processing_speed": 0.58,
+      "cognitive_flexibility": 0.45
+    }
+  }
+}

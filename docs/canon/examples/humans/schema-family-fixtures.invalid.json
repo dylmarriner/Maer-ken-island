@@ -1,0 +1,1322 @@
+{
+  "body": {
+    "vitals": {
+      "pulse": "high",
+      "bloodPressure": {
+        "systolic": 120.0,
+        "diastolic": 80.0
+      },
+      "spO2": 0.98,
+      "temperature": 36.7,
+      "glucose": 0.5,
+      "energy": 0.7,
+      "fatigue": 0.2,
+      "arousal": 0.5,
+      "tension": 0.2
+    },
+    "physiology": {
+      "hydration": 0.7,
+      "wastePressure": {
+        "bladder": 0.2,
+        "bowel": 0.1
+      },
+      "hygiene": 0.8,
+      "hormones": {
+        "cortisol": 0.3,
+        "oxytocin": 0.6,
+        "dopamine": 0.6,
+        "melatonin": 0.4,
+        "testosterone": 0.3,
+        "estrogen": 0.7
+      },
+      "metabolism": {
+        "glucose": 0.5,
+        "atp": 0.5,
+        "calorieIntake": 0.5,
+        "calorieBurn": 0.4
+      }
+    },
+    "appearance": {
+      "height": 172.0,
+      "weight": 68.0,
+      "build": "athletic",
+      "hairColor": "brown",
+      "eyeColor": "hazel"
+    },
+    "dna": {
+      "generation": 1,
+      "traitsEncoded": true
+    }
+  },
+  "runtime": {
+    "tick_rate_hz": "fast",
+    "last_tick": "2026-03-29T00:00:00Z"
+  },
+  "core_systems": {
+    "core_systems": {
+      "biosys": {
+        "metabolic_baselines": {
+          "atp": "invalid",
+          "glucose": 0.5,
+          "oxygen": 0.5
+        },
+        "endocrine_baselines": {
+          "testosterone": 0.3,
+          "estrogen": 0.7,
+          "progesterone": 0.5,
+          "oxytocin": 0.7,
+          "vasopressin": 0.4,
+          "dopamine": 0.6,
+          "serotonin": 0.5,
+          "cortisol": 0.3,
+          "adrenaline": 0.2,
+          "melatonin": 0.4
+        },
+        "drive_sensitivities": {
+          "hunger": 0.5,
+          "thirst": 0.5,
+          "fatigue": 0.5,
+          "somnolence": 0.5,
+          "libido": 0.5
+        },
+        "processing_rates": {
+          "atp_consumption_rate": 0.4,
+          "glucose_atp_conversion": 0.5,
+          "oxygen_efficiency": 0.6,
+          "waste_production_rate": 0.3
+        }
+      },
+      "psychesys": {
+        "urge_processing": {
+          "biological_to_psychological_weight": 0.5,
+          "emotional_amplification": 0.7,
+          "cognitive_filter_strength": 0.6
+        },
+        "urge_sensitivities": {
+          "survival_urgency": 0.4,
+          "social_urgency": 0.7,
+          "achievement_urgency": 0.6,
+          "exploration_urgency": 0.8,
+          "reproduction_urgency": 0.5
+        },
+        "emotional_processing": {
+          "affect_intensity": 0.8,
+          "emotional_decay_rate": 0.3,
+          "mood_stability": 0.5
+        },
+        "memory_integration": {
+          "experience_weight": 0.7,
+          "trauma_amplification": 0.4,
+          "positive_bias": 0.5
+        }
+      },
+      "chaossys": {
+        "chaos_bounds": {
+          "survival_chaos": {
+            "min": 0.0,
+            "max": 0.2
+          },
+          "social_chaos": {
+            "min": 0.0,
+            "max": 0.3
+          },
+          "achievement_chaos": {
+            "min": 0.0,
+            "max": 0.3
+          },
+          "exploration_chaos": {
+            "min": 0.0,
+            "max": 0.4
+          },
+          "reproduction_chaos": {
+            "min": 0.0,
+            "max": 0.2
+          }
+        },
+        "randomness_profile": {
+          "entropy_level": 0.3,
+          "predictability": 0.6,
+          "creativity_factor": 0.8,
+          "stability_factor": 0.5
+        },
+        "chaos_responses": {
+          "stress_amplification": 0.2,
+          "opportunity_seeking": 0.7,
+          "risk_tolerance": 0.4,
+          "adaptation_rate": 0.6
+        }
+      },
+      "willsys": {
+        "willpower_profile": {
+          "baseline_threshold": 0.4,
+          "threshold_range": {
+            "min": 0.2,
+            "max": 0.8
+          },
+          "decay_rate": 0.2,
+          "recovery_rate": 0.3,
+          "fatigue_sensitivity": 0.4
+        },
+        "interrupt_processing": {
+          "urgency_weight": 0.7,
+          "chaos_weight": 0.2,
+          "context_modulation": 0.6,
+          "interrupt_cooldown": 3
+        },
+        "agency_patterns": {
+          "autonomy_drive": 0.8,
+          "compliance_tendency": 0.2,
+          "initiative_probability": 0.7,
+          "persistence_factor": 0.6
+        },
+        "cognitive_access": {
+          "attention_threshold": 0.4,
+          "working_memory_capacity": 7,
+          "processing_speed": 0.7,
+          "cognitive_flexibility": 0.6
+        }
+      }
+    },
+    "architectural_laws": {
+      "authority_laws": {
+        "biological_authority": true,
+        "sensory_authority": true,
+        "digital_authority": false,
+        "cognitive_authority": true
+      },
+      "deterministic_principles": {
+        "state_identicality": true,
+        "fixed_timestep": 0.1,
+        "no_drift": true,
+        "update_order": [
+          "biosys",
+          "psychesys",
+          "chaossys",
+          "willsys"
+        ]
+      },
+      "fail_closed_principles": {
+        "dependency_failure": true,
+        "fail_dead_conditions": [],
+        "safe_failure_modes": []
+      },
+      "information_flow": {
+        "unidirectional_chains": [
+          "body->cognition"
+        ],
+        "no_manual_injection": true,
+        "flow_sequences": [
+          "body",
+          "emotion",
+          "thought"
+        ]
+      }
+    },
+    "deterministic_architecture": {
+      "tick_configuration": {
+        "tick_rate_ms": 100.0,
+        "monotonic_clock": true,
+        "state_recalculation": true,
+        "no_events": false
+      },
+      "mathematical_constants": {
+        "atp_decay_rate": 0.1,
+        "glucose_decay_rate": 0.1,
+        "oxygen_decay_rate": 0.1,
+        "atp_production_rate": 0.1,
+        "hormone_recovery_rate": 0.1,
+        "hormone_sensitivity": 0.1,
+        "endocrine_metabolic_cost": 0.1
+      },
+      "hard_constraints": {
+        "atp_minimum": 0.1,
+        "maximum_values": {},
+        "minimum_values": {},
+        "coupling_weights": {}
+      },
+      "state_machine_rules": {
+        "deterministic_transitions": true,
+        "state_validation": true,
+        "rollback_capability": true,
+        "state_hashing": true
+      }
+    },
+    "immutable_state": {
+      "snapshot_principles": {
+        "single_invocation": true,
+        "read_only": true,
+        "deep_freeze": true,
+        "immutable_hash": true
+      },
+      "data_integrity": {
+        "validation_checksums": true,
+        "corruption_detection": true,
+        "atomic_operations": true,
+        "transaction_isolation": true
+      },
+      "temporal_integrity": {
+        "timestamp_authority": true,
+        "monotonic_timestamps": true,
+        "time_drift_prevention": true,
+        "deterministic_timing": true
+      }
+    },
+    "system_dependencies": {
+      "dependency_graph": {
+        "biosys_dependencies": [],
+        "psychesys_dependencies": [
+          "biosys"
+        ],
+        "chaossys_dependencies": [
+          "psychesys"
+        ],
+        "willsys_dependencies": [
+          "chaossys"
+        ]
+      },
+      "failure_propagation": {
+        "cascade_prevention": true,
+        "isolation_boundaries": [],
+        "graceful_degradation": true,
+        "recovery_procedures": []
+      },
+      "resource_management": {
+        "memory_limits": {},
+        "cpu_allocation": {},
+        "resource_sharing": {},
+        "priority_levels": {}
+      }
+    }
+  },
+  "cognition": {
+    "memory_systems": {
+      "episodic_memory": {},
+      "semantic_memory": {},
+      "working_memory": {}
+    },
+    "attention_system": {
+      "attention_traits": {
+        "capacity": 0.7,
+        "focus": 0.65,
+        "distractibility": 0.45,
+        "multitasking": 0.42,
+        "mind_wandering": 0.58,
+        "restoration": 0.62
+      },
+      "attention_state": {
+        "current_focus": "design",
+        "focus_level": 0.7,
+        "cognitive_load": 0.5,
+        "fatigue": 0.2,
+        "arousal": 0.5,
+        "flow": 0.6
+      },
+      "attention_resources": {
+        "available": 0.8,
+        "allocated": [
+          "analysis"
+        ],
+        "reserved": 0.1,
+        "efficiency": 0.7
+      },
+      "attention_modes": {
+        "focused": {
+          "width": "narrow",
+          "depth": "deep",
+          "duration": 2.0,
+          "efficiency": 0.8
+        },
+        "diffuse": {
+          "width": "wide",
+          "depth": "light",
+          "duration": 1.0,
+          "efficiency": 0.5
+        },
+        "divided": {
+          "width": "multi",
+          "depth": "shallow",
+          "duration": 0.5,
+          "efficiency": 0.3
+        },
+        "monitoring": {
+          "width": "broad",
+          "depth": "medium",
+          "duration": 1.0,
+          "efficiency": 0.5
+        }
+      },
+      "distraction_factors": {
+        "internal": {
+          "emotions": 0.2,
+          "thoughts": 0.3,
+          "needs": 0.2,
+          "memories": 0.1
+        },
+        "external": {
+          "noise": 0.1,
+          "visual": 0.1,
+          "social": 0.2,
+          "notifications": 0.3
+        }
+      }
+    },
+    "consciousness": {
+      "self_awareness": {
+        "meta_cognition": 0.7,
+        "self_monitoring": 0.7,
+        "identity_continuity": 0.8,
+        "agency_recognition": 0.75,
+        "perspective_taking": 0.72
+      },
+      "intrinsic_worth": {
+        "self_value": 0.6,
+        "worth_stability": 0.58,
+        "external_validation_need": 0.42,
+        "self_compassion": 0.64,
+        "growth_mindset": 0.7
+      },
+      "fear_system": {
+        "fear_of_loss": 0.55,
+        "uncertainty_tolerance": 0.48,
+        "threat_detection": 0.44,
+        "anxiety_baseline": 0.31,
+        "coping_mechanisms": 0.61
+      },
+      "qualia_system": {
+        "sensory_richness": 0.73,
+        "emotional_depth": 0.82,
+        "temporal_flow": 0.58,
+        "meaning_making": 0.79,
+        "aesthetic_appreciation": 0.81
+      },
+      "internal_monologue": {
+        "verbal_thought": 0.75,
+        "visual_imagery": 0.64,
+        "inner_speech": 0.78,
+        "self_talk": 0.72,
+        "narrative_coherence": 0.68
+      }
+    },
+    "learning_adaptation": {
+      "neural_plasticity": {
+        "synaptic_plasticity": 0.7,
+        "structural_plasticity": 0.52,
+        "functional_plasticity": 0.66,
+        "critical_periods": [],
+        "plasticity_decline": 0.2
+      },
+      "learning_processes": {
+        "acquisition_rate": 0.71,
+        "retention_rate": 0.62,
+        "transfer_ability": 0.68,
+        "generalization": 0.64,
+        "specialization": 0.72
+      },
+      "adaptive_traits": {
+        "logic_weight": 0.7,
+        "efficiency_weight": 0.58,
+        "emotion_weight": 0.66,
+        "creativity_weight": 0.73,
+        "social_weight": 0.61
+      },
+      "experience_integration": {
+        "learning_moments": 0.72,
+        "insight_generation": 0.67,
+        "pattern_recognition": 0.81,
+        "error_correction": 0.7,
+        "wisdom_accumulation": 0.63
+      }
+    },
+    "social_cognition": {
+      "theory_of_mind": {
+        "mental_state_inference": 0.68,
+        "intention_recognition": 0.66,
+        "belief_desire_reasoning": 0.61,
+        "perspective_taking": 0.74,
+        "false_belief_understanding": 0.57
+      },
+      "social_perception": {
+        "emotion_recognition": 0.78,
+        "social_cue_interpretation": 0.64,
+        "trust_assessment": 0.58,
+        "social_hierarchy": 0.41,
+        "group_dynamics": 0.54
+      },
+      "social_interaction": {
+        "communication_style": "direct",
+        "conflict_resolution": 0.55,
+        "cooperation_tendency": 0.71,
+        "empathy_level": 0.82,
+        "social_anxiety": 0.36
+      },
+      "relationship_patterns": {
+        "attachment_style": "secure",
+        "intimacy_needs": 0.69,
+        "autonomy_balance": 0.73,
+        "jealousy_tendency": 0.28,
+        "commitment_style": "steady"
+      }
+    },
+    "creative_systems": {
+      "creative_thinking": {
+        "divergent_thinking": 0.8,
+        "convergent_thinking": 0.62,
+        "originality": 0.78,
+        "flexibility": 0.72,
+        "elaboration": 0.65
+      },
+      "problem_solving": {
+        "analytical_solving": 0.7,
+        "intuitive_solving": 0.74,
+        "creative_solving": 0.77,
+        "systematic_approach": 0.58,
+        "insight_generation": 0.76
+      },
+      "innovation": {
+        "novelty_seeking": 0.84,
+        "risk_tolerance": 0.48,
+        "experimentation": 0.71,
+        "paradigm_shift": 0.63,
+        "implementation_skill": 0.56
+      },
+      "aesthetic_creativity": {
+        "artistic_expression": 0.72,
+        "aesthetic_sensitivity": 0.83,
+        "pattern_beauty": 0.78,
+        "symbolic_thinking": 0.66,
+        "narrative_creativity": 0.74
+      }
+    },
+    "decision_making": {
+      "decision_weights": {
+        "logic_weight": 0.3,
+        "efficiency_weight": 0.2,
+        "emotion_weight": 0.2,
+        "creativity_weight": 0.15,
+        "social_weight": 0.15
+      },
+      "decision_processes": {
+        "rational_analysis": 0.68,
+        "intuitive_judgment": 0.71,
+        "emotional_guidance": 0.62,
+        "social_consideration": 0.64,
+        "ethical_reasoning": 0.75
+      },
+      "choice_architecture": {
+        "option_generation": 0.73,
+        "consequence_analysis": 0.66,
+        "probability_assessment": 0.52,
+        "value_calculation": 0.69,
+        "commitment_level": 0.61
+      },
+      "decision_context": {
+        "time_pressure": 0.34,
+        "cognitive_load": 0.47,
+        "emotional_state": 0.58,
+        "social_context": 0.63,
+        "risk_environment": 0.39
+      }
+    },
+    "cognition": {
+      "attention_focus": {
+        "primary": "analysis"
+      },
+      "active_thoughts": [],
+      "goal_stack": "not-an-array"
+    }
+  },
+  "emotion": {
+    "comprehensive_emotion_taxonomy": {
+      "basic_emotions": {
+        "joy": {
+          "intensity": 0.8,
+          "valence": 1.0,
+          "arousal": 0.6,
+          "dominance": 0.5
+        }
+      },
+      "light_emotions": {},
+      "shadow_aggression": {},
+      "shadow_resource_guarding": {},
+      "shadow_system_collapse": {},
+      "complex_emotions": {},
+      "social_emotions": {},
+      "cognitive_emotions": {},
+      "self_conscious_emotions": {},
+      "moral_emotions": {},
+      "aesthetic_emotions": {},
+      "existential_emotions": {},
+      "power_dynamics": {},
+      "sexual_pleasure": {},
+      "system_glitches": {},
+      "dark_triad_manifestations": {},
+      "physiological_emotions": {},
+      "social_bonding": {},
+      "achievement_emotions": {},
+      "cognitive_state_emotions": {},
+      "temporal_emotions": {}
+    },
+    "granular_emotions": {
+      "joy": 0.7,
+      "sadness": 0.1,
+      "anger": 0.1,
+      "fear": 0.2,
+      "disgust": 0.1,
+      "surprise": 0.3,
+      "love": 0.6,
+      "hate": 0.0,
+      "pride": 0.3,
+      "shame": 0.1,
+      "guilt": 0.1,
+      "jealousy": 0.1,
+      "envy": 0.1,
+      "contempt": 0.0,
+      "awe": 0.5,
+      "nostalgia": 0.4,
+      "hope": 0.7,
+      "despair": 0.0,
+      "curiosity": 0.8,
+      "boredom": 0.1,
+      "relief": 0.4,
+      "disappointment": 0.1,
+      "gratitude": 0.7,
+      "resentment": 0.0,
+      "admiration": 0.6,
+      "pity": 0.2,
+      "schadenfreude": 0.0,
+      "embarrassment": 0.1,
+      "triumph": 0.3,
+      "humiliation": 0.0,
+      "contentment": 0.6
+    },
+    "dark_triad": {
+      "narcissism": {},
+      "machiavellianism": {},
+      "psychopathy": {},
+      "overall_darkness": 0.12,
+      "active_malice": 0.03,
+      "vengeance_drive": 0.08,
+      "manipulation_strategies": [],
+      "vengeance_plans": []
+    },
+    "emotion": {
+      "current": "joyful",
+      "mood": {
+        "baseline": 0.5
+      },
+      "decay_rates": {}
+    }
+  },
+  "biology": {
+    "immune_system": {
+      "innate_immunity": {
+        "macrophages": 0.5,
+        "neutrophils": 0.5,
+        "nk_cells": 0.5,
+        "complement": 0.4,
+        "inflammation": 0.1
+      },
+      "adaptive_immunity": {
+        "t_cells": 0.5,
+        "b_cells": 0.5,
+        "memory_cells": 0.4,
+        "antibodies": {},
+        "vaccination_history": []
+      },
+      "immune_memory": {},
+      "system_stress": "low",
+      "autoimmunity_risk": 0.05,
+      "immune_cells": [],
+      "pathogens": [],
+      "immune_responses": []
+    },
+    "skin_system": {
+      "temperature": 36.8,
+      "cleanliness": 0.8,
+      "healing_rate": 0.5,
+      "protection": 0.7,
+      "integrity": 0.9,
+      "infection_risk": 0.1,
+      "healing_events": []
+    }
+  },
+  "sensory": {
+    "sensory_systems": {
+      "tactile_system": {
+        "sensors": [],
+        "pain_qualia": [],
+        "tactile_events": [],
+        "body_map": {},
+        "overall_pain_level": 0.0,
+        "dominant_sensation": "steady"
+      },
+      "proprioception_system": {
+        "body_schema": {
+          "head": {
+            "position": {
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
+            },
+            "orientation": {
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
+            }
+          },
+          "torso": {
+            "position": {
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
+            },
+            "orientation": {
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
+            }
+          },
+          "left_arm": {
+            "shoulder": {
+              "joint": "shoulder",
+              "position": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+              },
+              "angle": 0.0,
+              "target_angle": 0.0,
+              "velocity": 0.0,
+              "torque": 0.0,
+              "flexibility": 0.5,
+              "stress": 0.0
+            },
+            "elbow": {
+              "joint": "elbow",
+              "position": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+              },
+              "angle": 0.0,
+              "target_angle": 0.0,
+              "velocity": 0.0,
+              "torque": 0.0,
+              "flexibility": 0.5,
+              "stress": 0.0
+            },
+            "wrist": {
+              "joint": "wrist",
+              "position": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+              },
+              "angle": 0.0,
+              "target_angle": 0.0,
+              "velocity": 0.0,
+              "torque": 0.0,
+              "flexibility": 0.5,
+              "stress": 0.0
+            },
+            "hand": {
+              "position": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+              }
+            }
+          },
+          "right_arm": {
+            "shoulder": {
+              "joint": "shoulder",
+              "position": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+              },
+              "angle": 0.0,
+              "target_angle": 0.0,
+              "velocity": 0.0,
+              "torque": 0.0,
+              "flexibility": 0.5,
+              "stress": 0.0
+            },
+            "elbow": {
+              "joint": "elbow",
+              "position": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+              },
+              "angle": 0.0,
+              "target_angle": 0.0,
+              "velocity": 0.0,
+              "torque": 0.0,
+              "flexibility": 0.5,
+              "stress": 0.0
+            },
+            "wrist": {
+              "joint": "wrist",
+              "position": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+              },
+              "angle": 0.0,
+              "target_angle": 0.0,
+              "velocity": 0.0,
+              "torque": 0.0,
+              "flexibility": 0.5,
+              "stress": 0.0
+            },
+            "hand": {
+              "position": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+              }
+            }
+          },
+          "left_leg": {
+            "hip": {
+              "joint": "hip",
+              "position": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+              },
+              "angle": 0.0,
+              "target_angle": 0.0,
+              "velocity": 0.0,
+              "torque": 0.0,
+              "flexibility": 0.5,
+              "stress": 0.0
+            },
+            "knee": {
+              "joint": "knee",
+              "position": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+              },
+              "angle": 0.0,
+              "target_angle": 0.0,
+              "velocity": 0.0,
+              "torque": 0.0,
+              "flexibility": 0.5,
+              "stress": 0.0
+            },
+            "ankle": {
+              "joint": "ankle",
+              "position": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+              },
+              "angle": 0.0,
+              "target_angle": 0.0,
+              "velocity": 0.0,
+              "torque": 0.0,
+              "flexibility": 0.5,
+              "stress": 0.0
+            },
+            "foot": {
+              "position": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+              }
+            }
+          },
+          "right_leg": {
+            "hip": {
+              "joint": "hip",
+              "position": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+              },
+              "angle": 0.0,
+              "target_angle": 0.0,
+              "velocity": 0.0,
+              "torque": 0.0,
+              "flexibility": 0.5,
+              "stress": 0.0
+            },
+            "knee": {
+              "joint": "knee",
+              "position": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+              },
+              "angle": 0.0,
+              "target_angle": 0.0,
+              "velocity": 0.0,
+              "torque": 0.0,
+              "flexibility": 0.5,
+              "stress": 0.0
+            },
+            "ankle": {
+              "joint": "ankle",
+              "position": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+              },
+              "angle": 0.0,
+              "target_angle": 0.0,
+              "velocity": 0.0,
+              "torque": 0.0,
+              "flexibility": 0.5,
+              "stress": 0.0
+            },
+            "foot": {
+              "position": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+              }
+            }
+          }
+        },
+        "muscle_spindles": [],
+        "spatial_awareness": {
+          "body_center": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0
+          },
+          "balance": 0.7,
+          "coordination": 0.7,
+          "phantom_limb_risk": 0.0
+        }
+      },
+      "visual_system": {
+        "vision_range": 1.0,
+        "field_of_view": "wide",
+        "ray_count": 32,
+        "visual_objects": [],
+        "visual_acuity": 0.7,
+        "color_perception": 0.8,
+        "depth_perception": 0.7,
+        "motion_detection": 0.6
+      },
+      "auditory_system": {
+        "hearing_range": {
+          "min_frequency": 20.0,
+          "max_frequency": 20000.0
+        },
+        "sound_sources": [],
+        "hearing_sensitivity": 0.7,
+        "sound_localization": 0.6,
+        "speech_recognition": 0.8
+      },
+      "vestibular_system": {
+        "balance_sensitivity": 0.7,
+        "motion_sickness": 0.2,
+        "spatial_orientation": 0.7,
+        "gravity_detection": 0.8,
+        "angular_acceleration": 0.5,
+        "linear_acceleration": 0.5
+      },
+      "interoception_system": {
+        "internal_sensations": [],
+        "body_awareness": 0.7,
+        "internal_state_monitoring": 0.7,
+        "homeostatic_regulation": 0.6
+      },
+      "sensory_integration": {
+        "multimodal_processing": 0.72,
+        "sensory_filtering": 0.48,
+        "attention_modulation": 0.64,
+        "sensory_memory": 0.57,
+        "adaptation_level": 0.53
+      }
+    }
+  },
+  "reproductive": {
+    "reproductive_systems": {
+      "sexual_system": {
+        "libido": 0.4,
+        "attraction": {},
+        "bonding": {},
+        "arousal": 0.3,
+        "satisfaction": 0.4,
+        "frustration": 0.1,
+        "attraction_factors": {},
+        "hormonal_influence": 0.4,
+        "last_activity": 0.0
+      },
+      "reproduction_system": {
+        "status": "hibernating",
+        "fertility_level": 0.4,
+        "conception_probability": 0.2,
+        "gestation_week": 0,
+        "pregnancy_complications": [],
+        "fertility_cycle": {
+          "cycle_day": 14,
+          "phase": "ovulation",
+          "fertility_peak": true,
+          "hormone_levels": {
+            "estrogen": {
+              "current": 0.7,
+              "baseline": 0.5,
+              "production": 0.6,
+              "decay": 0.2
+            },
+            "progesterone": {
+              "current": 0.4,
+              "baseline": 0.5,
+              "production": 0.4,
+              "decay": 0.2
+            },
+            "lh": {
+              "current": 0.6,
+              "baseline": 0.4,
+              "production": 0.6,
+              "decay": 0.2
+            },
+            "fsh": {
+              "current": 0.5,
+              "baseline": 0.4,
+              "production": 0.5,
+              "decay": 0.2
+            }
+          },
+          "cervical_mucus": "egg_white",
+          "basal_body_temp": 36.7,
+          "ovulation_day": 14
+        },
+        "sexual_activities": []
+      },
+      "genetics_system": {
+        "genotype": {
+          "id": "geno-1",
+          "paternal_genome": {},
+          "maternal_genome": {},
+          "creation_timestamp": "2026-03-29T00:00:00Z",
+          "mutations": []
+        },
+        "gametes": [],
+        "conception_history": [],
+        "birth_records": [],
+        "genetic_markers": {},
+        "hereditary_conditions": []
+      },
+      "mate_selection": {
+        "preferences": {
+          "physical_traits": {},
+          "personality_traits": {},
+          "social_status": 0.3,
+          "intelligence": 0.5,
+          "age_preference": {
+            "min": 20.0,
+            "max": 45.0,
+            "ideal": 31.0
+          },
+          "genetic_compatibility": 0.4
+        },
+        "courtship_behaviors": [],
+        "attraction_triggers": [],
+        "relationship_history": []
+      }
+    }
+  },
+  "brain": {
+    "extreme_brain_detail": {
+      "layer_1_functional_regions": {
+        "prefrontal_cortex": {
+          "activation_level": 0.6,
+          "inputs": [],
+          "outputs": [],
+          "modulation": {},
+          "fatigue": 0.2
+        },
+        "limbic_system": {
+          "activation_level": 0.6,
+          "inputs": [],
+          "outputs": [],
+          "modulation": {},
+          "fatigue": 0.2
+        },
+        "amygdala": {
+          "activation_level": 0.4,
+          "inputs": [],
+          "outputs": [],
+          "modulation": {},
+          "fatigue": 0.1
+        },
+        "hippocampus": {
+          "activation_level": 0.5,
+          "inputs": [],
+          "outputs": [],
+          "modulation": {},
+          "fatigue": 0.1
+        },
+        "basal_ganglia": {
+          "activation_level": 0.5,
+          "inputs": [],
+          "outputs": [],
+          "modulation": {},
+          "fatigue": 0.1
+        },
+        "hypothalamus": {
+          "activation_level": 0.4,
+          "inputs": [],
+          "outputs": [],
+          "modulation": {},
+          "fatigue": 0.1
+        },
+        "brainstem": {
+          "activation_level": 0.5,
+          "inputs": [],
+          "outputs": [],
+          "modulation": {},
+          "fatigue": 0.1
+        }
+      },
+      "layer_2_population_dynamics": {
+        "populations": [],
+        "oscillations": [],
+        "network_state": {
+          "global_excitation": 0.5,
+          "global_inhibition": 0.5,
+          "synchrony_level": 0.4,
+          "stability": 0.6
+        }
+      },
+      "layer_3_neurotransmitter_modulation": {
+        "neurotransmitters": {},
+        "hormones": {},
+        "modulation_effects": {
+          "learning_rate_multiplier": "bad",
+          "emotional_bias": 0.4,
+          "cognitive_load_capacity": 0.7,
+          "decision_threshold": 0.5
+        }
+      },
+      "layer_4_memory_systems": {
+        "working_memory": {
+          "capacity": 7,
+          "current_items": [],
+          "rehearsal_active": false,
+          "interference_level": 0.2
+        },
+        "short_term_memory": {
+          "items": [],
+          "consolidation_threshold": 0.5,
+          "max_duration": 60.0
+        },
+        "long_term_semantic": {
+          "concepts": {},
+          "semantic_network_density": 0.5,
+          "knowledge_integration_level": 0.5
+        },
+        "episodic_memory": {
+          "episodes": [],
+          "autobiographical_timeline": [],
+          "memory_distortion_level": 0.1
+        },
+        "procedural_memory": {
+          "skills": {},
+          "habit_strengths": {},
+          "interference_vulnerability": 0.2
+        },
+        "memory_integration": {
+          "consolidation_active": true,
+          "sleep_dependent_consolidation": 0.6,
+          "emotional_memory_enhancement": 0.4,
+          "forgetting_curve_rate": 0.2,
+          "false_memory_susceptibility": 0.1
+        }
+      },
+      "layer_5_predictive_processing": {
+        "world_model": {
+          "predictions": [],
+          "belief_network": {},
+          "mental_models": []
+        },
+        "prediction_errors": [],
+        "learning_mechanisms": {
+          "learning_rate": 0.6,
+          "prediction_error_sensitivity": 0.5,
+          "belief_persistence": 0.5,
+          "novelty_seeking": 0.8,
+          "confirmation_bias": 0.2,
+          "overconfidence_correction": 0.4
+        },
+        "cognitive_biases": {
+          "attentional_bias": {},
+          "memory_bias": {},
+          "interpretation_bias": {},
+          "response_bias": {}
+        },
+        "consciousness_indicators": {
+          "global_workspace_activity": 0.6,
+          "metacognitive_monitoring": 0.6,
+          "self_awareness_level": 0.6,
+          "subjective_confidence": 0.6,
+          "agency_attribution": 0.6
+        }
+      },
+      "mesoscale_brain_engine": {
+        "region_dynamics": {},
+        "global_dynamics": {
+          "total_metabolic_rate": 0.5,
+          "global_coupling_strength": 0.5,
+          "synchrony_measure": 0.4,
+          "complexity_measure": 0.6,
+          "criticality_parameter": 0.5,
+          "metastability_index": 0.5
+        },
+        "equation_parameters": {
+          "timestep_ms": 10.0,
+          "stability_constraints": {
+            "max_activity_rate": 1.0,
+            "max_connectivity": 1.0,
+            "damping_coefficient": 0.1
+          }
+        }
+      },
+      "formal_predictive_processing": {
+        "hierarchical_models": {
+          "level_0_sensory": [],
+          "level_1_features": [],
+          "level_2_concepts": [],
+          "level_3_goals": []
+        },
+        "error_minimization": {
+          "free_energy_principle": true,
+          "prediction_error_weight": 0.6,
+          "precision_weighting": true,
+          "hierarchical_error_propagation": true,
+          "action_perception_coupling": 0.5
+        },
+        "active_inference": {
+          "policy_space": [],
+          "action_selection": {
+            "softmax_temperature": 0.5,
+            "exploitation_vs_exploration": 0.5,
+            "habit_bias": 0.3,
+            "goal_directed_weight": 0.7
+          },
+          "policy_update": {
+            "learning_rate": 0.5,
+            "eligibility_traces": true
+          }
+        },
+        "precision_attention": {
+          "precision_allocation": {},
+          "precision_learning": 0.5,
+          "expected_uncertainty": {},
+          "precision_gain": 0.5,
+          "attentional_blink_period": 0.2
+        }
+      },
+      "neurochemical_attractor_control": {
+        "neurochemical_state": {},
+        "attractor_modulation": {
+          "basin_depth_changes": {},
+          "basin_width_changes": {},
+          "basin_position_shifts": {},
+          "landscape_deformation_rate": 0.1,
+          "hysteresis_effects": {},
+          "critical_transitions": []
+        },
+        "chemical_interactions": {
+          "receptor_competition": {},
+          "enzymatic_interactions": {},
+          "synthesis_modulation": {},
+          "clearance_modulation": {},
+          "feedback_loops": []
+        }
+      },
+      "brain_dynamics_module": {
+        "brain_regions": [],
+        "developmental_timeline": {
+          "current_age": 34.0,
+          "current_stage": "adult",
+          "developmental_progress": 1.0,
+          "critical_periods": [],
+          "parameter_drift": {
+            "connectivity_evolution": {},
+            "time_constant_evolution": {},
+            "plasticity_evolution": {
+              "infant_value": 1.0,
+              "adult_value": 0.5,
+              "sensitive_period_preservation": 0.2
+            }
+          },
+          "hormonal_modulation": {
+            "pubertal_hormones": {
+              "testosterone_surge": 0.0,
+              "estrogen_surge": 0.0,
+              "growth_hormone_level": 0.0,
+              "timing": {
+                "onset_age": 12.0,
+                "peak_age": 16.0,
+                "decline_age": 20.0
+              }
+            },
+            "stress_hormones": {
+              "cortisol_baseline": 0.3,
+              "cortisol_reactivity": 0.4,
+              "hpa_axis_maturity": 1.0
+            }
+          }
+        },
+        "pathology_failure_modes": {
+          "pathological_attractors": [],
+          "trauma_spectrum": {
+            "acute_stress_reaction": {},
+            "ptsd_attractor": {},
+            "complex_trauma": {}
+          },
+          "depression_spectrum": {
+            "major_depression_attractor": {},
+            "dysthymia_attractor": {},
+            "seasonal_affective_pattern": {}
+          },
+          "psychosis_spectrum": {
+            "schizophrenia_attractor": {},
+            "bipolar_attractors": {}
+          }
+        },
+        "evolutionary_pressure": {
+          "fitness_function": {},
+          "selection_pressures": [],
+          "evolutionary_constraints": {},
+          "mating_strategies": {}
+        },
+        "integration_parameters": {
+          "integration_timestep": 0.1,
+          "simulation_speed": 1.0,
+          "energy_budget": 1.0,
+          "noise_correlation": {},
+          "global_stability": {}
+        },
+        "output_interfaces": {
+          "consciousness_stream": true,
+          "behavioral_output": true,
+          "physiological_output": true,
+          "emotional_output": true,
+          "cognitive_output": true
+        }
+      },
+      "integration": {
+        "body_brain_loop": {},
+        "emotion_cognition_loop": {},
+        "thought_action_loop": {}
+      },
+      "emergent_properties": {
+        "personality_traits": {},
+        "behavioral_patterns": [],
+        "cognitive_style": "intuitive",
+        "emotional_temperament": "sensitive",
+        "learning_style": "visual"
+      }
+    }
+  }
+}
