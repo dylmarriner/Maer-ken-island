@@ -8,7 +8,7 @@ This repository carries forward the canonical Maer-Ken human schema/runtime and 
 
 The top-level execution map is [`docs/IMPLEMENTATION_READY_ROADMAP.md`](docs/IMPLEMENTATION_READY_ROADMAP.md).
 
-It defines the locked NZ-scale single-island scope, phase order, agent execution contract, acceptance gates, and links to the five detailed implementation plans under `docs/superpowers/plans/`.
+It defines the locked scope (a uniquely shaped, New-Zealand-sized island on an Earth-like Marr'Kena, simulated realistically), the phase order (0, 0b, 0c, 1–4, 4b, 5), the agent execution contract, acceptance gates, and links to the nine detailed implementation plans under `docs/superpowers/plans/`.
 
 ## What is here
 
