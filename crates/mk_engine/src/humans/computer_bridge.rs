@@ -173,11 +173,10 @@ pub enum RetryPolicy {
 
 impl RetryPolicy {
     fn should_retry(self, err: &BridgeError) -> bool {
-        match (self, err) {
-            (_, BridgeError::RateLimitError) => true,
-            (RetryPolicy::Idempotent, BridgeError::TimeoutError) => true,
-            _ => false,
-        }
+        matches!(
+            (self, err),
+            (_, BridgeError::RateLimitError) | (RetryPolicy::Idempotent, BridgeError::TimeoutError)
+        )
     }
 }
 

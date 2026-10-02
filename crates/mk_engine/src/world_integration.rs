@@ -299,11 +299,6 @@ pub struct WorldState {
     pub metrics: WorldMetrics,
 }
 
-/// Hydrology spin-up when a world is built: one year of ten-day steps under
-/// the initial climate (see [`WorldState::new`]).
-const HYDROLOGY_SPIN_UP_STEPS: usize = 36;
-const HYDROLOGY_SPIN_UP_STEP_SECONDS: f64 = 10.0 * 86_400.0;
-
 /// Audit trail for deterministic verification
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuditTrail {

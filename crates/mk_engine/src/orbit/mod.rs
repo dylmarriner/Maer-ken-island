@@ -45,7 +45,7 @@ pub fn solve_kepler(
     eccentricity: f64,
     max_iterations: u32,
 ) -> Result<f64, KeplerError> {
-    if eccentricity < 0.0 || eccentricity >= 1.0 {
+    if !(0.0..1.0).contains(&eccentricity) {
         return Err(KeplerError::InvalidInput);
     }
 

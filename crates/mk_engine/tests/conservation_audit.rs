@@ -133,7 +133,6 @@ fn biomass_growth_draws_its_carbon_from_the_atmosphere() {
     let mut world = WorldState::new(Arc::new(CanonLocked::default()), [9u8; 32]);
     world.step_world(3600).unwrap();
     let before = mk_engine::conservation::measure(&world);
-    let tick = world.tick;
     world.step_world(30 * 86_400).unwrap();
     assert_conserved(&world, "one month");
     let after = mk_engine::conservation::measure(&world);

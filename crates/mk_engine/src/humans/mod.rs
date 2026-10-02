@@ -371,6 +371,9 @@ impl HumanSystem {
         use dialogue::ConversationRelationship as Relationship;
         use std::collections::{BTreeSet, HashMap};
 
+        /// (relationship rank, mutual approach, closeness, earlier first)
+        type PartnerScore = (u8, bool, i32, std::cmp::Reverse<usize>);
+
         /// Candidates examined per human; bounds the cost per human so a
         /// crowded cell cannot make pairing quadratic.
         const CANDIDATES_PER_CELL: usize = 8;
@@ -419,12 +422,7 @@ impl HumanSystem {
             }
             let a = &humans[a_index];
             let (row, col) = (a.position.row, a.position.col);
-            // (relationship rank, mutual approach, closeness, earlier first)
-            let mut best: Option<(
-                (u8, bool, i32, std::cmp::Reverse<usize>),
-                usize,
-                Relationship,
-            )> = None;
+            let mut best: Option<(PartnerScore, usize, Relationship)> = None;
             for (d_row, d_col) in [(0, 0), (-1, 0), (1, 0), (0, -1), (0, 1)] {
                 let Some(cell) = cells.get(&(row + d_row, col + d_col)) else {
                     continue;
@@ -2347,8 +2345,8 @@ mod tests {
 
         let mut seen = std::collections::HashSet::new();
         for event in system.conversation_log() {
-            assert!(seen.insert(event.participant_a_id.clone()), "{event:?}");
-            assert!(seen.insert(event.participant_b_id.clone()), "{event:?}");
+            assert!(seen.insert(event.participant_a_id), "{event:?}");
+            assert!(seen.insert(event.participant_b_id), "{event:?}");
         }
         // 51 approaching neighbours: 25 pairs, one person left over.
         assert_eq!(system.conversation_log().count(), 25);
@@ -2362,7 +2360,7 @@ mod tests {
             system.step_dialogue(&mk_core::rng::RngRegistry::new([8u8; 32]), 4);
             system
                 .conversation_log()
-                .map(|e| (e.participant_a_id.clone(), e.participant_b_id.clone()))
+                .map(|e| (e.participant_a_id, e.participant_b_id))
                 .collect::<Vec<_>>()
         };
         let first = run();

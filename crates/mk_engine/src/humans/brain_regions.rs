@@ -141,25 +141,6 @@ impl BrainRegionsSnapshot {
         }
     }
 
-    /// Mean regional activation of the resting defaults, the reference the
-    /// mesoscale layer scales metabolic power against.
-    pub(super) fn resting_mean_activation() -> f64 {
-        let d = Self::defaults();
-        [
-            &d.prefrontal_cortex,
-            &d.limbic_system,
-            &d.amygdala,
-            &d.hippocampus,
-            &d.basal_ganglia,
-            &d.hypothalamus,
-            &d.brainstem,
-        ]
-        .iter()
-        .map(|r| r.activation)
-        .sum::<f64>()
-            / 7.0
-    }
-
     pub(super) fn defaults() -> Self {
         Self {
             prefrontal_cortex: RegionState::from_trait(0.5, 0.0),
