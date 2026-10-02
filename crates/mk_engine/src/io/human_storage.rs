@@ -28,6 +28,9 @@ pub enum HumanStorageError {
     AlreadyExists(String),
     /// Invalid human ID (e.g. path traversal attempt)
     InvalidId(String),
+    /// A human with this agent id is already in the registry. Unlike every
+    /// other variant this means the human was **not** added.
+    DuplicateAgent(String),
 }
 
 impl std::fmt::Display for HumanStorageError {
@@ -38,6 +41,9 @@ impl std::fmt::Display for HumanStorageError {
             HumanStorageError::SerializationError(msg) => write!(f, "Serialization error: {}", msg),
             HumanStorageError::AlreadyExists(id) => write!(f, "Human already exists: {}", id),
             HumanStorageError::InvalidId(id) => write!(f, "Invalid human ID: {}", id),
+            HumanStorageError::DuplicateAgent(id) => {
+                write!(f, "Agent id already in the registry: {}", id)
+            }
         }
     }
 }

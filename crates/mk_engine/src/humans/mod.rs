@@ -229,15 +229,19 @@ impl HumanSystem {
 
     /// Create a human system whose population is persisted as individual
     /// profiles under `storage`, then seed the two canonical founding humans.
+    ///
+    /// `Err` means the storage could not be opened or reloaded at all. Once
+    /// it opens, the founders always exist: folder-write failures while
+    /// seeding them are returned alongside the system instead of discarding it.
     pub fn with_persistent_founders(
         storage: crate::io::HumanStorage,
-    ) -> Result<Self, crate::io::HumanStorageError> {
+    ) -> Result<(Self, Vec<crate::io::HumanStorageError>), crate::io::HumanStorageError> {
         let mut system = Self {
             registry: HumanRegistry::with_storage(storage)?,
             conversation_log: VecDeque::new(),
         };
-        system.registry.seed_founders()?;
-        Ok(system)
+        let seed_errors = system.registry.seed_founders().err().unwrap_or_default();
+        Ok((system, seed_errors))
     }
 
     /// Move the founding pair to the founders' estate, if one has been
@@ -853,7 +857,9 @@ impl HumanSystem {
                 "age": age,
                 "reason": reason,
             });
-            self.registry.record_event(&agent_id, &death_event);
+            if let Err(e) = self.registry.record_event(&agent_id, &death_event) {
+                tracing::warn!(agent = %agent_id, error = %e, "could not record death event");
+            }
         }
 
         for (initiator_id, target_id, conception) in intimacy_acts {
@@ -872,12 +878,22 @@ impl HumanSystem {
                 conception,
             );
         }
-        deliver_due_births(&mut self.registry, tick, grid_spec);
+        for e in deliver_due_births(&mut self.registry, tick, grid_spec) {
+            tracing::warn!(error = %e, "a newborn's folder could not be written; the child still exists");
+        }
         self.step_dialogue(rng_registry, tick);
 
         // Persist every living human's evolving state/experiences each tick
-        // (no-op when storage isn't configured for this registry).
-        self.registry.sync_to_storage();
+        // (no-op when storage isn't configured for this registry). A failed
+        // write never changes who exists or how the world evolves.
+        let sync_errors = self.registry.sync_to_storage();
+        if let Some(first) = sync_errors.first() {
+            tracing::warn!(
+                failed = sync_errors.len(),
+                error = %first,
+                "human storage sync failed"
+            );
+        }
     }
 }
 

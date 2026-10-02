@@ -694,18 +694,26 @@ impl WorldState {
     /// Enable persistent per-human profiles for this running world. This is
     /// deliberately separate from `new()` so deterministic tests and pure
     /// replay construction remain filesystem-free.
+    ///
+    /// `Err` means the storage could not be opened (including an unusable
+    /// storage key, which is refused rather than downgraded to plaintext) and
+    /// the world is left unchanged. Otherwise the founders exist and any
+    /// folder-write errors while seeding them are returned for the caller to
+    /// log.
     pub fn enable_persistent_humans(
         &mut self,
         base_path: impl Into<std::path::PathBuf>,
-    ) -> Result<(), crate::io::HumanStorageError> {
-        let storage = crate::io::HumanStorage::new(base_path);
-        self.humans_state = crate::humans::HumanSystem::with_persistent_founders(storage)?;
+    ) -> Result<Vec<crate::io::HumanStorageError>, crate::io::HumanStorageError> {
+        let storage = crate::io::HumanStorage::try_new(base_path)?;
+        let (humans_state, seed_errors) =
+            crate::humans::HumanSystem::with_persistent_founders(storage)?;
+        self.humans_state = humans_state;
         // Put the founders where their estate actually was built, rather
         // than at their canonical birthplace coordinates (which remain
         // profile truth for astrology/trait derivation).
         self.humans_state
             .place_founders_at_home(self.property_state.founders_estate_location());
-        Ok(())
+        Ok(seed_errors)
     }
 
     /// Attach a real `apps/computer-service` bridge so humans can select

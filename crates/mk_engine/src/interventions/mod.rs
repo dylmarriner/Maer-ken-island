@@ -1420,16 +1420,23 @@ fn spawn_human(
     }
     human.refresh_phase11_layers();
 
-    world
-        .humans_state
-        .registry
-        .add_human(human)
-        .map_err(|err| refused(format!("human storage rejected the new human: {err}")))?;
+    // The human exists as soon as it is added; a failed folder write is a
+    // warning, not a refusal. Only a duplicate id means it was not added.
+    let storage_warning = match world.humans_state.registry.add_human(human) {
+        Ok(()) => None,
+        Err(err @ crate::io::HumanStorageError::DuplicateAgent(_)) => {
+            return Err(refused(format!("the new human was not added: {err}")));
+        }
+        Err(err) => Some(err),
+    };
 
-    Ok(mutated(
-        format!("spawned human '{agent_id}' ({sex:?}) at cell ({row}, {col})"),
-        1,
-    ))
+    let mut summary = format!("spawned human '{agent_id}' ({sex:?}) at cell ({row}, {col})");
+    if let Some(err) = storage_warning {
+        summary.push_str(&format!(
+            " (warning: the human's storage folder could not be written: {err})"
+        ));
+    }
+    Ok(mutated(summary, 1))
 }
 
 fn construct_structure(
@@ -2210,6 +2217,42 @@ mod tests {
         assert!(
             summary.contains(&format!("({row}, {col})")),
             "summary should name the real cell: {summary}"
+        );
+    }
+
+    #[test]
+    fn spawn_human_succeeds_with_a_warning_when_its_folder_cannot_be_written() {
+        let mut w = world();
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("humans");
+        w.humans_state
+            .registry
+            .set_storage(crate::io::HumanStorage::new_unencrypted(&root))
+            .unwrap();
+        std::fs::remove_dir_all(&root).unwrap();
+        std::fs::write(&root, b"not a directory").unwrap();
+
+        let ex = InterventionExecutor::new(InterventionPermissions {
+            can_spawn_humans: true,
+            ..InterventionPermissions::default()
+        });
+        let before = w.humans_state.registry.count();
+        let outcome = ex
+            .execute(
+                &mut w,
+                &InterventionAction::SpawnHuman {
+                    template_id: "female".to_string(),
+                    location: Location::new(0.0, 0.0),
+                    profile: None,
+                },
+            )
+            .expect("a storage failure must not refuse the spawn");
+
+        assert_eq!(w.humans_state.registry.count(), before + 1);
+        assert!(
+            outcome.summary().contains("warning"),
+            "the storage error is reported: {}",
+            outcome.summary()
         );
     }
 
