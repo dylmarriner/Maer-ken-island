@@ -15,7 +15,7 @@
 ## Upstream canon problems (audited)
 
 - **Gravity vs humans.** Upstream: radius 1.9113e7 m with surface gravity 19.62 m/s² (2 g). The human runtime models Earth humans, who could not live normally at 2 g.
-- **Year vs orbit.** Upstream star mass 2.2270864e30 kg (1.12 M☉) and semi-major axis 1.75e11 m give a Kepler year of 37.74 Ms, not the canon 46.656 Ms (24% off).
+- **Year vs orbit.** Upstream star mass 2.2270864e30 kg (1.12 M☉) and semi-major axis 1.75e11 m give a Kepler year of 37.74 Ms, not the canon 46.656 Ms (24% off). Both moons' orbital distances also disagree with their periods (McKenz's 8.9e8 m implies a ~23-day period, not 45). Upstream mass and gravity do agree (18 Earth masses, 19.62 m/s²).
 - **Outer moon unstable.** At Earth-like planet mass, Hahn's 135-day orbit lies at 0.62 of the planet's Hill radius; prograde satellites are long-term stable only inside about 0.49 (Domingos, Winter & Yokoyama 2006).
 - **No intrinsic body clock.** The human circadian hormone follows `daylight_fraction` directly (`humans/neurochemistry.rs:73`), so humans would lock perfectly onto a 36-hour day. Real humans have an intrinsic period of about 24.2 h (Czeisler et al. 1999) and cannot entrain to days far outside roughly 23.5–24.7 h.
 - **Missing systems the spec promises or reality requires:** no earthquakes; human actions take no real time and cost no real energy; vehicles, power tools and computers run with no fuel or electricity.
@@ -32,15 +32,15 @@
 | Rotation period | 129,600 s (36 h) | kept; equator speed 927 m/s, centrifugal 0.46% g |
 | Obliquity | 27.0° | kept |
 | Star mass | 2.2271e30 kg (1.12 M☉) | kept |
-| Star luminosity | 6.017e26 W (1.57 L☉) | main-sequence L ∝ M⁴ |
+| Star luminosity | 5.1678e26 W (1.35 L☉) | kept from canon |
 | Insolation at orbit | 1,361 W/m² | Earth value |
-| Semi-major axis | 1.8757e11 m (1.254 AU) | √(L / 4πS) |
-| Orbital period | 41,865,187 s (323.0 local days, 484.6 Earth days) | Kepler's third law |
+| Semi-major axis | 1.7383e11 m (1.162 AU) | √(L / 4πS), then refined by Kepler from the whole-second period |
+| Orbital period | 37,349,219 s (288.19 local days, 432.3 Earth days) | Kepler's third law, rounded to whole seconds |
 | Equilibrium temperature | 254.6 K (Bond albedo 0.30) | Stefan–Boltzmann; greenhouse brings the mean near 288 K |
 | Surface pressure | 101,325 Pa | Earth |
 | Atmosphere | N₂ 78.08%, O₂ 20.95%, Ar 0.93%, CO₂ 280 ppm (pre-industrial) | Earth dry air |
-| McKenz | period 3,888,000 s (45 d), orbit 1.111e9 m (0.30 R_Hill) | kept; stable |
-| Hahn | period ≈ 6,912,000 s (80 d), orbit ≈ 1.6e9 m (≈0.44 R_Hill) | shortened from 135 d for stability; final value set by Task 1's stability check |
+| McKenz | period 3,888,000 s (30 local d = 45 Earth d), orbit 1.1156e9 m (0.33 R_Hill) | period kept; orbit recomputed (upstream's 8.9e8 m disagreed with its own period); equilibrium tide ≈ 1.8 m, about 3.3× Earth's |
+| Hahn | period 6,220,800 s (48 local d = 72 Earth d), orbit 1.5225e9 m (0.45 R_Hill) | shortened from 90 local days: at the canon period it would sit outside the stable half of the Hill sphere; 48 days keeps a margin and avoids the 2:1 and 3:2 resonances with McKenz (ratio 1.6) |
 
 **Declared exception.** A rocky planet of this radius would have a surface gravity of roughly 6–7 g; Earth gravity at this size implies a bulk density one third of Earth's, like the ice-rich moons Ganymede and Titan. The island keeps the owner's size and Earth gravity, and models the crust, mantle, heat flow and tectonics with Earth-like rock properties. This is the only place the simulation knowingly departs from physical consistency, and it is recorded first in the deviation register.
 
@@ -63,11 +63,11 @@
 - Produces: `CanonLocked::load(path: &Path) -> Result<CanonLocked, CanonError>` recomputing every derived value; `validate_physical_consistency(&CanonLocked) -> Vec<ConsistencyIssue>` checking: g = GM/R² (±0.1%), Kepler's third law for the planet and each moon (±0.5%), insolation = L/(4πa²) (±0.5%), each moon inside 0.49 R_Hill and outside the Roche limit, moons not in a destabilising mean-motion resonance (period ratio not within 2% of 2:1 or 3:2), and escape velocity sufficient to retain N₂/O₂ (Jeans parameter > 50 at a 1,000 K exobase).
 - Moon masses and radii: keep upstream values if defined; otherwise choose values giving tidal ranges of the same order as Earth's (documented derivation) and record them.
 
-- [ ] **Step 1:** Write tests: upstream default canon reports the gravity/year/Hahn issues; the island canon reports none except the declared density exception (reported as `Declared`, not an error); derived values match the table above within tolerance; loading is deterministic and the canon digest is stable.
-- [ ] **Step 2:** Run `cargo test -p mk_core --test island_canon`; expect FAIL.
-- [ ] **Step 3:** Implement loading and the validator; set Hahn's period to the longest period that passes the stability and resonance checks, rounded to whole days.
-- [ ] **Step 4:** Re-run, plus `cargo test -p mk_core --lib canon::`; expect PASS (upstream default canon behaviour unchanged).
-- [ ] **Step 5:** Commit `feat(canon): earth-like marr'kena island canon with consistency checks`.
+- [x] **Step 1:** Write tests: upstream default canon reports the year and moon-orbit issues; the island canon reports none except the declared density exception (reported as `Declared`, not an error); derived values match the table above within tolerance; loading is deterministic and the canon digest is stable.
+- [x] **Step 2:** Run `cargo test -p mk_core --test island_canon`; expect FAIL.
+- [x] **Step 3:** Implement loading and the validator; set Hahn's period with a stability margin (48 local days, 0.45 R_Hill) avoiding low-order resonances. Moon masses use upstream's mass ratios (0.0123, 0.005).
+- [x] **Step 4:** Re-run, plus `cargo test -p mk_core --lib canon::`; expect PASS (upstream default canon behaviour unchanged).
+- [x] **Step 5:** Commit `feat(canon): earth-like marr'kena island canon with consistency checks`.
 
 ### Task 2: Realism standard and deviation register
 
@@ -76,12 +76,12 @@
 - Create: `docs/island/DEVIATIONS.md`
 
 **Content:**
-- **Standard:** (1) every parameter cites a source or derivation; (2) every subsystem has a validation suite against real-world reference data (Task 3), translated for planetary differences (36-h day, 323-day year, larger radius) by physical scaling, not by copying Earth numbers; (3) no game shortcuts — no free regeneration, instant actions, teleporting, infinite fuel or unpowered machines; (4) conservation of energy, water, carbon, oxygen, nitrogen and phosphorus closes every step; (5) resolution limits are stated, not hidden.
+- **Standard:** (1) every parameter cites a source or derivation; (2) every subsystem has a validation suite against real-world reference data (Task 3), translated for planetary differences (36-h day, 288-day year, larger radius) by physical scaling, not by copying Earth numbers; (3) no game shortcuts — no free regeneration, instant actions, teleporting, infinite fuel or unpowered machines; (4) conservation of energy, water, carbon, oxygen, nitrogen and phosphorus closes every step; (5) resolution limits are stated, not hidden.
 - **Deviation register:** one row per known simplification — what reality does, what the model does, expected error, why, and the phase that could remove it. Seed rows: the density exception; daily-mean upstream climate (Phase 2 adds a diurnal cycle); parameterised convection at 12 km; species evolved for Marr'Kena rather than Earth species (validated by functional traits instead); industrial equipment (turbines, generators, rigs, refinery and gas-plant units) imported before the simulation began, with finite spares (Phase 4b); the computer service bridges to the real internet.
 
-- [ ] **Step 1:** Write both documents.
-- [ ] **Step 2:** Add a CI check that every row in `DEVIATIONS.md` names an owning phase.
-- [ ] **Step 3:** Commit `docs(island): realism standard and deviation register`.
+- [x] **Step 1:** Write both documents.
+- [x] **Step 2:** Add a check that every row in `DEVIATIONS.md` names an owning phase and a valid status — implemented as `crates/mk_core/tests/deviation_register.rs`, so it runs in the fast test tier and therefore in CI.
+- [x] **Step 3:** Commit `docs(island): realism standard and deviation register`.
 
 ### Task 3: Real-world reference data packs
 

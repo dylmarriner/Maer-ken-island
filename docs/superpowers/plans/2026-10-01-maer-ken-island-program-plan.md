@@ -81,7 +81,7 @@ Decided (2026-10-02):
 6. **Physical materials:** gathered wood, food, fibre, resin, coal and water move real carbon, oxygen and water; burning and human metabolism release CO₂; biotic resources regrow only as biomass regrows (Phase 3 Task 3).
 7. **Every resource and material:** real geology (rock types and ~20 deposit families) places gold, silver, platinum, base metals, gems including diamonds, crystals, stone, industrial minerals, salts and fuels; every resource has a node and every material an item (Phase 1 Task 5, Phase 3 Task 2). Diamonds require the island's ancient-crust fragment; the gallery shows which candidate islands have them.
 
-9. **Planet:** Earth-like Marr'Kena — keep the 19,113 km radius, 36-hour day, 27° tilt and two moons; Earth gravity, atmosphere and sunlight; orbit recomputed (year 323 local days ≈ 485 Earth days) and Hahn's orbit shortened to about 80 days for stability (Phase 0c). Declared exception: Earth gravity at this size implies one-third Earth density.
+9. **Planet:** Earth-like Marr'Kena — keep the 19,113 km radius, 36-hour day, 27° tilt and two moons; Earth gravity, atmosphere and sunlight; orbit recomputed (year 288 local days ≈ 432 Earth days) and Hahn's orbit shortened to 48 local days (72 Earth days) for stability (Phase 0c). Declared exception: Earth gravity at this size implies one-third Earth density.
 10. **Realism over convenience:** default resolution 2 km (land) / 12 km (air and sea), falling back to 4 km / 24 km only if benchmarks require it; earthquakes, a real day/night cycle, travelling weather systems, timed and energy-costed human work, and fuel/electricity for the estate.
 
 Open (defaults apply until decided):

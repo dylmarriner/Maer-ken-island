@@ -96,7 +96,35 @@ pub struct CanonLocked {
     pub cn_ratio_det: f64,      // 24.0
 }
 
+/// Why a canon file could not be loaded.
+#[derive(Debug)]
+pub enum CanonLoadError {
+    Io(std::io::Error),
+    Parse(serde_json::Error),
+}
+
+impl std::fmt::Display for CanonLoadError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Io(err) => write!(f, "could not read canon file: {err}"),
+            Self::Parse(err) => write!(f, "could not parse canon file: {err}"),
+        }
+    }
+}
+
+impl std::error::Error for CanonLoadError {}
+
 impl CanonLocked {
+    /// Load a canon from a JSON file in the same format `CanonLocked`
+    /// serializes to. Upstream code validates canon identity with
+    /// [`validator::validate_canon`], which accepts only the default canon;
+    /// an alternative canon (such as the island's) is checked with
+    /// [`validator::validate_physical_consistency`] instead.
+    pub fn load(path: &std::path::Path) -> Result<Self, CanonLoadError> {
+        let bytes = std::fs::read(path).map_err(CanonLoadError::Io)?;
+        serde_json::from_slice(&bytes).map_err(CanonLoadError::Parse)
+    }
+
     /// Whole seconds one `WorldState::step_world` tick advances when the
     /// caller does not choose its own step: the canon `dt_seconds` rounded
     /// up, never zero (the canon value is sub-second, and a zero-second step
