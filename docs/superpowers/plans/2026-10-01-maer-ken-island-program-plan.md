@@ -58,7 +58,7 @@
 - [ ] **Gate 2:** Phase 2 tests prove local ocean/atmosphere/hydrology coupling with explicit non-wrapping edge forcing and a zonal background calibrated against the upstream global model; preview emits temperature/rain/river maps.
 - [ ] **Gate 3:** Phase 3 tests prove the retained ecology, founders, property inventory, metric estate layout (computer room inside the house), dense local vegetation, computers and material economy operate on regional cells, with carbon, oxygen and water budgets closing every step; preview emits the estate plan and local tree map.
 - [ ] **Gate 4:** Phase 4 tests prove complete snapshot/replay determinism and scheduler cadence behaviour; every human has a folder; the owner can create a human from the dashboard and see them in the world and on disk.
-- [ ] **Gate 4b:** For one simulated local year the estate and town run on river hydro (with recorded low-flow backup), the refinery makes the island's fuel, the town's workers keep the plants running, every ledger closes (water, carbon, oxygen, methane, money), and Gem-D and Gem-K receive dividends equal to their shares of profit.
+- [ ] **Gate 4b:** For one simulated local year the estate and town run on river hydro (with recorded low-flow backup), the refinery makes the island's fuel, the town's workers keep the plants running and are paid every 14 roster days, the town is fed from its own farms and fishery through the supermarket, houses are built from its own timber, every ledger closes (water, carbon, oxygen, methane, money), and Gem-D and Gem-K receive dividends equal to their shares of profit.
 - [ ] **Gate 5:** Phase 5 tests/benchmarks prove the regional app renders/inspects the retained world and normal execution no longer depends on planetary-only modules.
 
 ## Test tiers
@@ -86,7 +86,7 @@ Decided (2026-10-02):
 
 Open (defaults apply until decided):
 
-- **Industry and town (Phase 4b):** 25 kW house micro-hydro then 2 MW town hydro; 3-well oil and gas field; ~500 bbl/day modular refinery run in campaigns; gas plant; ~150-person founding town (operators, electricians, mechanics, drillers, refinery operators, farmers, fishers, store-keeper, nurse, teacher and families); island dollar; Gem-D and Gem-K own every enterprise 50/50; cost + 20% pricing; 50% of profit paid out quarterly.
+- **Industry and town (Phase 4b):** 25 kW house micro-hydro then 2 MW town hydro; 3-well oil and gas field; ~500 bbl/day modular refinery run in campaigns; gas plant; ~200-person founding town (plant, field and refinery crews; farmers, fishers, butcher, baker and supermarket staff; forestry crew, sawmill hands and builders; nurse, teacher and families); island dollar; Gem-D and Gem-K own every enterprise 50/50 (Gem Hydro, Gem Petroleum, Gem Foods, Gem Supermarket, Gem Forestry, Gem Construction, Gem Housing); workers paid every 14 roster days for hours worked; cost + 20% pricing; 50% of profit paid out quarterly.
 - **Estate energy:** default one 10 kW diesel generator, 2,000 L diesel, 400 L petrol, 5 kW rooftop solar and a 10 kWh battery (Phase 3 Task 4b).
 - **Performance targets:** default at least one simulated day per real minute headless, and real time with the UI open (Phase 5 Task 6).
 

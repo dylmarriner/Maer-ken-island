@@ -507,10 +507,12 @@ larger hydro plant on the same river later powers a town. Output follows river d
 falls in drought and leaves an environmental flow in the river. Where the island's geology holds a
 petroleum basin, an oil and gas field feeds a small modular refinery and a gas plant that make the
 island's petrol, diesel, kerosene and LPG; production declines as the reservoir is drawn down, and
-flaring, combustion and methane leaks are booked against the climate. A founding town houses the
-people who operate and maintain these plants and feed the community — every one a complete human
+flaring, combustion and methane leaks are booked against the climate. Farms, an inshore fishery, food processing and a supermarket feed the island; forestry on a
+sustainable harvest, a sawmill and a building company supply and build its houses. A founding town
+houses the people who operate and maintain all of this — every one a complete human
 with their own folder — working real shifts under their own decision-making. Money is conserved and
-double-entry; the enterprises sell electricity and fuel, pay wages and costs, and pay their profits
+double-entry; the enterprises sell electricity, fuel, food, timber and housing, pay every worker
+for the hours they work every 14 roster days, pay their costs, and pay their profits
 to their owners, Gem-D and Gem-K. Equipment that cannot be manufactured on the island (turbines,
 generators, rigs, refinery units) exists from the start as imported before the simulation began,
 with finite spares; this is a declared deviation.

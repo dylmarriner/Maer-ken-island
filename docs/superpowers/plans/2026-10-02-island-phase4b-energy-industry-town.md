@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** A river beside the estate drives a hydro plant that powers the house and later a town; an oil and gas field, an oil refinery and a gas processing plant make the island's fuel; a town houses the people who run them; and an economy with money, wages, prices and ownership pays Gem-D and Gem-K the profits.
+**Goal:** A river beside the estate drives a hydro plant that powers the house and later a town; an oil and gas field, an oil refinery and a gas processing plant make the island's fuel; farms, a fishery, food processing and a supermarket feed the island; forestry, a sawmill and a building company supply and build its houses; a town houses the people who run all of it; and an economy with money, wages, prices and ownership pays every worker and pays Gem-D and Gem-K the profits.
 
 **Owner decisions (2026-10-02):** river with hydro by the estate, powering the house and eventually a town; oil production, an oil refinery and a gas plant for fuel; houses and humans to operate and maintain them; Gem-D and Gem-K own the enterprises and receive the profit.
 
@@ -29,16 +29,18 @@
 | Item | Default | Basis |
 |---|---|---|
 | House hydro (stage 1) | run-of-river micro-hydro, 25 kW, Pelton or Turgo by head | estate peak load ~10–15 kW plus margin |
-| Town hydro (stage 2) | small hydro on the same river, 2 MW, built when town peak demand exceeds 80% of stage 1 + backup | ~150-person town with workshops and refinery loads |
+| Town hydro (stage 2) | small hydro on the same river, 2 MW, built when town peak demand exceeds 80% of stage 1 + backup | ~200-person town with workshops, sawmill, food processing, refrigeration and refinery loads |
 | Environmental flow | ≥ 30% of mean discharge always left in the river | common minimum-flow practice |
 | Oil field | 3 producing wells, separator, storage tanks, flowline to the refinery | smallest viable development |
 | Refinery | skid-mounted atmospheric distillation unit, ~500 bbl/day nameplate, plus a small catalytic reformer for petrol octane | smallest real modular refineries |
 | Gas plant | separation of methane, LPG (propane/butane) and condensate; methane to a gas-fired backup generator and town supply; LPG bottled | |
-| Town | ~150 people in ~45 households: plant operators, electricians, mechanics, drillers and field crew, refinery operators, farm workers, fishers, a store-keeper, a nurse and a teacher, with spouses and children | staffing from reference tables (Task 1) |
+| Town | ~200 people in ~60 households: plant operators, electricians, mechanics, drillers and field crew, refinery operators; farmers, farm hands, fishers, a butcher, a miller/baker, supermarket manager and staff; forestry crew, sawmill hands, builders, carpenters, a plumber; a nurse and a teacher; with spouses and children | staffing from reference tables (Task 1) |
+| Food | mixed farm (grain, vegetables, orchard, pasture with sheep and cattle, dairy, poultry) sized to the town's energy and protein needs, an inshore fishing boat, abattoir/butchery, mill and bakery, dairy shed, supermarket | ~2,300 kcal and ~60 g protein per person per day |
+| Timber | forestry crew (chainsaws, skidder, log truck) on a sustainable-yield harvest plan with replanting, sawmill (logs → framing, weatherboards, flooring; offcuts and sawdust → firewood and boiler fuel) | |
 | Currency | island dollar, integer cents | |
 | Shares | Gem-D 50%, Gem-K 50% of every enterprise | owner decision |
 | Prices | cost-based: levelised cost + 20% margin, reviewed each local month | |
-| Wages | relative occupational wage ratios from the reference labour pack, scaled so a full-time wage covers a household's food, fuel and electricity | |
+| Wages | relative occupational wage ratios from the reference labour pack, scaled so the lowest full-time wage covers a household's food, rent, fuel and electricity with a margin; paid every 14 roster days for hours actually worked | |
 
 ---
 
@@ -50,7 +52,7 @@
 - Test: `crates/mk_engine/tests/industry_sizing.rs`
 
 - [ ] **Step 1:** Assemble cited reference values: turbine efficiency curves by type (Pelton, Turgo, Francis, Crossflow, Kaplan) and head range; penstock friction (Darcy–Weisbach); oil reservoir recovery factors and Arps decline parameters; crude assays (product yields for light and medium crude); refinery energy use and emissions per barrel; gas composition and processing yields; staffing per plant type and size; occupational wage ratios; household electricity, cooking and transport fuel demand.
-- [ ] **Step 2:** Implement `size_plants(demand, river_reach, petroleum_deposit) -> PlantDesign` choosing equipment from the reference tables; test that the defaults above fall out for a ~150-person town.
+- [ ] **Step 2:** Implement `size_plants(demand, river_reach, petroleum_deposit) -> PlantDesign` choosing equipment from the reference tables; test that the defaults above fall out for a ~200-person town.
 - [ ] **Step 3:** Commit `feat(industry): reference data and plant sizing`.
 
 ### Task 2: River-side estate and hydro sites
@@ -128,7 +130,7 @@
 - Test: `crates/mk_engine/tests/industry_jobs.rs`
 
 **Interfaces:**
-- Produces: `TradeQualification::{PlantOperator, Electrician, Mechanic, Driller, WellServiceHand, ProcessOperator, Farmer, Fisher, StoreKeeper, Nurse, Teacher, Labourer}` with proficiency (0–1) that grows with practice; learning speed scales with the upstream `SkillMatrix` aptitudes.
+- Produces: `TradeQualification::{PlantOperator, Electrician, Mechanic, Driller, WellServiceHand, ProcessOperator, Farmer, FarmHand, DairyHand, Fisher, Butcher, Baker, RetailWorker, StoreManager, Forester, ChainsawOperator, SawmillHand, Builder, Carpenter, Plumber, Nurse, Teacher, Labourer}` with proficiency (0–1) that grows with practice; learning speed scales with the upstream `SkillMatrix` aptitudes.
 - Produces: `Job { employer, role, qualification, shift: ShiftPattern, wage_cents_per_hour, workplace }`. Shifts run on a 24-hour human roster, not the 36-hour sun, because human body clocks are ~24.2 h (Phase 0c); night shifts carry the realistic fatigue cost the circadian model produces.
 - Work is a real upstream action: a human goes to work when their own decision-making chooses it (pay, obligation, needs, personality), travels there (Phase 3 labour), performs timed tasks (operate, inspect, maintain, repair) that change plant condition and output, and can be late, absent, sick or quit.
 - Maintenance: plants request work orders when condition falls; qualified workers complete them using spare parts; unqualified workers take longer and make errors at reference rates.
@@ -146,13 +148,37 @@
 
 **Interfaces:**
 - Produces: double-entry `Ledger` of `Account { owner: Human | Enterprise, balance_cents }` and `Transaction { tick, from, to, amount_cents, memo }`; total money is constant except explicit issuance at scenario start (documented initial balances).
-- Produces: `Enterprise { name, shareholders: Vec<(agent_id, share)>, assets, accounts, price_list, payroll }` for **Gem Hydro** (electricity) and **Gem Petroleum** (oil, gas, refinery, fuel depot), each owned 50/50 by Gem-D and Gem-K; plus a **town store** and **farm/fishery** enterprises (default: also owned by Gem-D and Gem-K, owner to confirm) so food reaches the town.
-- Each local month: meters bill households and businesses for kWh; the depot bills fuel at the pump; payroll pays wages; costs (spare parts, materials) are booked; profit = revenue − costs; a dividend policy (default: pay out 50% of profit each local quarter, retain the rest) credits Gem-D's and Gem-K's accounts by share.
+- Produces: `Enterprise { name, shareholders: Vec<(agent_id, share)>, assets, accounts, price_list, payroll }` for **Gem Hydro** (electricity), **Gem Petroleum** (oil, gas, refinery, fuel depot), **Gem Foods** (farm, fishery, abattoir, mill, bakery, dairy), **Gem Supermarket** (retail), **Gem Forestry** (forest and sawmill), **Gem Construction** (builders) and **Gem Housing** (owns the town houses and collects rent), each owned 50/50 by Gem-D and Gem-K by default (owner to confirm per enterprise). Enterprises trade with each other at their price lists (the farm sells to the supermarket, the sawmill to the builders, everyone buys electricity and fuel).
+- **Pay:** each job records a timesheet from actual attendance (Task 6); every 14 roster days payroll pays each worker hours worked × wage (overtime at 1.5×, paid sick leave and annual leave per a default employment policy the owners can change) into the worker's own account and writes a payslip event to their folder. If an enterprise cannot cover payroll it borrows from Gem-D's and Gem-K's accounts (owner approval command) or pays late, and workers' decisions react to late or missing pay.
+- Each local month: meters bill households and businesses for kWh; the depot bills fuel at the pump; Gem Housing charges rent; costs (spare parts, materials, purchases from other enterprises) are booked; profit = revenue − costs; a dividend policy (default: pay out 50% of profit each local quarter, retain the rest) credits Gem-D's and Gem-K's accounts by share.
 - Humans buy food, fuel, LPG and electricity with their money through their own decisions; a household that cannot pay is disconnected after a grace period (owners may change the policy).
 
-- [ ] **Step 1:** Tests: every transaction balances and total money is conserved; a month of operation produces correct bills from meter readings; dividends equal profit × payout × share; Gem-D and Gem-K's balances rise when the enterprises are profitable and fall when they lose money; a worker paid wages buys food at the store; disconnection happens only after the grace period.
+- [ ] **Step 1:** Tests: every transaction balances and total money is conserved; a month of operation produces correct bills from meter readings; dividends equal profit × payout × share; Gem-D and Gem-K's balances rise when the enterprises are profitable and fall when they lose money; a worker is paid exactly hours × wage (with overtime and leave) every 14 roster days and a payslip appears in their folder; the lowest full-time wage covers the reference household basket at default prices; a worker paid wages buys food at the supermarket; disconnection happens only after the grace period.
 - [ ] **Step 2:** Implement; run `cargo test -p mk_engine --test island_economy`; expect PASS.
 - [ ] **Step 3:** Commit `feat(economy): money, enterprises and owner profits`.
+
+### Task 7b: Food and timber supply chains
+
+A supermarket sells food; it does not make it. With no imports, every calorie the town eats and every board in its houses must be grown, caught, cut and processed on the island.
+
+**Files:**
+- Create: `crates/mk_engine/src/regional/industry/{farm.rs,fishery.rs,food_processing.rs,supermarket.rs,forestry.rs,sawmill.rs,construction.rs}`
+- Modify: `crates/mk_engine/src/materials/catalogue.rs` (Phase 3 Task 2: grain, flour, bread, vegetables, fruit, milk, cheese, eggs, mutton, beef, chicken, fish, logs, sawn timber, weatherboards, firewood; crop seed and livestock as stock)
+- Test: `crates/mk_engine/tests/food_chain.rs`, `crates/mk_engine/tests/timber_chain.rs`
+
+**Interfaces:**
+- **Farm:** fields and pasture on buildable cells near the town. Crop growth from the Phase-2 climate (temperature, rainfall, sunlight over the 36-hour day and 323-day year) using crop growth-degree-day and water-stress models from reference data; sowing and harvest are timed labour; yields per hectare within reference ranges; soil nutrients deplete and need rotation or manure. Livestock are real animals with feed (pasture biomass), growth, breeding and slaughter weights from reference data; dairy cows milked twice a roster day. Farm carbon, nitrogen and water go through the Phase-3 ledgers.
+- **Fishery:** an inshore boat with a crew; catch per trip from the Phase-3 marine species populations and fishing effort (catch-per-unit-effort), burning diesel; overfishing depletes stocks.
+- **Processing:** abattoir/butchery (carcass → cuts by reference yields), mill and bakery (grain → flour → bread), dairy (milk → milk, butter, cheese); each a workplace with jobs and electricity load.
+- **Supermarket:** stock of every food item with quantity, purchase cost, shelf price and shelf life; refrigerated and frozen stock spoils if the power fails; reorders from Gem Foods when stock is low; households buy through their own decisions (Task 7); unsold food past its date becomes waste (detritus carbon).
+- **Forestry:** a harvest plan whose annual cut does not exceed the forest's regrowth (sustainable yield from Phase-3 biomass and NPP); felling is timed labour with chainsaws (fuel) and a skidder; logs are trucked to the sawmill; cut blocks are replanted and regrow.
+- **Sawmill:** logs → framing, weatherboards and flooring at reference recovery rates; offcuts and sawdust become firewood and boiler fuel; carbon follows the timber (Phase-3 `MaterialCarbon`, stored in buildings).
+- **Construction:** Gem Construction builds houses and other buildings as projects with a bill of materials (sawn timber, iron roofing from stock or the Phase-3 smelter, glass, lime mortar/concrete from Phase-3 quicklime, fixings) and labour hours by trade from reference data; a house is habitable only when complete.
+
+- [ ] **Step 1:** Food tests: the founding town's food production meets its energy and protein needs over a simulated year within ±10% (or the shortfall is reported, not hidden); a drought year lowers crop yields; overfishing reduces catch; a power cut spoils refrigerated stock; a household with money and need buys food and eats it (Phase-3 metabolism); food waste returns to detritus.
+- [ ] **Step 2:** Timber tests: annual harvest never exceeds regrowth under the default plan; a felled block regrows after replanting; sawmill output matches log input × recovery; a house built from the bill of materials consumes exactly those materials and labour hours and becomes habitable on completion; carbon is conserved from tree to house.
+- [ ] **Step 3:** Run `cargo test -p mk_engine --test food_chain --test timber_chain`; expect FAIL; implement; re-run; expect PASS.
+- [ ] **Step 4:** Commit `feat(industry): food and timber supply chains`.
 
 ### Task 8: Town, housing and the founding workforce
 
@@ -164,9 +190,9 @@
 
 **Interfaces:**
 - High-detail patches: the estate (Phase 3), the town (4 km × 4 km, on buildable land near the stage-2 hydro site and the refinery road), and the refinery/gas-plant site (2 km × 2 km); oil wells are point sites on medium cells; roads, flowlines, pipelines and power lines are network links with real lengths.
-- Town layout: one house per household sized to household size (reference floor areas), store, workshop, clinic, school room, depot; every building has an electricity meter and LPG supply.
+- Town layout: one house per household sized to household size (reference floor areas), owned by Gem Housing and rented to the household; supermarket, bakery, butchery, workshop, clinic, school room, fuel depot; the farm (fields, pasture, dairy shed, barns) and the sawmill and timber yard at the town edge; the fishing wharf on the coast; every building has an electricity meter and LPG supply.
 - Workforce: households generated deterministically from the scenario seed with realistic demographics (age/sex structure, couples and children from reference tables), each adult assigned a role and an initial qualification; every person is created through `build_authored_human` and gets their own folder; family relationships are set through upstream relationship APIs.
-- Town growth: new households form from births and young adults leaving home; when demand exceeds supply, the dashboard proposes stage-2 hydro or more housing as construction projects that use Phase-3 labour and materials (steel, cement-equivalent, timber) and imported equipment from stock.
+- Town growth: new households form from births and young adults leaving home; when demand exceeds supply, the dashboard proposes stage-2 hydro, more houses, more farmland or a bigger sawmill as construction projects that Gem Construction builds with Task 7b's timber chain, Phase-3 labour and materials, and imported equipment from stock.
 
 - [ ] **Step 1:** Tests: the founding town has the default number of households and roles; every person has a folder, a house and (if adult) a job or a reason not to; houses do not overlap and are routable; the town is connected to the grid and the depot; the workforce file reproduces the same people from the same seed.
 - [ ] **Step 2:** Implement; run `cargo test -p mk_engine --test island_town`; expect PASS.
@@ -180,11 +206,11 @@
 - Test: `crates/mk_engine/tests/island_industry_acceptance.rs`
 
 **Interfaces:**
-- Dashboard pages: **Power** (river flow, hydro output, grid load, shed loads), **Petroleum** (well rates, reservoir pressure, refinery campaigns, tank levels), **Town** (households, people, jobs, vacancies), **Finance** (each enterprise's revenue, costs, profit, dividends; Gem-D's and Gem-K's balances), with the Human Creator able to create a person directly into a town household and job.
+- Dashboard pages: **Power** (river flow, hydro output, grid load, shed loads), **Petroleum** (well rates, reservoir pressure, refinery campaigns, tank levels), **Town** (households, people, jobs, vacancies, houses under construction), **Food** (production vs need, supermarket stock and prices), **Timber** (harvest vs regrowth, sawmill output), **Payroll** (each worker's hours, pay and payslips), **Finance** (each enterprise's revenue, costs, profit, dividends; Gem-D's and Gem-K's balances), with the Human Creator able to create a person directly into a town household and job.
 - Owner controls (commands, replayable): set prices and tariffs, set wages, set dividend policy, approve construction projects, hire and fire.
 - All new state is in `IslandWorldState`, snapshots and the state hash; cadences: electricity and jobs at `human_seconds`, petroleum and refinery at `weather_ocean_seconds`, billing and payroll monthly.
 
-- [ ] **Step 1:** Acceptance (slow tier): bootstrap the default scenario, run one local year; assert the house and town are powered by hydro except during recorded low-flow periods, fuel is produced and sold, every ledger closes (water, carbon, oxygen, methane, money), Gem-D and Gem-K receive dividends equal to their shares of profit, workers are paid and fed, and the state hash is deterministic; snapshot mid-year and resume to the same hash.
+- [ ] **Step 1:** Acceptance (slow tier): bootstrap the default scenario, run one local year; assert the house and town are powered by hydro except during recorded low-flow periods, fuel is produced and sold, every ledger closes (water, carbon, oxygen, methane, money), Gem-D and Gem-K receive dividends equal to their shares of profit, every worker is paid for the hours they worked every 14 roster days, the town is fed from its own farms and fishery, houses are built from its own timber, and the state hash is deterministic; snapshot mid-year and resume to the same hash.
 - [ ] **Step 2:** Run the acceptance test; add `island_preview world` overlays for the river, plants, grid and town.
 - [ ] **Step 3:** Benchmark with the full town population and record it in the Phase-5 baseline; if the default scale misses the performance targets, record the measured cost and offer the owner a smaller founding town.
 - [ ] **Step 4:** Commit `feat(island): hydro, petroleum, town and economy on the dashboard`.
