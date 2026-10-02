@@ -56,11 +56,11 @@ Out (arrives later — say so in the UI):
 - Produces: `pub fn build_authored_human(rng: &RngRegistry, tick: Tick, agent_id: String, sex: BiologicalSex, profile: &HumanSpawnProfile) -> Result<HumanBeing, SpawnHumanError>` containing exactly the part of `spawn_human` from the RNG stream (`SubsystemId::Humans`, `SPAWN_HUMAN_EPOCH`) through `HumanBeing::sampled`, the authored body/appearance fields and `refresh_phase11_layers()`.
 - `interventions::spawn_human` keeps its signature and calls these, then still places the human at the requested cell and calls `add_human`.
 
-- [ ] **Step 1:** Run `cargo test -p mk_engine --lib interventions::` and record the passing set.
-- [ ] **Step 2:** Write tests: `build_authored_human` is byte-identical for identical inputs and differs for a different tick or agent id; `agent_id_for_name` returns `sam`, then `sam-2`, then `sam-3` as humans are added.
-- [ ] **Step 3:** Move the code; re-run Step 1 and the new tests; expect the same passing set plus the new tests.
-- [ ] **Step 4:** Record the extraction in `UPSTREAM.md` as an island divergence suitable for upstreaming.
-- [ ] **Step 5:** Commit `refactor(humans): extract the authored-spawn core from interventions`.
+- [x] **Step 1:** Run `cargo test -p mk_engine --lib interventions::` and record the passing set.
+- [x] **Step 2:** Write tests: `build_authored_human` is byte-identical for identical inputs and differs for a different tick or agent id; `agent_id_for_name` returns `sam`, then `sam-2`, then `sam-3` as humans are added.
+- [x] **Step 3:** Move the code; re-run Step 1 and the new tests; expect the same passing set plus the new tests.
+- [x] **Step 4:** Record the extraction in `UPSTREAM.md` as an island divergence suitable for upstreaming.
+- [x] **Step 5:** Commit `refactor(humans): extract the authored-spawn core from interventions`.
 
 ### Task 2: Population with folders and a creator
 
@@ -79,11 +79,11 @@ Out (arrives later — say so in the UI):
 - Sensitive files are encrypted by `HumanStorage::new`, which creates `<data-dir>/humans/.secret_storage_key` unless `MK_STORAGE_KEY` is set. Losing that key makes those files unreadable.
 - The existing in-memory `IslandHumanPopulation::with_founders()` / `empty()` stay for tests.
 
-- [ ] **Step 1:** Write tests (temp dirs): first open creates Gem-D/Gem-K folders; `create_human` creates a folder with `profile/`, `traits/`, `cognition/`, `social/`, `development/`, `reproduction/`, `memories/{episodic,semantic,procedural}/`, `state/`, `relationships/`, `events/` and a `created` event; reopening reloads the same humans; each upstream validation rule rejects with its message; two "Sam"s become `sam` and `sam-2`; replaying `creations.jsonl` into a fresh directory with the same seed yields identical profiles; a read-only `humans/` directory still adds the human and returns `storage_error`.
-- [ ] **Step 2:** Run `cargo test -p island_humans --test creator`; expect FAIL.
-- [ ] **Step 3:** Implement on `HumanRegistry::with_storage` and Task 1's functions; no new folder format.
-- [ ] **Step 4:** Point the CLI `create` command at `create_human` with `--data-dir` (default `./island-data`), keeping its argument order and adding the appearance fields as optional flags with upstream defaults.
-- [ ] **Step 5:** Re-run; expect PASS. Commit `feat(island): create humans with their own folders`.
+- [x] **Step 1:** Write tests (temp dirs): first open creates Gem-D/Gem-K folders; `create_human` creates a folder with `profile/`, `traits/`, `cognition/`, `social/`, `development/`, `reproduction/`, `memories/{episodic,semantic,procedural}/`, `state/`, `relationships/`, `events/` and a `created` event; reopening reloads the same humans; each upstream validation rule rejects with its message; two "Sam"s become `sam` and `sam-2`; replaying `creations.jsonl` into a fresh directory with the same seed yields identical profiles; a read-only `humans/` directory still adds the human and returns `storage_error`.
+- [x] **Step 2:** Run `cargo test -p island_humans --test creator`; expect FAIL.
+- [x] **Step 3:** Implement on `HumanRegistry::with_storage` and Task 1's functions; no new folder format.
+- [x] **Step 4:** Point the CLI `create` command at `create_human` with `--data-dir` (default `./island-data`), keeping its argument order and adding the appearance fields as optional flags with upstream defaults.
+- [x] **Step 5:** Re-run; expect PASS. Commit `feat(island): create humans with their own folders`.
 
 ### Task 3: Dashboard server
 
@@ -102,10 +102,10 @@ Out (arrives later — say so in the UI):
 - `POST /api/humans` (auth) → `201 { summary, storage_error }`, `401` unauthorised, `422 { errors: [..] }` invalid.
 - The population sits behind a `Mutex`; one request mutates at a time, in arrival order.
 
-- [ ] **Step 1:** Write server tests: GETs work unauthenticated; `POST` without a token under `BearerToken` is 401; under `LoopbackOnly` it succeeds; under `Disabled` it is refused; a valid `POST` is listed by the next `GET /api/humans` and its folder exists; an invalid `POST` returns 422 with upstream's messages; `GET /api/humans/../x` cannot escape the data directory.
-- [ ] **Step 2:** Run `cargo test -p island`; expect FAIL.
-- [ ] **Step 3:** Implement, following upstream `apps/mk_cli/src/web/server.rs` structure.
-- [ ] **Step 4:** Re-run; expect PASS. Commit `feat(island): dashboard api with human creation`.
+- [x] **Step 1:** Write server tests: GETs work unauthenticated; `POST` without a token under `BearerToken` is 401; under `LoopbackOnly` it succeeds; under `Disabled` it is refused; a valid `POST` is listed by the next `GET /api/humans` and its folder exists; an invalid `POST` returns 422 with upstream's messages; `GET /api/humans/../x` cannot escape the data directory.
+- [x] **Step 2:** Run `cargo test -p island`; expect FAIL.
+- [x] **Step 3:** Implement, following upstream `apps/mk_cli/src/web/server.rs` structure.
+- [x] **Step 4:** Re-run; expect PASS. Commit `feat(island): dashboard api with human creation`.
 
 ### Task 4: Dashboard pages
 
@@ -118,14 +118,14 @@ Out (arrives later — say so in the UI):
 - **Create a human** (`/creator`): form with name, sex, birth date and time, birthplace latitude/longitude (default: Gem-D's recorded birthplace until the island exists), current age, height, build, hair, eye and skin dropdowns from `/api/creator/options`; optional token field stored in `sessionStorage`; server validation errors shown next to the form; on success, the new person opens in the People view with their folder path, and any `storage_error` is shown as a warning.
 - All human-supplied text is inserted with `textContent`, never `innerHTML`.
 
-- [ ] **Step 1:** Write tests that each page and asset is served with the right content type and that `dashboard.js`/`creator.js` contain no `innerHTML` assignments.
-- [ ] **Step 2:** Implement the pages; reuse upstream `apps/mk_cli/static/dashboard` styling where it fits.
-- [ ] **Step 3:** Run `cargo test -p island`; expect PASS.
-- [ ] **Step 4:** Manual check: `cargo run -p island -- serve`, open `http://127.0.0.1:8080/creator`, create a person, confirm they appear in People and that `island-data/humans/<id>/` exists with a `created` event; restart and confirm they are still listed.
-- [ ] **Step 5:** Commit `feat(island): people dashboard and human creator page`.
+- [x] **Step 1:** Write tests that each page and asset is served with the right content type and that `dashboard.js`/`creator.js` contain no `innerHTML` assignments. (`island` is a binary crate, so these are unit tests in `src/serve/pages.rs`.)
+- [x] **Step 2:** Implement the pages; reuse upstream `apps/mk_cli/static/dashboard` styling where it fits.
+- [x] **Step 3:** Run `cargo test -p island`; expect PASS.
+- [x] **Step 4:** Manual check: `cargo run -p island -- serve`, open `http://127.0.0.1:8080/creator`, create a person, confirm they appear in People and that `island-data/humans/<id>/` exists with a `created` event; restart and confirm they are still listed.
+- [x] **Step 5:** Commit `feat(island): people dashboard and human creator page`.
 
 ### Task 5: Gate 0b
 
-- [ ] **Step 1:** Run fmt, clippy `-D warnings` and the fast test tier; expect green.
-- [ ] **Step 2:** Update `README.md` with `island serve` usage, the "time is not running yet" limitation, and a warning to back up `island-data/humans/.secret_storage_key` (or set `MK_STORAGE_KEY`), because losing it makes encrypted human files unreadable.
-- [ ] **Step 3:** Tick Gate 0b in the program plan.
+- [x] **Step 1:** Run fmt, clippy `-D warnings` and the fast test tier; expect green.
+- [x] **Step 2:** Update `README.md` with `island serve` usage, the "time is not running yet" limitation, and a warning to back up `island-data/humans/.secret_storage_key` (or set `MK_STORAGE_KEY`), because losing it makes encrypted human files unreadable.
+- [x] **Step 3:** Tick Gate 0b in the program plan.

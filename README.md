@@ -22,17 +22,33 @@ It defines the locked scope (a uniquely shaped, New-Zealand-sized island on an E
 
 ## Current bootstrap
 
-`IslandHumanPopulation::with_founders()` loads the canonical founders Gem-D (`HUM-000001`) and Gem-K (`HUM-000002`).
+A stored population lives in a data directory (default `./island-data`). Every human, Gem-D (`HUM-000001`) and Gem-K (`HUM-000002`) included, has their own folder under `island-data/humans/<agent-id>/` with `profile/`, `traits/`, `cognition/`, `social/`, `development/`, `reproduction/`, `memories/`, `state/`, `relationships/` and `events/`.
 
-New simulated people are created through the same deterministic `HumanBeing::new_born_at` path used by Maer-Ken. Identical agent ID, sex, birth data and birthplace produce the same profile.
+New people are built through upstream's `SpawnHuman` path from the population's seed and a creation counter. Every creation is appended to `island-data/creations.jsonl`, so replaying that log with the same seed reproduces the same people.
 
 ## Run it
 
 ```bash
-cargo test -p island_humans
-cargo run -p island_humans -- founders
-cargo run -p island_humans -- create islander-001 female 2000-01-02T03:04:05Z -36.85 174.76 "Maer-Ken Island"
+cargo test --workspace                          # fast tier
+cargo run -p island -- serve                    # dashboard at http://127.0.0.1:8080/
+cargo run -p island_humans -- founders          # list everyone (CLI)
+cargo run -p island_humans -- create "Hine Moana" female 1992-11-03T10:15:00+13:00 -41.3 174.8 --height 166 --hair black
 ```
+
+### The dashboard (`island serve`)
+
+- **People** (`/`): the roster, and everything stored about whoever you pick.
+- **Create a human** (`/creator`): name, sex, birth date and place, age and appearance. Each new person gets a folder immediately.
+
+`island serve [--data-dir DIR] [--bind ADDR:PORT] [--seed HEX64]`. Reading never needs a token. Creating people is allowed:
+
+- with `ISLAND_CONTROL_TOKEN` set: only for requests carrying `Authorization: Bearer <token>`. The Creator page has a field for it, kept in the browser tab only.
+- without a token on a loopback bind (the default `127.0.0.1:8080`): from this machine.
+- without a token on any other bind: never. Set a token before using `--bind 0.0.0.0:…`.
+
+**Time is not running yet.** People are created and stored, but nobody ages, eats or acts until the island world exists (Phase 4).
+
+**Back up your storage key.** Human files are encrypted with `island-data/humans/.secret_storage_key`, generated on first run, or with `MK_STORAGE_KEY` if set. Lose the key and every human file becomes unreadable. Back it up with the data, or set `MK_STORAGE_KEY` yourself.
 
 ## Source authority
 

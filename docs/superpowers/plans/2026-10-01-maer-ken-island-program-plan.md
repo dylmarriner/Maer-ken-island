@@ -52,7 +52,7 @@
 ## Program gates
 
 - [x] **Gate 0:** `cargo test --workspace` (fast set) passes with 0 failures, the slow set passes in release, and CI enforces fmt/clippy/fast tests on every push. Recorded 2026-10-02: fast tier 112 s wall (warm build), slow tier passes in release (2 tests; the 1 kyr benchmark is deep-tier), fmt and clippy `-D warnings` clean.
-- [ ] **Gate 0b:** The owner creates a human in the browser dashboard; they appear in the roster, have their own folder with a `created` event, and survive a restart.
+- [x] **Gate 0b:** The owner creates a human in the browser dashboard; they appear in the roster, have their own folder with a `created` event, and survive a restart. Recorded 2026-10-02: verified with a headless Chromium run against `island serve` (create, roster, folder with `created` event, restart reload; user-supplied markup rendered as text). The owner's own browser check is still welcome.
 - [ ] **Gate 0c:** The island canon passes the physical-consistency validator with only the declared density exception; reference packs load; human realism results are passing or accepted by the owner.
 - [ ] **Gate 1:** Phase 1 tests prove deterministic one-island generation within land-area tolerance and ocean-buffer constraints, with lithology and mineral deposits; `island_preview` emits the elevation, geology and deposit maps and the seed gallery.
 - [ ] **Gate 2:** Phase 2 tests prove local ocean/atmosphere/hydrology coupling with explicit non-wrapping edge forcing and a zonal background calibrated against the upstream global model; preview emits temperature/rain/river maps.
