@@ -1,0 +1,26 @@
+[package]
+name = "island"
+version = "0.1.0"
+edition = "2021"
+description = "Maer-Ken Island: dashboard with the Human Creator"
+
+[[bin]]
+name = "island"
+path = "src/main.rs"
+
+[dependencies]
+island_humans = { path = "../island_humans" }
+mk_engine = { path = "../../crates/mk_engine" }
+mk_interventions = { path = "../../crates/mk_interventions" }
+serde.workspace = true
+serde_json.workspace = true
+hex.workspace = true
+warp.workspace = true
+tokio.workspace = true
+
+[dev-dependencies]
+warp = { workspace = true, features = ["test"] }
+tempfile = "3"
+
+[lints]
+workspace = true

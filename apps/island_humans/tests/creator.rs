@@ -98,6 +98,22 @@ fn reopening_reloads_everyone() {
 }
 
 #[test]
+fn the_name_as_typed_survives_a_reopen() {
+    let tmp = tempfile::tempdir().unwrap();
+    {
+        let (mut population, _) = IslandHumanPopulation::open(tmp.path(), SEED).unwrap();
+        let created = population
+            .create_human(request("  Hine Moana "), "test")
+            .unwrap();
+        assert_eq!(created.summary.agent_id, "hine-moana");
+        assert_eq!(created.summary.name, "Hine Moana");
+    }
+    let (population, _) = IslandHumanPopulation::open(tmp.path(), SEED).unwrap();
+    assert_eq!(population.summary("hine-moana").unwrap().name, "Hine Moana");
+    assert_eq!(population.summary("Gem-D").unwrap().name, "Gem-D");
+}
+
+#[test]
 fn reopening_with_a_different_seed_is_refused() {
     let tmp = tempfile::tempdir().unwrap();
     IslandHumanPopulation::open(tmp.path(), SEED).unwrap();

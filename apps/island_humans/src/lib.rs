@@ -14,12 +14,15 @@ use mk_engine::humans::{HumanBeing, HumanRegistry, HumanSystem};
 use mk_engine::io::HumanStorage;
 use mk_interventions::{validate_intervention, HumanSpawnProfile, InterventionAction, Location};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct HumanSummary {
     pub agent_id: String,
+    /// The name as it was typed at creation (the agent id is its slug).
+    pub name: String,
     pub human_id: String,
     pub biological_sex: String,
     pub status: String,
@@ -159,6 +162,9 @@ pub struct IslandHumanPopulation {
     seed: [u8; 32],
     counter: u64,
     data_dir: Option<PathBuf>,
+    /// Names as typed at creation, by agent id. Upstream keeps only the slug,
+    /// so the island layer keeps the original spelling (from `creations.jsonl`).
+    names: HashMap<String, String>,
 }
 
 impl Default for IslandHumanPopulation {
@@ -190,6 +196,7 @@ impl IslandHumanPopulation {
             seed: DEFAULT_SEED,
             counter: 0,
             data_dir: None,
+            names: HashMap::new(),
         }
     }
 
@@ -235,6 +242,10 @@ impl IslandHumanPopulation {
             Ok(()) => Vec::new(),
             Err(errors) => errors.iter().map(ToString::to_string).collect(),
         };
+        let names = read_creations(data_dir)?
+            .into_iter()
+            .map(|record| (record.agent_id, record.request.name.trim().to_string()))
+            .collect();
         let mut system = HumanSystem::new();
         system.registry = registry;
         Ok((
@@ -244,6 +255,7 @@ impl IslandHumanPopulation {
                 seed,
                 counter: record.counter,
                 data_dir: Some(data_dir.to_path_buf()),
+                names,
             },
             warnings,
         ))
@@ -271,7 +283,9 @@ impl IslandHumanPopulation {
             &request.profile(),
         )
         .map_err(|err| CreateHumanError::Invalid(vec![err.to_string()]))?;
-        let summary = summarize(&human);
+        let mut summary = summarize(&human);
+        summary.name = request.name.trim().to_string();
+        self.names.insert(agent_id.clone(), summary.name.clone());
         let counter = self.counter;
 
         let mut storage_errors = Vec::new();
@@ -347,7 +361,24 @@ impl IslandHumanPopulation {
     }
 
     pub fn summaries(&self) -> Vec<HumanSummary> {
-        self.system.registry.iter().map(summarize).collect()
+        self.system
+            .registry
+            .iter()
+            .map(|human| self.with_name(summarize(human)))
+            .collect()
+    }
+
+    /// The summary of one human, with their name as typed at creation.
+    pub fn summary(&self, agent_id: &str) -> Option<HumanSummary> {
+        self.get(agent_id)
+            .map(|human| self.with_name(summarize(human)))
+    }
+
+    fn with_name(&self, mut summary: HumanSummary) -> HumanSummary {
+        if let Some(name) = self.names.get(&summary.agent_id) {
+            summary.name = name.clone();
+        }
+        summary
     }
 
     pub fn system(&self) -> &HumanSystem {
@@ -398,6 +429,7 @@ pub fn read_creations(data_dir: &Path) -> Result<Vec<CreationRecord>, Population
 pub fn summarize(human: &HumanBeing) -> HumanSummary {
     HumanSummary {
         agent_id: human.agent_id().to_string(),
+        name: human.agent_id().to_string(),
         human_id: human.profile.human_id.to_string(),
         biological_sex: match human.biological_sex() {
             BiologicalSex::Male => "male",
