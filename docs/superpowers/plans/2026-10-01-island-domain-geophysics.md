@@ -58,6 +58,31 @@
 - [ ] **Step 4:** Re-run `cargo test -p mk_island --test domain_contract`; expect PASS.
 - [ ] **Step 5:** Commit `feat(island): add regional domain contract`.
 
+### Task 1b: Small test island and deterministic multi-core iteration
+
+Two speed rules every later phase relies on.
+
+**Small test island.** Most tests check a rule (water is conserved, rivers reach the sea, no wrap at the edge), which a small island proves in seconds. Only gate acceptance tests use the full island.
+
+**Multi-core cells.** Per-cell physics is independent within a step, so it runs across all CPU cores. Results must be bit-identical whatever the number of threads: floating-point sums are order-sensitive, so every reduction uses a fixed chunking and a fixed combine order.
+
+**Files:**
+- Create: `fixtures/island/test_small_profile.json`
+- Modify: `crates/mk_island/src/profile.rs` (`IslandProfile::test_small()`)
+- Modify: `Cargo.toml` (`rayon = "1"` in `[workspace.dependencies]`), `crates/mk_engine/Cargo.toml`
+- Create: `crates/mk_engine/src/regional/par.rs`
+- Test: `crates/mk_island/tests/domain_contract.rs` (extend), `crates/mk_engine/tests/regional_par_determinism.rs`
+
+**Interfaces:**
+- `IslandProfile::test_small()`: domain `480,000 m × 384,000 m`, coarse `12,000 m` (`32 × 40`), medium `2,000 m` (`192 × 240`), ocean buffer `60,000 m`, land target `8,000 km²` ±5%, the same shape requirements, `version = 1`. It passes the same validation; only the numbers differ. The full-size limits (268,000 km², 300 km buffer) are asserted only by tests that load the default profile.
+- `par_map_cells(cells: &[(usize, usize)], f) -> Vec<T>` (results in input order), `par_for_each_cell_mut(grid, cells, f)` (disjoint cells only), and `det_sum(values: &[f64]) -> f64` / `det_sum_by(cells, f)` (fixed 4,096-element chunks summed in order, then the chunk sums in order). All regional per-cell steps from here on use these; plain `rayon` iterators with `.sum()` are not allowed in simulation code.
+- Thread count comes from `RAYON_NUM_THREADS` or all cores; it never affects results.
+
+- [ ] **Step 1:** Write tests: `test_small()` validates and has the dimensions above; `det_sum` of a fixed random vector is bit-identical with 1, 2 and 8 threads and equals itself across runs; `par_map_cells` preserves order; a synthetic per-cell step gives identical grid bytes with 1 and 8 threads.
+- [ ] **Step 2:** Run `cargo test -p mk_island --test domain_contract` and `cargo test -p mk_engine --test regional_par_determinism`; expect FAIL; implement; re-run; expect PASS.
+- [ ] **Step 3:** Rule for every later task: functional tests use `test_small()`; acceptance and gate tests use the default profile; every acceptance test also runs once with `RAYON_NUM_THREADS=1` in CI and must produce the same hash.
+- [ ] **Step 4:** Commit `feat(island): small test island and deterministic multi-core cell iteration`.
+
 ### Task 2: Deterministic regional boundary forcing
 
 **Files:**
