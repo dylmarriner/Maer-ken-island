@@ -123,9 +123,7 @@
 ### Task 5: Phase-4 acceptance and headless runner
 
 **Files:**
-- Create: `apps/island/Cargo.toml`
-- Create: `apps/island/src/main.rs`
-- Modify: `Cargo.toml`
+- Modify: `apps/island/Cargo.toml`, `apps/island/src/main.rs` (created in Phase 0b)
 - Test: `crates/mk_engine/tests/island_runtime_acceptance.rs`
 
 **Interfaces:**
@@ -140,26 +138,25 @@
 
 ### Task 6: Web dashboard with Human Creator
 
-The owner creates humans from a dashboard. Upstream's browser dashboard (`mk serve`) is view-only; its human creators are Bevy desktop panels (`mk_studio` foundry panel, `mk_ui` human foundry) that submit the `SpawnHuman` intervention. The island gets the dashboard and the creator in this phase, without waiting for the Phase-5 3D UI.
+Phase 0b built the dashboard, the Creator page, `CreateHumanRequest`, `create_human` and the extracted upstream spawn core against a human-only population. This task moves them onto `IslandWorldState`: humans now live in the stepped world, gain an island/estate location, and creation becomes a queued command applied at the next tick.
 
 **Files:**
-- Create: `apps/island/src/serve/{mod.rs,server.rs,handlers.rs}` (port of upstream `apps/mk_cli/src/web`)
-- Create: `apps/island/static/dashboard/{index.html,dashboard.js,creator.js}` (port of upstream dashboard plus a new Human Creator page)
+- Modify: `apps/island/src/serve/*` and `apps/island/static/*` (from Phase 0b)
 - Create: `crates/mk_engine/src/regional/create_human.rs`
 - Test: `crates/mk_engine/tests/island_create_human.rs`, `apps/island/tests/serve_api.rs`
 
 **Interfaces:**
-- CLI: `island serve --scenario <path> | --snapshot <path> [--bind 127.0.0.1:8080] [--humans-dir <path>]`; runs the simulation and serves the dashboard. Binds to localhost by default; write endpoints require the bearer token from `ISLAND_CONTROL_TOKEN`, exactly as upstream gates `/api/control` and `/api/intervene`.
+- CLI: `island serve --scenario <path> | --snapshot <path> [--bind 127.0.0.1:8080] [--humans-dir <path>]`; runs the simulation and serves the dashboard. Write endpoints keep Phase 0b's port of upstream `ControlAuth` (token if `ISLAND_CONTROL_TOKEN` is set; otherwise loopback-only; non-loopback without a token refuses writes). `--data-dir` from Phase 0b is accepted and its humans are imported into the new world once, by replaying `creations.jsonl`.
 - Read API (ported): `GET /api/status`, `/api/humans` (roster; `?id=`/`?name=` for full detail), `/api/properties`, `/api/vegetation`, `/api/economy`, `/api/timeline`.
-- Write API: `POST /api/humans` accepts `CreateHumanRequest { name, biological_sex, birth_timestamp (RFC 3339), birthplace: { latitude, longitude } | "here", age_years, height_cm, build, hair_color, eye_color, skin_tone, location: EstateSpace (room/outdoor metres) | IslandCell }` — the upstream `HumanSpawnProfile` fields plus sex and an island location. Also `POST /api/control` (pause/resume/step/save).
-- `IslandWorldState::queue_create_human(request) -> Result<QueuedCommandId, CreateHumanError>` validates immediately (upstream limits: age ≤ 130 years, height 40–272 cm, known sex/build/colour values, unique name→`agent_id`, location on land or inside an estate room). The command applies at the next tick boundary through the same path as upstream `spawn_human` (`HumanBeing::sampled` with the RNG stream keyed by agent id and tick, then the authored body/appearance fields), so a request is deterministic and replayable.
+- Write API: `POST /api/humans` accepts Phase 0b's `CreateHumanRequest` extended with `birthplace_here: bool` and `location: EstateSpace (room/outdoor metres) | IslandCell`. Also `POST /api/control` (pause/resume/step/save).
+- `IslandWorldState::queue_create_human(request) -> Result<QueuedCommandId, CreateHumanError>` validates immediately (upstream `validate_intervention` rules plus: location on land or inside an estate room). Names follow upstream `agent_id_for_name` (duplicates get `-2`, `-3`, …). The command applies at the next tick boundary through Phase 0b's `build_authored_human` (RNG stream keyed by agent id and world tick), so a request is deterministic and replayable.
 - `"here"` birthplace uses the island coordinates of the chosen location mapped to latitude/longitude through `IslandDomain`; explicit coordinates let a human be born off-island.
 - On apply: the human joins the registry, their folder is created (Task 3b), a `created` event is written to it, and the command is appended to the replay log. A folder-write failure is reported in the response and audit trail but does not undo the creation.
 - Creator page: form with the fields above, sex/build/colour dropdowns from the engine's accepted values, location picker (estate plan from `island_preview` data, or island map), inline validation errors from the server, and on success a link to the new human's detail view.
 
 - [ ] **Step 1:** Write engine tests: identical requests at the same tick produce byte-identical humans; each validation rule rejects with a specific error; a created human appears at the requested room/cell with a folder and `created` event; the creation survives save/load and is reproduced by replay; storage failure still creates the human and reports the error.
-- [ ] **Step 2:** Write API tests: unauthenticated `POST /api/humans` returns 401; a valid request returns 202 with the command id and the human is listed by `GET /api/humans` after one step; an invalid request returns 422 with the field errors.
+- [ ] **Step 2:** Write API tests: unauthorised `POST /api/humans` returns 401; a valid request returns 202 with the command id and the human is listed by `GET /api/humans` after one step; an invalid request returns 422 with the field errors; a Phase-0b data directory imports with identical human profiles.
 - [ ] **Step 3:** Run both test suites; expect FAIL.
-- [ ] **Step 4:** Implement the command, port the server and read dashboard, and build the Creator page.
+- [ ] **Step 4:** Implement the queued command, add the location picker to the Creator page, add the ported world read endpoints, and switch `serve` from the human-only population to `IslandWorldState`.
 - [ ] **Step 5:** Re-run; expect PASS. Manually create a human from the browser against a fixed scenario and confirm their folder and detail view.
 - [ ] **Step 6:** Commit `feat(island): dashboard with human creator`.

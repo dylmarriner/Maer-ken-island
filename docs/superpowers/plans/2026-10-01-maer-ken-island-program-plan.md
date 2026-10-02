@@ -39,6 +39,7 @@
 ## Ordered plan set
 
 0. `2026-10-01-island-phase0-baseline.md` — make the imported workspace green, split slow tests, add CI, fix inherited defects, check upstream drift.
+0b. `2026-10-01-island-phase0b-early-human-creator.md` — browser dashboard where the owner creates complete humans, each with their own folder; no island or time yet.
 1. `2026-10-01-island-domain-geophysics.md` — regional coordinate contract, deterministic boundaries, tectonics/terrain/volcanism, one-island land-area fitting, headless preview tool.
 2. `2026-10-01-island-water-atmosphere.md` — dependency inventory, zonal background forcing, regional climate/weather/ocean/hydrology/tides and boundary exchange.
 3. `2026-10-01-island-life-property-humans.md` — ecology/vegetation/resources, dense local vegetation, canonical property inventory with a metric estate layout, founders and human interactions.
@@ -48,6 +49,7 @@
 ## Program gates
 
 - [ ] **Gate 0:** `cargo test --workspace` (fast set) passes with 0 failures, the slow set passes in release, and CI enforces fmt/clippy/fast tests on every push.
+- [ ] **Gate 0b:** The owner creates a human in the browser dashboard; they appear in the roster, have their own folder with a `created` event, and survive a restart.
 - [ ] **Gate 1:** Phase 1 tests prove deterministic one-island generation within land-area tolerance and ocean-buffer constraints; `island_preview` emits the elevation/land-mask PNG.
 - [ ] **Gate 2:** Phase 2 tests prove local ocean/atmosphere/hydrology coupling with explicit non-wrapping edge forcing and a zonal background calibrated against the upstream global model; preview emits temperature/rain/river maps.
 - [ ] **Gate 3:** Phase 3 tests prove the retained ecology, founders, property inventory, metric estate layout, dense local vegetation, computers and material economy operate on regional cells; preview emits the estate plan and local tree map.
@@ -71,7 +73,7 @@ Decided (2026-10-02):
 
 Population:
 
-5. **Population.** The island starts with Gem-D and Gem-K (the only humans upstream defines, running the complete runtime). The owner adds people through the dashboard Human Creator (Phase 4 Task 6); further people are born through the reproduction system. Every human, however created, gets their own folder.
+5. **Population.** The island starts with Gem-D and Gem-K (the only humans upstream defines, running the complete runtime). The owner adds people through the dashboard Human Creator (first in Phase 0b, then with island placement in Phase 4 Task 6); further people are born through the reproduction system. Every human, however created, gets their own folder.
 
 ## Final verification
 
@@ -81,4 +83,4 @@ Population:
 - [ ] Run the fixed-seed replay command defined in Phase 4 twice and require byte-identical final hashes.
 - [ ] Run the benchmark command defined in Phase 5 and commit the baseline report under `benchmarks/`.
 - [ ] Update `UPSTREAM.md` with every imported path and island divergence introduced by the phases.
-- [ ] Tick the program complete only after all six gates are green.
+- [ ] Tick the program complete only after all seven gates are green.
