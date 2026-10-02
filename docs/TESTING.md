@@ -10,11 +10,11 @@ The toolchain is pinned in `rust-toolchain.toml` (Rust 1.97.0 with `rustfmt` and
 | Slow | `#[ignore = "slow: <reason>"]` and a `slow_` name prefix | `cargo test --workspace --release -- --ignored slow_` | nightly |
 | Deep | `#[ignore = "deep: <reason>"]` and a `deep_` name prefix | `cargo test --release -p mk_engine --test <binary> -- --ignored deep_` | manual only, never scheduled |
 
-libtest filters by test name, not by ignore reason, which is why the name prefix is required in addition to the `#[ignore]` reason. Tests are never deleted to make a tier faster; they move tier.
+`--ignored deep_` is a substring filter, so a slow test's name must not contain `deep_`. libtest filters by test name, not by ignore reason, which is why the name prefix is required in addition to the `#[ignore]` reason. Tests are never deleted to make a tier faster; they move tier.
 
 Current members:
 
-- **Slow:** `benchmark_verification::slow_test_verification_horizon_1kyr_benchmark` (>12 min in debug), `phase4_phase5_integration::slow_test_phase4_deep_time_evolution` (~35 s in debug).
+- **Slow:** `benchmark_verification::slow_test_verification_horizon_1kyr_benchmark` (>12 min in debug), `phase4_phase5_integration::slow_test_phase4_long_horizon_evolution` (~35 s in debug).
 - **Deep:** the eight 100-kyr tests in `phase6_verification.rs` (`deep_test_*`, tens of millions of daily ticks) and `phase7_artifacts_emit::deep_emit_phase7_artifacts_writes_files_and_canon_digest_matches_core` (emits a Kyr100 artifact, >5 min in debug).
 
 ## Build profiles

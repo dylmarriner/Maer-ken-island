@@ -77,20 +77,21 @@ impl HumanRegistry {
         self.humans.push(human);
     }
 
-    /// Position of `agent_id` in registration order, if present.
+    /// Position of `agent_id` in registration order, if present. O(1).
+    ///
+    /// A human's agent id never changes once registered, so a miss in the
+    /// index means the id is absent. A hit is still verified against the
+    /// human it points at, and falls back to a scan if they disagree.
     pub fn position_of(&self, agent_id: &str) -> Option<usize> {
-        match self.index.get(agent_id) {
-            Some(&position)
-                if self
-                    .humans
-                    .get(position)
-                    .is_some_and(|h| h.agent_id() == agent_id) =>
-            {
-                Some(position)
-            }
-            // The index is only ever stale if a human's id was rewritten in
-            // place; the scan keeps lookups correct regardless.
-            _ => self.humans.iter().position(|h| h.agent_id() == agent_id),
+        let &position = self.index.get(agent_id)?;
+        if self
+            .humans
+            .get(position)
+            .is_some_and(|h| h.agent_id() == agent_id)
+        {
+            Some(position)
+        } else {
+            self.humans.iter().position(|h| h.agent_id() == agent_id)
         }
     }
 

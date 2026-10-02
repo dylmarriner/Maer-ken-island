@@ -123,17 +123,7 @@ impl EncryptionManager {
                 .collect::<String>()
         ));
 
-        let mut options = fs::OpenOptions::new();
-        options.write(true).create_new(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
-        let mut file = options.open(&tmp_path)?;
-        let written = file.write_all(&key).and_then(|()| file.sync_all());
-        drop(file);
-
+        let written = Self::write_new_private_file(&tmp_path, &key);
         let linked = written.and_then(|()| fs::hard_link(&tmp_path, key_path));
         let _ = fs::remove_file(&tmp_path);
         match linked {
@@ -141,8 +131,44 @@ impl EncryptionManager {
             Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
                 Self::read_key_file(key_path)
             }
-            Err(e) => Err(e.into()),
+            // The filesystem cannot hard-link (some network and FAT-style
+            // mounts). Create the key file directly, still exclusively and
+            // owner-only; a loser of that race waits for the winner's write.
+            Err(_) => match Self::write_new_private_file(key_path, &key) {
+                Ok(()) => Ok(key),
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                    Self::read_key_file_when_complete(key_path)
+                }
+                Err(e) => Err(e.into()),
+            },
         }
+    }
+
+    /// Create `path` (failing if it exists) readable only by the owner, and
+    /// write `key` to it durably.
+    fn write_new_private_file(path: &Path, key: &[u8; 32]) -> std::io::Result<()> {
+        let mut options = fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        let mut file = options.open(path)?;
+        file.write_all(key)?;
+        file.sync_all()
+    }
+
+    /// Read a key file another process may still be writing: wait briefly for
+    /// it to reach full length.
+    fn read_key_file_when_complete(key_path: &Path) -> Result<[u8; 32], EncryptionError> {
+        for _ in 0..50 {
+            if fs::metadata(key_path)?.len() >= 32 {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        Self::read_key_file(key_path)
     }
 }
 

@@ -356,141 +356,193 @@ impl HumanSystem {
 
     /// Pair living humans into this step's conversations.
     ///
-    /// Each human is in at most one conversation per step, and the pairing
-    /// costs O(n log n) in the population: humans are bucketed by grid cell,
-    /// and each one looks only at a bounded number of nearby candidates.
-    /// Pairs are made in priority order, each deterministic:
+    /// Each human is in at most one conversation per step. The pairing is one
+    /// deterministic greedy matching over candidate pairs, costing O(n log n)
+    /// in the population (humans are bucketed by grid cell and each looks at
+    /// a bounded window of eligible candidates):
     ///
-    /// 1. the founders, when both are alive;
-    /// 2. neighbours (same or edge-adjacent cell) where either is reaching
-    ///    out socially, or the two are siblings — each human, in registry
-    ///    order, takes the best free candidate, ranked by relationship, then
-    ///    mutual approach, then distance, then registry order;
-    /// 3. a still-free child with a still-free living parent, at any distance.
+    /// * **Family pairs** — the founders, every living child with each living
+    ///   parent (at any distance), and adjacent siblings — outrank everyone
+    ///   else. Among themselves they are ordered by a hash of the tick and
+    ///   the two ids, so no family pair monopolises a person: over time the
+    ///   founders talk to each other *and* to their children.
+    /// * **Neighbour pairs** — humans in the same or an edge-adjacent cell
+    ///   where either is reaching out socially — come next, ranked by mutual
+    ///   approach, then closeness, then the same hash.
+    ///
+    /// Eligibility is decided *before* candidates are capped, so a crowd of
+    /// idle strangers cannot hide an eligible partner.
     pub fn step_dialogue(&mut self, rng_registry: &mk_core::rng::RngRegistry, tick: u64) {
         use dialogue::ConversationRelationship as Relationship;
-        use std::collections::{BTreeSet, HashMap};
+        use std::cmp::Reverse;
+        use std::collections::{BTreeSet, HashMap, HashSet};
+        use std::ops::Bound::{Excluded, Unbounded};
 
-        /// (relationship rank, mutual approach, closeness, earlier first)
-        type PartnerScore = (u8, bool, i32, std::cmp::Reverse<usize>);
+        /// Eligible candidates examined per human (per cell). Bounds the
+        /// work per human so a crowded cell cannot make pairing quadratic.
+        const CANDIDATES: usize = 8;
 
-        /// Candidates examined per human; bounds the cost per human so a
-        /// crowded cell cannot make pairing quadratic.
-        const CANDIDATES_PER_CELL: usize = 8;
+        /// Higher is matched first: (family?, mutual approach, closeness,
+        /// per-tick hash, earlier registry positions).
+        type EdgeScore = (bool, bool, i32, u64, Reverse<usize>, Reverse<usize>);
+
+        struct Edge {
+            score: EdgeScore,
+            a: usize,
+            b: usize,
+            relationship: Relationship,
+        }
 
         let humans = self.registry.get_all_humans();
-        // Registry positions of the living, in registry order.
-        let living: Vec<usize> = humans
-            .iter()
-            .enumerate()
-            .filter(|(_, h)| matches!(h.profile.status, HumanStatus::Alive))
-            .map(|(i, _)| i)
-            .collect();
+        let alive = |i: usize| matches!(humans[i].profile.status, HumanStatus::Alive);
+        let approaching =
+            |h: &HumanBeing| matches!(h.economy_action.kind, ActionKind::SocialApproach);
+        let living: Vec<usize> = (0..humans.len()).filter(|&i| alive(i)).collect();
 
-        let mut busy: Vec<bool> = vec![false; humans.len()];
-        let mut pairs: Vec<(usize, usize, Relationship)> = Vec::new();
-        let mut claim = |busy: &mut Vec<bool>, a: usize, b: usize, relationship| {
-            busy[a] = true;
-            busy[b] = true;
-            pairs.push((a, b, relationship));
+        // Deterministic per-tick tie-break, independent of registry order.
+        let tick_hash = |a: usize, b: usize| -> u64 {
+            let (x, y) = (humans[a].agent_id(), humans[b].agent_id());
+            let (x, y) = if x <= y { (x, y) } else { (y, x) };
+            let mut hasher = blake3::Hasher::new();
+            hasher.update(&tick.to_le_bytes());
+            hasher.update(x.as_bytes());
+            hasher.update(&[0]);
+            hasher.update(y.as_bytes());
+            let digest = hasher.finalize();
+            u64::from_le_bytes(digest.as_bytes()[..8].try_into().expect("8 bytes"))
+        };
+        let manhattan = |a: usize, b: usize| {
+            (humans[a].position.row - humans[b].position.row).abs()
+                + (humans[a].position.col - humans[b].position.col).abs()
         };
 
-        // 1. Founders.
+        let mut edges: Vec<Edge> = Vec::new();
+        let mut seen: HashSet<(usize, usize)> = HashSet::new();
+        let mut add_edge = |a: usize, b: usize, relationship: Relationship, mutual: bool| {
+            let (lo, hi) = (a.min(b), a.max(b));
+            if lo == hi || !seen.insert((lo, hi)) {
+                return;
+            }
+            let family = relationship != Relationship::Other;
+            let score = (
+                family,
+                !family && mutual,
+                if family { 0 } else { -manhattan(lo, hi) },
+                tick_hash(lo, hi),
+                Reverse(lo),
+                Reverse(hi),
+            );
+            edges.push(Edge {
+                score,
+                a: lo,
+                b: hi,
+                relationship,
+            });
+        };
+
+        // Family: the founders.
         if let (Some(d), Some(k)) = (
             self.registry.position_of("Gem-D"),
             self.registry.position_of("Gem-K"),
         ) {
-            let alive = |i: usize| matches!(humans[i].profile.status, HumanStatus::Alive);
             if alive(d) && alive(k) {
-                claim(&mut busy, d, k, Relationship::Founders);
+                add_edge(d, k, Relationship::Founders, false);
             }
         }
 
-        // 2. Neighbours. Free humans per cell, ordered by registry position.
-        let mut cells: HashMap<(i32, i32), BTreeSet<usize>> = HashMap::new();
-        for &i in &living {
-            if !busy[i] {
-                let p = humans[i].position;
-                cells.entry((p.row, p.col)).or_default().insert(i);
-            }
-        }
-        let approaching =
-            |h: &HumanBeing| matches!(h.economy_action.kind, ActionKind::SocialApproach);
-        for &a_index in &living {
-            if busy[a_index] {
-                continue;
-            }
-            let a = &humans[a_index];
-            let (row, col) = (a.position.row, a.position.col);
-            let mut best: Option<(PartnerScore, usize, Relationship)> = None;
-            for (d_row, d_col) in [(0, 0), (-1, 0), (1, 0), (0, -1), (0, 1)] {
-                let Some(cell) = cells.get(&(row + d_row, col + d_col)) else {
-                    continue;
-                };
-                for &b_index in cell
-                    .iter()
-                    .filter(|&&i| i != a_index)
-                    .take(CANDIDATES_PER_CELL)
-                {
-                    let b = &humans[b_index];
-                    let reaching = approaching(a) || approaching(b);
-                    let relationship = relationship_between(a, b);
-                    if !reaching && relationship != Relationship::Siblings {
-                        continue;
-                    }
-                    let rank = match relationship {
-                        Relationship::Founders => 4,
-                        Relationship::ParentChild => 3,
-                        Relationship::Siblings => 2,
-                        Relationship::Other => 1,
-                    };
-                    let score = (
-                        rank,
-                        approaching(a) && approaching(b),
-                        -(d_row.abs() + d_col.abs()),
-                        std::cmp::Reverse(b_index),
-                    );
-                    if best.as_ref().is_none_or(|(top, _, _)| score > *top) {
-                        best = Some((score, b_index, relationship));
-                    }
-                }
-            }
-            if let Some((_, b_index, relationship)) = best {
-                for index in [a_index, b_index] {
-                    let p = humans[index].position;
-                    if let Some(cell) = cells.get_mut(&(p.row, p.col)) {
-                        cell.remove(&index);
-                    }
-                }
-                claim(&mut busy, a_index, b_index, relationship);
-            }
-        }
-
-        // 3. Children and their parents, wherever they are.
-        for &child_index in &living {
-            if busy[child_index] {
-                continue;
-            }
-            let child = &humans[child_index];
-            let Some((father_id, mother_id)) = parent_agent_ids(child) else {
+        // Family: children and their living parents, wherever they are; and
+        // the living children of each parent, to find siblings.
+        let mut children_of: HashMap<String, Vec<usize>> = HashMap::new();
+        for &child in &living {
+            let Some((father_id, mother_id)) = parent_agent_ids(&humans[child]) else {
                 continue;
             };
-            let parent = [father_id, mother_id].iter().find_map(|id| {
-                let index = self.registry.position_of(id)?;
-                let alive = matches!(humans[index].profile.status, HumanStatus::Alive);
-                (index != child_index && alive && !busy[index]).then_some(index)
-            });
-            if let Some(parent_index) = parent {
-                claim(
-                    &mut busy,
-                    child_index,
-                    parent_index,
-                    Relationship::ParentChild,
+            for parent_id in [father_id, mother_id] {
+                if let Some(parent) = self.registry.position_of(&parent_id) {
+                    if parent != child && alive(parent) {
+                        add_edge(child, parent, Relationship::ParentChild, false);
+                    }
+                }
+                children_of.entry(parent_id).or_default().push(child);
+            }
+        }
+
+        // Family: adjacent siblings, found through their shared parents.
+        for &a in &living {
+            let Some((father_id, mother_id)) = parent_agent_ids(&humans[a]) else {
+                continue;
+            };
+            let parents = [father_id, mother_id];
+            let siblings = parents
+                .iter()
+                .filter_map(|id| children_of.get(id))
+                .flatten()
+                .copied()
+                .filter(|&b| b != a && manhattan(a, b) <= 1)
+                .take(CANDIDATES);
+            for sibling in siblings {
+                add_edge(
+                    a,
+                    sibling,
+                    relationship_between(&humans[a], &humans[sibling]),
+                    approaching(&humans[a]) && approaching(&humans[sibling]),
                 );
             }
         }
 
-        let pairs: Vec<(String, String, Relationship)> = pairs
+        // Neighbours where either is reaching out socially.
+        let mut everyone: HashMap<(i32, i32), BTreeSet<usize>> = HashMap::new();
+        let mut reaching_out: HashMap<(i32, i32), BTreeSet<usize>> = HashMap::new();
+        for &i in &living {
+            let p = humans[i].position;
+            everyone.entry((p.row, p.col)).or_default().insert(i);
+            if approaching(&humans[i]) {
+                reaching_out.entry((p.row, p.col)).or_default().insert(i);
+            }
+        }
+        for &a in &living {
+            let (row, col) = (humans[a].position.row, humans[a].position.col);
+            // A reaching-out human may talk to anyone nearby; anyone else
+            // only to those reaching out to them.
+            let pool = if approaching(&humans[a]) {
+                &everyone
+            } else {
+                &reaching_out
+            };
+            for (d_row, d_col) in [(0, 0), (-1, 0), (1, 0), (0, -1), (0, 1)] {
+                let Some(cell) = pool.get(&(row + d_row, col + d_col)) else {
+                    continue;
+                };
+                // The next candidates after `a` in registry order, wrapping,
+                // so the candidate graph is a ring rather than a star.
+                let window = cell
+                    .range((Excluded(a), Unbounded))
+                    .chain(cell.range(..a))
+                    .take(CANDIDATES);
+                for &b in window {
+                    add_edge(
+                        a,
+                        b,
+                        relationship_between(&humans[a], &humans[b]),
+                        approaching(&humans[a]) && approaching(&humans[b]),
+                    );
+                }
+            }
+        }
+
+        // Greedy matching, best edge first.
+        edges.sort_unstable_by_key(|edge| Reverse(edge.score));
+        let mut busy = vec![false; humans.len()];
+        let mut matched: Vec<(usize, usize, Relationship)> = Vec::new();
+        for edge in &edges {
+            if !busy[edge.a] && !busy[edge.b] {
+                busy[edge.a] = true;
+                busy[edge.b] = true;
+                matched.push((edge.a, edge.b, edge.relationship));
+            }
+        }
+
+        let pairs: Vec<(String, String, Relationship)> = matched
             .into_iter()
             .map(|(a, b, relationship)| {
                 (
@@ -2301,30 +2353,26 @@ mod tests {
 
         system.step_dialogue(&rng, 1);
 
-        // A child is in one conversation at a time: with the father (the
-        // first listed parent); the mother is not also talking to the child.
+        // A child is in one conversation at a time: with one of its
+        // parents, not both at once.
         assert_eq!(system.conversation_log().count(), 1);
         assert!(system
             .conversation_log()
             .all(|e| e.relationship == dialogue::ConversationRelationship::ParentChild));
         let child = system.registry.get_human("child-c").unwrap();
         assert_eq!(child.conversation_history.len(), 1);
-        assert_eq!(
-            system
-                .registry
-                .get_human("parent-a")
-                .unwrap()
-                .conversation_history
-                .len(),
-            1,
-            "the first listed living parent is chosen"
-        );
-        assert!(system
-            .registry
-            .get_human("parent-b")
-            .unwrap()
-            .conversation_history
-            .is_empty());
+        let parent_conversations: usize = ["parent-a", "parent-b"]
+            .iter()
+            .map(|id| {
+                system
+                    .registry
+                    .get_human(id)
+                    .unwrap()
+                    .conversation_history
+                    .len()
+            })
+            .sum();
+        assert_eq!(parent_conversations, 1);
     }
 
     fn crowd(size: usize, cells: usize) -> HumanSystem {
@@ -2348,9 +2396,132 @@ mod tests {
             assert!(seen.insert(event.participant_a_id), "{event:?}");
             assert!(seen.insert(event.participant_b_id), "{event:?}");
         }
-        // 51 approaching neighbours: 25 pairs, one person left over.
-        assert_eq!(system.conversation_log().count(), 25);
-        assert_eq!(seen.len(), 50);
+        // 51 approaching neighbours. The matching is maximal over a ring of
+        // 8 successors each, so at most one person in nine is left over.
+        let pairs = system.conversation_log().count();
+        assert!((23..=25).contains(&pairs), "{pairs} pairs");
+        assert_eq!(seen.len(), pairs * 2);
+    }
+
+    /// `parent`/`child` are made parent and child by a birth record, the way
+    /// the lifecycle does it.
+    fn kin(name: &str, parents: (&str, &str), at: GridPosition) -> HumanBeing {
+        let mut human = HumanBeing::new(name.to_string(), BiologicalSex::Female);
+        human
+            .profile
+            .canonical_schema
+            .get_or_insert_with(|| HumanSchema::canonical_minimal(name))
+            .reproductive_systems
+            .genetics_system
+            .birth_records
+            .push(mk_core::human::schema::BirthRecordSchema {
+                birth_id: format!("birth_{name}"),
+                genotype_id: format!("genotype_{name}"),
+                father_id: parents.0.to_string(),
+                mother_id: parents.1.to_string(),
+                birth_timestamp: "tick-0".to_string(),
+                agent_id: name.to_string(),
+                mutations: vec![],
+            });
+        human.set_runtime_position(at);
+        human
+    }
+
+    fn talked_with(system: &HumanSystem, id: &str) -> usize {
+        system
+            .registry
+            .get_human(id)
+            .unwrap()
+            .conversation_history
+            .len()
+    }
+
+    #[test]
+    fn founders_and_their_child_all_get_to_talk() {
+        let mut system = HumanSystem::new();
+        let mut gem_d = HumanBeing::gem_d_founder();
+        let mut gem_k = HumanBeing::gem_k_founder();
+        gem_d.set_runtime_position(GridPosition::new(0, 0));
+        gem_k.set_runtime_position(GridPosition::new(40, 40));
+        system.registry.add_human_no_storage(gem_d);
+        system.registry.add_human_no_storage(gem_k);
+        system.registry.add_human_no_storage(kin(
+            "first-child",
+            ("Gem-D", "Gem-K"),
+            GridPosition::new(20, 20),
+        ));
+        let rng = mk_core::rng::RngRegistry::new([3u8; 32]);
+
+        for tick in 0..60 {
+            system.step_dialogue(&rng, tick);
+        }
+
+        let founders_together = system
+            .conversation_log()
+            .filter(|e| e.relationship == dialogue::ConversationRelationship::Founders)
+            .count();
+        assert!(
+            founders_together > 0,
+            "the founders still talk to each other"
+        );
+        // The child talked, and to each parent: both parents have more
+        // conversations than the founders' own pairings account for.
+        assert!(talked_with(&system, "first-child") > 0);
+        let parent_chats = |id: &str| talked_with(&system, id) - founders_together;
+        assert!(parent_chats("Gem-D") > 0, "the child talks to Gem-D");
+        assert!(parent_chats("Gem-K") > 0, "the child talks to Gem-K");
+    }
+
+    #[test]
+    fn a_child_talks_to_its_distant_parent_rather_than_a_nearby_stranger() {
+        let mut system = HumanSystem::new();
+        system.registry.add_human_no_storage({
+            let mut parent = HumanBeing::new("far-parent".to_string(), BiologicalSex::Male);
+            parent.set_runtime_position(GridPosition::new(30, 30));
+            parent
+        });
+        system.registry.add_human_no_storage(kin(
+            "kid",
+            ("far-parent", "unknown-mother"),
+            GridPosition::new(2, 2),
+        ));
+        let mut stranger = HumanBeing::new("stranger".to_string(), BiologicalSex::Male);
+        stranger.set_runtime_position(GridPosition::new(2, 3));
+        stranger.economy_action.kind = ActionKind::SocialApproach;
+        system.registry.add_human_no_storage(stranger);
+
+        system.step_dialogue(&mk_core::rng::RngRegistry::new([2u8; 32]), 5);
+
+        assert_eq!(talked_with(&system, "far-parent"), 1);
+        assert_eq!(talked_with(&system, "kid"), 1);
+        assert_eq!(talked_with(&system, "stranger"), 0);
+    }
+
+    #[test]
+    fn siblings_behind_many_idle_strangers_still_converse() {
+        let mut system = HumanSystem::new();
+        let here = GridPosition::new(4, 4);
+        for n in 0..30 {
+            let mut idle = HumanBeing::new(format!("idle-{n:02}"), BiologicalSex::Male);
+            idle.set_runtime_position(here);
+            system.registry.add_human_no_storage(idle);
+        }
+        system
+            .registry
+            .add_human_no_storage(kin("sib-a", ("dad", "mum"), here));
+        system
+            .registry
+            .add_human_no_storage(kin("sib-b", ("dad", "mum"), here));
+
+        system.step_dialogue(&mk_core::rng::RngRegistry::new([2u8; 32]), 1);
+
+        assert_eq!(talked_with(&system, "sib-a"), 1);
+        assert_eq!(talked_with(&system, "sib-b"), 1);
+        assert_eq!(
+            system.conversation_log().count(),
+            1,
+            "idle strangers stay quiet"
+        );
     }
 
     #[test]

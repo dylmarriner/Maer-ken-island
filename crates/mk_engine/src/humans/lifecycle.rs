@@ -1032,28 +1032,47 @@ pub fn deliver_due_births(
         // `add_human` inserts the child first and then creates their personal
         // folder when storage is enabled, so a birth never depends on the
         // disk. A duplicate id is the only case where the child is not added.
-        // Events are only written when the child's folder was, so a stale
-        // folder left by an earlier run is never appended to.
-        if let Err(e) = registry.add_human(child) {
-            errors.push(e);
-            continue;
-        }
+        // The child is added whatever the disk does; only a duplicate id
+        // means it was not (its pregnancy is already consumed, so say so).
+        let child_stored = match registry.add_human(child) {
+            Ok(()) => true,
+            Err(e @ HumanStorageError::DuplicateAgent(_)) => {
+                tracing::error!(
+                    child = %child_id,
+                    mother = %mother_id,
+                    "a newborn was lost: its agent id is already in the registry"
+                );
+                errors.push(e);
+                continue;
+            }
+            Err(e) => {
+                errors.push(e);
+                false
+            }
+        };
 
-        let birth_event = serde_json::json!({
-            "kind": "born",
-            "tick": tick,
-            "parents": [mother_id, father_id],
-        });
+        // The parents' folders are theirs and unaffected by the child's, so
+        // their `reproduced` event is always written. The child's `born`
+        // event goes only into a folder this birth actually created, never
+        // into a stale folder left by an earlier run.
         let reproduced_event = serde_json::json!({
             "kind": "reproduced",
             "tick": tick,
             "child": child_id,
         });
-        for (id, event) in [
-            (&child_id, &birth_event),
+        let mut events = vec![
             (&mother_id, &reproduced_event),
             (&father_id, &reproduced_event),
-        ] {
+        ];
+        let birth_event = serde_json::json!({
+            "kind": "born",
+            "tick": tick,
+            "parents": [mother_id, father_id],
+        });
+        if child_stored {
+            events.insert(0, (&child_id, &birth_event));
+        }
+        for (id, event) in events {
             if let Err(e) = registry.record_event(id, event) {
                 errors.push(e);
             }

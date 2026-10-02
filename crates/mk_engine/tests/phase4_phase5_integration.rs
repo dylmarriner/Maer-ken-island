@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 #[test]
 #[ignore = "slow: ~35 s in debug; run with: cargo test --workspace --release -- --ignored slow_"]
-fn slow_test_phase4_deep_time_evolution() {
+fn slow_test_phase4_long_horizon_evolution() {
     let canon = Arc::new(CanonLocked::default());
     let mut biosphere = BiosphereSystem::new(canon.clone(), 12345);
 
