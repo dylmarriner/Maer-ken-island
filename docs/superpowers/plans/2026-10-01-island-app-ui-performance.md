@@ -6,7 +6,7 @@
 
 **Architecture:** Reuse the proven Maer-Ken Bevy render/procgen/property/human ideas but project them into flat regional metre coordinates rather than a sphere. The app reads a presentation projection from `IslandWorldState`; rendering is one-way and never participates in deterministic state hashing.
 
-**Tech Stack:** Bevy 0.13, bevy_egui 0.25, Rust 2021, retained GLB/texture assets, existing deterministic procgen where useful.
+**Tech Stack:** Bevy + bevy_egui (default: match upstream `mk_ui`, currently Bevy 0.13 / bevy_egui 0.25; see Task 0), Rust 2021, retained GLB/texture assets, existing deterministic procgen where useful.
 
 **Spec:** `docs/superpowers/specs/2026-10-01-maer-ken-island-regional-world-design.md`
 
@@ -14,7 +14,7 @@
 
 - Regional terrain/ocean, vegetation, property, humans, vehicles and simulation clock must be visible/inspectable.
 - Globe/orbit rendering is excluded.
-- Render coordinates derive from `IslandDomain` metres with a documented display scale; simulation state never stores Bevy transforms.
+- Render coordinates derive from `IslandDomain` metres; simulation state never stores Bevy transforms. The island spans ~2,400 km while a room is a few metres, so one global display scale cannot serve both: regional views use a coarse scale and estate/interior views use metres around a floating origin at the estate patch.
 - Assets copied from Maer-Ken retain license/source records.
 - Performance work follows measurement; structural whole-planet allocations are removed before micro-optimization.
 
@@ -28,6 +28,12 @@
 
 ---
 
+### Task 0: Render stack decision
+
+- [ ] **Step 1:** Inventory the upstream `mk_ui` render/procgen code the island will port (terrain, flora, buildings, vehicles, humans) and its Bevy API surface.
+- [ ] **Step 2:** Decide: match upstream's Bevy version (direct port) or upgrade (port + migrate). Record the decision and reason in `docs/island/RENDER_STACK.md`; it is the owner's call (program plan Owner decision 3).
+- [ ] **Step 3:** Commit `docs(island): record render stack decision`.
+
 ### Task 1: Regional view projection
 
 **Files:**
@@ -40,10 +46,11 @@
 - Test: `crates/mk_island_view/tests/projection.rs`
 
 **Interfaces:**
-- Produces: `IslandView::from_world(&IslandWorldState) -> Self` with terrain/ocean summaries, clock, humans, vegetation, property and vehicles.
-- Produces: `regional_to_render(domain: &IslandDomain, row: usize, col: usize, elevation_m: f64) -> [f32;3]` using constant display scale `1 render unit = 10,000 m`.
+- Produces: `IslandView::from_world(&IslandWorldState) -> Self` with terrain/ocean summaries, clock, humans, aggregate vegetation density, estate layout, patch trees, property and vehicles.
+- Produces: `regional_to_render(domain: &IslandDomain, row: usize, col: usize, elevation_m: f64) -> [f32;3]` using regional display scale `1 render unit = 10,000 m`.
+- Produces: `estate_to_render(layout: &EstateLayout, position_m: (f64, f64), height_m: f64) -> [f32;3]` using `1 render unit = 1 m` relative to the patch origin (floating origin), and a documented transform between the two frames.
 
-- [ ] **Step 1:** Write tests for deterministic coordinate projection, founder/property co-location and no mutation of source state.
+- [ ] **Step 1:** Write tests for deterministic coordinate projection in both frames, consistent regional↔estate transforms, founder/property co-location and no mutation of source state.
 - [ ] **Step 2:** Run `cargo test -p mk_island_view`; expect FAIL.
 - [ ] **Step 3:** Implement read-only view structs/projection without Bevy dependencies.
 - [ ] **Step 4:** Re-run tests; expect PASS.
@@ -86,7 +93,9 @@
 
 - [ ] **Step 1:** Copy only required GLBs/materials and record source/license/provenance; do not vendor the full planetary asset directory.
 - [ ] **Step 2:** Port/adapt deterministic procgen helpers required for flora, humans, buildings and current named vehicles.
-- [ ] **Step 3:** Write tests covering all six property building kinds, every current named vehicle class, founder model aliases and deterministic offsets.
+- [ ] **Step 2a:** Vegetation: render every patch `TreeInstance` individually inside the estate patch; outside it, render GPU-instanced trees whose per-chunk density and kind mix come from the aggregate biomass/biome fields. Instanced trees are presentation-only and deterministic from chunk ID; they are never resource nodes.
+- [ ] **Step 2b:** Buildings and interiors: generate meshes from `EstateLayout` footprints/rooms/doors and place items at their `ItemPlacement` positions; an interior view shows rooms with their furniture, tools, vehicles and computers.
+- [ ] **Step 3:** Write tests covering all six property building kinds, every room in the layout, every current named vehicle class, founder model aliases, instanced-tree density following aggregate biomass, and deterministic offsets.
 - [ ] **Step 4:** Implement render synchronization from `IslandView` in flat regional coordinates.
 - [ ] **Step 5:** Run app/render tests; expect PASS.
 - [ ] **Step 6:** Commit `feat(ui): render island life and property`.
@@ -99,7 +108,7 @@
 - Test: pure-state tests for inspector selection/projection.
 
 **Interfaces:**
-- Inspector exposes simulation clock, selected terrain cell, human summary, property/building/item/network-account summary and physical/environmental values from `IslandView`.
+- Inspector exposes simulation clock, selected terrain cell, selected room/item/tree, human summary (including current room), property/building/item/network-account summary and physical/environmental values from `IslandView`.
 - Controls: pause/resume, single deterministic step, save snapshot; no arbitrary state mutation through renderer.
 
 - [ ] **Step 1:** Write tests for selection lookup and inspector data coming only from current `IslandView`.

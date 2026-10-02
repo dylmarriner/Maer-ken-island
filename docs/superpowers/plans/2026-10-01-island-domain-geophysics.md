@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Introduce a deterministic regional spatial domain and generate one NZ-scale tectonic island with volcanism, bathymetry and a guaranteed surrounding-ocean buffer.
+**Goal:** Introduce a deterministic regional spatial domain and generate one NZ-scale tectonic island with volcanism, bathymetry and a guaranteed surrounding-ocean buffer, and add the headless preview tool every later phase extends.
 
 **Architecture:** Add a small `mk_island` crate that owns geometry/profile/boundary contracts while `mk_engine::regional` adapts existing Maer-Ken tectonic and volcanic state to a planar regional grid. Existing global functions remain intact until final pruning so imported tests continue to protect upstream behaviour.
 
-**Tech Stack:** Rust 2021, `mk_core`, `mk_engine`, serde, blake3, rand_chacha.
+**Tech Stack:** Rust 2021, `mk_core`, `mk_engine`, serde, blake3, rand_chacha, `png` (preview tool only).
 
 **Spec:** `docs/superpowers/specs/2026-10-01-maer-ken-island-regional-world-design.md`
 
@@ -18,6 +18,7 @@
 - No periodic east/west wrap in regional neighbor queries.
 - Boundary forcing is deterministic from seed, canon digest and simulation time.
 - Existing `mk_core::grid::Grid2<T>` remains the storage container; regional geometry lives in `IslandDomain`, not in fake spherical `GridSpec` methods.
+- Island shape defaults to unconstrained (area-fitted only). An optional `IslandShape` profile field may bias the landmass toward an elongated form; it never relaxes the area, connectivity or buffer constraints.
 
 ## Review Focus
 
@@ -41,6 +42,7 @@
 
 **Interfaces:**
 - Produces: `IslandProfile::default_nz_scale() -> Self`, `IslandProfile::validate() -> Result<(), IslandProfileError>`.
+- Produces: `IslandShape::{Unconstrained, Elongated { aspect_ratio: f64, orientation_deg: f64 }}` as `IslandProfile::shape`, default `Unconstrained`; validation rejects `aspect_ratio < 1.0`, non-finite values, and any elongated envelope whose length cannot fit inside the buffered domain at the given orientation.
 - Produces: `IslandDomain::from_profile(profile: IslandProfile) -> Result<Self, IslandDomainError>`.
 - Produces: `DomainLevel::{Coarse, Medium}`, `IslandDomain::{coarse_storage_spec, medium_storage_spec}() -> mk_core::grid::GridSpec`, `cell_center_m(level: DomainLevel, row: usize, col: usize) -> (f64, f64)`, `cell_area_m2(level: DomainLevel) -> f64`, `latitude_rad_for_row(level: DomainLevel, row: usize) -> f64`, `is_edge_buffer_cell(level: DomainLevel, row: usize, col: usize) -> bool`.
 - Produces: `LocalPatchSpec { origin_x_m: f64, origin_y_m: f64, width_m: f64, height_m: f64, cell_size_m: f64, rows: usize, cols: usize }` and `IslandDomain::local_patch(center_x_m: f64, center_y_m: f64, extent_m: f64, cell_size_m: f64) -> Result<LocalPatchSpec, IslandDomainError>` for high-detail property/interior/navigation windows without allocating a world-wide fine grid.
@@ -103,11 +105,30 @@
 - [ ] **Step 1:** Write fixed-seed tests asserting land area `254,600..=281,400 km²`, one connected primary land component, ocean in the complete 300 km edge band, negative offshore bathymetry, and deterministic elevation bytes.
 - [ ] **Step 2:** Run `cargo test -p mk_engine --test regional_geophysics`; expect FAIL.
 - [ ] **Step 3:** Implement sea-level fitting on regional cell area, deterministically retain the largest land component, submerge disconnected land, and iterate sea level until tolerance is met without violating the buffer.
+- [ ] **Step 3a:** For `IslandShape::Elongated`, apply a smooth deterministic elevation envelope along the configured axis before fitting; add a test that the fitted land's principal-axis aspect ratio is within ±25% of the requested value and all other constraints still hold.
 - [ ] **Step 4:** Feed the regional plate/heat state into existing volcanism logic through a regional wrapper; confirm volcanic fields do not require a planetary grid.
 - [ ] **Step 5:** Re-run `regional_geophysics` plus focused volcanism tests; expect PASS.
 - [ ] **Step 6:** Commit `feat(engine): generate nz-scale island geophysics`.
 
-### Task 5: Phase-1 acceptance fixture
+### Task 5: Headless preview tool
+
+**Files:**
+- Create: `apps/island_preview/Cargo.toml`
+- Create: `apps/island_preview/src/main.rs`
+- Modify: `Cargo.toml`
+- Test: `apps/island_preview/tests/preview_determinism.rs`
+
+**Interfaces:**
+- CLI: `island_preview geophysics --profile <path> --seed <hex> --out <dir>` writes `elevation.png` (hypsometric land, depth-shaded ocean, 300 km buffer outline), `land_mask.png`, `plates.png` and `summary.json` (land area km², sea-level offset, component count, min/max elevation, plate count).
+- Later phases add subcommands (`physical`, `life`, `world`) to the same tool; it never mutates or persists simulation state.
+
+- [ ] **Step 1:** Write tests asserting identical PNG bytes and `summary.json` for the same profile/seed, and that `summary.json` area equals `RegionalGeophysics::land_area_m2`.
+- [ ] **Step 2:** Run `cargo test -p island_preview`; expect FAIL.
+- [ ] **Step 3:** Implement the renderer with fixed palettes and no timestamps/metadata that vary between runs.
+- [ ] **Step 4:** Re-run; expect PASS. Generate the default-seed preview and commit it under `docs/previews/phase1/`.
+- [ ] **Step 5:** Commit `feat(preview): render island geophysics headlessly`.
+
+### Task 6: Phase-1 acceptance fixture
 
 **Files:**
 - Create: `fixtures/island/default_profile.json`
@@ -123,3 +144,4 @@
 - [ ] **Step 4:** Update `UPSTREAM.md` with `mk_island` and regional tectonic/terrain divergences.
 - [ ] **Step 5:** Run `cargo fmt --all -- --check` and Phase-1 focused tests; expect 0 failures.
 - [ ] **Step 6:** Commit `test(island): lock regional geophysics acceptance`.
+- [ ] **Step 7:** Gate 1 review: the owner looks at `docs/previews/phase1/elevation.png` before Phase 2 starts. A landmass that is wrong in kind (shape, relief, coast) is fixed here, not after climate is built on it.

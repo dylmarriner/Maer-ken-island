@@ -2,6 +2,7 @@
 
 Date: 2026-10-01
 Status: Approved architecture, implementation pending plan
+Amended: 2026-10-02 — zonal background forcing (§6), vegetation and estate representation levels (§4.5, §4.7), Phase-0 baseline (§17), per-phase previews (§13)
 Source project: `dylmarriner/Maer-Ken`
 Target project: `dylmarriner/Maer-ken-island`
 
@@ -145,6 +146,12 @@ Retain:
 Deep-time systems must operate on the island population/ecosystem rather than requiring unrelated
 global populations.
 
+Vegetation has two representation levels. Across the island, biomass and habitat are aggregate
+per-cell quantities and are the authoritative ledger values. Inside high-detail patches (by default
+one patch around the founders' estate), individual trees are simulated with positions, size and
+growth; their biomass is a disaggregation of the containing cell and must sum back to it. Outside
+patches, visible trees are presentation-only instances whose density follows the aggregate fields.
+
 ### 4.6 Humans
 
 Retain the current canonical Maer-Ken human runtime, including the existing schema/runtime behaviour
@@ -174,7 +181,10 @@ Retain and use the existing Maer-Ken property concepts/assets, including at mini
 - furniture and household fixtures represented in current data/assets
 - storage and inventory relationships
 
-Rooms are navigable/semantic locations in the simulation, not merely decorative labels.
+Rooms are navigable/semantic locations in the simulation, not merely decorative labels. The
+estate is laid out in metres inside its high-detail patch: building footprints, rooms, doors and
+item positions, with a door graph humans route through. The layout derives from the existing
+property inventory and never defines items of its own.
 
 ### 4.8 Vehicles, tools, equipment and computers
 
@@ -232,6 +242,12 @@ Required boundary categories:
 
 Boundary values must be deterministic functions of seed, canon and simulation time, or persisted
 state. No wall-clock time or hidden network dependency may feed deterministic simulation state.
+
+The upstream climate relaxes each cell toward the planet's area-weighted mean temperature, which a
+regional window cannot compute from its own cells. Global and zonal context therefore comes from a
+compact 1-D zonal background model (latitude bands only) that reuses the upstream energy-balance
+equations, is calibrated against the upstream global model, and supplies atmosphere and ocean edge
+forcing. It is compact analytic forcing under §5, not a planetary grid.
 
 ## 7. Spatial representation
 
@@ -367,6 +383,9 @@ The initial island UI must be scoped to this regional world and should expose:
 Planetary globe/orbit views are not required. Regional map/free camera views are appropriate.
 Existing Maer-Ken render/property assets should be reused where compatible.
 
+Before the UI exists, every implementation phase ends with a deterministic headless preview
+(PNG/JSON) of its new state, reviewed by the owner before the next phase builds on it.
+
 ## 14. Performance goal
 
 The purpose of the regional architecture is to make Maer-Ken materially cheaper to run while
@@ -421,7 +440,8 @@ starting point.
 
 Migration will:
 
-1. preserve its passing human/core runtime baseline
+1. make the imported baseline green and CI-gated (it was not fully passing at audit: three
+   inherited test failures, no CI, multi-minute debug tests), then preserve it
 2. restore the required regional geophysical/ecological/property systems from the pinned Maer-Ken source
 3. introduce `IslandDomain` and explicit boundary interfaces
 4. replace whole-planet bootstrap/world assumptions with regional composition

@@ -37,7 +37,7 @@
 
 **Interfaces:**
 - Produces: `IslandWorldState::new(canon: Arc<CanonLocked>, scenario: IslandScenario) -> Result<Self, IslandWorldError>`.
-- State owns `tick`, `sim_time_seconds`, canon/derived, seed/rng/hash chain, `IslandDomain`, `RegionalBoundaryState`, `RegionalPhysicalState`, `RegionalEcologyState`, `PropertySystem`, `HumanSystem`, `ResourceEconomyState`, audit/chronicle and scheduler state.
+- State owns `tick`, `sim_time_seconds`, canon/derived, seed/rng/hash chain, `IslandDomain`, `RegionalBoundaryState`, `RegionalPhysicalState` (including `ZonalBackgroundState`), `RegionalEcologyState`, `PropertySystem`, `EstateLayout`, `LocalVegetationPatch`, `HumanSystem`, `ResourceEconomyState`, audit/chronicle and scheduler state.
 - Produces: `IslandWorldState::state_hash() -> Result<[u8;32], IslandWorldError>`.
 
 - [ ] **Step 1:** Write a bootstrap test asserting the acceptance criteria for island/domain, physical state, ecology, property and founders from a single constructor.
@@ -56,7 +56,7 @@
 **Interfaces:**
 - Consumes: `mk_island::scenario::IslandCadenceProfile`. Produces: `IslandScheduler`, `SubsystemCadence`, `SchedulerAccumulators`.
 - Produces: `IslandWorldState::step(dt_seconds: u64) -> Result<(), IslandWorldError>`.
-- The scheduler uses the validated scenario cadence values: humans/interactions `60 s`; weather/ocean `3,600 s`; hydrology/ecology/resources `21,600 s`; tectonics/geology `86,400 s` by default. `IslandWorldState` persists the resolved `IslandCadenceProfile`.
+- The scheduler uses the validated scenario cadence values: humans/interactions `60 s`; weather/ocean (and zonal background) `3,600 s`; hydrology/ecology/resources/local vegetation `21,600 s`; tectonics/geology `86,400 s` by default. `IslandWorldState` persists the resolved `IslandCadenceProfile`.
 
 - [ ] **Step 1:** Write tests comparing one 86,400-second step against 1,440 × 60-second calls and requiring identical scheduler counters/final state hash for systems whose equations are cadence-invariant.
 - [ ] **Step 2:** Write tests for deterministic remainder handling with irregular `dt_seconds = 3,701` and repeated execution.
@@ -77,7 +77,7 @@
 - Produces: `load_island_snapshot(path: &Path) -> Result<IslandWorldState, IslandSnapshotError>`.
 - Error variants include digest mismatch, incompatible profile version, canon mismatch/invalid canon, serialization and filesystem errors.
 
-- [ ] **Step 1:** Write tests for round-trip equality of `state_hash`, tamper rejection, truncation rejection, incompatible fixture profile version and invalid canon.
+- [ ] **Step 1:** Write tests for round-trip equality of `state_hash` (including estate layout, patch trees and zonal background), tamper rejection, truncation rejection, incompatible fixture profile version and invalid canon.
 - [ ] **Step 2:** Run `cargo test -p mk_engine --test island_snapshot`; expect FAIL.
 - [ ] **Step 3:** Implement atomic digest-prefixed JSON save/load, re-derive canon-derived values on load, and validate scenario/profile compatibility before returning state.
 - [ ] **Step 4:** Re-run tests; expect PASS.
@@ -110,8 +110,9 @@
 **Interfaces:**
 - CLI: `island run --scenario <path> --steps <n> --dt <seconds> [--save <path>]`, `island replay --scenario <path> --log <path> [--save <path>]`, and `island inspect --snapshot <path>`; no UI dependency yet.
 
-- [ ] **Step 1:** Add acceptance test running a fixed scenario for 100 ticks, snapshotting, loading, continuing 100 ticks and matching an uninterrupted 200-tick hash.
+- [ ] **Step 1:** Add acceptance test running a fixed scenario for 100 ticks, snapshotting, loading, continuing 100 ticks and matching an uninterrupted 200-tick hash. Put it in the slow tier if it exceeds ~30 s debug.
 - [ ] **Step 2:** Implement the headless CLI around `IslandWorldState`; default with no command prints concise world summary and exits successfully.
 - [ ] **Step 3:** Run the fixed-seed CLI twice and compare printed final hash; require exact equality.
 - [ ] **Step 4:** Run fmt and all Phase-4 tests; update `UPSTREAM.md`.
 - [ ] **Step 5:** Commit `feat(app): add deterministic island runner`.
+- [ ] **Step 6:** Add `island_preview world --snapshot <path> --out <dir>` reusing the Phase 1–3 renderers on a loaded `IslandWorldState`, so any saved run can be inspected headlessly.
