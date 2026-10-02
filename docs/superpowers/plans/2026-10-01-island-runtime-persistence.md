@@ -17,6 +17,8 @@
 - Scheduler cadence is deterministic and based only on accumulated simulated time.
 - Large time advances execute deterministic accumulated substeps; they may aggregate slow systems but may not silently skip human/interaction transitions.
 - Final state hash excludes non-deterministic bridges/UI handles/wall-clock timestamps.
+- Every human — founders, newborns and foundry-created people — has their own folder in the run's human store (upstream `HumanStorage` layout: profile, traits, cognition, social, development, reproduction, episodic/semantic/procedural memories, state, relationships, events; sensitive files encrypted). The folder is created when the human is created.
+- The snapshot is the authority for deterministic restore; human folders are the per-person record and are derived from the same state. Disk success or failure never changes simulation state.
 
 ## Review Focus
 
@@ -83,6 +85,25 @@
 - [ ] **Step 4:** Re-run tests; expect PASS.
 - [ ] **Step 5:** Commit `feat(io): persist complete island world`.
 
+### Task 3b: Per-human folders
+
+**Files:**
+- Create: `crates/mk_engine/src/regional/human_store.rs`
+- Modify: `crates/mk_engine/src/regional/world.rs`
+- Test: `crates/mk_engine/tests/island_human_store.rs`
+
+**Interfaces:**
+- Each run owns a store directory, `<save_root>/<run_id>/humans/`, where `run_id` derives from scenario + seed + a creation counter, so a fresh run never reuses an earlier run's folders.
+- `IslandWorldState::enable_human_store(root: &Path) -> Result<(), HumanStoreError>` creates folders for every current human; afterwards every creation path (founders, `deliver_due_births`, the foundry command) creates the new human's folder at creation time.
+- Sync cadence: event files (`events/`, memories, relationships) are appended when the event happens; full state files are rewritten on the human-store cadence (default every 3,600 simulated seconds, configurable in `IslandCadenceProfile`), at every snapshot save, and when a human dies — not every 60 s human tick.
+- Storage errors are counted and surfaced in the audit trail and CLI output, never discarded.
+
+- [ ] **Step 1:** Write tests: founders get folders on enable; a birth during a stepped run creates the child's folder in the same tick with a `born` event and parents' `reproduced` events; a foundry-created human gets a folder; folders after a snapshot save match the snapshot's human state; a fresh run with the same seed under the same root uses a new `run_id` directory; state hash is identical with the store enabled, disabled or failing.
+- [ ] **Step 2:** Run `cargo test -p mk_engine --test island_human_store`; expect FAIL.
+- [ ] **Step 3:** Implement on top of upstream `HumanStorage` (no second folder format), adding the run directory, cadence and error reporting.
+- [ ] **Step 4:** Re-run; expect PASS. Record per-sync cost in the Phase-5 benchmark.
+- [ ] **Step 5:** Commit `feat(island): keep a folder for every human`.
+
 ### Task 4: Deterministic action replay
 
 **Files:**
@@ -108,7 +129,7 @@
 - Test: `crates/mk_engine/tests/island_runtime_acceptance.rs`
 
 **Interfaces:**
-- CLI: `island run --scenario <path> --steps <n> --dt <seconds> [--save <path>]`, `island replay --scenario <path> --log <path> [--save <path>]`, and `island inspect --snapshot <path>`; no UI dependency yet.
+- CLI: `island run --scenario <path> --steps <n> --dt <seconds> [--save <path>] [--humans-dir <path>]`, `island replay --scenario <path> --log <path> [--save <path>]`, and `island inspect --snapshot <path>`; no UI dependency yet. `--humans-dir` enables per-human folders (default: `<save dir>/humans` when `--save` is given).
 
 - [ ] **Step 1:** Add acceptance test running a fixed scenario for 100 ticks, snapshotting, loading, continuing 100 ticks and matching an uninterrupted 200-tick hash. Put it in the slow tier if it exceeds ~30 s debug.
 - [ ] **Step 2:** Implement the headless CLI around `IslandWorldState`; default with no command prints concise world summary and exits successfully.

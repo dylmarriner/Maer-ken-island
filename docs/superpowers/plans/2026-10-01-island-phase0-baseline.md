@@ -19,6 +19,8 @@
 - `EncryptionManager::decode_hex` panics on odd-length or non-ASCII `MK_STORAGE_KEY` (byte-index slicing); with `panic = "abort"` this aborts the process.
 - The generated storage key file is written with default permissions, then chmodded to `0600`.
 - `HttpComputerBridge::with_retry` retries `SendEmail` on timeout (can send duplicates) and reports `RateLimitError` for a final timeout.
+- Newborns can silently vanish: `deliver_due_births` consumes the pregnancy, then calls `HumanRegistry::add_human`, which returns early on any folder-write error (including `AlreadyExists`) *before* adding the child; the error is ignored. Newborn ids are deterministic (`born_t{tick}_{hash}`), so re-running a seed into a data directory holding an earlier run's folders drops those children. Simulation state must never depend on disk state.
+- `HumanRegistry::sync_to_storage` rewrites every human's full folder every human tick and discards write errors.
 
 ## Review Focus
 
@@ -74,6 +76,19 @@
 - [ ] **Step 4:** Restrict retries to idempotent requests and preserve the real last error.
 - [ ] **Step 5:** Run `cargo test -p mk_engine --lib io:: humans::computer_bridge`; expect PASS.
 - [ ] **Step 6:** Commit `fix(engine): harden storage key handling and bridge retries`.
+
+### Task 4b: Births must never depend on disk
+
+**Files:**
+- Modify: `crates/mk_engine/src/humans/registry.rs` (`add_human`)
+- Modify: `crates/mk_engine/src/humans/lifecycle.rs` (`deliver_due_births`)
+- Test: beside both
+
+- [ ] **Step 1:** Add failing tests with storage enabled: (a) a pre-existing folder with the newborn's id, (b) an unwritable storage root. In both, the child must still join the registry, the birth and parent events must still be recorded in memory, and the storage failure must be reported (returned/logged and counted), not swallowed.
+- [ ] **Step 2:** Change `add_human` to insert the human first and return the storage outcome separately; make `deliver_due_births` keep every child regardless and surface storage errors.
+- [ ] **Step 3:** Add a test that the same seed stepped with storage enabled, disabled, and failing yields the same human registry hash.
+- [ ] **Step 4:** Run `cargo test -p mk_engine --lib humans::`; expect PASS.
+- [ ] **Step 5:** Commit `fix(humans): never drop a newborn because a folder write failed`.
 
 ### Task 5: CI gate
 
