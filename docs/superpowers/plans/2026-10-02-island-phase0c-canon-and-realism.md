@@ -67,7 +67,7 @@
 - [x] **Step 2:** Run `cargo test -p mk_core --test island_canon`; expect FAIL.
 - [x] **Step 3:** Implement loading and the validator; set Hahn's period with a stability margin (48 local days, 0.45 R_Hill) avoiding low-order resonances. Moon masses use upstream's mass ratios (0.0123, 0.005).
 - [x] **Step 4:** Re-run, plus `cargo test -p mk_core --lib canon::`; expect PASS (upstream default canon behaviour unchanged).
-- [ ] **Step 5:** Commit `feat(canon): earth-like marr'kena island canon with consistency checks`.
+- [x] **Step 5:** Commit `feat(canon): earth-like marr'kena island canon with consistency checks`.
 
 ### Task 2: Realism standard and deviation register
 
@@ -79,9 +79,9 @@
 - **Standard:** (1) every parameter cites a source or derivation; (2) every subsystem has a validation suite against real-world reference data (Task 3), translated for planetary differences (36-h day, 288-day year, larger radius) by physical scaling, not by copying Earth numbers; (3) no game shortcuts — no free regeneration, instant actions, teleporting, infinite fuel or unpowered machines; (4) conservation of energy, water, carbon, oxygen, nitrogen and phosphorus closes every step; (5) resolution limits are stated, not hidden.
 - **Deviation register:** one row per known simplification — what reality does, what the model does, expected error, why, and the phase that could remove it. Seed rows: the density exception; daily-mean upstream climate (Phase 2 adds a diurnal cycle); parameterised convection at 12 km; species evolved for Marr'Kena rather than Earth species (validated by functional traits instead); industrial equipment (turbines, generators, rigs, refinery and gas-plant units) imported before the simulation began, with finite spares (Phase 4b); the computer service bridges to the real internet.
 
-- [ ] **Step 1:** Write both documents.
-- [ ] **Step 2:** Add a CI check that every row in `DEVIATIONS.md` names an owning phase.
-- [ ] **Step 3:** Commit `docs(island): realism standard and deviation register`.
+- [x] **Step 1:** Write both documents.
+- [x] **Step 2:** Add a check that every row in `DEVIATIONS.md` names an owning phase and a valid status — implemented as `crates/mk_core/tests/deviation_register.rs`, so it runs in the fast test tier and therefore in CI.
+- [x] **Step 3:** Commit `docs(island): realism standard and deviation register`.
 
 ### Task 3: Real-world reference data packs
 
