@@ -8,7 +8,8 @@ use mk_engine::world_integration::WorldState;
 use std::sync::Arc;
 
 #[test]
-fn test_phase4_deep_time_evolution() {
+#[ignore = "slow: ~35 s in debug; run with: cargo test --workspace --release -- --ignored slow_"]
+fn slow_test_phase4_deep_time_evolution() {
     let canon = Arc::new(CanonLocked::default());
     let mut biosphere = BiosphereSystem::new(canon.clone(), 12345);
 
