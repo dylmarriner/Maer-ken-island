@@ -10,13 +10,13 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-01-maer-ken-island-regional-world-design.md`
 
-**Depends on:** Phase 0 green baseline.
+**Depends on:** Phase 0 green baseline and Phase 0c island canon.
 
 ## Global Constraints
 
 - Default land target `268,000 km^2`, acceptance tolerance ±5% (`254,600..=281,400 km²`).
 - Minimum coastline-to-edge ocean buffer `300,000 m` on north/south/east/west edges.
-- Initial benchmark profile dimensions `2,400,000 m` (east–west) × `1,920,000 m` (north–south); coarse cell `24,000 m`; medium cell `8,000 m`; reference latitude `-41.0°` and reference longitude `174.0°` at the domain centre; all values remain configurable and validated rather than canon-locked. This yields exactly `80` rows × `100` cols coarse and `240` rows × `300` cols medium. Phase 5 benchmarks may justify a different default, but any change must preserve the profile contract and acceptance tests.
+- Initial benchmark profile dimensions `2,400,000 m` (east–west) × `1,920,000 m` (north–south); coarse cell `12,000 m` (atmosphere/ocean, comparable to regional climate models); medium cell `2,000 m` (terrain, rivers, ecology, resources — fine enough for real catchments and valleys; the island has ~67,000 land cells); reference latitude `-41.0°` and reference longitude `174.0°` at the domain centre; all values configurable and validated rather than canon-locked. This yields exactly `160` rows × `200` cols coarse and `960` rows × `1,200` cols medium. If the Phase-5 benchmark shows the default cannot run in real time on the reference machine, the documented fallback is `24,000 m` / `4,000 m` (`80 × 100` / `480 × 600`); any change must preserve the profile contract and acceptance tests. The planet canon is the island canon from Phase 0c.
 - **Orientation:** row 0 is the southern edge and latitude increases with row (matching upstream `GridSpec::lat_rad`, where row 0 is the south pole, and weather's `row + 1` = north); col 0 is the western edge and longitude increases with col. `latitude_rad_for_row` is linear in metres about the reference latitude; `longitude_rad_for_col` likewise about the reference longitude, scaled by `cos(reference latitude)`.
 - All regional grids are constructed with explicit `GridSpec::new(rows, cols)` (`GridSpec::new(nlat, nlon)`). Do not call `TectonicsState::new(width, height)`: it passes its arguments to `GridSpec::new` as `(nlat, nlon)`.
 - No periodic east/west wrap in regional neighbour queries.
@@ -52,7 +52,7 @@
 - Produces: `DomainLevel::{Coarse, Medium}`, `IslandDomain::{rows, cols}(level) -> usize`, `storage_spec(level) -> mk_core::grid::GridSpec` (`GridSpec::new(rows, cols)`), `cell_size_m(level) -> f64`, `cell_center_m(level, row, col) -> (f64, f64)`, `cell_area_m2(level) -> f64`, `latitude_rad_for_row(level, row) -> f64`, `longitude_rad_for_col(level, col) -> f64`, `lat_lon_at_m(x_m, y_m) -> (f64, f64)` (for positions inside cells, e.g. estate metres), `is_edge_buffer_cell(level, row, col) -> bool`.
 - Produces: `LocalPatchSpec { origin_x_m, origin_y_m, width_m, height_m, cell_size_m, rows, cols }` and `IslandDomain::local_patch(center_x_m, center_y_m, extent_m, cell_size_m) -> Result<LocalPatchSpec, IslandDomainError>` for high-detail property/interior/navigation windows without allocating a world-wide fine grid. A patch may span several medium cells; it must lie fully inside the domain.
 
-- [ ] **Step 1:** Write `domain_contract.rs` tests asserting default numeric values, `80 × 100` / `240 × 300` dimensions, flat cell area, row 0 = southernmost latitude, latitude/longitude at the centre equal the reference values, coordinate round-trip, bounded local-patch geometry, profile JSON round-trip, unknown `version` rejected, and all invalid profile/local-patch cases.
+- [ ] **Step 1:** Write `domain_contract.rs` tests asserting default numeric values, `160 × 200` / `960 × 1,200` dimensions, the fallback profile's `80 × 100` / `480 × 600`, flat cell area, row 0 = southernmost latitude, latitude/longitude at the centre equal the reference values, coordinate round-trip, bounded local-patch geometry, profile JSON round-trip, unknown `version` rejected, and all invalid profile/local-patch cases.
 - [ ] **Step 2:** Run `cargo test -p mk_island --test domain_contract`; expect compile/test failure because the crate/types do not exist.
 - [ ] **Step 3:** Add the workspace member and implement the profile/domain interfaces without changing `Grid2` storage semantics.
 - [ ] **Step 4:** Re-run `cargo test -p mk_island --test domain_contract`; expect PASS.
@@ -96,6 +96,23 @@
 - [ ] **Step 3:** Implement planar deterministic plate seeds/velocities and classify boundaries using regional neighbours plus edge tectonic forcing; reuse `PlateCell`, `PlateType`, `BoundaryType`, `TectonicsState`.
 - [ ] **Step 4:** Run `cargo test -p mk_engine --test regional_tectonics` and `cargo test -p mk_engine --lib tectonics::`; expect PASS.
 - [ ] **Step 5:** Commit `feat(engine): step tectonics on island domain`.
+
+### Task 3b: Earthquakes and fault slip
+
+The spec promises earthquakes; the engine has none. Earthquakes are the release of the tectonic stress Task 3 accumulates.
+
+**Files:**
+- Create: `crates/mk_engine/src/regional/seismicity.rs`
+- Test: `crates/mk_engine/tests/regional_seismicity.rs`
+
+**Interfaces:**
+- Produces: `FaultSystem { faults: Vec<Fault { id, trace_cells, kind: Thrust | Normal | StrikeSlip, slip_rate_mm_yr, locked_depth_km, stress_mpa }> }` derived from plate boundaries and their relative velocities.
+- Produces: `step_seismicity(faults: &mut FaultSystem, dt_seconds, rng: &RngRegistry) -> Vec<Earthquake { fault_id, epicentre_m, depth_km, magnitude_mw, slip_m, rupture_length_km }>`: stress loads at the fault's slip rate; events nucleate when stress exceeds a threshold drawn deterministically; magnitude from rupture area and slip (Wells & Coppersmith 1994 scaling); aftershocks follow Omori–Utsu decay; long-run magnitude–frequency follows Gutenberg–Richter with b ≈ 1.
+- Earthquakes feed back into the world: co-seismic uplift/subsidence at the fault (elevation change), landslides on steep slopes (Phase 2 hydrology sediment), shaking intensity per cell (Phase 3 structures and humans).
+
+- [ ] **Step 1:** Write tests: fault slip rates match plate relative velocities; a 10,000-year run's magnitude–frequency has b within 0.8–1.2 and moment release matches the tectonic loading budget within 10%; aftershock rate decays as Omori–Utsu (p ≈ 1); events are deterministic per seed; no event on an aseismic interior.
+- [ ] **Step 2:** Run `cargo test -p mk_engine --test regional_seismicity`; expect FAIL; implement; re-run; expect PASS (the 10,000-year run is a slow-tier test).
+- [ ] **Step 3:** Commit `feat(engine): earthquakes from regional fault stress`.
 
 ### Task 4: Volcanism, one-island terrain, target area and shape
 

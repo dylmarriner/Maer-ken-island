@@ -16,12 +16,13 @@
 - The normal world contains one contiguous primary island and ocean on every side.
 - Minimum ocean buffer is `300,000 m` from coastline to every domain edge.
 - Detailed simulation coordinates are regional Cartesian/metre-based, not a full longitude/latitude planet raster. Initial coarse/medium resolutions are implementation baselines and may change only from measured Phase-5 benchmark evidence, not convenience.
-- Maer-Ken canonical astronomy and physical constants remain authoritative unless explicitly overridden by island profile data.
+- The island uses the Phase-0c Earth-like Marr'Kena canon (`fixtures/island/canon.json`): Marr'Kena's 19,113 km radius, 36-hour day, 27° tilt and two moons, with Earth gravity, atmosphere and sunlight, and orbital values recomputed for physical consistency. Upstream canon is unchanged.
 - Same canon + seed + scenario + actions + build must produce the same state/replay hash.
 - Deterministic state must not depend on wall-clock time, hidden network input, or unordered iteration.
 - Gem-D and Gem-K use the canonical imported Maer-Ken human runtime; no island-only fork of human cognition/biology is permitted.
 - Imported code remains attributable to `dylmarriner/Maer-Ken` at the commit pinned in `UPSTREAM.md` (currently `7c05f0dcf254387ffd7322dbb525fe4807228602`) until an explicit upstream sync changes the pin.
 - Normal island execution must not allocate unrelated whole-planet terrain, ocean, atmosphere, biosphere, settlement, or resource grids. Compact 1-D zonal (latitude-band) forcing models permitted by spec §5 are not "planetary grids" and are allowed.
+- **Realism standard** (Phase 0c, `docs/island/REALISM.md`): every parameter sourced or derived; every system validated against real-world reference data scaled for the planet; every remaining simplification in `docs/island/DEVIATIONS.md`; no free regeneration, instant actions, infinite fuel or unpowered machines.
 - Every phase ends with a headless, deterministic preview (`island_preview`, introduced in Phase 1) that renders that phase's new state to PNG/JSON so progress is inspectable without waiting for the Phase-5 UI.
 - Each task commits on its own once its focused tests pass. Main must never be red: CI from Phase 0 gates every push.
 
@@ -40,6 +41,7 @@
 
 0. `2026-10-01-island-phase0-baseline.md` — make the imported workspace green, split slow tests, add CI, fix inherited defects, check upstream drift.
 0b. `2026-10-01-island-phase0b-early-human-creator.md` — browser dashboard where the owner creates complete humans, each with their own folder; no island or time yet.
+0c. `2026-10-02-island-phase0c-canon-and-realism.md` — physically consistent Earth-like Marr'Kena canon, realism standard, deviation register, real-world reference data, human realism validation.
 1. `2026-10-01-island-domain-geophysics.md` — regional coordinate contract, deterministic boundaries, tectonics/terrain/volcanism, one-island land-area fitting, headless preview tool.
 2. `2026-10-01-island-water-atmosphere.md` — dependency inventory, zonal background forcing, regional climate/weather/ocean/hydrology/tides and boundary exchange.
 3. `2026-10-01-island-life-property-humans.md` — ecology/vegetation/resources, dense local vegetation, canonical property inventory with a metric estate layout, founders and human interactions.
@@ -50,6 +52,7 @@
 
 - [ ] **Gate 0:** `cargo test --workspace` (fast set) passes with 0 failures, the slow set passes in release, and CI enforces fmt/clippy/fast tests on every push.
 - [ ] **Gate 0b:** The owner creates a human in the browser dashboard; they appear in the roster, have their own folder with a `created` event, and survive a restart.
+- [ ] **Gate 0c:** The island canon passes the physical-consistency validator with only the declared density exception; reference packs load; human realism results are passing or accepted by the owner.
 - [ ] **Gate 1:** Phase 1 tests prove deterministic one-island generation within land-area tolerance and ocean-buffer constraints, with lithology and mineral deposits; `island_preview` emits the elevation, geology and deposit maps and the seed gallery.
 - [ ] **Gate 2:** Phase 2 tests prove local ocean/atmosphere/hydrology coupling with explicit non-wrapping edge forcing and a zonal background calibrated against the upstream global model; preview emits temperature/rain/river maps.
 - [ ] **Gate 3:** Phase 3 tests prove the retained ecology, founders, property inventory, metric estate layout (computer room inside the house), dense local vegetation, computers and material economy operate on regional cells, with carbon, oxygen and water budgets closing every step; preview emits the estate plan and local tree map.
@@ -76,9 +79,17 @@ Decided (2026-10-02):
 6. **Physical materials:** gathered wood, food, fibre, resin, coal and water move real carbon, oxygen and water; burning and human metabolism release CO₂; biotic resources regrow only as biomass regrows (Phase 3 Task 3).
 7. **Every resource and material:** real geology (rock types and ~20 deposit families) places gold, silver, platinum, base metals, gems including diamonds, crystals, stone, industrial minerals, salts and fuels; every resource has a node and every material an item (Phase 1 Task 5, Phase 3 Task 2). Diamonds require the island's ancient-crust fragment; the gallery shows which candidate islands have them.
 
+9. **Planet:** Earth-like Marr'Kena — keep the 19,113 km radius, 36-hour day, 27° tilt and two moons; Earth gravity, atmosphere and sunlight; orbit recomputed (year 323 local days ≈ 485 Earth days) and Hahn's orbit shortened to about 80 days for stability (Phase 0c). Declared exception: Earth gravity at this size implies one-third Earth density.
+10. **Realism over convenience:** default resolution 2 km (land) / 12 km (air and sea), falling back to 4 km / 24 km only if benchmarks require it; earthquakes, a real day/night cycle, travelling weather systems, timed and energy-costed human work, and fuel/electricity for the estate.
+
+Open (defaults apply until decided):
+
+- **Estate energy:** default one 10 kW diesel generator, 2,000 L diesel, 400 L petrol, 5 kW rooftop solar and a 10 kWh battery (Phase 3 Task 4b).
+- **Performance targets:** default at least one simulated day per real minute headless, and real time with the UI open (Phase 5 Task 6).
+
 Population:
 
-8. **Population.** The island starts with Gem-D and Gem-K (the only humans upstream defines, running the complete runtime). The owner adds people through the dashboard Human Creator (first in Phase 0b, then with island placement in Phase 4 Task 6); further people are born through the reproduction system. Every human, however created, gets their own folder.
+11. **Population.** The island starts with Gem-D and Gem-K (the only humans upstream defines, running the complete runtime). The owner adds people through the dashboard Human Creator (first in Phase 0b, then with island placement in Phase 4 Task 6); further people are born through the reproduction system. Every human, however created, gets their own folder.
 
 ## Final verification
 
@@ -88,4 +99,4 @@ Population:
 - [ ] Run the fixed-seed replay command defined in Phase 4 twice and require byte-identical final hashes.
 - [ ] Run the benchmark command defined in Phase 5 and commit the baseline report under `benchmarks/`.
 - [ ] Update `UPSTREAM.md` with every imported path and island divergence introduced by the phases.
-- [ ] Tick the program complete only after all seven gates are green.
+- [ ] Tick the program complete only after all eight gates are green.

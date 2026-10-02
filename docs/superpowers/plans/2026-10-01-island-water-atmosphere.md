@@ -33,7 +33,7 @@ This phase therefore adds a compact 1-D **zonal background model** — latitude 
 - Hydrology reaching ocean or a domain edge is conserved and ledger/audit visible.
 - No regional step computes a planet-wide quantity from regional cells; global/zonal context comes only from `ZonalBackgroundState`.
 - The zonal background has a fixed, small band count (default 64) and is part of persisted deterministic state.
-- **Grid levels:** zonal background is 1-D; climate, weather and ocean run on `DomainLevel::Coarse` (80 × 100); hydrology and tides run on `DomainLevel::Medium` (240 × 300). Crossing levels goes only through `resample_coarse_to_medium` (bilinear) and `aggregate_medium_to_coarse` (area mean, flux-conserving), introduced in Task 3.
+- **Grid levels:** zonal background is 1-D; climate, weather and ocean run on `DomainLevel::Coarse` (160 × 200 at 12 km); hydrology and tides run on `DomainLevel::Medium` (960 × 1,200 at 2 km). Crossing levels goes only through `resample_coarse_to_medium` (bilinear) and `aggregate_medium_to_coarse` (area mean, flux-conserving), introduced in Task 3.
 - **Coriolis:** `f = 2Ω·sin(latitude_rad_for_row)`, Ω from the canon rotation period, computed once per level from the domain.
 
 ## Review Focus
@@ -91,15 +91,32 @@ This phase therefore adds a compact 1-D **zonal background model** — latitude 
 - Produces: `regional_coriolis(domain, level, canon) -> Grid2<f64>`.
 - Produces: `step_regional_climate(previous: &ClimateState, forcing: &ClimateForcing<'_>, domain: &IslandDomain, background: &ZonalBackgroundState, atmosphere: &AtmosphereBoundaryForcing, ocean_edge: &OceanBoundaryForcing) -> ClimateState` on Coarse. `forcing.volcanic_co2_mol_yr` is the island's own volcanic output from Phase 1; CO₂ concentration, the meridional-transport target `mean(T_rad)`, and `mean_absorbed_flux_w_m2` come from `background`, not regional cells. Ocean-edge SST forcing is applied here, because upstream ocean copies SST from climate (`ocean/mod.rs:223`).
 - Produces: `step_regional_weather(canon: &CanonLocked, tick: Tick, climate: &ClimateState, elevation_m: &Grid2<f64>, domain: &IslandDomain, background: &ZonalBackgroundState, atmosphere: &AtmosphereBoundaryForcing) -> WeatherState` on Coarse, using `regional_coriolis`, flat row spacing, and `background.global_mean_precipitation_mm_day` for the precipitation normalisation.
+- Produces (new physics, island divergence): `apply_diurnal_cycle(climate: &mut ClimateState, insolation: &InsolationState, surface: &SurfaceProperties, domain)` — upstream climate is a daily mean; the island resolves day and night across the 36-hour day: instantaneous insolation, surface energy balance with land/ocean heat capacity, a diurnal temperature range that is larger inland and under clear skies, nocturnal cooling and inversions in valleys, and land/sea breezes. The daily mean is preserved, so the zonal-background coupling is unchanged.
 - Produces (new physics, island divergence): `apply_orographic_precipitation(weather: &mut WeatherState, elevation_m: &Grid2<f64>, domain)` — upwind moisture budget along the wind vector: rain enhancement on windward slopes proportional to upslope gradient, depletion of the carried moisture, and a rain shadow downwind; total precipitation over the domain is preserved within ±1% so the normalisation still holds.
 
 - [ ] **Step 1:** Write `levels.rs` tests: coarse→medium→coarse round-trip within interpolation tolerance; medium→coarse conserves `Σ value·area` exactly.
-- [ ] **Step 2:** Write `regional_atmosphere.rs` tests: deterministic temperature/rain/wind; reference-latitude seasonality (southern-hemisphere phase); warmer at the northern edge than the southern; finite boundary gradients; no spherical area weighting; an all-ocean domain whose mean temperature matches the background at the same latitudes within ±1 K; a single west–east ridge under a westerly wind gets more rain on its west flank than its east flank, and domain-total precipitation is preserved within ±1%.
+- [ ] **Step 2:** Write `regional_atmosphere.rs` tests: deterministic temperature/rain/wind; reference-latitude seasonality (southern-hemisphere phase); warmer at the northern edge than the southern; finite boundary gradients; no spherical area weighting; an all-ocean domain whose mean temperature matches the background at the same latitudes within ±1 K; a single west–east ridge under a westerly wind gets more rain on its west flank than its east flank, and domain-total precipitation is preserved within ±1%; the diurnal temperature range over inland valleys exceeds that over the ocean by the reference-pack ratio, and the daily mean is unchanged by the diurnal cycle.
 - [ ] **Step 3:** Run `cargo test -p mk_engine --test regional_atmosphere`; expect FAIL.
 - [ ] **Step 4:** Implement climate reusing upstream equations with domain latitude, flat weighting, and background-sourced global terms; blend atmospheric and ocean-edge forcing only through explicit boundary cells.
 - [ ] **Step 5:** Implement weather on the same contract, then `apply_orographic_precipitation`. Do not change imported global APIs; extract shared helpers where an upstream function hard-codes spherical geometry, as Phase 1 Task 4 did for volcanism.
 - [ ] **Step 6:** Run `cargo test -p mk_engine --test regional_atmosphere` and `cargo test -p mk_engine --lib -- climate:: weather::`; expect PASS.
 - [ ] **Step 7:** Record the orographic precipitation step and any extracted helpers in `UPSTREAM.md`. Commit `feat(engine): regionalize climate and weather`.
+
+### Task 3b: Synoptic weather systems
+
+Upstream weather is diagnostic from climate; real mid-latitude weather is a sequence of travelling fronts, highs and lows. A full dynamical atmosphere is beyond this phase; instead, synoptic systems are generated from the physics that creates them and steered by the background flow.
+
+**Files:**
+- Create: `crates/mk_engine/src/regional/synoptic.rs`
+- Test: `crates/mk_engine/tests/regional_synoptic.rs`
+
+**Interfaces:**
+- Produces: `SynopticState { systems: Vec<SynopticSystem { kind: Cyclone | Anticyclone | Front, centre_m, velocity_m_s, central_pressure_pa, radius_m, age_s }> }` and `step_synoptic(state, background: &ZonalBackgroundState, boundaries, domain, canon, dt_seconds, rng) -> SynopticState`.
+- Physics: genesis rate from the Eady baroclinic growth rate (`0.31·f·|∂u/∂z|/N`, from the background's meridional temperature gradient and the canon's rotation rate); system scale from the Rossby deformation radius (`N·H/f`), which differs from Earth's because of the 36-hour day; systems enter at the upwind domain edge, move with the steering flow, deepen and decay with documented lifetimes. Weather (wind, cloud, rain) is the diagnostic upstream field modulated by the systems: fronts bring rain bands and wind shifts, lows bring storms, highs bring clear calm spells.
+
+- [ ] **Step 1:** Write tests: system frequency, size and lifetime fall within the reference climate pack's mid-latitude storm-track ranges after scaling by the planet's deformation radius and rotation rate; a front's passage produces a pressure trough, wind shift and rain band; long-run mean rainfall and wind still match Task 3's climatology within 5%; deterministic per seed.
+- [ ] **Step 2:** Run `cargo test -p mk_engine --test regional_synoptic`; expect FAIL; implement; re-run; expect PASS.
+- [ ] **Step 3:** Commit `feat(engine): travelling synoptic weather systems`.
 
 ### Task 4: Regional ocean and tides
 
@@ -143,11 +160,11 @@ This phase therefore adds a compact 1-D **zonal background model** — latitude 
 - Test: `crates/mk_engine/tests/regional_physical_coupling.rs`
 
 **Interfaces:**
-- Produces: `RegionalPhysicalState { geophysics, zonal_background, boundaries, insolation, climate, weather, hydrology, ocean, tides, climatology, ledger }`. The state owns its `RegionalBoundaryState`; callers never pass one in. `insolation` is upstream `InsolationState` evaluated on the Coarse grid from `AstronomyForcing` with regional latitude/longitude; Phase 3's human observation reads `daylight_fraction` from it.
+- Produces: `RegionalPhysicalState { geophysics, zonal_background, boundaries, insolation, climate, synoptic, weather, hydrology, ocean, tides, climatology, ledger }`. The state owns its `RegionalBoundaryState`; callers never pass one in. `insolation` is upstream `InsolationState` evaluated on the Coarse grid from `AstronomyForcing` with regional latitude/longitude; Phase 3's human observation reads `daylight_fraction` from it.
 - Produces: `RegionalPhysicalState::bootstrap(canon: &Arc<CanonLocked>, domain: &IslandDomain, seed: [u8; 32]) -> Result<Self, RegionalPhysicalError>` (runs Phase 1 geophysics bootstrap, zonal spin-up and regional climate spin-up) and `RegionalPhysicalState::step(&mut self, canon: &Arc<CanonLocked>, domain: &IslandDomain, seed: [u8; 32], sim_time_seconds: f64, tick: Tick, dt_seconds: u64) -> Result<(), RegionalPhysicalError>`.
-- Step order inside `step`: zonal background → `sample_regional_boundaries_with_background` (stored in `self.boundaries`) → insolation → tides → climate → weather (+ orographic) → resample to medium → hydrology → aggregate runoff → ocean → slow geophysics cadence hook (no-op until Phase 4's scheduler).
+- Step order inside `step`: zonal background → `sample_regional_boundaries_with_background` (stored in `self.boundaries`) → insolation → tides → climate (+ diurnal) → synoptic systems → weather (+ orographic) → resample to medium → hydrology → aggregate runoff → ocean → slow geophysics cadence hook (no-op until Phase 4's scheduler).
 
-- [ ] **Step 1:** Write an acceptance test stepping 30 simulated days and asserting changing weather/ocean/hydrology, finite state, preserved land mask, water budget closure across the step, and deterministic final serialized hash. Slow tier if it exceeds ~30 s debug.
+- [ ] **Step 1:** Write an acceptance test stepping 30 simulated days and asserting changing weather/ocean/hydrology, finite state, preserved land mask, water budget closure across the step, and deterministic final serialized hash. Add a slow-tier realism test over one simulated year comparing lapse rate, diurnal range, windward/leeward rainfall ratio, sea-surface temperature range, storm frequency and river runoff ratios against the Phase-0c climate and hydrology reference packs (scaled for the planet), with each tolerance stated.
 - [ ] **Step 2:** Run `cargo test -p mk_engine --test regional_physical_coupling`; expect FAIL.
 - [ ] **Step 3:** Implement `bootstrap` and `step` in the order above.
 - [ ] **Step 4:** Re-run the test twice and assert identical final blake3 hash.

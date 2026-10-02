@@ -42,7 +42,7 @@
 
 **Interfaces:**
 - Produces: `IslandWorldState::new(canon: Arc<CanonLocked>, scenario: IslandScenario) -> Result<Self, IslandWorldError>`.
-- State owns `tick`, `sim_time_seconds`, canon/derived, scenario, seed/`RngRegistry`/`HashChain`, `IslandDomain`, `GridTopology` (regional, Medium), `RegionalPhysicalState` (including boundaries, zonal background, insolation), `RegionalEcologyState`, `PropertySystem`, `EstateLayout`, `LocalVegetationPatch`, `HumanSystem`, `HumanEstatePositions`, `ResourceEconomyState`, audit/chronicle, scheduler state and the pending command queue.
+- State owns `tick`, `sim_time_seconds`, canon/derived, scenario, seed/`RngRegistry`/`HashChain`, `IslandDomain`, `GridTopology` (regional, Medium), `FaultSystem` and recent earthquakes, `RegionalPhysicalState` (including boundaries, zonal background, insolation, synoptic systems), `RegionalEcologyState`, `PropertySystem`, `EstateLayout`, `EstateEnergy`, `LocalVegetationPatch`, `HumanSystem`, `HumanEstatePositions`, active labour tasks, `ResourceEconomyState`, audit/chronicle, scheduler state and the pending command queue.
 - Produces: `IslandWorldState::state_hash() -> Result<[u8; 32], IslandWorldError>` (canonical form above).
 
 - [ ] **Step 1:** Write a bootstrap test asserting the acceptance criteria for island/domain, physical state, ecology, property, layout, patch vegetation and founders from a single constructor, and that `state_hash` is identical across two separate processes (spawn the test binary twice via `std::process::Command` and compare).
@@ -61,7 +61,7 @@
 **Interfaces:**
 - Consumes: `mk_island::scenario::IslandCadenceProfile` (five cadences, Phase 3 Task 4). Produces: `IslandScheduler`, `SubsystemCadence`, `SchedulerAccumulators`.
 - Produces: `IslandWorldState::step(dt_seconds: u64) -> Result<(), IslandWorldError>`.
-- Per human substep, in fixed order: apply queued commands for this tick (Task 4) → humans/interactions (`human_seconds`) → weather/ocean/zonal background/insolation (`weather_ocean_seconds`) → hydrology/ecology/resources (`regenerate()` once per firing)/local vegetation (`hydrology_ecology_resource_seconds`) → tectonics/geology (`geophysics_seconds`) → human store sync (`human_store_seconds`, Task 3b) → audit/hash commit.
+- Per human substep, in fixed order: apply queued commands for this tick (Task 4) → humans/interactions, active labour tasks and estate energy (`human_seconds`) → weather/ocean/zonal background/insolation (`weather_ocean_seconds`) → hydrology/ecology/resources (`regenerate()` once per firing)/local vegetation (`hydrology_ecology_resource_seconds`) → tectonics/geology and fault stress (`geophysics_seconds`; earthquakes are resolved at the human substep in which they nucleate so shaking reaches humans and structures in the same tick) → human store sync (`human_store_seconds`, Task 3b) → audit/hash commit.
 
 - [ ] **Step 1:** Write tests comparing one 86,400-second step against 1,440 × 60-second calls and requiring identical scheduler counters and final state hash.
 - [ ] **Step 2:** Write tests for deterministic remainder handling with irregular `dt_seconds = 3,701` and repeated execution.

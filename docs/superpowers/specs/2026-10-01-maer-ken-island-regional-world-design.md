@@ -28,7 +28,7 @@ The default island profile targets approximately New Zealand's total land area:
 - ocean on every side
 - default ocean buffer: configurable, initially 300 km minimum from the generated coastline to each domain edge
 - horizontal simulation coordinates are regional Cartesian/metre-based coordinates rather than a required global longitude/latitude raster
-- Maer-Ken astronomical and physical constants remain canonical unless an island-specific canon file explicitly overrides a value
+- the island runs on an island canon file (Phase 0c): Earth-like Marr'Kena — Marr'Kena's 19,113 km radius, 36-hour day, 27° axial tilt and two moons, with Earth surface gravity, an Earth atmosphere and Earth-like sunlight, and the orbit, year and outer moon recomputed so the physics is consistent. The one declared exception is bulk density (Earth gravity at this size implies one third of Earth's density). Upstream Maer-Ken's canon is unchanged
 
 The land-area target is a generation constraint, not a fixed rectangle. Coastline, mountains,
 valleys, river systems, wetlands, beaches and offshore bathymetry are generated within the regional
@@ -487,3 +487,16 @@ Migration will:
 
 The implementation plan following this design must stage those changes so the repository remains
 buildable and testable throughout the migration.
+
+## 18. Realism standard
+
+The island is a realistic simulation of a planet and its people. Every parameter cites a source or a
+derivation; every system is validated against real-world reference data, scaled for the planet's
+size, day and year; every simplification that remains is recorded in a deviation register with its
+expected error. The simulation has no free regeneration, instant actions, infinite fuel or
+unpowered machines: work takes real time and real energy, deposits run out, fuel burns, computers
+need power, earthquakes release real tectonic stress, weather moves through in systems, and day and
+night follow the 36-hour rotation. Human biology runs in real time; where the human runtime
+disagrees with real physiology (for example, it has no intrinsic ~24.2-hour body clock), it is
+corrected upstream first.
+
