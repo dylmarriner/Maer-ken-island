@@ -8,9 +8,14 @@ description = "Maer-Ken Island human population bootstrap using the canonical Ma
 [dependencies]
 mk_core = { path = "../../crates/mk_core" }
 mk_engine = { path = "../../crates/mk_engine" }
+mk_interventions = { path = "../../crates/mk_interventions" }
+hex.workspace = true
 chrono.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+
+[dev-dependencies]
+tempfile = "3"
 
 [lints]
 workspace = true
