@@ -275,6 +275,192 @@ fn validate_phys(
     Ok(())
 }
 
+/// How serious a physical-consistency finding is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IssueSeverity {
+    /// The canon contradicts physics; a world built on it is inconsistent.
+    Error,
+    /// A known departure the canon's author has chosen and recorded (for
+    /// example, Earth gravity on a planet three times Earth's radius).
+    Declared,
+}
+
+/// One physical-consistency finding.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ConsistencyIssue {
+    pub check: &'static str,
+    pub expected: f64,
+    pub actual: f64,
+    pub severity: IssueSeverity,
+}
+
+/// Bulk density below which a planet cannot be mostly rock. The least dense
+/// rocky body in the Solar System is the Moon, at about 3,344 kg/m³.
+pub const ROCKY_MIN_BULK_DENSITY_KG_M3: f64 = 3_300.0;
+
+/// Prograde satellites on near-circular orbits stay bound over long times
+/// only inside roughly half the Hill radius (Domingos, Winter & Yokoyama
+/// 2006, MNRAS 373, 1227).
+pub const HILL_STABLE_FRACTION: f64 = 0.49;
+
+/// Jeans escape parameter above which a gas is retained over geological time.
+pub const JEANS_RETENTION_PARAMETER: f64 = 50.0;
+
+/// Check that the canon's values agree with each other under Newtonian
+/// physics: surface gravity, insolation, the planet's and each moon's orbit
+/// (Kepler's third law), moon stability (Hill sphere, Roche limit, low-order
+/// resonances) and atmosphere retention. Unlike [`validate_canon`], this does
+/// not require the default canon's exact values, so it applies to any canon.
+pub fn validate_physical_consistency(canon: &CanonLocked) -> Vec<ConsistencyIssue> {
+    use std::f64::consts::PI;
+    let g = GRAVITATIONAL_CONSTANT;
+    let mut issues = Vec::new();
+    let mut check = |name: &'static str, expected: f64, actual: f64, rel: f64| {
+        if !expected.is_finite()
+            || !actual.is_finite()
+            || (actual - expected).abs() > rel * expected.abs()
+        {
+            issues.push(ConsistencyIssue {
+                check: name,
+                expected,
+                actual,
+                severity: IssueSeverity::Error,
+            });
+        }
+    };
+
+    let planet = canon.planet_mass_kg;
+    let radius = canon.planet_radius_m;
+    check(
+        "surface_gravity_m_s2 = G M / R^2",
+        g * planet / (radius * radius),
+        canon.surface_gravity_m_s2,
+        5e-3,
+    );
+    check(
+        "solar_constant_w_m2 = L / (4 pi a^2)",
+        canon.star_luminosity_w / (4.0 * PI * canon.semi_major_axis_m.powi(2)),
+        canon.solar_constant_w_m2,
+        5e-3,
+    );
+    let kepler = |a: f64, mu: f64| 2.0 * PI * (a.powi(3) / mu).sqrt();
+    check(
+        "orbital_period_s (Kepler, planet around star)",
+        kepler(canon.semi_major_axis_m, g * (canon.star_mass_kg + planet)),
+        canon.orbital_period_s,
+        5e-3,
+    );
+
+    let hill = canon.semi_major_axis_m
+        * (1.0 - canon.orbital_eccentricity)
+        * (planet / (3.0 * canon.star_mass_kg)).cbrt();
+    let roche = 2.44 * radius; // fluid Roche limit for a moon as dense as its planet
+    struct Moon {
+        a: f64,
+        period: f64,
+        local_days: f64,
+        mass_ratio: f64,
+        kepler: &'static str,
+        days: &'static str,
+        hill: &'static str,
+        roche: &'static str,
+    }
+    let moons = [
+        Moon {
+            a: canon.mckenz_semi_major_axis_m,
+            period: canon.moon_mckenz_period_s,
+            local_days: canon.mckenz_period_local_days,
+            mass_ratio: canon.moon_mckenz_mass_ratio,
+            kepler: "moon_mckenz_period_s (Kepler)",
+            days: "moon_mckenz_period_s = local days x rotation",
+            hill: "mckenz_semi_major_axis_m < 0.49 Hill radius",
+            roche: "mckenz_semi_major_axis_m > Roche limit",
+        },
+        Moon {
+            a: canon.hahn_semi_major_axis_m,
+            period: canon.moon_hahn_period_s,
+            local_days: canon.hahn_period_local_days,
+            mass_ratio: canon.moon_hahn_mass_ratio,
+            kepler: "moon_hahn_period_s (Kepler)",
+            days: "moon_hahn_period_s = local days x rotation",
+            hill: "hahn_semi_major_axis_m < 0.49 Hill radius",
+            roche: "hahn_semi_major_axis_m > Roche limit",
+        },
+    ];
+    for moon in &moons {
+        check(
+            moon.kepler,
+            kepler(moon.a, g * planet * (1.0 + moon.mass_ratio)),
+            moon.period,
+            5e-3,
+        );
+        check(
+            moon.days,
+            moon.local_days * canon.rotation_period_s,
+            moon.period,
+            1e-9,
+        );
+    }
+    for moon in &moons {
+        if moon.a >= HILL_STABLE_FRACTION * hill {
+            issues.push(ConsistencyIssue {
+                check: moon.hill,
+                expected: HILL_STABLE_FRACTION * hill,
+                actual: moon.a,
+                severity: IssueSeverity::Error,
+            });
+        }
+        if moon.a <= roche {
+            issues.push(ConsistencyIssue {
+                check: moon.roche,
+                expected: roche,
+                actual: moon.a,
+                severity: IssueSeverity::Error,
+            });
+        }
+    }
+    let (inner, outer) = if canon.moon_mckenz_period_s <= canon.moon_hahn_period_s {
+        (canon.moon_mckenz_period_s, canon.moon_hahn_period_s)
+    } else {
+        (canon.moon_hahn_period_s, canon.moon_mckenz_period_s)
+    };
+    let ratio = outer / inner;
+    for resonance in [2.0, 1.5] {
+        if (ratio - resonance).abs() <= 0.02 * resonance {
+            issues.push(ConsistencyIssue {
+                check: "moon period ratio not near 2:1 or 3:2",
+                expected: resonance,
+                actual: ratio,
+                severity: IssueSeverity::Error,
+            });
+        }
+    }
+
+    // Jeans escape parameter for N2 at a 1,000 K exobase 500 km up.
+    let boltzmann = 1.380_649e-23;
+    let n2_mass = 28.0 * 1.660_539_066_6e-27;
+    let jeans = g * planet * n2_mass / (boltzmann * 1_000.0 * (radius + 5.0e5));
+    if jeans < JEANS_RETENTION_PARAMETER {
+        issues.push(ConsistencyIssue {
+            check: "Jeans parameter for N2 >= 50",
+            expected: JEANS_RETENTION_PARAMETER,
+            actual: jeans,
+            severity: IssueSeverity::Error,
+        });
+    }
+
+    let density = planet / (4.0 / 3.0 * PI * radius.powi(3));
+    if density < ROCKY_MIN_BULK_DENSITY_KG_M3 {
+        issues.push(ConsistencyIssue {
+            check: "bulk density >= rocky minimum",
+            expected: ROCKY_MIN_BULK_DENSITY_KG_M3,
+            actual: density,
+            severity: IssueSeverity::Declared,
+        });
+    }
+    issues
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -12,7 +12,7 @@ The island project must retain the depth of the Maer-Ken simulation while boundi
 
 - approximately `268,000 km²` of contiguous primary land with a **unique, procedurally generated shape** (irregular coastline with headlands and bays; not New Zealand's outline, not a blob), chosen by the owner from a seed gallery;
 - ocean on every side, with a minimum `300 km` coastline-to-domain-edge buffer;
-- the planet is **Earth-like Marr'Kena**: Marr'Kena's 19,113 km radius, 36-hour day, 27° tilt and two moons, with Earth gravity, atmosphere and sunlight, and orbit, year (323 local days) and outer-moon period recomputed for physical consistency;
+- the planet is **Earth-like Marr'Kena**: Marr'Kena's 19,113 km radius, 36-hour day, 27° tilt and two moons, with Earth gravity, atmosphere and sunlight, and orbit, year (288 local days) and outer-moon period recomputed for physical consistency;
 - deterministic tectonics, earthquakes, terrain, volcanism, rock types and mineral deposits (gold, silver, platinum, base metals, gems including diamonds, crystals, stone, industrial minerals, salts, coal, oil and gas);
 - ocean, tides, atmosphere, climate with a real day/night cycle, travelling weather systems, and hydrology with real rivers;
 - soils, vegetation (individual trees around the estate), ecology, every resource as a node and every material as an item, with carbon, oxygen and water moving physically through gathering, crafting, burning and eating;
