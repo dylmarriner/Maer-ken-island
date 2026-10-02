@@ -38,6 +38,21 @@ panic = "abort"
 opt-level = 0
 debug = true
 
+# The simulation crates are numeric and loop-heavy; optimising them keeps the
+# fast test tier fast without slowing compiles of the rest of the workspace.
+[profile.dev.package.mk_engine]
+opt-level = 2
+
+[profile.dev.package.mk_core]
+opt-level = 2
+
+# `cargo test --release` uses the bench profile, which would otherwise inherit
+# the release `lto = true, codegen-units = 1` and make every test binary slow
+# to link.
+[profile.bench]
+lto = false
+codegen-units = 16
+
 [workspace.lints.cargo]
 non_kebab_case_bins = "allow"
 missing_lints_inheritance = "allow"
