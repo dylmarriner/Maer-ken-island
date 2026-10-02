@@ -156,6 +156,57 @@ pub struct HttpComputerBridge {
 }
 
 const MAX_RETRIES: u32 = 3;
+
+/// Whether repeating a request after a failure can change the outcome of the
+/// real world, which decides which failures may be retried.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RetryPolicy {
+    /// Repeating the request is harmless (e.g. a search): retry on timeout
+    /// and on rate limiting.
+    Idempotent,
+    /// Repeating the request may repeat its effect (e.g. sending an email):
+    /// retry only on rate limiting, which means the request was not
+    /// accepted. A timeout is never retried because the request may have
+    /// been delivered.
+    NonIdempotent,
+}
+
+impl RetryPolicy {
+    fn should_retry(self, err: &BridgeError) -> bool {
+        match (self, err) {
+            (_, BridgeError::RateLimitError) => true,
+            (RetryPolicy::Idempotent, BridgeError::TimeoutError) => true,
+            _ => false,
+        }
+    }
+}
+
+/// Exponential backoff used between attempts: 200, 400, 800 ms, ...
+fn backoff_delay(retry: u32) -> Duration {
+    Duration::from_millis(200 * 2u64.pow(retry))
+}
+
+/// Run `attempt` up to [`MAX_RETRIES`] times, sleeping `backoff(n)` after the
+/// n-th failure that `policy` allows retrying (never after the last attempt).
+/// A failure the policy does not allow retrying is returned immediately, and
+/// when attempts run out the final attempt's real error is returned.
+pub fn retry_with<T>(
+    policy: RetryPolicy,
+    backoff: impl Fn(u32) -> Duration,
+    mut attempt: impl FnMut() -> Result<T, BridgeError>,
+) -> Result<T, BridgeError> {
+    let mut retry = 0;
+    loop {
+        match attempt() {
+            Ok(value) => return Ok(value),
+            Err(err) if policy.should_retry(&err) && retry + 1 < MAX_RETRIES => {
+                std::thread::sleep(backoff(retry));
+                retry += 1;
+            }
+            Err(err) => return Err(err),
+        }
+    }
+}
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 
 impl HttpComputerBridge {
@@ -201,24 +252,10 @@ impl HttpComputerBridge {
 
     fn with_retry<T>(
         &self,
-        mut attempt: impl FnMut() -> Result<T, BridgeError>,
+        policy: RetryPolicy,
+        attempt: impl FnMut() -> Result<T, BridgeError>,
     ) -> Result<T, BridgeError> {
-        let mut last_err = None;
-        for retry in 0..MAX_RETRIES {
-            match attempt() {
-                Ok(value) => return Ok(value),
-                Err(BridgeError::RateLimitError) | Err(BridgeError::TimeoutError) => {
-                    std::thread::sleep(Duration::from_millis(200 * 2u64.pow(retry)));
-                    last_err = Some(if retry == MAX_RETRIES - 1 {
-                        BridgeError::RateLimitError
-                    } else {
-                        BridgeError::TimeoutError
-                    });
-                }
-                Err(other) => return Err(other),
-            }
-        }
-        Err(last_err.unwrap_or(BridgeError::TimeoutError))
+        retry_with(policy, backoff_delay, attempt)
     }
 
     fn classify_error(err: ureq::Error) -> BridgeError {
@@ -243,7 +280,7 @@ impl HttpComputerBridge {
 
 impl ComputerBridge for HttpComputerBridge {
     fn web_search(&self, agent_id: &str, query: &str) -> Result<WebSearchResult, BridgeError> {
-        self.with_retry(|| {
+        self.with_retry(RetryPolicy::Idempotent, || {
             let url = format!("{}/api/computer/{}/search", self.base_url, agent_id);
             self.authorized(self.agent.post(&url))
                 .send_json(ureq::json!({ "query": query }))
@@ -260,7 +297,7 @@ impl ComputerBridge for HttpComputerBridge {
         subject: &str,
         body: &str,
     ) -> Result<EmailResult, BridgeError> {
-        self.with_retry(|| {
+        self.with_retry(RetryPolicy::NonIdempotent, || {
             let url = format!("{}/api/computer/{}/email", self.base_url, agent_id);
             self.authorized(self.agent.post(&url))
                 .send_json(ureq::json!({ "to": to, "subject": subject, "body": body }))
@@ -729,6 +766,94 @@ impl ComputerBridge for MockComputerBridge {
 
 #[cfg(test)]
 mod tests {
+    use super::{retry_with, BridgeError, RetryPolicy, MAX_RETRIES};
+    use std::cell::Cell;
+    use std::time::Duration;
+
+    fn no_wait(_: u32) -> Duration {
+        Duration::ZERO
+    }
+
+    /// Fails with `err()` for the first `failures` calls, then succeeds.
+    fn run(
+        policy: RetryPolicy,
+        failures: u32,
+        err: fn() -> BridgeError,
+    ) -> (Result<u32, BridgeError>, u32) {
+        let calls = Cell::new(0);
+        let result = retry_with(policy, no_wait, || {
+            calls.set(calls.get() + 1);
+            if calls.get() <= failures {
+                Err(err())
+            } else {
+                Ok(calls.get())
+            }
+        });
+        (result, calls.get())
+    }
+
+    #[test]
+    fn idempotent_requests_retry_timeouts_then_succeed() {
+        let (result, calls) = run(RetryPolicy::Idempotent, 2, || BridgeError::TimeoutError);
+        assert_eq!(result.unwrap(), 3);
+        assert_eq!(calls, 3);
+    }
+
+    #[test]
+    fn non_idempotent_requests_never_retry_timeouts() {
+        let (result, calls) = run(RetryPolicy::NonIdempotent, 1, || BridgeError::TimeoutError);
+        assert!(matches!(result, Err(BridgeError::TimeoutError)));
+        assert_eq!(calls, 1, "a timed-out email may have been sent");
+    }
+
+    #[test]
+    fn non_idempotent_requests_retry_rate_limits() {
+        let (result, calls) = run(RetryPolicy::NonIdempotent, 2, || {
+            BridgeError::RateLimitError
+        });
+        assert_eq!(result.unwrap(), 3);
+        assert_eq!(calls, 3);
+    }
+
+    #[test]
+    fn exhausted_retries_return_the_real_error() {
+        let (result, calls) = run(RetryPolicy::Idempotent, 99, || BridgeError::TimeoutError);
+        assert!(matches!(result, Err(BridgeError::TimeoutError)));
+        assert_eq!(calls, MAX_RETRIES);
+
+        let (result, calls) = run(RetryPolicy::Idempotent, 99, || BridgeError::RateLimitError);
+        assert!(matches!(result, Err(BridgeError::RateLimitError)));
+        assert_eq!(calls, MAX_RETRIES);
+    }
+
+    #[test]
+    fn other_errors_are_not_retried() {
+        let (result, calls) = run(RetryPolicy::Idempotent, 99, || {
+            BridgeError::ServiceUnavailable("HTTP 500".into())
+        });
+        assert!(matches!(result, Err(BridgeError::ServiceUnavailable(_))));
+        assert_eq!(calls, 1);
+    }
+
+    #[test]
+    fn backoff_runs_between_attempts_only() {
+        let waits = Cell::new(0);
+        let calls = Cell::new(0);
+        let _: Result<(), _> = retry_with(
+            RetryPolicy::Idempotent,
+            |_| {
+                waits.set(waits.get() + 1);
+                Duration::ZERO
+            },
+            || {
+                calls.set(calls.get() + 1);
+                Err(BridgeError::TimeoutError)
+            },
+        );
+        assert_eq!(calls.get(), MAX_RETRIES);
+        assert_eq!(waits.get(), MAX_RETRIES - 1);
+    }
+
     use super::*;
     use crate::humans::HumanBeing;
     use mk_core::human::BiologicalSex;

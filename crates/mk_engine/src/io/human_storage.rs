@@ -72,15 +72,58 @@ pub struct HumanStorage {
 }
 
 impl HumanStorage {
-    /// Create a new human storage at the given path
+    /// Create a new human storage at the given path.
+    ///
+    /// Kept for upstream parity. If the storage key cannot be initialised
+    /// this logs the error and continues **without encryption**, so sensitive
+    /// files are written in plaintext. Island code must use
+    /// [`HumanStorage::try_new`], which refuses instead.
     pub fn new(base_path: impl Into<PathBuf>) -> Self {
         let base_path = base_path.into();
-        let encryption = EncryptionManager::init(&base_path).ok();
+        let encryption = match EncryptionManager::init(&base_path) {
+            Ok(manager) => Some(manager),
+            Err(e) => {
+                tracing::error!(
+                    path = %base_path.display(),
+                    error = %e,
+                    "storage key unavailable; sensitive human data will be stored unencrypted"
+                );
+                None
+            }
+        };
         Self {
             base_path,
             encryption,
             snapshot_retention: 5,
         }
+    }
+
+    /// Create a new encrypted human storage, propagating any storage-key
+    /// error instead of silently downgrading to plaintext.
+    pub fn try_new(base_path: impl Into<PathBuf>) -> Result<Self, HumanStorageError> {
+        let base_path = base_path.into();
+        let encryption = EncryptionManager::init(&base_path)
+            .map_err(|e| HumanStorageError::IoError(format!("storage key: {e}")))?;
+        Ok(Self {
+            base_path,
+            encryption: Some(encryption),
+            snapshot_retention: 5,
+        })
+    }
+
+    /// Create an encrypted human storage from an explicit hex key (64 hex
+    /// characters). An invalid key is an error; nothing is written.
+    pub fn try_with_key_hex(
+        base_path: impl Into<PathBuf>,
+        key_hex: &str,
+    ) -> Result<Self, HumanStorageError> {
+        let key = crate::io::encryption::parse_storage_key(key_hex)
+            .map_err(|e| HumanStorageError::IoError(format!("storage key: {e}")))?;
+        Ok(Self {
+            base_path: base_path.into(),
+            encryption: Some(EncryptionManager::from_key(key)),
+            snapshot_retention: 5,
+        })
     }
 
     /// Create a new human storage without encryption (for testing)
@@ -1101,6 +1144,34 @@ mod tests {
 
         // Clean up
         let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn invalid_explicit_key_is_refused_and_writes_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        let base = dir.path().join("store");
+        for bad in ["", "abc", &"z".repeat(64), &"ab".repeat(31)] {
+            let result = HumanStorage::try_with_key_hex(&base, bad);
+            assert!(
+                matches!(result, Err(HumanStorageError::IoError(ref m)) if m.contains("storage key")),
+                "key {bad:?} must be refused"
+            );
+        }
+        assert!(!base.exists(), "a refused key must not touch the disk");
+    }
+
+    #[test]
+    fn explicit_key_storage_encrypts_sensitive_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let storage = HumanStorage::try_with_key_hex(dir.path(), &"ab".repeat(32)).unwrap();
+        assert!(storage.encryption.is_some());
+        storage.init().unwrap();
+
+        let human = HumanBeing::new("keyed_human".to_string(), BiologicalSex::Female);
+        storage.create_human(&human).unwrap();
+        let human_dir = dir.path().join("keyed_human");
+        assert!(human_dir.join("profile/identity.enc.json").exists());
+        assert!(!human_dir.join("profile/identity.json").exists());
     }
 
     #[test]

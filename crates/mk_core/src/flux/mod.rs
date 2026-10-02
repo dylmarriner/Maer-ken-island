@@ -1228,8 +1228,7 @@ mod tests {
             seen[ordinal(*r)] += 1;
         }
         assert_eq!(
-            seen,
-            [1usize; VARIANTS],
+            seen, [1usize; VARIANTS],
             "Reservoir::all() must list every variant exactly once"
         );
         assert_eq!(all.len(), VARIANTS);
