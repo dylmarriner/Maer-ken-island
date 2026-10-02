@@ -40,6 +40,7 @@ pub mod sensory;
 pub mod skin;
 pub mod social_cognition;
 pub mod social_systems;
+pub mod spawn;
 pub mod technology;
 pub mod thought;
 

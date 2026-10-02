@@ -1266,29 +1266,6 @@ fn modify_scenario(
     }
 }
 
-/// A registry-unique `agent_id` derived from an authored display name:
-/// lowercase alphanumerics joined by `-`, suffixed `-2`, `-3`, … on collision.
-fn agent_id_for_name(world: &WorldState, name: &str) -> String {
-    let slug = name
-        .split(|c: char| !c.is_alphanumeric())
-        .filter(|part| !part.is_empty())
-        .map(str::to_lowercase)
-        .collect::<Vec<_>>()
-        .join("-");
-    let registry = &world.humans_state.registry;
-    if registry.get_human(&slug).is_none() {
-        return slug;
-    }
-    (2u64..)
-        .map(|n| format!("{slug}-{n}"))
-        .find(|candidate| registry.get_human(candidate).is_none())
-        .expect("an unbounded suffix range always yields a free id")
-}
-
-/// Keyed RNG epoch for sampling a spawned human's genome and traits,
-/// distinct from every other `SubsystemId::Humans` consumer's epoch.
-const SPAWN_HUMAN_EPOCH: u32 = 0x5350_574E;
-
 /// Developmental age of a human spawned without an authored profile: an
 /// adult, matching the engine's default for a profile with no recorded age.
 const DEFAULT_SPAWN_AGE_YEARS: f64 = 25.0;
@@ -1328,7 +1305,6 @@ fn spawn_human(
 ) -> Result<AppliedOutcome, InterventionError> {
     use mk_core::human::astrology::GeoCoordinates;
     use mk_core::human::BiologicalSex;
-    use mk_core::rng::{RngKey, SubsystemId};
 
     // The template id selects biological sex; anything else is rejected
     // rather than silently defaulting, so a typo cannot quietly produce an
@@ -1382,24 +1358,20 @@ fn spawn_human(
     };
 
     let agent_id = match profile {
-        Some(profile) => agent_id_for_name(world, &profile.name),
+        Some(profile) => {
+            crate::humans::spawn::agent_id_for_name(&world.humans_state.registry, &profile.name)
+        }
         None => world.humans_state.registry.allocate_agent_id(),
     };
-    let place_name = format!("{:.4}, {:.4}", birthplace.latitude, birthplace.longitude);
-    let mut rng = world.rng.stream(RngKey::new(
-        SubsystemId::Humans,
-        (crate::humans::deterministic_human_id(&agent_id) & 0xFFFF_FFFF) as u32,
-        SPAWN_HUMAN_EPOCH,
+    let mut human = crate::humans::spawn::build_spawned_human(
+        &world.rng,
         world.tick,
-    ));
-    let mut human = crate::humans::HumanBeing::sampled(
         agent_id.clone(),
         sex,
         birth,
         birthplace,
-        &place_name,
         age_years,
-        &mut rng,
+        profile,
     )
     .map_err(|err| refused(err.to_string()))?;
 
@@ -1407,18 +1379,6 @@ fn spawn_human(
     // is honoured rather than ignored.
     let (row, col) = cell_for(world, location);
     human.set_runtime_position(GridPosition::new(row as i32, col as i32));
-    human.development.age_years = age_years;
-    if let Some(profile) = profile {
-        // Keep the authored timestamp as written (its offset included); the
-        // sampled chart already used the same instant.
-        human.profile.core_identity.birth_timestamp = profile.birth_timestamp.clone();
-        human.body.height_cm = profile.height_cm;
-        human.body.build = profile.build.trim().to_lowercase();
-        human.body.hair_color = profile.hair_color.trim().to_lowercase();
-        human.body.eye_color = profile.eye_color.trim().to_lowercase();
-        human.body.skin_tone = profile.skin_tone.trim().to_lowercase();
-    }
-    human.refresh_phase11_layers();
 
     // The human exists as soon as it is added; a failed folder write is a
     // warning, not a refusal. Only a duplicate id means it was not added.

@@ -33,6 +33,10 @@ Each of these changes imported code. None has been proposed upstream yet; per th
 7. `mk_engine::humans::HumanSystem::step_dialogue` — pairing is O(n log n) and realistic: each human is in at most one conversation per step, partners are chosen by relationship, mutual approach and distance. Behaviour change: pairing is one greedy matching in which family pairs (founders, child–parent at any distance, adjacent siblings) outrank neighbour pairs and rotate by a per-tick hash, so a child talks to one parent per step rather than both, and the founders still talk to each other and to their children over time. Conversations still last one step; multi-step conversations are not modelled.
 8. Clippy cleanups: removed the unused `HYDROLOGY_SPIN_UP_STEPS`/`HYDROLOGY_SPIN_UP_STEP_SECONDS` constants and `BrainRegionsSnapshot::resting_mean_activation`, and used `RangeBounds::contains` in `orbit`.
 
+## Phase 0b divergences (2026-10-02)
+
+1. `mk_engine::humans::spawn` (new) — the human-building core of `interventions::spawn_human` is extracted into `build_spawned_human`, `build_authored_human` and `agent_id_for_name` (now taking a `HumanRegistry` instead of a `WorldState`), with `SPAWN_HUMAN_EPOCH` moved alongside. `spawn_human` calls them, so intervention spawns are unchanged (all intervention tests pass unmodified); the island population uses the same functions to create people without a planetary world. Suitable for upstreaming as a pure refactor.
+
 ## Drift check (2026-10-02)
 
 Upstream `dylmarriner/Maer-Ken` default-branch HEAD is `7c05f0dcf254387ffd7322dbb525fe4807228602`, equal to the pin: no upstream commits since the extraction, so upstream has not fixed the Phase 0 defects either. Re-check immediately before Phase 1.
