@@ -120,6 +120,23 @@
 - [ ] **Step 4:** Run `cargo test -p mk_engine --lib -- humans:: interventions::` and `cargo test -p mk_engine --test humans_world_integration`; expect PASS.
 - [ ] **Step 5:** Commit `fix(humans): never lose a human because a folder write failed`.
 
+### Task 4c: Human runtime scaling (upstream first)
+
+Measured 2026-10-02 (release, no LTO, this repo's container): `HumanSystem::step` costs ~0.027 ms per human per step and scales linearly when humans are spread out (200 humans: 5.3 ms at 60 s steps), but 200 humans in one cell cost 106 ms per step — 20× per human — because of two quadratic paths:
+- `HumanSystem::step_dialogue` (`humans/mod.rs:386-404`) tests every pair of living humans, scans the growing pair list with `already_paired` for each, and lets every adjacent approaching pair converse in the same step — with 200 neighbours, ~19,900 conversations per step, each person in 199 at once, which is also unrealistic.
+- `HumanRegistry::get_human`/`get_human_mut` (`registry.rs:191-197`) are linear scans, called inside per-human loops.
+
+**Files (upstream `dylmarriner/Maer-Ken` first, then sync):**
+- Modify: `crates/mk_engine/src/humans/registry.rs` (agent-id → index map maintained on insert/remove)
+- Modify: `crates/mk_engine/src/humans/mod.rs` (`step_dialogue`)
+- Create: `crates/mk_engine/tests/human_scaling.rs`
+
+- [ ] **Step 1:** Write a scaling test: 200 adults in one cell must cost no more than 3× the per-human time of 200 adults spread across cells (slow tier; uses `Instant`, asserts a ratio, not an absolute time). Expect FAIL today.
+- [ ] **Step 2:** Add the id index to the registry; keep iteration order identical so determinism is unchanged.
+- [ ] **Step 3:** Rewrite pairing realistically and in O(n log n): bucket living humans by cell; each human is in at most one conversation at a time and stays in it for its duration; partners are chosen deterministically from nearby candidates by relationship and approach intent; founders, siblings and parent–child pairs keep their current priority rules. Record the behavioural change in `UPSTREAM.md`.
+- [ ] **Step 4:** Run the scaling test and `cargo test -p mk_engine --lib -- humans::`; expect PASS. Existing dialogue tests may need their expectations updated only where they asserted simultaneous conversations; each such change is listed in the commit message.
+- [ ] **Step 5:** Commit `perf(humans): index the registry and pair conversations realistically`.
+
 ### Task 5: CI gate
 
 **Files:**

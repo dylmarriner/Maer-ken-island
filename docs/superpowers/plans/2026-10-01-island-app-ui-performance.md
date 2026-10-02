@@ -169,6 +169,7 @@ The engine is already identical to upstream; this task brings the surrounding de
 - [ ] **Step 1:** Add an allocation-bound test, run with `--features construction-counters`: `WorldState::new` (`world_integration.rs:462`, the planetary `GridSpec::new(32, 64)` bootstrap) increments a static counter; building and stepping `IslandWorldState` for 10 ticks leaves it at zero; default coarse/medium cell counts match the profile.
 - [ ] **Step 2:** Implement benchmark instrumentation around the actual regional bootstrap/step/save/load/store-sync paths.
 - [ ] **Step 3:** Run the benchmark with `--release` and save the JSON baseline.
+- [ ] **Step 3b (dead compute):** measure `formal_predictive_processing::step()`'s share of human step time; upstream documents that it runs every tick and its `selected_action` is read nowhere but its own tests (`docs/canon/HUMAN_SYSTEM_STATUS.md`, Known gaps). Owner decides: wire its output into decisions upstream, or stop running it. Also prune any planetary-only module still stepped by the island (Task 7).
 - [ ] **Step 3a (resolution gate):** Default targets (owner to confirm): headless, at least one simulated day per real minute; with the UI open, at least real time (one simulated second per real second). If the 2 km / 12 km default misses them after profiling and fixing measured hotspots, switch the default profile to the 4 km / 24 km fallback (Phase 1), re-run every acceptance test, and record the measured trade-off in `docs/island/DEVIATIONS.md`.
 - [ ] **Step 4:** Commit `perf(island): record regional baseline`.
 

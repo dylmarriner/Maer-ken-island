@@ -34,6 +34,7 @@ This phase therefore adds a compact 1-D **zonal background model** — latitude 
 - No regional step computes a planet-wide quantity from regional cells; global/zonal context comes only from `ZonalBackgroundState`.
 - The zonal background has a fixed, small band count (default 64) and is part of persisted deterministic state.
 - **Grid levels:** zonal background is 1-D; climate, weather and ocean run on `DomainLevel::Coarse` (160 × 200 at 12 km); hydrology and tides run on `DomainLevel::Medium` (960 × 1,200 at 2 km). Crossing levels goes only through `resample_coarse_to_medium` (bilinear) and `aggregate_medium_to_coarse` (area mean, flux-conserving), introduced in Task 3.
+- **Land-only fine grid.** Only ~6% of the domain is land (~67,000 of 1,152,000 medium cells). Medium-level processes (hydrology, ecology, resources, local vegetation) iterate `domain.active_cells(Medium)` — land plus the coastal band — and never the open ocean, which is handled on Coarse. Storage stays dense `Grid2`; only iteration is restricted. Measured basis: upstream world physics costs ~6 µs per cell per step (32 × 64 grid, release), so iterating all 1.15 M medium cells would cost ~7 s per step against ~0.4 s for active cells.
 - **Coriolis:** `f = 2Ω·sin(latitude_rad_for_row)`, Ω from the canon rotation period, computed once per level from the domain.
 
 ## Review Focus
