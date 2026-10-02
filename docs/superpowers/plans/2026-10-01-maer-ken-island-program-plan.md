@@ -6,7 +6,7 @@
 
 **Architecture:** A baseline phase makes the imported workspace green and gated, then five dependent implementation plans replace whole-planet detailed grids with `IslandDomain`, regional boundary forcing, a regional `IslandWorldState`, and a flat/regional UI while retaining Maer-Ken physics, ecology, human, property, resource, persistence, and audit behaviour. Each plan ends in a buildable, independently testable milestone, produces a visible preview of its output, and becomes the input contract for the next.
 
-**Tech Stack:** Rust 2021 workspace, serde/serde_json, blake3, rand_chacha, existing Maer-Ken engine modules, `png` for headless previews, Bevy + bevy_egui for the final regional UI (version decided at the start of Phase 5; see Owner decisions).
+**Tech Stack:** Rust 2021 workspace, serde/serde_json, blake3, rand_chacha, existing Maer-Ken engine modules, `png` for headless previews, Bevy 0.19 + the matching bevy_egui release (0.42 at time of writing) for the final regional UI.
 
 **Spec:** `docs/superpowers/specs/2026-10-01-maer-ken-island-regional-world-design.md`
 
@@ -62,12 +62,16 @@
 
 ## Owner decisions
 
-These change scope or appearance and are the repository owner's to make; implementation uses the stated default until decided.
+Decided (2026-10-02):
 
-1. **Island shape.** Default: unconstrained generated landmass (area-fitted only). Option: set `IslandProfile::shape` to an elongated NZ-like form (aspect ratio and orientation) — see Phase 1 Task 4.
-2. **Upstream resync before Phase 1.** Default: keep the current pin unless Phase 0 Task 6 finds human/property changes upstream worth taking.
-3. **Bevy version.** Default: match upstream `mk_ui` so render code ports directly; upgrading is a separate decision at the start of Phase 5.
-4. **Detail-patch size.** Default: one 4 km × 4 km high-detail patch centred on the founders' estate (Phase 3). Larger or multiple patches cost memory and tick time and should follow Phase-5 benchmarks.
+1. **Island shape:** uniquely shaped and procedurally generated from the island's own tectonics — irregular coastline with headlands and bays, explicitly *not* New Zealand's outline and not a blob. Enforced by shape metrics; the owner picks the final seed from a Phase-1 preview gallery.
+2. **Upstream resync:** not needed — upstream `dylmarriner/Maer-Ken` HEAD equals the pinned commit `7c05f0d` as of 2026-10-02. Phase 0 Task 6 re-checks before Phase 1 starts.
+3. **Bevy:** upgrade to Bevy 0.19 (current) rather than upstream's 0.13. Upstream `mk_ui`/`mk_view` render and UI code is a behavioural reference to port, not code to copy unchanged.
+4. **Detail patch:** one 4 km × 4 km high-detail patch centred on the founders' estate holds the house, shed, garage, workshop, rooms, vehicles, tools, computers and individually simulated trees.
+
+Open:
+
+5. **Starting population.** Upstream Maer-Ken has exactly two humans, Gem-D and Gem-K, running the complete human runtime; further humans arise through its reproduction system. Whether the island starts with additional people (and how they are defined) is undecided. Default until decided: the upstream behaviour.
 
 ## Final verification
 

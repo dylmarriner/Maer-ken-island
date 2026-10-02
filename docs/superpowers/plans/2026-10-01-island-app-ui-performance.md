@@ -6,7 +6,7 @@
 
 **Architecture:** Reuse the proven Maer-Ken Bevy render/procgen/property/human ideas but project them into flat regional metre coordinates rather than a sphere. The app reads a presentation projection from `IslandWorldState`; rendering is one-way and never participates in deterministic state hashing.
 
-**Tech Stack:** Bevy + bevy_egui (default: match upstream `mk_ui`, currently Bevy 0.13 / bevy_egui 0.25; see Task 0), Rust 2021, retained GLB/texture assets, existing deterministic procgen where useful.
+**Tech Stack:** Bevy 0.19 + the bevy_egui release that targets it (0.42 at time of writing; confirm the pairing in Task 0), Rust 2021, retained GLB/texture assets, existing deterministic procgen where useful. Upstream `mk_ui`/`mk_view`/`mk_observatory` target Bevy 0.13, so their render/UI code is a behavioural reference to port, not code to copy unchanged.
 
 **Spec:** `docs/superpowers/specs/2026-10-01-maer-ken-island-regional-world-design.md`
 
@@ -28,11 +28,12 @@
 
 ---
 
-### Task 0: Render stack decision
+### Task 0: Bevy 0.19 port inventory
 
-- [ ] **Step 1:** Inventory the upstream `mk_ui` render/procgen code the island will port (terrain, flora, buildings, vehicles, humans) and its Bevy API surface.
-- [ ] **Step 2:** Decide: match upstream's Bevy version (direct port) or upgrade (port + migrate). Record the decision and reason in `docs/island/RENDER_STACK.md`; it is the owner's call (program plan Owner decision 3).
-- [ ] **Step 3:** Commit `docs(island): record render stack decision`.
+- [ ] **Step 1:** Inventory the upstream code the island will port — `apps/mk_ui` (render: terrain, flora, buildings, vehicles, `render/humans.rs`; UI: `ui/human_inspector.rs`, `ui/human_foundry.rs`), `crates/mk_view` (`human_view.rs`, `human_detail_view.rs`) and `apps/mk_studio/src/watch/human_inspector.rs` — and list each Bevy 0.13 API it uses with its 0.19 replacement (colour types, required components, picking, render graph, asset loading, egui integration).
+- [ ] **Step 2:** Pin `bevy = "0.19"` and the matching `bevy_egui` in the workspace; prove a minimal windowed app and a headless build both compile and run in CI.
+- [ ] **Step 3:** Record the inventory and pins in `docs/island/RENDER_STACK.md`.
+- [ ] **Step 4:** Commit `build(ui): adopt bevy 0.19`.
 
 ### Task 1: Regional view projection
 
@@ -70,7 +71,7 @@
 - CLI adds `island ui --scenario <path>`; `run/save/replay` remain headless.
 - Produces deterministic chunk descriptors from `IslandView`; Bevy mesh handles are presentation-only.
 
-- [ ] **Step 1:** Add Bevy dependencies matching upstream `mk_ui` versions/features and keep headless commands behind no display initialization.
+- [ ] **Step 1:** Use the Bevy 0.19 / bevy_egui pins from Task 0 and keep headless commands behind no display initialization.
 - [ ] **Step 2:** Write tests for terrain chunk partitioning, land/ocean material selection and regional camera bounds.
 - [ ] **Step 3:** Implement chunked terrain heightfield + surrounding ocean surface and free/orbit-over-map camera, explicitly not a planetary sphere.
 - [ ] **Step 4:** Run headless CLI tests plus app unit tests; expect PASS.
@@ -100,7 +101,32 @@
 - [ ] **Step 5:** Run app/render tests; expect PASS.
 - [ ] **Step 6:** Commit `feat(ui): render island life and property`.
 
-### Task 4: Inspectors and simulation controls
+### Task 4: Human tooling — views, inspector, foundry, portraits
+
+Upstream has more human tooling than the island imported. The engine is already identical; this task brings the surrounding tools across.
+
+**Files:**
+- Create: `crates/mk_island_view/src/human_detail.rs` (port of upstream `mk_view::human_view`/`human_detail_view` against `IslandWorldState`)
+- Create: `apps/island/src/ui/human_inspector.rs`, `apps/island/src/ui/human_foundry.rs` (ports of upstream `mk_ui` equivalents to Bevy 0.19)
+- Copy: upstream `apps/mk_ui/assets/portraits/*` into `apps/island/assets/portraits/` with provenance in `CREDITS.md`
+- Test: pure-state tests beside each module
+
+**Interfaces:**
+- Human detail view exposes the same sections upstream does (identity, body/vitals, needs, emotion, cognition/attention, memory, relationships, development/lifecycle, current room/position) from read-only state.
+- The foundry creates new humans only through `HumanBeing::new_born_at` and adds them through a queued simulation command, so creation is deterministic, replayable and recorded in the replay log — never by mutating state from the renderer.
+
+- [ ] **Step 1:** Write tests: detail view for Gem-D/Gem-K matches the profile values; a foundry request with identical inputs yields the same `human_id`; a duplicate agent id is rejected; foundry creations appear in the replay log and survive save/load.
+- [ ] **Step 2:** Port views, inspector and foundry; wire the founders' GLB models and portraits.
+- [ ] **Step 3:** Run tests; expect PASS.
+- [ ] **Step 4:** Commit `feat(ui): port human views, inspector and foundry`.
+
+### Task 4b: Computer service (opt-in)
+
+- [ ] **Step 1:** Import upstream `apps/computer-service` (the real web-search/email backend for `ActionKind::WebSearch`/`SendEmail`) with provenance, keeping it opt-in via `COMPUTER_ACTIONS_ENABLED=1` exactly as upstream.
+- [ ] **Step 2:** Test that with the service disabled, replay/state hashes are unchanged and humans never attempt those actions; with it enabled, results enter only through the existing bridge and are excluded from the deterministic hash.
+- [ ] **Step 3:** Commit `feat(island): import opt-in computer service`.
+
+### Task 5: Inspectors and simulation controls
 
 **Files:**
 - Create: `apps/island/src/ui/inspectors.rs`
@@ -116,7 +142,7 @@
 - [ ] **Step 3:** Run headless tests and UI pure-state tests; expect PASS.
 - [ ] **Step 4:** Commit `feat(ui): inspect regional world state`.
 
-### Task 5: Repeatable performance baselines
+### Task 6: Repeatable performance baselines
 
 **Files:**
 - Create: `apps/island/src/bin/island_bench.rs`
@@ -132,7 +158,7 @@
 - [ ] **Step 3:** Run benchmark in release mode and save the JSON baseline; do not invent target numbers before measurement.
 - [ ] **Step 4:** Commit `perf(island): record regional baseline`.
 
-### Task 6: Upstream sync and planetary-only pruning
+### Task 7: Upstream sync and planetary-only pruning
 
 **Files:**
 - Create: `scripts/sync-maerken-upstream`
@@ -152,7 +178,7 @@
 - [ ] **Step 6:** Update `UPSTREAM.md` with final retained module/asset list and sync procedure.
 - [ ] **Step 7:** Commit `refactor(island): prune planetary-only runtime`.
 
-### Task 7: Final acceptance
+### Task 8: Final acceptance
 
 **Files:**
 - Create: `docs/ISLAND_SYSTEM_STATUS.md`

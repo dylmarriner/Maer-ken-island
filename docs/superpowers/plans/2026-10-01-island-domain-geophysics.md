@@ -18,7 +18,7 @@
 - No periodic east/west wrap in regional neighbor queries.
 - Boundary forcing is deterministic from seed, canon digest and simulation time.
 - Existing `mk_core::grid::Grid2<T>` remains the storage container; regional geometry lives in `IslandDomain`, not in fake spherical `GridSpec` methods.
-- Island shape defaults to unconstrained (area-fitted only). An optional `IslandShape` profile field may bias the landmass toward an elongated form; it never relaxes the area, connectivity or buffer constraints.
+- The island must have a distinctive, irregular, procedurally generated shape — not a blob, ellipse or circle, and not New Zealand's outline. No real-world coastline data may be used as a template. Shape quality is enforced by measurable metrics (Task 4) and the default seed is chosen by the owner from a preview gallery (Task 5); shape requirements never relax the area, connectivity or buffer constraints.
 
 ## Review Focus
 
@@ -42,7 +42,7 @@
 
 **Interfaces:**
 - Produces: `IslandProfile::default_nz_scale() -> Self`, `IslandProfile::validate() -> Result<(), IslandProfileError>`.
-- Produces: `IslandShape::{Unconstrained, Elongated { aspect_ratio: f64, orientation_deg: f64 }}` as `IslandProfile::shape`, default `Unconstrained`; validation rejects `aspect_ratio < 1.0`, non-finite values, and any elongated envelope whose length cannot fit inside the buffered domain at the given orientation.
+- Produces: `ShapeRequirements { max_compactness: f64, max_convexity: f64, min_major_headlands: u32, min_major_bays: u32 }` as `IslandProfile::shape`, with defaults `0.30`, `0.80`, `3`, `3` (initial values; tune from the gallery). Validation rejects non-finite or out-of-range values.
 - Produces: `IslandDomain::from_profile(profile: IslandProfile) -> Result<Self, IslandDomainError>`.
 - Produces: `DomainLevel::{Coarse, Medium}`, `IslandDomain::{coarse_storage_spec, medium_storage_spec}() -> mk_core::grid::GridSpec`, `cell_center_m(level: DomainLevel, row: usize, col: usize) -> (f64, f64)`, `cell_area_m2(level: DomainLevel) -> f64`, `latitude_rad_for_row(level: DomainLevel, row: usize) -> f64`, `is_edge_buffer_cell(level: DomainLevel, row: usize, col: usize) -> bool`.
 - Produces: `LocalPatchSpec { origin_x_m: f64, origin_y_m: f64, width_m: f64, height_m: f64, cell_size_m: f64, rows: usize, cols: usize }` and `IslandDomain::local_patch(center_x_m: f64, center_y_m: f64, extent_m: f64, cell_size_m: f64) -> Result<LocalPatchSpec, IslandDomainError>` for high-detail property/interior/navigation windows without allocating a world-wide fine grid.
@@ -105,7 +105,9 @@
 - [ ] **Step 1:** Write fixed-seed tests asserting land area `254,600..=281,400 km²`, one connected primary land component, ocean in the complete 300 km edge band, negative offshore bathymetry, and deterministic elevation bytes.
 - [ ] **Step 2:** Run `cargo test -p mk_engine --test regional_geophysics`; expect FAIL.
 - [ ] **Step 3:** Implement sea-level fitting on regional cell area, deterministically retain the largest land component, submerge disconnected land, and iterate sea level until tolerance is met without violating the buffer.
-- [ ] **Step 3a:** For `IslandShape::Elongated`, apply a smooth deterministic elevation envelope along the configured axis before fitting; add a test that the fitted land's principal-axis aspect ratio is within ±25% of the requested value and all other constraints still hold.
+- [ ] **Step 3a:** Shape the landmass from the tectonic state rather than a template: uplift along convergent boundaries and volcanic arcs, multi-octave deterministic noise for coastline detail, and erosion-like smoothing at coarse scale, so peninsulas, bays, ranges and inlets emerge from geology.
+- [ ] **Step 3b:** Produces `ShapeMetrics { compactness, convexity, major_headlands, major_bays, coastline_length_m, principal_axis_ratio }` via `measure_shape(land_mask, domain) -> ShapeMetrics`. Compactness is `4πA/P²` (circle = 1); convexity is land area / convex-hull area; headlands/bays are counted from the coastline's convex-hull deficits above a minimum size.
+- [ ] **Step 3c:** Tests: a disc and an ellipse fixture fail `ShapeRequirements`; the default seed passes; `bootstrap_regional_geophysics` returns `RegionalGeophysicsError::ShapeRequirementsUnmet` (never silently accepts) when a seed fails, and the error carries the metrics.
 - [ ] **Step 4:** Feed the regional plate/heat state into existing volcanism logic through a regional wrapper; confirm volcanic fields do not require a planetary grid.
 - [ ] **Step 5:** Re-run `regional_geophysics` plus focused volcanism tests; expect PASS.
 - [ ] **Step 6:** Commit `feat(engine): generate nz-scale island geophysics`.
@@ -119,13 +121,15 @@
 - Test: `apps/island_preview/tests/preview_determinism.rs`
 
 **Interfaces:**
-- CLI: `island_preview geophysics --profile <path> --seed <hex> --out <dir>` writes `elevation.png` (hypsometric land, depth-shaded ocean, 300 km buffer outline), `land_mask.png`, `plates.png` and `summary.json` (land area km², sea-level offset, component count, min/max elevation, plate count).
+- CLI: `island_preview geophysics --profile <path> --seed <hex> --out <dir>` writes `elevation.png` (hypsometric land, depth-shaded ocean, 300 km buffer outline), `land_mask.png`, `plates.png` and `summary.json` (land area km², sea-level offset, component count, min/max elevation, plate count, `ShapeMetrics`).
+- CLI: `island_preview gallery --profile <path> --seeds <n> --out <dir>` generates `n` candidate seeds deterministically, writes one thumbnail each plus `gallery.png` (contact sheet labelled with seed and metrics) and `gallery.json`; seeds that fail any constraint are listed with the reason, not drawn.
 - Later phases add subcommands (`physical`, `life`, `world`) to the same tool; it never mutates or persists simulation state.
 
 - [ ] **Step 1:** Write tests asserting identical PNG bytes and `summary.json` for the same profile/seed, and that `summary.json` area equals `RegionalGeophysics::land_area_m2`.
 - [ ] **Step 2:** Run `cargo test -p island_preview`; expect FAIL.
 - [ ] **Step 3:** Implement the renderer with fixed palettes and no timestamps/metadata that vary between runs.
-- [ ] **Step 4:** Re-run; expect PASS. Generate the default-seed preview and commit it under `docs/previews/phase1/`.
+- [ ] **Step 4:** Re-run; expect PASS. Generate a 24-seed gallery and commit it under `docs/previews/phase1/gallery/`.
+- [ ] **Step 4a:** The owner picks the island from the gallery; pin that seed in `fixtures/island/default_profile.json` and commit its full preview under `docs/previews/phase1/`.
 - [ ] **Step 5:** Commit `feat(preview): render island geophysics headlessly`.
 
 ### Task 6: Phase-1 acceptance fixture
@@ -138,8 +142,8 @@
 **Interfaces:**
 - Consumes all Phase-1 public interfaces; produces no new runtime API.
 
-- [ ] **Step 1:** Add a fixture with the exact default profile values and profile version `1`.
-- [ ] **Step 2:** Add an acceptance test that bootstraps geophysics twice from `[7u8;32]` and asserts identical serialized results, area/buffer/connectivity constraints, and finite tectonic/volcanic state.
+- [ ] **Step 1:** Add a fixture with the exact default profile values, the owner-chosen seed and profile version `1`.
+- [ ] **Step 2:** Add an acceptance test that bootstraps geophysics twice from the fixture seed and asserts identical serialized results, area/buffer/connectivity/shape constraints, and finite tectonic/volcanic state.
 - [ ] **Step 3:** Run `cargo test -p mk_engine --test island_phase1_acceptance -- --nocapture`; expect PASS.
 - [ ] **Step 4:** Update `UPSTREAM.md` with `mk_island` and regional tectonic/terrain divergences.
 - [ ] **Step 5:** Run `cargo fmt --all -- --check` and Phase-1 focused tests; expect 0 failures.

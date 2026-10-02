@@ -92,7 +92,7 @@
 **Files:**
 - Modify: `UPSTREAM.md`
 
-- [ ] **Step 1:** Compare the pinned commit against current `dylmarriner/Maer-Ken` default branch for the imported paths (`crates/mk_core`, `crates/mk_engine`, `crates/mk_interventions`, `fixtures/human`, `docs/canon`, the Blender tool and GLBs).
+- [ ] **Step 1:** Compare the pinned commit against current `dylmarriner/Maer-Ken` default branch for the imported paths (`crates/mk_core`, `crates/mk_engine`, `crates/mk_interventions`, `fixtures/human`, `docs/canon`, the Blender tool and GLBs). As of 2026-10-02 upstream HEAD equals the pin and the imported human modules are identical apart from one rustfmt-only hunk in `mk_core/src/human/profile.rs`; re-check immediately before Phase 1.
 - [ ] **Step 2:** List upstream changes to human, property, vegetation and resource modules, and whether upstream already fixed Tasks 1, 2 and 4.
 - [ ] **Step 3:** Record the findings and the Phase-0 divergences in `UPSTREAM.md`; recommend resync-now or keep-pin (program plan Owner decision 2).
 - [ ] **Step 4:** Commit `docs(upstream): record phase-0 divergences and drift`.

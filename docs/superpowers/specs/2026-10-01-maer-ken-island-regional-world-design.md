@@ -2,7 +2,7 @@
 
 Date: 2026-10-01
 Status: Approved architecture, implementation pending plan
-Amended: 2026-10-02 — zonal background forcing (§6), vegetation and estate representation levels (§4.5, §4.7), Phase-0 baseline (§17), per-phase previews (§13)
+Amended: 2026-10-02 — zonal background forcing (§6), vegetation and estate representation levels (§4.5, §4.7), Phase-0 baseline (§17), per-phase previews (§13); owner decisions on island shape (§2), Bevy 0.19 (§13), human tooling (§4.6)
 Source project: `dylmarriner/Maer-Ken`
 Target project: `dylmarriner/Maer-ken-island`
 
@@ -33,6 +33,11 @@ The default island profile targets approximately New Zealand's total land area:
 The land-area target is a generation constraint, not a fixed rectangle. Coastline, mountains,
 valleys, river systems, wetlands, beaches and offshore bathymetry are generated within the regional
 domain.
+
+The island is New Zealand's *size*, not its shape. Its outline is unique and procedurally generated
+from its own tectonic state — irregular, with headlands, bays and inlets — and must not be a blob,
+ellipse or a copy of any real coastline. Shape quality is checked by measurable metrics, and the
+owner chooses the default seed from a gallery of generated candidates.
 
 ## 3. Architectural principle
 
@@ -160,7 +165,11 @@ temperament, drives, stress, attachment, social cognition, reproduction, develop
 death, relationships, dialogue, culture, language, technology and skills to the extent present in
 the source runtime.
 
-Gem-D and Gem-K remain canonical founder humans for the default island scenario.
+Gem-D and Gem-K remain canonical founder humans for the default island scenario. They are the only
+humans upstream Maer-Ken defines, and they run the complete human runtime — not a reduced version.
+The island also carries over the upstream human tooling: human views and detail inspector, the human
+foundry for creating new people through the deterministic `new_born_at` path, founder models and
+portraits, and the opt-in computer service behind `WebSearch`/`SendEmail`.
 
 The island project must not fork a second independently evolving human model. Human code imported
 from Maer-Ken must retain explicit upstream provenance and a deliberate sync mechanism or extraction
@@ -381,7 +390,8 @@ The initial island UI must be scoped to this regional world and should expose:
 - inspectable human/property/world state
 
 Planetary globe/orbit views are not required. Regional map/free camera views are appropriate.
-Existing Maer-Ken render/property assets should be reused where compatible.
+Existing Maer-Ken render/property assets should be reused where compatible. The UI targets the
+current Bevy release (0.19 at amendment); upstream's Bevy 0.13 UI code is ported, not copied.
 
 Before the UI exists, every implementation phase ends with a deterministic headless preview
 (PNG/JSON) of its new state, reviewed by the owner before the next phase builds on it.
