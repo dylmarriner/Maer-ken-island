@@ -168,8 +168,14 @@ the source runtime.
 Gem-D and Gem-K remain canonical founder humans for the default island scenario. They are the only
 humans upstream Maer-Ken defines, and they run the complete human runtime — not a reduced version.
 The island also carries over the upstream human tooling: human views and detail inspector, the human
-foundry for creating new people through the deterministic `new_born_at` path, founder models and
-portraits, and the opt-in computer service behind `WebSearch`/`SendEmail`.
+foundry for creating new people, founder models and portraits, and the opt-in computer service behind
+`WebSearch`/`SendEmail`.
+
+The owner creates humans from a web dashboard Human Creator (name, sex, birth date/time/place, age,
+height, build, hair, eyes, skin, and where on the island or in the estate they appear). Creation uses
+the upstream `SpawnHuman` path, is deterministic and replayable, and gives the new human their own
+folder. Every human, whether a founder, created or born, has a folder holding their profile, traits,
+cognition, social, development, reproduction, memories, state, relationships and events.
 
 The island project must not fork a second independently evolving human model. Human code imported
 from Maer-Ken must retain explicit upstream provenance and a deliberate sync mechanism or extraction

@@ -42,7 +42,7 @@
 1. `2026-10-01-island-domain-geophysics.md` — regional coordinate contract, deterministic boundaries, tectonics/terrain/volcanism, one-island land-area fitting, headless preview tool.
 2. `2026-10-01-island-water-atmosphere.md` — dependency inventory, zonal background forcing, regional climate/weather/ocean/hydrology/tides and boundary exchange.
 3. `2026-10-01-island-life-property-humans.md` — ecology/vegetation/resources, dense local vegetation, canonical property inventory with a metric estate layout, founders and human interactions.
-4. `2026-10-01-island-runtime-persistence.md` — regional world composition, scheduler, deterministic replay, save/load and state hashing.
+4. `2026-10-01-island-runtime-persistence.md` — regional world composition, scheduler, deterministic replay, save/load, state hashing, per-human folders, and the web dashboard with the Human Creator.
 5. `2026-10-01-island-app-ui-performance.md` — regional Bevy application, assets/inspectors, benchmarks, upstream sync and planetary-code pruning.
 
 ## Program gates
@@ -51,7 +51,7 @@
 - [ ] **Gate 1:** Phase 1 tests prove deterministic one-island generation within land-area tolerance and ocean-buffer constraints; `island_preview` emits the elevation/land-mask PNG.
 - [ ] **Gate 2:** Phase 2 tests prove local ocean/atmosphere/hydrology coupling with explicit non-wrapping edge forcing and a zonal background calibrated against the upstream global model; preview emits temperature/rain/river maps.
 - [ ] **Gate 3:** Phase 3 tests prove the retained ecology, founders, property inventory, metric estate layout, dense local vegetation, computers and material economy operate on regional cells; preview emits the estate plan and local tree map.
-- [ ] **Gate 4:** Phase 4 tests prove complete snapshot/replay determinism and scheduler cadence behaviour.
+- [ ] **Gate 4:** Phase 4 tests prove complete snapshot/replay determinism and scheduler cadence behaviour; every human has a folder; the owner can create a human from the dashboard and see them in the world and on disk.
 - [ ] **Gate 5:** Phase 5 tests/benchmarks prove the regional app renders/inspects the retained world and normal execution no longer depends on planetary-only modules.
 
 ## Test tiers
@@ -69,9 +69,9 @@ Decided (2026-10-02):
 3. **Bevy:** upgrade to Bevy 0.19 (current) rather than upstream's 0.13. Upstream `mk_ui`/`mk_view` render and UI code is a behavioural reference to port, not code to copy unchanged.
 4. **Detail patch:** one 4 km × 4 km high-detail patch centred on the founders' estate holds the house, shed, garage, workshop, rooms, vehicles, tools, computers and individually simulated trees.
 
-Open:
+Population:
 
-5. **Starting population.** Upstream Maer-Ken has exactly two humans, Gem-D and Gem-K, running the complete human runtime; further humans arise through its reproduction system. Whether the island starts with additional people (and how they are defined) is undecided. Default until decided: the upstream behaviour.
+5. **Population.** The island starts with Gem-D and Gem-K (the only humans upstream defines, running the complete runtime). The owner adds people through the dashboard Human Creator (Phase 4 Task 6); further people are born through the reproduction system. Every human, however created, gets their own folder.
 
 ## Final verification
 

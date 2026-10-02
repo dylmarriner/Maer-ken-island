@@ -113,9 +113,9 @@ Upstream has more human tooling than the island imported. The engine is already 
 
 **Interfaces:**
 - Human detail view exposes the same sections upstream does (identity, body/vitals, needs, emotion, cognition/attention, memory, relationships, development/lifecycle, current room/position) from read-only state.
-- The foundry creates new humans only through `HumanBeing::new_born_at` and adds them through a queued simulation command, so creation is deterministic, replayable and recorded in the replay log — never by mutating state from the renderer.
+- The desktop foundry panel is a second front end to the same `CreateHuman` command the web dashboard uses (Phase 4 Task 6): identical fields, validation and outcome. It never mutates state from the renderer.
 
-- [ ] **Step 1:** Write tests: detail view for Gem-D/Gem-K matches the profile values; a foundry request with identical inputs yields the same `human_id`; a duplicate agent id is rejected; foundry creations appear in the replay log and survive save/load.
+- [ ] **Step 1:** Write tests: detail view for Gem-D/Gem-K matches the profile values; a foundry-panel request produces exactly the same human as the identical web-dashboard request.
 - [ ] **Step 2:** Port views, inspector and foundry; wire the founders' GLB models and portraits.
 - [ ] **Step 3:** Run tests; expect PASS.
 - [ ] **Step 4:** Commit `feat(ui): port human views, inspector and foundry`.
