@@ -80,12 +80,13 @@
 ### Task 4b: Births must never depend on disk
 
 **Files:**
-- Modify: `crates/mk_engine/src/humans/registry.rs` (`add_human`)
+- Modify: `crates/mk_engine/src/humans/registry.rs` (`add_human`, `seed_founders`, `sync_to_storage`, `sync_human_to_storage`, `record_event`)
 - Modify: `crates/mk_engine/src/humans/lifecycle.rs` (`deliver_due_births`)
-- Test: beside both
+- Modify: `crates/mk_engine/src/interventions/mod.rs` (`spawn_human`)
+- Test: beside each
 
 - [ ] **Step 1:** Add failing tests with storage enabled: (a) a pre-existing folder with the newborn's id, (b) an unwritable storage root. In both, the child must still join the registry, the birth and parent events must still be recorded in memory, and the storage failure must be reported (returned/logged and counted), not swallowed.
-- [ ] **Step 2:** Change `add_human` to insert the human first and return the storage outcome separately; make `deliver_due_births` keep every child regardless and surface storage errors.
+- [ ] **Step 2:** Change `add_human` to insert the human first and return the storage outcome separately (`Result<(), HumanStorageError>` now means "added; storage failed"). Duplicate agent ids are rejected *before* insertion with a distinct `DuplicateAgent` error. Update every caller: `deliver_due_births` keeps every child and surfaces storage errors; `seed_founders` and `with_persistent_founders` keep founders on storage failure; upstream `spawn_human` succeeds and reports the storage error in its outcome instead of aborting. Make `sync_to_storage`, `sync_human_to_storage` and `record_event` return the errors they currently discard with `let _ =` (callers that ignore them must now do so explicitly).
 - [ ] **Step 3:** Add a test that the same seed stepped with storage enabled, disabled, and failing yields the same human registry hash.
 - [ ] **Step 4:** Run `cargo test -p mk_engine --lib humans::`; expect PASS.
 - [ ] **Step 5:** Commit `fix(humans): never drop a newborn because a folder write failed`.
