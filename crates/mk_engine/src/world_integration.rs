@@ -2364,10 +2364,11 @@ impl WorldState {
     }
 
     fn step_ledger_clear(&mut self, _dt_seconds: u64) -> Result<(), WorldStepError> {
-        // авторitative clear of the flux ledger for the next tick
+        // Authoritative clear of the flux ledger for the next tick. The audit
+        // trail is deliberately kept: it holds exactly this tick's entries
+        // (`step_world` clears it on entry), so it stays bounded to one tick
+        // and remains observable after `step_world` returns.
         self.ledger = mk_core::flux::Ledger::new();
-        // Clear audit trail entries to prevent memory leak over long simulation runs
-        self.audit_trail.entries.clear();
         Ok(())
     }
 
@@ -2692,6 +2693,23 @@ mod founders_estate_placement_tests {
             ocean.hash_after,
             state_fingerprint(&ocean.hash_before, &world.ocean_state)
         );
+    }
+
+    #[test]
+    fn audit_trail_holds_exactly_one_ticks_entries() {
+        let mut world = WorldState::new(Arc::new(CanonLocked::default()), [5u8; 32]);
+        world.step_world(3600).unwrap();
+        let per_tick = world.audit_trail.entries.len();
+        assert!(per_tick > 0, "entries must be observable after step_world");
+
+        for _ in 0..10 {
+            world.step_world(3600).unwrap();
+            assert_eq!(
+                world.audit_trail.entries.len(),
+                per_tick,
+                "the trail must stay bounded to one tick's entries"
+            );
+        }
     }
 
     #[test]
