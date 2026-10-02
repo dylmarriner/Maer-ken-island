@@ -2,7 +2,7 @@
 
 Date: 2026-10-01
 Status: Approved architecture, implementation pending plan
-Amended: 2026-10-02 — zonal background forcing (§6), vegetation and estate representation levels (§4.5, §4.7), Phase-0 baseline (§17), per-phase previews (§13); owner decisions on island shape (§2), Bevy 0.19 (§13), human tooling (§4.6), computer room inside the house (§4.7), physical material flows (§4.9)
+Amended: 2026-10-02 — zonal background forcing (§6), vegetation and estate representation levels (§4.5, §4.7), Phase-0 baseline (§17), per-phase previews (§13); owner decisions on island shape (§2), Bevy 0.19 (§13), human tooling (§4.6), computer room inside the house (§4.7), physical material flows and complete geological resources (§4.1, §4.9)
 Source project: `dylmarriner/Maer-Ken`
 Target project: `dylmarriner/Maer-ken-island`
 
@@ -86,7 +86,11 @@ Retain:
 - earthquakes
 - volcanism
 - erosion-coupled landform change
-- mineral/resource consequences
+- mineral/resource consequences: a rock-type (lithology) map and mineral deposits that form only where
+  their geology allows — gold, silver, platinum, base metals, gems (including diamonds, possible
+  because the island includes a fragment of ancient continental crust where kimberlite pipes can
+  form), crystals, building stone, industrial minerals, salts and fossil fuels — plus river placers
+  and beach ironsands derived from them
 
 The island domain contains enough plate context to produce meaningful local tectonics. Plate state
 may extend mathematically beyond the simulation window, but only local cells/entities are materialized.
@@ -228,6 +232,11 @@ Retain local resource economy behaviour needed for:
 - resource depletion/regeneration when represented
 
 Only resources present in the island/ocean domain participate.
+
+Every resource has a node: every geological deposit, placer and beach sand; every plant, animal,
+fish and shellfish source; salt pans and water sources. Every material has an item, from ores, gems
+and crystals through stone, sediments, salts and fuels to processed metals, alloys, glass and cut
+gems. Deposits are finite; nothing regenerates without a physical cause.
 
 Materials are physical. Gathering wood, food, fibre or resin moves carbon out of living biomass
 (both the cell's biomass and the producer species that hold it); coal comes out of crustal carbon;

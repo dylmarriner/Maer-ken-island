@@ -97,6 +97,7 @@
 - [ ] **Step 2:** Port/adapt deterministic procgen helpers required for flora, humans, buildings and current named vehicles.
 - [ ] **Step 2a:** Vegetation: render every patch `TreeInstance` individually inside the estate patch, and patch `StandCover` as instanced trees at its stem density; outside the patch, render GPU-instanced trees whose per-chunk density and kind mix come from `biomass_kgc_m2`/biome. Instanced trees are presentation-only and deterministic from chunk ID; they are never resource nodes.
 - [ ] **Step 2b:** Buildings and interiors: generate meshes from `EstateLayout` footprints/spaces/doors and place items at their `ItemPlacement` positions; an interior view shows rooms with their furniture, tools, vehicles and computers.
+- [ ] **Step 2c:** Resources: every `ResourceNodeKind` has a visual (outcrops by lithology, mine workings on deposits, river gravel with placers, ironsand beaches, game, fisheries, bee colonies, salt pans) and every catalogue item has an inventory icon; a test enumerates both lists and fails on any missing entry.
 - [ ] **Step 3:** Write tests covering all six property building kinds (the computer room rendered as a room inside the House, not a separate building), every space in the layout, every current named vehicle class, founder model aliases, instanced-tree density following biomass, and deterministic offsets.
 - [ ] **Step 4:** Implement render synchronization from `IslandView`.
 - [ ] **Step 5:** Run `cargo test -p island_ui`; expect PASS.

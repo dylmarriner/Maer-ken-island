@@ -61,22 +61,52 @@ Two representation levels exist:
 - [ ] **Step 4:** Run `cargo test -p mk_engine --test regional_ecology` and `cargo test -p mk_engine --lib -- biosphere:: organisms::vegetation`; expect PASS.
 - [ ] **Step 5:** Commit `feat(engine): seed island ecology`.
 
-### Task 2: Regional resources and material economy
+### Task 2: Complete resource nodes and material catalogue
+
+Upstream has 9 node kinds (`resource_economy.rs:13-23`) placed by biome, maps only 12 of the 25 biome `ResourceKind`s to nodes (`node_kind_for_resource`, `:639-654` — `Gem`, `Salt`, `Sulfur`, `Herbs`, `Fish`, `Shellfish`, `Meat`, `Hide`, `Bone`, `Wax`, `Feather` and `Water` are dropped), and lumps ores into `MetalOre`/`Minerals`. This task makes every resource and material in the world gatherable from a real source: geological deposits from Phase 1 Task 5, river and beach deposits from Phase-2 hydrology, plants from cell biomass, animals and fish from species populations, and water from the hydrology stores.
 
 **Files:**
+- Create: `crates/mk_engine/src/materials/mod.rs`, `crates/mk_engine/src/materials/catalogue.rs`
+- Modify: `crates/mk_engine/src/agents/mod.rs` (`ItemKind` gains the catalogue's items)
+- Modify: `crates/mk_engine/src/resource_economy.rs` (`ResourceNodeKind`, `ToolKind`, `RecipeId`, exhaustive `node_kind_for_resource`)
 - Create: `crates/mk_engine/src/regional/resources.rs`
-- Test: `crates/mk_engine/tests/regional_resources.rs`
+- Test: `crates/mk_engine/tests/regional_resources.rs`, unit tests in `materials/catalogue.rs`
 
 **Interfaces:**
-- Produces: `bootstrap_regional_resources(ecology: &RegionalEcologyState, physical: &RegionalPhysicalState, domain: &IslandDomain) -> ResourceEconomyState` calling upstream `ResourceEconomyState::from_terrain(&biome_grid, &volcanic_area_fraction_medium)`.
-- Existing `ResourceEconomyState::{apply_human_action, regenerate}` remains the action API. `regenerate()` takes no `dt` and applies one regeneration per call (`resource_economy.rs:238`); after Task 3 it applies only to abiotic nodes, and biotic node stock follows cell biomass instead.
+- Produces: `MaterialCategory::{PreciousMetalOre, BaseMetalOre, Gem, Crystal, Stone, Sediment, IndustrialMineral, FossilFuel, Salt, Plant, Animal, Marine, Water, Processed}` and the catalogue — one `ItemKind` per material with name, category, density, hardness (Mohs where meaningful) and source. Required items:
+
+| Category | Items |
+|---|---|
+| Precious metals | gold ore (quartz-gold), placer gold (nuggets/flakes), silver ore, platinum-group concentrate |
+| Base and other metals | iron ore (hematite/magnetite), ironsand (titanomagnetite), copper ore, tin ore (cassiterite), lead ore (galena), zinc ore (sphalerite), nickel ore, chromite, tungsten ore (wolframite), molybdenite, cinnabar (mercury), uraninite, lithium ore, bauxite (only if Phase-3 climate produces laterite) |
+| Gems | diamond, ruby, sapphire, emerald, topaz, tourmaline, garnet, opal, nephrite jade |
+| Crystals and silica | quartz crystal, amethyst, agate, chalcedony, obsidian |
+| Stone | granite, basalt, limestone, marble, sandstone, slate, flint/chert, pumice, stone (generic rubble, upstream `Stone`) |
+| Sediments | clay (upstream `Clay`), kaolin, sand (upstream `Sand`), silica sand, gravel, peat |
+| Industrial minerals | sulfur, gypsum, phosphate rock, feldspar, mica, graphite, zeolite, serpentine, kyanite, pyrite |
+| Fossil fuels | coal (upstream `Coal`), crude oil, natural gas |
+| Salts | rock salt, sea salt |
+| Plants | wood (upstream `Wood`), resin, fibre (upstream `Fiber`), herbs (upstream `Herbal`), fruit, nuts, fungi, plant food (upstream `Food`), honey, beeswax, seaweed |
+| Animals | meat, hide, bone, feather |
+| Marine and freshwater | fish, shellfish |
+| Water | water (upstream `Water`) |
+| Processed | planks, masonry, rope, fuel, charcoal, quicklime, glass, gold ingot, silver ingot, copper ingot, tin ingot, lead ingot, zinc ingot, iron ingot, steel, bronze, brass, cut gem (per gem kind), polished stone, tools, weapons, structures (existing upstream items keep their names) |
+
+- Produces: `ResourceNodeKind` covering every source above: `Deposit(DepositKind)` for every Phase-1 deposit; `Placer { gold | diamond | gem(GemKind) }` and `Ironsand` from rivers and beaches; `Tree`, `FruitPlant`, `NutPlant`, `FungiPatch`, `HerbPatch`, `FibrePatch`, `FoodPatch`, `BeeColony`, `SeaweedBed` from cell biomass by biome; `GameAnimals`, `Fishery`, `ShellfishBed` from fauna and marine species in the cell; `SaltPan` (coastal, from sea water) and `WaterSource` (from hydrology stores).
+- `node_kind_for_resource` becomes an exhaustive `match` with no `_` arm, so a new upstream `ResourceKind` cannot be silently dropped again.
+- Secondary deposits, computed from Phase-2 rivers and coast: placers accumulate downstream of eroding primary gold, diamond and gem deposits, with grade decaying by distance along the river; ironsand concentrates on beaches downwind and downcurrent of basaltic/andesitic coasts.
+- Yields: a deposit node yields ore or rough gem at its deposit's grade, removing tonnage until exhausted; it never regenerates. Placers deplete too, but slowly recharge from upstream erosion. Biotic and animal nodes follow Task 3 (biomass and species populations, no free regeneration). Hunting and fishing reduce the hunted species' population.
+- Tools: `ToolKind` gains `GoldPan`, `Sluice`, `Chisel`, `LapidaryWheel`, `HuntingWeapon`, `FishingGear`, `Kiln`, `Crucible`, `Anvil`, `Drill`. Each node kind lists the tools that can work it (gems and hard-rock ore need a pickaxe or better; placer gold needs a pan or sluice; crude oil and natural gas need a drill rig that no current recipe makes, so they exist but cannot yet be extracted). Founders' estate tools (shed tool categories, workshop anvil and forge tools, armoury weapons) grant the matching `ToolKind` capabilities while the human is at the estate.
+- Recipes (each through Task 3's material ledger, mass-balanced): smelt gold, silver, copper, tin, lead, zinc and iron ores to ingots; bronze (copper + tin) and brass (copper + zinc); steel (iron + carbon from charcoal or coal); charcoal (wood → charcoal + CO₂); quicklime (limestone → lime + CO₂ from crustal carbon, as real calcination does); glass (silica sand + lime + fuel); cut gem (rough → cut, with documented mass loss); polished stone.
+- Produces: `bootstrap_regional_resources(geophysics: &RegionalGeophysics, ecology: &RegionalEcologyState, physical: &RegionalPhysicalState, domain: &IslandDomain) -> ResourceEconomyState`. Upstream `from_terrain` stays for the planetary path.
 - Buildability: upstream `is_buildable` allows at most `MAX_CLIMB_HEIGHT_M = 2.0` between neighbouring cells (`physics.rs:34, 76`), which almost no 8 km cell passes. Inside the estate patch, buildability uses patch terrain at 5 m; outside it, `regional_is_buildable` applies the same 2 m rise over the 5 m patch spacing as a slope limit (0.4) to medium-cell slope. Record as a divergence.
 
-- [ ] **Step 1:** Write tests asserting no nodes in aquatic cells, forest tree/food nodes, volcanic ore contribution, finite non-renewable deposits, deterministic IDs/order, and that a gentle lowland medium cell is buildable while a steep alpine one is not.
-- [ ] **Step 2:** Run `cargo test -p mk_engine --test regional_resources`; expect FAIL.
-- [ ] **Step 3:** Implement with only regional validation/placement glue around `from_terrain`, plus `regional_is_buildable`.
-- [ ] **Step 4:** Run `cargo test -p mk_engine --test regional_resources` and `cargo test -p mk_engine --lib resource_economy::`; expect PASS.
-- [ ] **Step 5:** Commit `feat(engine): bind resources to island terrain`.
+- [ ] **Step 1:** Write catalogue tests: every required item exists with a category and density; every `ResourceKind` maps to a node kind (exhaustive match compiles); every `DepositKind` maps to at least one node kind and item.
+- [ ] **Step 2:** Write regional tests: deposit nodes only where Phase 1 put deposits; gold and diamond nodes exist on the owner's chosen island where its gallery entry said they would; placer gold appears only downstream of a gold source; ironsand only on suitable coasts; no terrestrial nodes in aquatic cells; deposit nodes never regenerate and run out at their tonnage; panning a placer without a pan fails and with one succeeds; smelting gold ore yields gold in proportion to grade; a gentle lowland medium cell is buildable while a steep alpine one is not; deterministic IDs/order.
+- [ ] **Step 3:** Run `cargo test -p mk_engine --test regional_resources` and `cargo test -p mk_engine --lib materials::`; expect FAIL.
+- [ ] **Step 4:** Implement the catalogue, node kinds, tools, recipes and regional placement. Keep upstream variants and names; add, don't rename.
+- [ ] **Step 5:** Run both tests and `cargo test -p mk_engine --lib -- resource_economy:: agents::`; expect PASS, with existing upstream tests unchanged.
+- [ ] **Step 6:** Record the extended enums, tool mapping and every abundance/grade source in `UPSTREAM.md`. Commit `feat(engine): nodes for every resource and material on the island`.
 
 ### Task 3: Physical materials — carbon, oxygen and water through the economy
 
@@ -91,10 +121,12 @@ Upstream gathering, crafting, building, smelting, eating and drinking move no ca
 - Test: `crates/mk_engine/tests/island_material_flows.rs`
 
 **Interfaces:**
-- Produces: `MaterialComposition` table, one row per `ItemKind`: dry mass (kg per item unit), carbon fraction, water content, and origin (`Biotic(BiomeClass)`, `Fossil`, `Mineral`). Initial values with a cited source each (e.g. dry wood ≈ 50% carbon by mass); a test asserts every `ItemKind` has a row.
+- Produces: `MaterialComposition` table, one row per `ItemKind` in Task 2's catalogue: dry mass (kg per item unit), carbon fraction, water content, and origin (`Biotic(BiomeClass)`, `Animal`, `Fossil`, `Mineral`, `Carbonate`). Initial values with a cited source each (e.g. dry wood ≈ 50% carbon by mass, limestone ≈ 12% carbon as CaCO₃); a test asserts every `ItemKind` has a row. Mineral mass itself is conserved through deposit tonnage (Task 2), not the ledger.
 - Produces: `MaterialLedger` hooks called by the regional economy with the cell and amount:
   - **Gather biotic** (Tree/FoodPatch/Fiber/Herbal/Resin nodes): `BiomassCarbon → MaterialCarbon`, debiting the cell's `biomass_kgc_m2` and producer species carbon by the same amount. Species are debited in proportion to their carbon share, with a per-species fractional accumulator so integer populations stay exact. A biotic node's available yield is `min(node cap, cell biomass available for harvest)`; biotic `regenerate()` is replaced by biomass regrowth from NPP. Abiotic nodes (stone, clay, sand, ore) keep upstream behaviour.
-  - **Gather coal:** `CrustCarbon → MaterialCarbon`.
+  - **Gather coal, oil, gas or limestone:** `CrustCarbon → MaterialCarbon`.
+  - **Hunt or fish:** consumer species carbon (`BiomassCarbon`, consumer class) `→ MaterialCarbon`, reducing the hunted species' population with a fractional accumulator.
+  - **Calcine limestone (quicklime) / make charcoal:** the carbon released goes `MaterialCarbon → AtmosCO2`.
   - **Gather water:** the cell's hydrology store (rivers/lakes/groundwater) `→ MaterialWater`; refused if the store is empty.
   - **Craft:** carbon follows mass; any recipe mass loss (e.g. offcuts) goes to `DetritusCarbon` at the cell.
   - **Build:** carbon stays in `MaterialCarbon`, attributed to the structure; demolition or decay over a documented lifetime moves it to `DetritusCarbon`.
@@ -103,7 +135,7 @@ Upstream gathering, crafting, building, smelting, eating and drinking move no ca
   - **Drink:** `MaterialWater → ` the human, returned to `Atmosphere`/`SoilWater` at the cell by respiration, sweat and excretion so the human water store stays bounded.
 - Wildfire and other disturbances keep upstream's existing biomass carbon handling; harvested `MaterialCarbon` in structures at a burned cell burns too.
 
-- [ ] **Step 1:** Write tests: felling/gathering moves exactly the item's carbon from biomass (cell field and species) to `MaterialCarbon`; a cell harvested to zero yields nothing until NPP regrows it; smelting with coal fuel raises atmospheric CO₂ and lowers O₂ by the stoichiometric amounts; a human eating and living one day moves food carbon through `HumanCarbon` to atmospheric CO₂; drinking from a dry cell is refused; a built shelter holds its carbon until demolished; after each step the carbon, oxygen and water stock audits close.
+- [ ] **Step 1:** Write tests: felling/gathering moves exactly the item's carbon from biomass (cell field and species) to `MaterialCarbon`; a cell harvested to zero yields nothing until NPP regrows it; smelting with coal fuel raises atmospheric CO₂ and lowers O₂ by the stoichiometric amounts; calcining limestone and making charcoal release their carbon as CO₂; hunting a game animal reduces its species population and moves its carbon; a human eating and living one day moves food carbon through `HumanCarbon` to atmospheric CO₂; drinking from a dry cell is refused; a built shelter holds its carbon until demolished; after each step the carbon, oxygen and water stock audits close.
 - [ ] **Step 2:** Run `cargo test -p mk_engine --test island_material_flows`; expect FAIL.
 - [ ] **Step 3:** Add the reservoirs and audit terms; implement the composition table and hooks; route regional economy actions and human eating/drinking through them.
 - [ ] **Step 4:** Run the test plus `cargo test -p mk_core --lib flux::`, `cargo test -p mk_engine --lib -- conservation:: resource_economy:: humans::` and `cargo test -p mk_engine --test conservation_audit`; expect PASS. Planetary `WorldState` keeps upstream behaviour unless the hooks are explicitly enabled, so existing tests are unaffected.

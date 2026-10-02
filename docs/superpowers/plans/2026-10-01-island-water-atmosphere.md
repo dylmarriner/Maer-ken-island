@@ -153,6 +153,6 @@ This phase therefore adds a compact 1-D **zonal background model** — latitude 
 - [ ] **Step 4:** Re-run the test twice and assert identical final blake3 hash.
 - [ ] **Step 5:** Update `UPSTREAM.md` with regional physical wrappers; run `cargo fmt --all -- --check` and `cargo clippy --workspace --all-targets -- -D warnings`.
 - [ ] **Step 6:** Commit `feat(engine): couple island physical systems`.
-- [ ] **Step 7:** Add `island_preview physical --profile <path> --seed <hex> --days <n> --out <dir>` writing surface temperature, mean rainfall, river/lake, ocean surface temperature and current-vector PNGs plus `summary.json`; same determinism test pattern as Phase 1 Task 5.
+- [ ] **Step 7:** Add `island_preview physical --profile <path> --seed <hex> --days <n> --out <dir>` writing surface temperature, mean rainfall, river/lake, ocean surface temperature and current-vector PNGs plus `summary.json`; same determinism test pattern as Phase 1 Task 6.
 - [ ] **Step 8:** Commit the default-seed 30-day preview under `docs/previews/phase2/` and commit `feat(preview): render island physical state`.
 - [ ] **Step 9 (Gate 2 review):** The owner checks the previews for plausibility (warmer north/cooler south at the reference latitude, wetter windward and drier leeward of ranges, rivers reaching the sea) before Phase 3.

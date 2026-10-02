@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Introduce a deterministic regional spatial domain and generate one NZ-scale, uniquely shaped tectonic island with volcanism, bathymetry and a guaranteed surrounding-ocean buffer, and add the headless preview tool every later phase extends.
+**Goal:** Introduce a deterministic regional spatial domain and generate one NZ-scale, uniquely shaped tectonic island with volcanism, bathymetry, rock types and geologically formed mineral deposits (metals, gems, crystals, stone, fuels, salts) inside a guaranteed surrounding-ocean buffer, and add the headless preview tool every later phase extends.
 
 **Architecture:** A small `mk_island` crate owns pure geometry/profile/forcing *data* contracts and depends only on `mk_core` (plus serde). `mk_engine::regional` depends on `mk_island` and owns everything that needs engine code: astronomy sampling, tectonics, volcanism and terrain. The dependency direction is fixed: `mk_engine → mk_island → mk_core`; `mk_island` must never depend on `mk_engine`. Existing global functions remain intact until final pruning so imported tests continue to protect upstream behaviour.
 
@@ -46,6 +46,7 @@
 
 **Interfaces:**
 - Produces: `IslandProfile { version: u32, width_m, height_m, coarse_cell_m, medium_cell_m, reference_latitude_deg, reference_longitude_deg, target_land_area_m2, land_area_tolerance_fraction, minimum_ocean_buffer_m, shape: ShapeRequirements }` with `Serialize`/`Deserialize`; `IslandProfile::default_nz_scale() -> Self` (`version = 1`); `IslandProfile::validate() -> Result<(), IslandProfileError>`; `IslandProfile::load(path: &Path) -> Result<Self, IslandProfileError>` which rejects unknown `version`.
+- Produces: `GeologyProfile { ancient_basement: bool, basement_age_ma: f64, basement_area_fraction: f64 }` as `IslandProfile::geology`, defaults `true`, `2_700.0`, `0.08` — a fragment of Archean continental crust so that kimberlite pipes (and therefore diamonds) are geologically possible (Clifford's rule: diamondiferous kimberlites occur on cratons older than ~2.5 Ga). With `ancient_basement = false` the island is a young arc and has no primary diamonds, as a real young arc would not.
 - Produces: `ShapeRequirements { max_compactness: f64, max_convexity: f64, min_major_headlands: u32, min_major_bays: u32 }`, defaults `0.30`, `0.80`, `3`, `3` (initial values; tune from the gallery). Validation rejects non-finite or out-of-range values.
 - Produces: `IslandDomain::from_profile(profile: IslandProfile) -> Result<Self, IslandDomainError>`.
 - Produces: `DomainLevel::{Coarse, Medium}`, `IslandDomain::{rows, cols}(level) -> usize`, `storage_spec(level) -> mk_core::grid::GridSpec` (`GridSpec::new(rows, cols)`), `cell_size_m(level) -> f64`, `cell_center_m(level, row, col) -> (f64, f64)`, `cell_area_m2(level) -> f64`, `latitude_rad_for_row(level, row) -> f64`, `longitude_rad_for_col(level, col) -> f64`, `lat_lon_at_m(x_m, y_m) -> (f64, f64)` (for positions inside cells, e.g. estate metres), `is_edge_buffer_cell(level, row, col) -> bool`.
@@ -119,11 +120,58 @@
 - [ ] **Step 2 (raw terrain):** Build raw elevation from the tectonic and volcanic state rather than a template: uplift along convergent boundaries and volcanic arcs, subsidence at divergent margins, multi-octave deterministic noise for coastline detail, and coarse erosion-like smoothing, so peninsulas, bays, ranges and inlets emerge from geology. Medium elevation is coarse uplift bilinearly resampled plus medium-scale noise.
 - [ ] **Step 3 (fit):** Fit sea level on flat regional cell area, deterministically retain the largest land component, submerge disconnected land, raise edge-band cells below sea level, and iterate sea level until area tolerance is met without violating the buffer.
 - [ ] **Step 4 (shape metrics):** Implement `measure_shape`. Perimeter is the length of the marching-squares coastline contour (not the raster staircase, which inflates perimeter by ~4/π); compactness is `4πA/P²` (circle = 1); convexity is land area / convex-hull area; headlands and bays are counted from convex-hull deficits and protrusions larger than `max(2 coarse cells, 1% of hull area)`.
-- [ ] **Step 5 (tests):** Write `regional_shape.rs`: a disc and a 4:1 ellipse fixture both fail `ShapeRequirements` (the ellipse fails on convexity); a synthetic indented fixture passes. Write `regional_geophysics.rs`: land area `254,600..=281,400 km²`, one connected component, ocean in the complete 300 km edge band, negative offshore bathymetry, deterministic elevation bytes, and `ShapeRequirementsUnmet` (with metrics) for a seed that fails. Use a provisional passing seed found by a deterministic search over `[0u8;32]`, `[1u8;32]`, … and recorded as a constant in the test; Task 6 replaces it with the owner's seed.
+- [ ] **Step 5 (tests):** Write `regional_shape.rs`: a disc and a 4:1 ellipse fixture both fail `ShapeRequirements` (the ellipse fails on convexity); a synthetic indented fixture passes. Write `regional_geophysics.rs`: land area `254,600..=281,400 km²`, one connected component, ocean in the complete 300 km edge band, negative offshore bathymetry, deterministic elevation bytes, and `ShapeRequirementsUnmet` (with metrics) for a seed that fails. Use a provisional passing seed found by a deterministic search over `[0u8;32]`, `[1u8;32]`, … and recorded as a constant in the test; Task 7 replaces it with the owner's seed.
 - [ ] **Step 6:** Run `cargo test -p mk_engine --test regional_geophysics --test regional_shape` and `cargo test -p mk_engine --lib volcanism::`; expect PASS.
 - [ ] **Step 7:** Commit `feat(engine): generate nz-scale island geophysics`.
 
-### Task 5: Headless preview tool and island gallery
+### Task 5: Rock types and mineral deposits
+
+Upstream places every resource by biome and has no rock-type map; gold, silver, gems and crystals do not exist. This task gives the island real geology: a lithology map from the tectonic and volcanic state, and primary mineral deposits that form only where their geological conditions exist. Secondary (river/beach) deposits need Phase-2 rivers and are added in Phase 3 Task 2.
+
+**Files:**
+- Create: `crates/mk_engine/src/regional/geology.rs`
+- Create: `crates/mk_engine/src/regional/deposits.rs`
+- Modify: `crates/mk_engine/src/regional/geophysics.rs` (`RegionalGeophysics` gains `lithology`, `deposits`)
+- Modify: `crates/mk_engine/src/regional/mod.rs`
+- Test: `crates/mk_engine/tests/regional_geology.rs`
+
+**Interfaces:**
+- Produces: `Lithology::{OceanicBasalt, ArcAndesite, Rhyolite, Granite, Pegmatite, Greywacke, Schist, Gneiss, Marble, Limestone, Sandstone, Mudstone, CoalMeasures, Evaporite, Ultramafic, CratonicGneiss, Kimberlite}` and `generate_lithology(tectonics, volcanism, elevation_m, domain, profile, seed) -> Grid2<Lithology>` on Medium. Rules: oceanic crust → basalt; volcanic arcs → andesite/rhyolite; granite plutons behind convergent margins with pegmatite margins; greywacke/schist/gneiss belts in the collision zone by metamorphic grade; marble where limestone meets metamorphism; sedimentary basins (sandstone, mudstone, limestone in shallow marine, coal measures in low wet basins, evaporites in arid basins) on subsiding crust; ultramafic slivers along sutures; the ancient basement fragment as cratonic gneiss; kimberlite pipes only inside cratonic gneiss where lithosphere thickness ≥ 150 km.
+- Produces: `DepositKind` and `MineralDeposit { id, kind, cell: (usize, usize), depth_m, tonnage_t, grade, host: Lithology }` (grade in g/t for precious metals, % for base metals and industrial minerals, carats/100 t for diamonds, ct or kg/t for gems and crystals). Required deposit kinds and their formation rules:
+
+| Deposit kind | Yields | Forms in |
+|---|---|---|
+| Orogenic lode gold (quartz veins) | gold, quartz | Greywacke/Schist belts near convergent boundaries |
+| Epithermal gold–silver | gold, silver, cinnabar, quartz, amethyst | ArcAndesite/Rhyolite near volcanic centres |
+| Porphyry copper–molybdenum–gold | copper, molybdenum, gold | Granite intrusions in arcs |
+| Volcanogenic massive sulfide | copper, zinc, lead, silver, pyrite | OceanicBasalt / submarine volcanics |
+| Sediment-hosted lead–zinc | lead (galena), zinc (sphalerite), silver | Limestone/Mudstone basins |
+| Tin–tungsten greisen and veins | tin (cassiterite), tungsten (wolframite) | Granite |
+| Pegmatite | quartz crystal, feldspar, mica, beryl/emerald, topaz, tourmaline, lithium | Pegmatite |
+| Skarn | iron (magnetite), copper, tungsten, garnet | Granite–Limestone contacts |
+| Ultramafic | chromite, nickel, platinum-group metals, nephrite jade, serpentine | Ultramafic |
+| Metamorphic gems and minerals | garnet, ruby/sapphire (corundum, in marble), kyanite, graphite | Schist/Gneiss/Marble |
+| Banded iron formation | iron (hematite/magnetite) | CratonicGneiss |
+| Kimberlite | diamond | Kimberlite |
+| Volcanic silica and gems | obsidian, opal, agate, chalcedony, amethyst geodes, pumice, zeolite | Rhyolite/ArcAndesite/OceanicBasalt |
+| Volcanic sulfur | sulfur | active volcanic centres (fumaroles) |
+| Coal | coal | CoalMeasures |
+| Petroleum and natural gas | crude oil, natural gas | Mudstone/Sandstone basins above maturation depth |
+| Evaporite | rock salt, gypsum | Evaporite |
+| Phosphate | phosphate rock | Limestone/Mudstone (marine) |
+| Uranium | uraninite | Granite/CratonicGneiss |
+| Building and industrial stone | granite, basalt, limestone, marble, sandstone, slate, flint/chert, kaolin clay | the matching lithology at the surface |
+
+- Abundance: each kind's deposit count, size and grade are drawn deterministically from distributions documented in code with a cited source, scaled by the area of suitable host rock — precious metals and gems are rare, building stone is everywhere its rock is. Bauxite (needs tropical laterite weathering) is evaluated in Phase 3 from climate and is expected to be absent at the reference latitude.
+- Produces: `generate_primary_deposits(lithology, tectonics, volcanism, domain, profile, seed) -> Vec<MineralDeposit>` (deterministic order by cell, then kind).
+
+- [ ] **Step 1:** Write tests: lithology is deterministic; arc volcanics lie along convergent boundaries; no kimberlite outside cratonic gneiss and none at all with `ancient_basement = false`; every `DepositKind` has a formation rule and appears for at least one of 32 fixed test seeds; no deposit sits in a host rock its rule forbids; gold and diamond deposits are rarer than building-stone deposits by at least two orders of magnitude of tonnage; deposit list is byte-identical for identical inputs.
+- [ ] **Step 2:** Run `cargo test -p mk_engine --test regional_geology`; expect FAIL.
+- [ ] **Step 3:** Implement the lithology rules and deposit generation; record every abundance distribution's source in code.
+- [ ] **Step 4:** Re-run; expect PASS.
+- [ ] **Step 5:** Commit `feat(engine): generate island rock types and mineral deposits`.
+
+### Task 6: Headless preview tool and island gallery
 
 **Files:**
 - Create: `apps/island_preview/Cargo.toml` (deps: `mk_island`, `mk_engine`, `mk_core`, `serde`, `serde_json`, `hex`, `png`)
@@ -134,8 +182,8 @@
 - Test: `apps/island_preview/tests/preview_determinism.rs` (calls the lib directly)
 
 **Interfaces:**
-- CLI: `island_preview geophysics --profile <path> --seed <64 hex chars> --out <dir>` writes `elevation.png` (hypsometric land, depth-shaded ocean, 300 km buffer outline), `land_mask.png`, `plates.png` and `summary.json` (land area km², sea-level offset, component count, min/max elevation, plate count, `ShapeMetrics`).
-- CLI: `island_preview gallery --profile <path> --seeds <n> --out <dir>` derives `n` candidate seeds deterministically (`blake3("island-gallery" ‖ index)`), writes `seed-<hex>.png` thumbnails, `gallery.png` (contact sheet with each tile labelled by index using the bitmap font) and `gallery.json` (index → seed hex, metrics, pass/fail reason).
+- CLI: `island_preview geophysics --profile <path> --seed <64 hex chars> --out <dir>` writes `elevation.png` (hypsometric land, depth-shaded ocean, 300 km buffer outline), `land_mask.png`, `plates.png`, `geology.png` (lithology), `deposits.png` (deposit markers by kind) and `summary.json` (land area km², sea-level offset, component count, min/max elevation, plate count, `ShapeMetrics`, deposit counts and contained tonnage per `DepositKind`).
+- CLI: `island_preview gallery --profile <path> --seeds <n> --out <dir>` derives `n` candidate seeds deterministically (`blake3("island-gallery" ‖ index)`), writes `seed-<hex>.png` thumbnails, `gallery.png` (contact sheet with each tile labelled by index using the bitmap font) and `gallery.json` (index → seed hex, metrics, deposit counts per kind — including whether the island has gold, diamonds and each gem — pass/fail reason). Thumbnails mark gold and diamond deposits so the owner can choose an island by its resources as well as its shape.
 - Later phases add subcommands (`physical`, `life`, `world`) to the same tool; it never mutates or persists simulation state.
 
 - [ ] **Step 1:** Write tests asserting identical PNG bytes and `summary.json` for the same profile/seed, that `summary.json` area equals `RegionalGeophysics::land_area_m2`, and that `gallery.json` lists failing seeds with reasons.
@@ -143,9 +191,9 @@
 - [ ] **Step 3:** Implement the renderers with fixed palettes and no timestamps or variable PNG metadata.
 - [ ] **Step 4:** Re-run; expect PASS. Generate a 24-seed gallery and commit it under `docs/previews/phase1/gallery/`.
 - [ ] **Step 5:** Commit `feat(preview): render island geophysics and seed gallery`.
-- [ ] **Step 6 (owner):** The owner picks an island from the gallery by index; record the chosen seed hex.
+- [ ] **Step 6 (owner):** The owner picks an island from the gallery by index — by shape and by resources (e.g. one with diamonds) — and the chosen seed hex is recorded.
 
-### Task 6: Phase-1 acceptance fixture
+### Task 7: Phase-1 acceptance fixture
 
 **Files:**
 - Modify: `fixtures/island/default_profile.json` (owner's seed)
@@ -157,7 +205,7 @@
 - Consumes all Phase-1 public interfaces; produces no new runtime API.
 
 - [ ] **Step 1:** Set the owner-chosen seed in the fixture (profile `version` stays `1`) and in the geophysics test constant.
-- [ ] **Step 2:** Add an acceptance test that loads the fixture, bootstraps geophysics twice and asserts identical serialized results, area/buffer/connectivity/shape constraints, and finite tectonic/volcanic state.
+- [ ] **Step 2:** Add an acceptance test that loads the fixture, bootstraps geophysics twice and asserts identical serialized results, area/buffer/connectivity/shape constraints, finite tectonic/volcanic state, and the deposit list the owner saw in the gallery.
 - [ ] **Step 3:** Run `cargo test -p mk_engine --test island_phase1_acceptance -- --nocapture`; expect PASS.
 - [ ] **Step 4:** Generate the chosen island's full preview into `docs/previews/phase1/`.
 - [ ] **Step 5:** Update `UPSTREAM.md` with `mk_island`, the volcanism geometry extraction and regional tectonic/terrain divergences.

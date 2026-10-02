@@ -50,7 +50,7 @@
 
 - [ ] **Gate 0:** `cargo test --workspace` (fast set) passes with 0 failures, the slow set passes in release, and CI enforces fmt/clippy/fast tests on every push.
 - [ ] **Gate 0b:** The owner creates a human in the browser dashboard; they appear in the roster, have their own folder with a `created` event, and survive a restart.
-- [ ] **Gate 1:** Phase 1 tests prove deterministic one-island generation within land-area tolerance and ocean-buffer constraints; `island_preview` emits the elevation/land-mask PNG.
+- [ ] **Gate 1:** Phase 1 tests prove deterministic one-island generation within land-area tolerance and ocean-buffer constraints, with lithology and mineral deposits; `island_preview` emits the elevation, geology and deposit maps and the seed gallery.
 - [ ] **Gate 2:** Phase 2 tests prove local ocean/atmosphere/hydrology coupling with explicit non-wrapping edge forcing and a zonal background calibrated against the upstream global model; preview emits temperature/rain/river maps.
 - [ ] **Gate 3:** Phase 3 tests prove the retained ecology, founders, property inventory, metric estate layout (computer room inside the house), dense local vegetation, computers and material economy operate on regional cells, with carbon, oxygen and water budgets closing every step; preview emits the estate plan and local tree map.
 - [ ] **Gate 4:** Phase 4 tests prove complete snapshot/replay determinism and scheduler cadence behaviour; every human has a folder; the owner can create a human from the dashboard and see them in the world and on disk.
@@ -74,10 +74,11 @@ Decided (2026-10-02):
 4. **Detail patch:** one 4 km × 4 km high-detail patch centred on the founders' estate holds the house, shed, garage, workshop, rooms, vehicles, tools, computers and individually simulated trees.
 5. **Computer room:** part of the house — laid out as a room inside the House, reached through it (Phase 3 Task 5).
 6. **Physical materials:** gathered wood, food, fibre, resin, coal and water move real carbon, oxygen and water; burning and human metabolism release CO₂; biotic resources regrow only as biomass regrows (Phase 3 Task 3).
+7. **Every resource and material:** real geology (rock types and ~20 deposit families) places gold, silver, platinum, base metals, gems including diamonds, crystals, stone, industrial minerals, salts and fuels; every resource has a node and every material an item (Phase 1 Task 5, Phase 3 Task 2). Diamonds require the island's ancient-crust fragment; the gallery shows which candidate islands have them.
 
 Population:
 
-7. **Population.** The island starts with Gem-D and Gem-K (the only humans upstream defines, running the complete runtime). The owner adds people through the dashboard Human Creator (first in Phase 0b, then with island placement in Phase 4 Task 6); further people are born through the reproduction system. Every human, however created, gets their own folder.
+8. **Population.** The island starts with Gem-D and Gem-K (the only humans upstream defines, running the complete runtime). The owner adds people through the dashboard Human Creator (first in Phase 0b, then with island placement in Phase 4 Task 6); further people are born through the reproduction system. Every human, however created, gets their own folder.
 
 ## Final verification
 
