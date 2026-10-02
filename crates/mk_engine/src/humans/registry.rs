@@ -6,15 +6,46 @@
 use super::{BiologicalSex, HumanBeing};
 use crate::io::{HumanStorage, HumanStorageError};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// Registry for managing human beings
+///
+/// Humans are kept in insertion order (iteration order is part of the
+/// deterministic simulation) with a side index from agent id to position, so
+/// id lookups do not scan the whole population.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(from = "RegistryData")]
 pub struct HumanRegistry {
     humans: Vec<HumanBeing>,
     next_agent_id: u32,
     /// Optional persistent storage for human folders
     #[serde(skip)]
     storage: Option<HumanStorage>,
+    /// Agent id -> position in `humans` (first occurrence). Derived state:
+    /// never serialized, rebuilt on load, and verified on every lookup.
+    #[serde(skip)]
+    index: HashMap<String, usize>,
+}
+
+/// The serialized shape of [`HumanRegistry`]; deserialization goes through it
+/// so the id index is rebuilt rather than loaded.
+#[derive(Deserialize)]
+struct RegistryData {
+    humans: Vec<HumanBeing>,
+    next_agent_id: u32,
+}
+
+impl From<RegistryData> for HumanRegistry {
+    fn from(data: RegistryData) -> Self {
+        let mut registry = Self {
+            humans: data.humans,
+            next_agent_id: data.next_agent_id,
+            storage: None,
+            index: HashMap::new(),
+        };
+        registry.rebuild_index();
+        registry
+    }
 }
 
 impl HumanRegistry {
@@ -24,6 +55,43 @@ impl HumanRegistry {
             humans: Vec::new(),
             next_agent_id: 1,
             storage: None,
+            index: HashMap::new(),
+        }
+    }
+
+    fn rebuild_index(&mut self) {
+        self.index.clear();
+        for (position, human) in self.humans.iter().enumerate() {
+            self.index
+                .entry(human.agent_id().to_string())
+                .or_insert(position);
+        }
+    }
+
+    /// Append a human, keeping the index in step. The index points at the
+    /// first human with a given id, matching a linear scan.
+    fn push(&mut self, human: HumanBeing) {
+        self.index
+            .entry(human.agent_id().to_string())
+            .or_insert(self.humans.len());
+        self.humans.push(human);
+    }
+
+    /// Position of `agent_id` in registration order, if present. O(1).
+    ///
+    /// A human's agent id never changes once registered, so a miss in the
+    /// index means the id is absent. A hit is still verified against the
+    /// human it points at, and falls back to a scan if they disagree.
+    pub fn position_of(&self, agent_id: &str) -> Option<usize> {
+        let &position = self.index.get(agent_id)?;
+        if self
+            .humans
+            .get(position)
+            .is_some_and(|h| h.agent_id() == agent_id)
+        {
+            Some(position)
+        } else {
+            self.humans.iter().position(|h| h.agent_id() == agent_id)
         }
     }
 
@@ -35,7 +103,7 @@ impl HumanRegistry {
         storage.init()?;
         for agent_id in storage.list_humans() {
             if let Some(human) = storage.load_human(&agent_id)? {
-                registry.humans.push(human);
+                registry.push(human);
             }
         }
         registry.storage = Some(storage);
@@ -44,32 +112,51 @@ impl HumanRegistry {
 
     /// Seed the canonical first humans exactly once. Their folders are
     /// created through the same path used for every future human or birth.
-    pub fn seed_founders(&mut self) -> Result<(), HumanStorageError> {
-        if self.get_human("Gem-D").is_none() {
-            self.add_human(HumanBeing::gem_d_founder())?;
+    ///
+    /// The founders always exist afterwards: both are inserted before either
+    /// folder is written, and any storage errors are returned *after* the
+    /// insertion (the founders are in the registry even when `Err`).
+    pub fn seed_founders(&mut self) -> Result<(), Vec<HumanStorageError>> {
+        let mut errors = Vec::new();
+        for founder in [HumanBeing::gem_d_founder, HumanBeing::gem_k_founder] {
+            let founder = founder();
+            if self.get_human(founder.agent_id()).is_none() {
+                if let Err(e) = self.add_human(founder) {
+                    errors.push(e);
+                }
+            }
         }
-        if self.get_human("Gem-K").is_none() {
-            self.add_human(HumanBeing::gem_k_founder())?;
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(errors)
         }
-        Ok(())
     }
 
-    /// Add a human to the registry (and create their folder if storage is enabled)
+    /// Add a human to the registry, then create their folder if storage is
+    /// enabled.
+    ///
+    /// Who exists never depends on the disk: the human is inserted first, so
+    /// an `Err` from a failed folder write means "added; storage failed".
+    /// The one exception is [`HumanStorageError::DuplicateAgent`], which is
+    /// returned before inserting and means the human was *not* added.
     pub fn add_human(&mut self, human: HumanBeing) -> Result<(), HumanStorageError> {
-        let _agent_id = human.agent_id().to_string();
-
-        // Create human folder if storage is enabled
-        if let Some(ref storage) = self.storage {
-            storage.create_human(&human)?;
+        if self.position_of(human.agent_id()).is_some() {
+            return Err(HumanStorageError::DuplicateAgent(
+                human.agent_id().to_string(),
+            ));
         }
-
-        self.humans.push(human);
-        Ok(())
+        self.push(human);
+        let added = self.humans.last().expect("just pushed");
+        match self.storage {
+            Some(ref storage) => storage.create_human(added),
+            None => Ok(()),
+        }
     }
 
     /// Add a human without creating storage (for in-memory only)
     pub fn add_human_no_storage(&mut self, human: HumanBeing) {
-        self.humans.push(human);
+        self.push(human);
     }
 
     /// Set storage backend
@@ -95,29 +182,38 @@ impl HumanRegistry {
         self.storage.is_some()
     }
 
-    /// Sync human data to storage
-    pub fn sync_to_storage(&self) {
-        if let Some(ref storage) = self.storage {
-            for human in &self.humans {
-                let _ = storage.update_human(human);
-            }
-        }
+    /// Sync every human to storage. Every human is attempted; the errors
+    /// are returned (empty when storage is disabled or all writes succeed)
+    /// so the caller decides whether to log, count or ignore them.
+    pub fn sync_to_storage(&self) -> Vec<HumanStorageError> {
+        let Some(ref storage) = self.storage else {
+            return Vec::new();
+        };
+        self.humans
+            .iter()
+            .filter_map(|human| storage.update_human(human).err())
+            .collect()
     }
 
-    /// Sync specific human to storage
-    pub fn sync_human_to_storage(&self, agent_id: &str) {
-        if let Some(ref storage) = self.storage {
-            if let Some(human) = self.get_human(agent_id) {
-                let _ = storage.update_human(human);
-            }
+    /// Sync one human to storage. `Ok(())` when storage is disabled or the
+    /// human is unknown.
+    pub fn sync_human_to_storage(&self, agent_id: &str) -> Result<(), HumanStorageError> {
+        match (&self.storage, self.get_human(agent_id)) {
+            (Some(storage), Some(human)) => storage.update_human(human),
+            _ => Ok(()),
         }
     }
 
     /// Record a life event (birth, reproduction, death, ...) to a human's
-    /// personal event log, if storage is enabled. No-op otherwise.
-    pub fn record_event(&self, agent_id: &str, event: &serde_json::Value) {
-        if let Some(ref storage) = self.storage {
-            let _ = storage.record_event(agent_id, event);
+    /// personal event log, if storage is enabled. `Ok(())` otherwise.
+    pub fn record_event(
+        &self,
+        agent_id: &str,
+        event: &serde_json::Value,
+    ) -> Result<(), HumanStorageError> {
+        match self.storage {
+            Some(ref storage) => storage.record_event(agent_id, event),
+            None => Ok(()),
         }
     }
 
@@ -153,48 +249,32 @@ impl HumanRegistry {
         agent_id
     }
 
-    /// Create and add a new human with auto-generated ID (and create folder if storage enabled)
-    pub fn create_human(
-        &mut self,
-        biological_sex: BiologicalSex,
-    ) -> Result<&HumanBeing, HumanStorageError> {
+    /// Create and add a new human with auto-generated ID (and create folder
+    /// if storage enabled). Storage semantics are those of [`Self::add_human`].
+    pub fn create_human(&mut self, biological_sex: BiologicalSex) -> Result<(), HumanStorageError> {
         let agent_id = self.allocate_agent_id();
-        let human = HumanBeing::new(agent_id.clone(), biological_sex);
-
-        // Create human folder if storage is enabled
-        if let Some(ref storage) = self.storage {
-            storage.create_human(&human)?;
-        }
-
-        self.humans.push(human);
-        Ok(self.humans.last().unwrap())
+        self.add_human(HumanBeing::new(agent_id, biological_sex))
     }
 
-    /// Create and add a human with a specific name (and create folder if storage enabled)
+    /// Create and add a human with a specific name (and create folder if
+    /// storage enabled). Storage semantics are those of [`Self::add_human`].
     pub fn create_named_human(
         &mut self,
         agent_id: String,
         biological_sex: BiologicalSex,
-    ) -> Result<&HumanBeing, HumanStorageError> {
-        let human = HumanBeing::new(agent_id.clone(), biological_sex);
-
-        // Create human folder if storage is enabled
-        if let Some(ref storage) = self.storage {
-            storage.create_human(&human)?;
-        }
-
-        self.humans.push(human);
-        Ok(self.humans.last().unwrap())
+    ) -> Result<(), HumanStorageError> {
+        self.add_human(HumanBeing::new(agent_id, biological_sex))
     }
 
     /// Get a human by agent ID
     pub fn get_human(&self, agent_id: &str) -> Option<&HumanBeing> {
-        self.humans.iter().find(|h| h.agent_id() == agent_id)
+        self.position_of(agent_id).map(|i| &self.humans[i])
     }
 
     /// Get a mutable reference to a human by agent ID
     pub fn get_human_mut(&mut self, agent_id: &str) -> Option<&mut HumanBeing> {
-        self.humans.iter_mut().find(|h| h.agent_id() == agent_id)
+        let position = self.position_of(agent_id)?;
+        Some(&mut self.humans[position])
     }
 
     /// Remove a human by agent ID.
@@ -207,10 +287,13 @@ impl HumanRegistry {
         agent_id: &str,
     ) -> Result<Option<HumanBeing>, crate::governance::ReverenceVetoViolation> {
         crate::governance::check(agent_id)?;
-        if let Some(pos) = self.humans.iter().position(|h| h.agent_id() == agent_id) {
+        if let Some(pos) = self.position_of(agent_id) {
             // Also delete from storage
             self.delete_from_storage(agent_id);
-            Ok(Some(self.humans.remove(pos)))
+            let removed = self.humans.remove(pos);
+            // Every later human shifted down by one.
+            self.rebuild_index();
+            Ok(Some(removed))
         } else {
             Ok(None)
         }
@@ -221,8 +304,9 @@ impl HumanRegistry {
         &self.humans
     }
 
-    /// Get all humans mutably
-    pub fn get_all_humans_mut(&mut self) -> &mut Vec<HumanBeing> {
+    /// Get all humans mutably. A slice, not the `Vec`, so callers cannot add,
+    /// remove or reorder humans behind the id index's back.
+    pub fn get_all_humans_mut(&mut self) -> &mut [HumanBeing] {
         &mut self.humans
     }
 
@@ -270,6 +354,7 @@ impl HumanRegistry {
     /// Clear all humans
     pub fn clear(&mut self) {
         self.humans.clear();
+        self.index.clear();
         self.next_agent_id = 1;
     }
 }
@@ -331,6 +416,121 @@ mod tests {
         assert!(temp_dir.join("Gem-K/profile/gemini_identity.json").exists());
 
         let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn a_duplicate_agent_id_is_rejected_before_insertion() {
+        let mut registry = HumanRegistry::new();
+        registry
+            .add_human(HumanBeing::new("twin".to_string(), BiologicalSex::Male))
+            .unwrap();
+        let err = registry
+            .add_human(HumanBeing::new("twin".to_string(), BiologicalSex::Female))
+            .unwrap_err();
+        assert!(matches!(err, HumanStorageError::DuplicateAgent(id) if id == "twin"));
+        assert_eq!(registry.population_count(), 1);
+        assert!(registry
+            .create_named_human("twin".into(), BiologicalSex::Male)
+            .is_err());
+        assert_eq!(registry.population_count(), 1);
+    }
+
+    #[test]
+    fn a_failed_folder_write_still_adds_the_human() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("humans");
+        let mut registry =
+            HumanRegistry::with_storage(HumanStorage::new_unencrypted(&root)).unwrap();
+        std::fs::remove_dir_all(&root).unwrap();
+        std::fs::write(&root, b"not a directory").unwrap();
+
+        let err = registry
+            .add_human(HumanBeing::new("alice".to_string(), BiologicalSex::Female))
+            .expect_err("the folder cannot be written");
+        assert!(!matches!(err, HumanStorageError::DuplicateAgent(_)));
+        assert!(registry.get_human("alice").is_some());
+
+        assert!(registry
+            .create_named_human("bob".into(), BiologicalSex::Male)
+            .is_err());
+        assert!(registry.get_human("bob").is_some());
+        assert!(registry.create_human(BiologicalSex::Female).is_err());
+        assert_eq!(registry.population_count(), 3);
+    }
+
+    #[test]
+    fn founders_exist_even_when_storage_fails() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("humans");
+        let mut registry =
+            HumanRegistry::with_storage(HumanStorage::new_unencrypted(&root)).unwrap();
+        std::fs::remove_dir_all(&root).unwrap();
+        std::fs::write(&root, b"not a directory").unwrap();
+
+        let errors = registry.seed_founders().expect_err("storage is broken");
+
+        assert_eq!(errors.len(), 2, "one storage error per founder folder");
+        assert!(registry.get_human("Gem-D").is_some());
+        assert!(registry.get_human("Gem-K").is_some());
+        // Seeding again neither duplicates nor reports anything new.
+        assert!(registry.seed_founders().is_ok());
+        assert_eq!(registry.population_count(), 2);
+    }
+
+    #[test]
+    fn storage_errors_from_sync_and_events_are_returned() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("humans");
+        let mut registry =
+            HumanRegistry::with_storage(HumanStorage::new_unencrypted(&root)).unwrap();
+        registry
+            .add_human(HumanBeing::new("carol".to_string(), BiologicalSex::Female))
+            .unwrap();
+        assert!(registry.sync_to_storage().is_empty());
+        assert!(registry.sync_human_to_storage("carol").is_ok());
+        assert!(registry
+            .record_event("carol", &serde_json::json!({"kind": "test"}))
+            .is_ok());
+
+        std::fs::remove_dir_all(&root).unwrap();
+        std::fs::write(&root, b"not a directory").unwrap();
+
+        assert_eq!(registry.sync_to_storage().len(), 1);
+        assert!(registry.sync_human_to_storage("carol").is_err());
+        assert!(registry
+            .record_event("carol", &serde_json::json!({"kind": "test"}))
+            .is_err());
+    }
+
+    #[test]
+    fn the_id_index_survives_removal_clear_and_a_serde_round_trip() {
+        let mut registry = HumanRegistry::new();
+        for name in ["a", "b", "c", "d"] {
+            registry
+                .create_named_human(name.to_string(), BiologicalSex::Female)
+                .unwrap();
+        }
+        assert_eq!(registry.position_of("c"), Some(2));
+
+        registry.remove_human("b").unwrap();
+        assert_eq!(registry.position_of("a"), Some(0));
+        assert_eq!(registry.position_of("b"), None);
+        assert_eq!(registry.position_of("c"), Some(1));
+        assert_eq!(registry.get_human("d").unwrap().agent_id(), "d");
+
+        // Iteration order is unchanged by the index.
+        let order: Vec<_> = registry.iter().map(|h| h.agent_id().to_string()).collect();
+        assert_eq!(order, ["a", "c", "d"]);
+
+        let json = serde_json::to_string(&registry).unwrap();
+        assert!(!json.contains("\"index\""), "the index is derived state");
+        let reloaded: HumanRegistry = serde_json::from_str(&json).unwrap();
+        assert_eq!(reloaded.position_of("d"), Some(2));
+        assert!(reloaded.get_human("c").is_some());
+
+        registry.clear();
+        assert_eq!(registry.position_of("a"), None);
+        assert!(registry.get_human("a").is_none());
     }
 
     #[test]

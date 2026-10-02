@@ -4,7 +4,8 @@ use mk_core::canon::{CanonDerived, CanonLocked};
 use mk_engine::{emit_phase7_artifacts_for_horizons, MKIDeclaration, VerificationHorizon};
 
 #[test]
-fn emit_phase7_artifacts_writes_files_and_canon_digest_matches_core() {
+#[ignore = "deep: emits a Kyr100 verification artifact (>5 min in debug); run manually with: cargo test --release -p mk_engine --test phase7_artifacts_emit -- --ignored deep_"]
+fn deep_emit_phase7_artifacts_writes_files_and_canon_digest_matches_core() {
     let dir = tempfile::tempdir().expect("tempdir");
     emit_phase7_artifacts_for_horizons(dir.path(), &[VerificationHorizon::Kyr100]).expect("emit");
 

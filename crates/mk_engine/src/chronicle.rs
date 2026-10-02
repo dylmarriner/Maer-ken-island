@@ -267,11 +267,16 @@ mod tests {
     fn arrivals_and_deaths_are_recorded() {
         let mut w = world();
         w.observe_chronicle();
+        w.humans_state
+            .registry
+            .create_human(mk_core::human::BiologicalSex::Female)
+            .expect("in-memory registry");
         let id = w
             .humans_state
             .registry
-            .create_human(mk_core::human::BiologicalSex::Female)
-            .expect("in-memory registry")
+            .iter()
+            .last()
+            .expect("just created")
             .agent_id()
             .to_string();
         w.observe_chronicle();
@@ -297,11 +302,16 @@ mod tests {
     fn technology_eras_open_when_knowledge_crosses_the_unlock_threshold() {
         let mut w = world();
         w.observe_chronicle();
+        w.humans_state
+            .registry
+            .create_human(mk_core::human::BiologicalSex::Male)
+            .expect("in-memory registry");
         let id = w
             .humans_state
             .registry
-            .create_human(mk_core::human::BiologicalSex::Male)
-            .expect("in-memory registry")
+            .iter()
+            .last()
+            .expect("just created")
             .agent_id()
             .to_string();
         let human = w

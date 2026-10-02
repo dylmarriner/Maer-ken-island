@@ -51,7 +51,7 @@
 
 ## Program gates
 
-- [ ] **Gate 0:** `cargo test --workspace` (fast set) passes with 0 failures, the slow set passes in release, and CI enforces fmt/clippy/fast tests on every push.
+- [x] **Gate 0:** `cargo test --workspace` (fast set) passes with 0 failures, the slow set passes in release, and CI enforces fmt/clippy/fast tests on every push. Recorded 2026-10-02: fast tier 112 s wall (warm build), slow tier passes in release (2 tests; the 1 kyr benchmark is deep-tier), fmt and clippy `-D warnings` clean.
 - [ ] **Gate 0b:** The owner creates a human in the browser dashboard; they appear in the roster, have their own folder with a `created` event, and survive a restart.
 - [ ] **Gate 0c:** The island canon passes the physical-consistency validator with only the declared density exception; reference packs load; human realism results are passing or accepted by the owner.
 - [ ] **Gate 1:** Phase 1 tests prove deterministic one-island generation within land-area tolerance and ocean-buffer constraints, with lithology and mineral deposits; `island_preview` emits the elevation, geology and deposit maps and the seed gallery.

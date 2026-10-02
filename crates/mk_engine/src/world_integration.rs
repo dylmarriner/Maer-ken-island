@@ -299,11 +299,6 @@ pub struct WorldState {
     pub metrics: WorldMetrics,
 }
 
-/// Hydrology spin-up when a world is built: one year of ten-day steps under
-/// the initial climate (see [`WorldState::new`]).
-const HYDROLOGY_SPIN_UP_STEPS: usize = 36;
-const HYDROLOGY_SPIN_UP_STEP_SECONDS: f64 = 10.0 * 86_400.0;
-
 /// Audit trail for deterministic verification
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuditTrail {
@@ -694,18 +689,26 @@ impl WorldState {
     /// Enable persistent per-human profiles for this running world. This is
     /// deliberately separate from `new()` so deterministic tests and pure
     /// replay construction remain filesystem-free.
+    ///
+    /// `Err` means the storage could not be opened (including an unusable
+    /// storage key, which is refused rather than downgraded to plaintext) and
+    /// the world is left unchanged. Otherwise the founders exist and any
+    /// folder-write errors while seeding them are returned for the caller to
+    /// log.
     pub fn enable_persistent_humans(
         &mut self,
         base_path: impl Into<std::path::PathBuf>,
-    ) -> Result<(), crate::io::HumanStorageError> {
-        let storage = crate::io::HumanStorage::new(base_path);
-        self.humans_state = crate::humans::HumanSystem::with_persistent_founders(storage)?;
+    ) -> Result<Vec<crate::io::HumanStorageError>, crate::io::HumanStorageError> {
+        let storage = crate::io::HumanStorage::try_new(base_path)?;
+        let (humans_state, seed_errors) =
+            crate::humans::HumanSystem::with_persistent_founders(storage)?;
+        self.humans_state = humans_state;
         // Put the founders where their estate actually was built, rather
         // than at their canonical birthplace coordinates (which remain
         // profile truth for astrology/trait derivation).
         self.humans_state
             .place_founders_at_home(self.property_state.founders_estate_location());
-        Ok(())
+        Ok(seed_errors)
     }
 
     /// Attach a real `apps/computer-service` bridge so humans can select
@@ -2364,10 +2367,11 @@ impl WorldState {
     }
 
     fn step_ledger_clear(&mut self, _dt_seconds: u64) -> Result<(), WorldStepError> {
-        // авторitative clear of the flux ledger for the next tick
+        // Authoritative clear of the flux ledger for the next tick. The audit
+        // trail is deliberately kept: it holds exactly this tick's entries
+        // (`step_world` clears it on entry), so it stays bounded to one tick
+        // and remains observable after `step_world` returns.
         self.ledger = mk_core::flux::Ledger::new();
-        // Clear audit trail entries to prevent memory leak over long simulation runs
-        self.audit_trail.entries.clear();
         Ok(())
     }
 
@@ -2692,6 +2696,23 @@ mod founders_estate_placement_tests {
             ocean.hash_after,
             state_fingerprint(&ocean.hash_before, &world.ocean_state)
         );
+    }
+
+    #[test]
+    fn audit_trail_holds_exactly_one_ticks_entries() {
+        let mut world = WorldState::new(Arc::new(CanonLocked::default()), [5u8; 32]);
+        world.step_world(3600).unwrap();
+        let per_tick = world.audit_trail.entries.len();
+        assert!(per_tick > 0, "entries must be observable after step_world");
+
+        for _ in 0..10 {
+            world.step_world(3600).unwrap();
+            assert_eq!(
+                world.audit_trail.entries.len(),
+                per_tick,
+                "the trail must stay bounded to one tick's entries"
+            );
+        }
     }
 
     #[test]

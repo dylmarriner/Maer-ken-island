@@ -6,6 +6,7 @@ use super::genetics::GeneticsSnapshot;
 use super::registry::HumanRegistry;
 use super::reproduction::ReproductiveTimeline;
 use super::{BiologicalSex, HumanBeing, HumanStatus};
+use crate::io::HumanStorageError;
 use chrono::Utc;
 use mk_core::rng::{RngExt, RngKey, RngRegistry, SubsystemId};
 use serde_json::Value;
@@ -1003,11 +1004,15 @@ pub fn deliver_birth(
 
 /// Per-tick birth pass: every living mother whose pregnancy has reached
 /// full term delivers, in stable registry order.
+///
+/// Every child is added to the registry whether or not storage works. Birth
+/// and `reproduced` events are written when storage allows; storage errors
+/// are returned (in delivery order) for the caller to log and count.
 pub fn deliver_due_births(
     registry: &mut HumanRegistry,
     tick: mk_core::time::Tick,
     grid_spec: &mk_core::grid::GridSpec,
-) {
+) -> Vec<HumanStorageError> {
     let mut births = Vec::new();
     for mother in registry.get_all_humans_mut() {
         if !matches!(mother.profile.status, HumanStatus::Alive) {
@@ -1020,30 +1025,60 @@ pub fn deliver_due_births(
         }
     }
 
+    let mut errors = Vec::new();
     for (child, mother_id, father_id) in births {
         let child_id = child.agent_id().to_string();
 
-        // `add_human` creates the child's personal folder when storage is
-        // enabled (falls back to an in-memory push otherwise, same as
-        // `add_human_no_storage`), so a birth always leaves a documented
-        // record of the new human, matching the retired parents' own folders.
-        if registry.add_human(child).is_ok() {
-            let birth_event = serde_json::json!({
-                "kind": "born",
-                "tick": tick,
-                "parents": [mother_id, father_id],
-            });
-            registry.record_event(&child_id, &birth_event);
+        // `add_human` inserts the child first and then creates their personal
+        // folder when storage is enabled, so a birth never depends on the
+        // disk. A duplicate id is the only case where the child is not added.
+        // The child is added whatever the disk does; only a duplicate id
+        // means it was not (its pregnancy is already consumed, so say so).
+        let child_stored = match registry.add_human(child) {
+            Ok(()) => true,
+            Err(e @ HumanStorageError::DuplicateAgent(_)) => {
+                tracing::error!(
+                    child = %child_id,
+                    mother = %mother_id,
+                    "a newborn was lost: its agent id is already in the registry"
+                );
+                errors.push(e);
+                continue;
+            }
+            Err(e) => {
+                errors.push(e);
+                false
+            }
+        };
 
-            let reproduced_event = serde_json::json!({
-                "kind": "reproduced",
-                "tick": tick,
-                "child": child_id,
-            });
-            registry.record_event(&mother_id, &reproduced_event);
-            registry.record_event(&father_id, &reproduced_event);
+        // The parents' folders are theirs and unaffected by the child's, so
+        // their `reproduced` event is always written. The child's `born`
+        // event goes only into a folder this birth actually created, never
+        // into a stale folder left by an earlier run.
+        let reproduced_event = serde_json::json!({
+            "kind": "reproduced",
+            "tick": tick,
+            "child": child_id,
+        });
+        let mut events = vec![
+            (&mother_id, &reproduced_event),
+            (&father_id, &reproduced_event),
+        ];
+        let birth_event = serde_json::json!({
+            "kind": "born",
+            "tick": tick,
+            "parents": [mother_id, father_id],
+        });
+        if child_stored {
+            events.insert(0, (&child_id, &birth_event));
+        }
+        for (id, event) in events {
+            if let Err(e) = registry.record_event(id, event) {
+                errors.push(e);
+            }
         }
     }
+    errors
 }
 
 /// Append one consensual act to `agent_id`'s own
@@ -1633,6 +1668,147 @@ mod tests {
         let mother = registry.get_human("term_mother").unwrap();
         assert!(mother.reproduction.pregnancy.is_none());
         assert!(mother.reproduction.postpartum_years_remaining > 0.0);
+    }
+
+    /// A registry holding a mother carried to full term and her child's
+    /// father, ready for `deliver_due_births`. `storage` is attached before
+    /// the parents are added, so their folders are written normally.
+    fn term_registry(
+        storage: Option<crate::io::HumanStorage>,
+    ) -> (HumanRegistry, mk_core::time::Tick) {
+        let registry_rng = rng();
+        let father = adult("term_father", BiologicalSex::Male);
+        let mut mother = in_fertile_window(adult("term_mother", BiologicalSex::Female));
+        mother.set_runtime_position(super::super::GridPosition::new(4, 7));
+        let mut tick = 0;
+        while !attempt_conception(&mut mother, &father, 0.0, &registry_rng, tick) {
+            tick += 1;
+        }
+        let mut registry = match storage {
+            Some(storage) => HumanRegistry::with_storage(storage).unwrap(),
+            None => HumanRegistry::new(),
+        };
+        registry.add_human(father).unwrap();
+        registry.add_human(mother).unwrap();
+        (registry, tick + 2)
+    }
+
+    fn carry_to_term(registry: &mut HumanRegistry) {
+        let mother = registry.get_human_mut("term_mother").unwrap();
+        for _ in 0..41 {
+            step_reproductive_days(mother, 7.0);
+        }
+    }
+
+    fn registry_hash(registry: &HumanRegistry) -> [u8; 32] {
+        *blake3::hash(&serde_json::to_vec(registry).unwrap()).as_bytes()
+    }
+
+    fn child_id(registry: &HumanRegistry) -> String {
+        registry
+            .iter()
+            .find(|h| h.agent_id() != "term_mother" && h.agent_id() != "term_father")
+            .expect("a child must have been born")
+            .agent_id()
+            .to_string()
+    }
+
+    #[test]
+    fn a_newborn_whose_folder_already_exists_still_joins_the_registry() {
+        // Learn the deterministic newborn id from an in-memory run.
+        let (mut reference, tick) = term_registry(None);
+        carry_to_term(&mut reference);
+        assert!(deliver_due_births(&mut reference, tick, &grid()).is_empty());
+        let newborn = child_id(&reference);
+
+        // An earlier run left a folder with that id behind.
+        let dir = tempfile::tempdir().unwrap();
+        let storage = crate::io::HumanStorage::new_unencrypted(dir.path());
+        let (mut registry, tick) = term_registry(Some(storage.clone()));
+        storage
+            .create_human(&HumanBeing::new(newborn.clone(), BiologicalSex::Female))
+            .unwrap();
+        carry_to_term(&mut registry);
+
+        let errors = deliver_due_births(&mut registry, tick, &grid());
+
+        assert_eq!(registry.population_count(), 3, "the child must exist");
+        assert_eq!(child_id(&registry), newborn);
+        assert!(
+            matches!(errors.as_slice(), [HumanStorageError::AlreadyExists(_)]),
+            "the storage error is returned, got {errors:?}"
+        );
+    }
+
+    #[test]
+    fn a_newborn_joins_the_registry_when_the_storage_root_is_unwritable() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("humans");
+        let storage = crate::io::HumanStorage::new_unencrypted(&root);
+        let (mut registry, tick) = term_registry(Some(storage));
+        carry_to_term(&mut registry);
+
+        // The storage root becomes a plain file: nothing can be written.
+        std::fs::remove_dir_all(&root).unwrap();
+        std::fs::write(&root, b"not a directory").unwrap();
+
+        let errors = deliver_due_births(&mut registry, tick, &grid());
+
+        assert_eq!(registry.population_count(), 3, "the child must exist");
+        assert!(!errors.is_empty(), "the storage error is returned");
+        let _ = child_id(&registry);
+    }
+
+    #[test]
+    fn a_duplicate_newborn_id_is_reported_and_not_added_twice() {
+        let (mut registry, tick) = term_registry(None);
+        carry_to_term(&mut registry);
+        let mut twin = registry.clone();
+        deliver_due_births(&mut registry, tick, &grid());
+        let newborn = registry.get_human(&child_id(&registry)).unwrap().clone();
+        // Pretend the same id is already taken before the birth is delivered.
+        twin.add_human(newborn).unwrap();
+
+        let errors = deliver_due_births(&mut twin, tick, &grid());
+
+        assert!(matches!(
+            errors.as_slice(),
+            [HumanStorageError::DuplicateAgent(_)]
+        ));
+        assert_eq!(twin.population_count(), 3);
+    }
+
+    #[test]
+    fn the_registry_hash_does_not_depend_on_storage() {
+        let run = |storage: Option<crate::io::HumanStorage>, sabotage: Option<&std::path::Path>| {
+            let (mut registry, tick) = term_registry(storage);
+            carry_to_term(&mut registry);
+            if let Some(root) = sabotage {
+                std::fs::remove_dir_all(root).unwrap();
+                std::fs::write(root, b"not a directory").unwrap();
+            }
+            deliver_due_births(&mut registry, tick, &grid());
+            registry_hash(&registry)
+        };
+
+        let in_memory = run(None, None);
+
+        let dir = tempfile::tempdir().unwrap();
+        let healthy = run(
+            Some(crate::io::HumanStorage::new_unencrypted(
+                dir.path().join("ok"),
+            )),
+            None,
+        );
+
+        let failing_root = dir.path().join("failing");
+        let failing = run(
+            Some(crate::io::HumanStorage::new_unencrypted(&failing_root)),
+            Some(&failing_root),
+        );
+
+        assert_eq!(in_memory, healthy);
+        assert_eq!(in_memory, failing);
     }
 
     #[test]

@@ -1176,12 +1176,62 @@ mod tests {
         assert_eq!(policy.tolerance(FluxKind::Phosphorus), 0.00016);
     }
 
+    /// Dense ordinal for every variant. The `match` has no wildcard arm, so
+    /// adding a `Reservoir` variant without listing it here (and therefore
+    /// without adding it to `Reservoir::all()`) fails to compile.
+    fn ordinal(r: Reservoir) -> usize {
+        use Reservoir::*;
+        match r {
+            TOAInsolation => 0,
+            AtmosEnergy => 1,
+            SurfaceEnergy => 2,
+            OceanHeat => 3,
+            TidalHeat => 4,
+            VolcanicHeat => 5,
+            SpaceRadiation => 6,
+            ImpactorKinetic => 7,
+            Atmosphere => 8,
+            SoilWater => 9,
+            Groundwater => 10,
+            Rivers => 11,
+            Ocean => 12,
+            AtmosCO2 => 13,
+            BiomassCarbon => 14,
+            DetritusCarbon => 15,
+            OceanDIC => 16,
+            CrustCarbon => 17,
+            AtmosO2 => 18,
+            BiomassOxygen => 19,
+            OceanDO => 20,
+            AtmosN2 => 21,
+            BiomassNitrogen => 22,
+            SoilNitrogen => 23,
+            BiomassPhosphorus => 24,
+            SoilPhosphorus => 25,
+            OceanPhosphorus => 26,
+            OperatorIntervention => 27,
+            DetritusNitrogen => 28,
+            DetritusPhosphorus => 29,
+            CrustPhosphorus => 30,
+            SurfaceWater => 31,
+        }
+    }
+
     #[test]
     fn reservoir_all() {
+        const VARIANTS: usize = 32;
         let all = Reservoir::all();
-        // 8 energy + 5 water + 5 carbon + 3 oxygen + 3 nitrogen + 3 phosphorus
-        // + 1 external operator-intervention boundary = 28
-        assert_eq!(all.len(), 31);
+
+        // Every variant appears in `all()` exactly once.
+        let mut seen = [0usize; VARIANTS];
+        for r in all {
+            seen[ordinal(*r)] += 1;
+        }
+        assert_eq!(
+            seen, [1usize; VARIANTS],
+            "Reservoir::all() must list every variant exactly once"
+        );
+        assert_eq!(all.len(), VARIANTS);
 
         // Check specific reservoirs exist
         assert!(all.contains(&Reservoir::TOAInsolation));
@@ -1191,6 +1241,7 @@ mod tests {
         assert!(all.contains(&Reservoir::AtmosN2));
         assert!(all.contains(&Reservoir::BiomassPhosphorus));
         assert!(all.contains(&Reservoir::OperatorIntervention));
+        assert!(all.contains(&Reservoir::SurfaceWater));
     }
 
     #[test]

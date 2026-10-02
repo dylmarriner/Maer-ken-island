@@ -50,9 +50,19 @@ fn main() {
 
     let canon = std::sync::Arc::new(mk_core::canon::CanonLocked::default());
     let mut world = mk_engine::world_integration::WorldState::new(canon, [0; 32]);
-    if let Err(e) = world.enable_persistent_humans("data/humans") {
-        error!("Could not initialize persistent human profiles: {}", e);
-        std::process::exit(1);
+    match world.enable_persistent_humans("data/humans") {
+        Ok(seed_errors) => {
+            for e in seed_errors {
+                error!(
+                    "Founder folder could not be written (founder still exists): {}",
+                    e
+                );
+            }
+        }
+        Err(e) => {
+            error!("Could not initialize persistent human profiles: {}", e);
+            std::process::exit(1);
+        }
     }
 
     info!("Initial State: Tick {}", world.tick);

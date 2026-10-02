@@ -16,8 +16,8 @@ use mk_engine::long_horizon_verification::{
 };
 
 #[test]
-#[ignore = "full 100 kyr world-step integration; run with: cargo test -p mk_engine --test phase6_verification -- --ignored"]
-fn test_verification_horizon_100kyr() {
+#[ignore = "deep: full 100 kyr world-step integration (tens of millions of daily ticks); run manually with: cargo test --release -p mk_engine --test phase6_verification -- --ignored deep_"]
+fn deep_test_verification_horizon_100kyr() {
     let config = VerificationConfig {
         horizon: VerificationHorizon::Kyr100,
         initial_seed: [123u8; 32],
@@ -109,8 +109,8 @@ fn test_verification_observables_validation() {
 }
 
 #[test]
-#[ignore = "full 100 kyr world-step integration; run with: cargo test -p mk_engine --test phase6_verification -- --ignored"]
-fn test_determinism_requirements() {
+#[ignore = "deep: full 100 kyr world-step integration (tens of millions of daily ticks); run manually with: cargo test --release -p mk_engine --test phase6_verification -- --ignored deep_"]
+fn deep_test_determinism_requirements() {
     let config = VerificationConfig {
         horizon: VerificationHorizon::Kyr100,
         initial_seed: [45u8; 32],
@@ -155,8 +155,8 @@ fn test_determinism_requirements() {
 }
 
 #[test]
-#[ignore = "full 100 kyr world-step integration; run with: cargo test -p mk_engine --test phase6_verification -- --ignored"]
-fn test_conservation_drift_bounds() {
+#[ignore = "deep: full 100 kyr world-step integration (tens of millions of daily ticks); run manually with: cargo test --release -p mk_engine --test phase6_verification -- --ignored deep_"]
+fn deep_test_conservation_drift_bounds() {
     let config = VerificationConfig {
         horizon: VerificationHorizon::Kyr100,
         initial_seed: [78u8; 32],
@@ -204,8 +204,8 @@ fn test_conservation_drift_bounds() {
 }
 
 #[test]
-#[ignore = "full 100 kyr world-step integration; run with: cargo test -p mk_engine --test phase6_verification -- --ignored"]
-fn test_equilibrium_lock_detection() {
+#[ignore = "deep: full 100 kyr world-step integration (tens of millions of daily ticks); run manually with: cargo test --release -p mk_engine --test phase6_verification -- --ignored deep_"]
+fn deep_test_equilibrium_lock_detection() {
     let config = VerificationConfig {
         horizon: VerificationHorizon::Kyr100,
         initial_seed: [101u8; 32],
@@ -251,8 +251,8 @@ fn test_equilibrium_lock_detection() {
 }
 
 #[test]
-#[ignore = "full 100 kyr world-step integration; run with: cargo test -p mk_engine --test phase6_verification -- --ignored"]
-fn test_sapience_ceiling_enforcement() {
+#[ignore = "deep: full 100 kyr world-step integration (tens of millions of daily ticks); run manually with: cargo test --release -p mk_engine --test phase6_verification -- --ignored deep_"]
+fn deep_test_sapience_ceiling_enforcement() {
     let config = VerificationConfig {
         horizon: VerificationHorizon::Kyr100,
         initial_seed: [131u8; 32],
@@ -299,8 +299,8 @@ fn test_sapience_ceiling_enforcement() {
 }
 
 #[test]
-#[ignore = "full 100 kyr world-step integration; run with: cargo test -p mk_engine --test phase6_verification -- --ignored"]
-fn test_all_horizons_integration() {
+#[ignore = "deep: full 100 kyr world-step integration (tens of millions of daily ticks); run manually with: cargo test --release -p mk_engine --test phase6_verification -- --ignored deep_"]
+fn deep_test_all_horizons_integration() {
     // This test runs all horizons but with reduced duration for testing
     println!("Running integrated Phase 6 verification test...");
 
@@ -371,8 +371,8 @@ fn test_all_horizons_integration() {
 }
 
 #[test]
-#[ignore = "full 100 kyr world-step integration; run with: cargo test -p mk_engine --test phase6_verification -- --ignored"]
-fn test_phase6_exit_gates() {
+#[ignore = "deep: full 100 kyr world-step integration (tens of millions of daily ticks); run manually with: cargo test --release -p mk_engine --test phase6_verification -- --ignored deep_"]
+fn deep_test_phase6_exit_gates() {
     let config = VerificationConfig {
         horizon: VerificationHorizon::Kyr100,
         initial_seed: [192u8; 32],
@@ -451,8 +451,8 @@ fn test_phase6_exit_gates() {
 }
 
 #[test]
-#[ignore = "full 100 kyr world-step integration; run with: cargo test -p mk_engine --test phase6_verification -- --ignored"]
-fn test_verification_report_generation() {
+#[ignore = "deep: full 100 kyr world-step integration (tens of millions of daily ticks); run manually with: cargo test --release -p mk_engine --test phase6_verification -- --ignored deep_"]
+fn deep_test_verification_report_generation() {
     // Run a quick verification
     let config = VerificationConfig {
         horizon: VerificationHorizon::Kyr100,
