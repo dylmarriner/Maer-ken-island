@@ -358,19 +358,20 @@ Expected target structure:
 ```text
 crates/
   mk_core/          canonical shared types, clock, deterministic utilities, human schema
-  mk_island/        IslandDomain, regional world composition and boundary forcing
-  mk_engine/        retained/adapted runtime systems needed by the island
+  mk_island/        data-only contracts: IslandProfile, IslandDomain, boundary-forcing types,
+                    scenario (depends only on mk_core)
+  mk_engine/        retained/adapted runtime systems; `regional` module owns boundary sampling,
+                    zonal background, regional physics/ecology/property/humans, IslandWorldState
+  mk_island_view/   read-only presentation projection (no Bevy)
   mk_interventions/ retained intervention surface where useful
 apps/
-  island/           executable/UI entry point
+  island/           headless binary: run, replay, inspect, serve (dashboard + Human Creator)
+  island_ui/        Bevy desktop application (island-ui)
+  island_preview/   headless PNG/JSON previews and the island seed gallery
+services/
+  computer-service/ opt-in Node.js web-search/email backend (from upstream)
 assets/
-  humans/
-  property/
-  vehicles/
-  tools/
-  computers/
-  terrain/
-  vegetation/
+  humans/  property/  vehicles/  tools/  computers/  terrain/  vegetation/
 fixtures/
   human/
   island/

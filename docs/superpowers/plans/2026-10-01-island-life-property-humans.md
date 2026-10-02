@@ -58,7 +58,7 @@ Two representation levels exist:
 - [ ] **Step 1:** Write tests asserting ocean/land biome consistency, at least one tree/shrub/grass on eligible land, no terrestrial plant in ocean cells, NPP higher in warm wet lowland than cold alpine cells, `biomass_kgc_m2` zero over ocean, `Σ biomass × area` equal to producer species carbon after a step, and deterministic bootstrap.
 - [ ] **Step 2:** Run `cargo test -p mk_engine --test regional_ecology`; expect FAIL.
 - [ ] **Step 3:** Upstream `update_primary_production` derives latitude as `(row+0.5)/nlat·π−π/2` and uses planet radius and `dlon` (`biosphere/mod.rs:628-660`); `habitat_cells` takes `&WorldState` (`habitat.rs:55`). Extract the latitude/area inputs as parameters (global path filled exactly as today; regional path from `domain.latitude_rad_for_row` and flat area) and add a habitat function over explicit grids. Reuse biome classification and biosphere/vegetation systems against regional climatology/hydrology/elevation resampled to Medium.
-- [ ] **Step 4:** Run `cargo test -p mk_engine --test regional_ecology` and `cargo test -p mk_engine --lib biosphere:: organisms::vegetation`; expect PASS.
+- [ ] **Step 4:** Run `cargo test -p mk_engine --test regional_ecology` and `cargo test -p mk_engine --lib -- biosphere:: organisms::vegetation`; expect PASS.
 - [ ] **Step 5:** Commit `feat(engine): seed island ecology`.
 
 ### Task 2: Regional resources and material economy
@@ -106,7 +106,7 @@ Upstream gathering, crafting, building, smelting, eating and drinking move no ca
 - [ ] **Step 1:** Write tests: felling/gathering moves exactly the item's carbon from biomass (cell field and species) to `MaterialCarbon`; a cell harvested to zero yields nothing until NPP regrows it; smelting with coal fuel raises atmospheric CO₂ and lowers O₂ by the stoichiometric amounts; a human eating and living one day moves food carbon through `HumanCarbon` to atmospheric CO₂; drinking from a dry cell is refused; a built shelter holds its carbon until demolished; after each step the carbon, oxygen and water stock audits close.
 - [ ] **Step 2:** Run `cargo test -p mk_engine --test island_material_flows`; expect FAIL.
 - [ ] **Step 3:** Add the reservoirs and audit terms; implement the composition table and hooks; route regional economy actions and human eating/drinking through them.
-- [ ] **Step 4:** Run the test plus `cargo test -p mk_core --lib flux::`, `cargo test -p mk_engine --lib conservation:: resource_economy:: humans::` and `cargo test -p mk_engine --test conservation_audit`; expect PASS. Planetary `WorldState` keeps upstream behaviour unless the hooks are explicitly enabled, so existing tests are unaffected.
+- [ ] **Step 4:** Run the test plus `cargo test -p mk_core --lib flux::`, `cargo test -p mk_engine --lib -- conservation:: resource_economy:: humans::` and `cargo test -p mk_engine --test conservation_audit`; expect PASS. Planetary `WorldState` keeps upstream behaviour unless the hooks are explicitly enabled, so existing tests are unaffected.
 - [ ] **Step 5:** Record the coupling and every composition value's source in `UPSTREAM.md`. Commit `feat(engine): make gathered materials move real carbon, oxygen and water`.
 
 ### Task 4: Island scenario and canonical estate placement
@@ -169,7 +169,7 @@ Upstream gathering, crafting, building, smelting, eating and drinking move no ca
 - `GridTopology::regional(domain: &IslandDomain, level: DomainLevel)` uses flat cells, no wrap, `domain.latitude_rad_for_row`/`longitude_rad_for_col`; `cell_for_lat_lon` returns `None` outside the domain.
 - Every listed function takes `&GridTopology` where it took `&GridSpec`. A child born on the island gets a birthplace from `topology.lat_lon` of the mother's cell.
 
-- [ ] **Step 1:** Run `cargo test -p mk_engine --lib humans:: perception:: organisms::` and `cargo test -p mk_engine --test humans_world_integration`; record results and the `state_hash` of a 10-step default `WorldState`.
+- [ ] **Step 1:** Run `cargo test -p mk_engine --lib -- humans:: perception:: organisms::` and `cargo test -p mk_engine --test humans_world_integration`; record results and the `state_hash` of a 10-step default `WorldState`.
 - [ ] **Step 2:** Write topology tests: planetary area/neighbours/lat-lon equal the current functions for every row of a 32 × 64 grid; regional west-edge cells have no east-edge neighbours; regional `lat_lon` ↔ `cell_for_lat_lon` round-trips.
 - [ ] **Step 3:** Introduce `GridTopology` and thread it through the listed functions; `WorldState` passes `GridTopology::planetary`.
 - [ ] **Step 4:** Re-run Step 1; expect identical results and identical 10-step hash.

@@ -6,7 +6,7 @@
 
 **Architecture:** A baseline phase makes the imported workspace green and gated, then five dependent implementation plans replace whole-planet detailed grids with `IslandDomain`, regional boundary forcing, a regional `IslandWorldState`, and a flat/regional UI while retaining Maer-Ken physics, ecology, human, property, resource, persistence, and audit behaviour. Each plan ends in a buildable, independently testable milestone, produces a visible preview of its output, and becomes the input contract for the next.
 
-**Tech Stack:** Rust 2021 workspace, serde/serde_json, blake3, rand_chacha, existing Maer-Ken engine modules, `png` for headless previews, Bevy 0.19 + the matching bevy_egui release (0.42 at time of writing) for the final regional UI.
+**Tech Stack:** Rust 2021 workspace on Rust 1.97.0 (pinned in Phase 0), serde/serde_json, blake3, rand_chacha, existing Maer-Ken engine modules, `png` for headless previews, Bevy 0.19 + the matching bevy_egui release (0.42 at time of writing) for the final regional UI.
 
 **Spec:** `docs/superpowers/specs/2026-10-01-maer-ken-island-regional-world-design.md`
 
@@ -59,8 +59,10 @@
 ## Test tiers
 
 - **Fast tier** (`cargo test --workspace`): every test that completes in under ~30 s in a debug build. Runs on every push.
-- **Slow tier** (`cargo test --workspace --release -- --ignored`): long-horizon, benchmark and multi-year acceptance tests, each marked `#[ignore = "slow: ..."]`. Runs nightly and before each gate is ticked.
-- New acceptance tests that advance more than ~30 simulated days at fine cadence belong in the slow tier.
+- **Slow tier** (`cargo test --workspace --release -- --ignored slow_`): long-horizon, benchmark and multi-year acceptance tests, marked `#[ignore = "slow: ..."]` and named with a `slow_` prefix. Runs nightly and before each gate is ticked.
+- **Deep tier** (`--ignored deep_`): 100-kyr verification runs; never scheduled, run by hand.
+- Any test that exceeds ~30 s debug goes in the slow tier, wherever a plan puts it.
+- Multi-filter commands use libtest syntax: `cargo test -p <crate> --lib -- <filter> <filter>`.
 
 ## Owner decisions
 
@@ -81,7 +83,7 @@ Population:
 
 - [ ] Run `cargo fmt --all -- --check` and expect exit 0.
 - [ ] Run `cargo clippy --workspace --all-targets -- -D warnings` and expect exit 0 after resolving inherited warnings rather than suppressing new ones.
-- [ ] Run `cargo test --workspace` and `cargo test --workspace --release -- --ignored`; expect 0 failures in both tiers.
+- [ ] Run `cargo test --workspace` and `cargo test --workspace --release -- --ignored slow_`; expect 0 failures in both tiers.
 - [ ] Run the fixed-seed replay command defined in Phase 4 twice and require byte-identical final hashes.
 - [ ] Run the benchmark command defined in Phase 5 and commit the baseline report under `benchmarks/`.
 - [ ] Update `UPSTREAM.md` with every imported path and island divergence introduced by the phases.

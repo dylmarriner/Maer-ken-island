@@ -52,7 +52,7 @@ This phase therefore adds a compact 1-D **zonal background model** — latitude 
 **Files:**
 - Create: `docs/island/PLANETARY_DEPENDENCIES.md`
 
-- [ ] **Step 1:** For `climate`, `weather`, `ocean`, `hydrology`, `tides` and `insolation` (this phase), and `biosphere`, `biosphere::habitat`, `organisms::runtime`, `perception` and `humans` movement/lifecycle (Phase 3 Tasks 1 and 5), list every use of global means, spherical row area (`cell_area_at_row_m2`, `cos(lat)` weights), `GridSpec::lat_rad`/`lon_rad`, row spacing from planet radius, longitude wrap (`% nlon`, `rem_euclid`, `nlon - 1` neighbours), hard-coded cell distances, and pole handling, with file:line. Start from the list in this plan's Architecture section; it is known to be incomplete.
+- [ ] **Step 1:** For `climate`, `weather`, `ocean`, `hydrology`, `tides` and `insolation` (this phase), and `biosphere`, `biosphere::habitat`, `organisms::runtime`, `perception` and `humans` movement/lifecycle (Phase 3 Tasks 1 and 6), list every use of global means, spherical row area (`cell_area_at_row_m2`, `cos(lat)` weights), `GridSpec::lat_rad`/`lon_rad`, row spacing from planet radius, longitude wrap (`% nlon`, `rem_euclid`, `nlon - 1` neighbours), hard-coded cell distances, and pole handling, with file:line. Start from the list in this plan's Architecture section; it is known to be incomplete.
 - [ ] **Step 2:** Classify each as: replace with domain geometry, replace with zonal-background input, replace with edge forcing, or unaffected.
 - [ ] **Step 3:** Re-estimate Tasks 2–6 from the inventory and record the estimate in the document.
 - [ ] **Step 4:** Commit `docs(island): inventory planetary dependencies in physical systems`.
@@ -98,7 +98,7 @@ This phase therefore adds a compact 1-D **zonal background model** — latitude 
 - [ ] **Step 3:** Run `cargo test -p mk_engine --test regional_atmosphere`; expect FAIL.
 - [ ] **Step 4:** Implement climate reusing upstream equations with domain latitude, flat weighting, and background-sourced global terms; blend atmospheric and ocean-edge forcing only through explicit boundary cells.
 - [ ] **Step 5:** Implement weather on the same contract, then `apply_orographic_precipitation`. Do not change imported global APIs; extract shared helpers where an upstream function hard-codes spherical geometry, as Phase 1 Task 4 did for volcanism.
-- [ ] **Step 6:** Run `cargo test -p mk_engine --test regional_atmosphere` and `cargo test -p mk_engine --lib climate:: weather::`; expect PASS.
+- [ ] **Step 6:** Run `cargo test -p mk_engine --test regional_atmosphere` and `cargo test -p mk_engine --lib -- climate:: weather::`; expect PASS.
 - [ ] **Step 7:** Record the orographic precipitation step and any extracted helpers in `UPSTREAM.md`. Commit `feat(engine): regionalize climate and weather`.
 
 ### Task 4: Regional ocean and tides
@@ -116,7 +116,7 @@ This phase therefore adds a compact 1-D **zonal background model** — latitude 
 - [ ] **Step 2:** Run `cargo test -p mk_engine --test regional_ocean`; expect FAIL.
 - [ ] **Step 3:** Reuse upstream seawater density/evaporation/heat equations and add deterministic edge relaxation/advection against `OceanBoundaryForcing`.
 - [ ] **Step 4:** Keep tide phase analytic; map tide amplitude onto regional ocean cells.
-- [ ] **Step 5:** Run `cargo test -p mk_engine --test regional_ocean` and `cargo test -p mk_engine --lib ocean:: tides::` plus `cargo test -p mk_engine --test tides`; expect PASS.
+- [ ] **Step 5:** Run `cargo test -p mk_engine --test regional_ocean` and `cargo test -p mk_engine --lib -- ocean:: tides::` plus `cargo test -p mk_engine --test tides`; expect PASS.
 - [ ] **Step 6:** Commit `feat(engine): regionalize ocean and tides`.
 
 ### Task 5: Regional hydrology and coastline exchange
