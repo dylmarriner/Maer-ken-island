@@ -6,15 +6,46 @@
 use super::{BiologicalSex, HumanBeing};
 use crate::io::{HumanStorage, HumanStorageError};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// Registry for managing human beings
+///
+/// Humans are kept in insertion order (iteration order is part of the
+/// deterministic simulation) with a side index from agent id to position, so
+/// id lookups do not scan the whole population.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(from = "RegistryData")]
 pub struct HumanRegistry {
     humans: Vec<HumanBeing>,
     next_agent_id: u32,
     /// Optional persistent storage for human folders
     #[serde(skip)]
     storage: Option<HumanStorage>,
+    /// Agent id -> position in `humans` (first occurrence). Derived state:
+    /// never serialized, rebuilt on load, and verified on every lookup.
+    #[serde(skip)]
+    index: HashMap<String, usize>,
+}
+
+/// The serialized shape of [`HumanRegistry`]; deserialization goes through it
+/// so the id index is rebuilt rather than loaded.
+#[derive(Deserialize)]
+struct RegistryData {
+    humans: Vec<HumanBeing>,
+    next_agent_id: u32,
+}
+
+impl From<RegistryData> for HumanRegistry {
+    fn from(data: RegistryData) -> Self {
+        let mut registry = Self {
+            humans: data.humans,
+            next_agent_id: data.next_agent_id,
+            storage: None,
+            index: HashMap::new(),
+        };
+        registry.rebuild_index();
+        registry
+    }
 }
 
 impl HumanRegistry {
@@ -24,6 +55,42 @@ impl HumanRegistry {
             humans: Vec::new(),
             next_agent_id: 1,
             storage: None,
+            index: HashMap::new(),
+        }
+    }
+
+    fn rebuild_index(&mut self) {
+        self.index.clear();
+        for (position, human) in self.humans.iter().enumerate() {
+            self.index
+                .entry(human.agent_id().to_string())
+                .or_insert(position);
+        }
+    }
+
+    /// Append a human, keeping the index in step. The index points at the
+    /// first human with a given id, matching a linear scan.
+    fn push(&mut self, human: HumanBeing) {
+        self.index
+            .entry(human.agent_id().to_string())
+            .or_insert(self.humans.len());
+        self.humans.push(human);
+    }
+
+    /// Position of `agent_id` in registration order, if present.
+    pub fn position_of(&self, agent_id: &str) -> Option<usize> {
+        match self.index.get(agent_id) {
+            Some(&position)
+                if self
+                    .humans
+                    .get(position)
+                    .is_some_and(|h| h.agent_id() == agent_id) =>
+            {
+                Some(position)
+            }
+            // The index is only ever stale if a human's id was rewritten in
+            // place; the scan keeps lookups correct regardless.
+            _ => self.humans.iter().position(|h| h.agent_id() == agent_id),
         }
     }
 
@@ -35,7 +102,7 @@ impl HumanRegistry {
         storage.init()?;
         for agent_id in storage.list_humans() {
             if let Some(human) = storage.load_human(&agent_id)? {
-                registry.humans.push(human);
+                registry.push(human);
             }
         }
         registry.storage = Some(storage);
@@ -73,12 +140,12 @@ impl HumanRegistry {
     /// The one exception is [`HumanStorageError::DuplicateAgent`], which is
     /// returned before inserting and means the human was *not* added.
     pub fn add_human(&mut self, human: HumanBeing) -> Result<(), HumanStorageError> {
-        if self.humans.iter().any(|h| h.agent_id() == human.agent_id()) {
+        if self.position_of(human.agent_id()).is_some() {
             return Err(HumanStorageError::DuplicateAgent(
                 human.agent_id().to_string(),
             ));
         }
-        self.humans.push(human);
+        self.push(human);
         let added = self.humans.last().expect("just pushed");
         match self.storage {
             Some(ref storage) => storage.create_human(added),
@@ -88,7 +155,7 @@ impl HumanRegistry {
 
     /// Add a human without creating storage (for in-memory only)
     pub fn add_human_no_storage(&mut self, human: HumanBeing) {
-        self.humans.push(human);
+        self.push(human);
     }
 
     /// Set storage backend
@@ -200,12 +267,13 @@ impl HumanRegistry {
 
     /// Get a human by agent ID
     pub fn get_human(&self, agent_id: &str) -> Option<&HumanBeing> {
-        self.humans.iter().find(|h| h.agent_id() == agent_id)
+        self.position_of(agent_id).map(|i| &self.humans[i])
     }
 
     /// Get a mutable reference to a human by agent ID
     pub fn get_human_mut(&mut self, agent_id: &str) -> Option<&mut HumanBeing> {
-        self.humans.iter_mut().find(|h| h.agent_id() == agent_id)
+        let position = self.position_of(agent_id)?;
+        Some(&mut self.humans[position])
     }
 
     /// Remove a human by agent ID.
@@ -218,10 +286,13 @@ impl HumanRegistry {
         agent_id: &str,
     ) -> Result<Option<HumanBeing>, crate::governance::ReverenceVetoViolation> {
         crate::governance::check(agent_id)?;
-        if let Some(pos) = self.humans.iter().position(|h| h.agent_id() == agent_id) {
+        if let Some(pos) = self.position_of(agent_id) {
             // Also delete from storage
             self.delete_from_storage(agent_id);
-            Ok(Some(self.humans.remove(pos)))
+            let removed = self.humans.remove(pos);
+            // Every later human shifted down by one.
+            self.rebuild_index();
+            Ok(Some(removed))
         } else {
             Ok(None)
         }
@@ -232,8 +303,9 @@ impl HumanRegistry {
         &self.humans
     }
 
-    /// Get all humans mutably
-    pub fn get_all_humans_mut(&mut self) -> &mut Vec<HumanBeing> {
+    /// Get all humans mutably. A slice, not the `Vec`, so callers cannot add,
+    /// remove or reorder humans behind the id index's back.
+    pub fn get_all_humans_mut(&mut self) -> &mut [HumanBeing] {
         &mut self.humans
     }
 
@@ -281,6 +353,7 @@ impl HumanRegistry {
     /// Clear all humans
     pub fn clear(&mut self) {
         self.humans.clear();
+        self.index.clear();
         self.next_agent_id = 1;
     }
 }
@@ -426,6 +499,37 @@ mod tests {
         assert!(registry
             .record_event("carol", &serde_json::json!({"kind": "test"}))
             .is_err());
+    }
+
+    #[test]
+    fn the_id_index_survives_removal_clear_and_a_serde_round_trip() {
+        let mut registry = HumanRegistry::new();
+        for name in ["a", "b", "c", "d"] {
+            registry
+                .create_named_human(name.to_string(), BiologicalSex::Female)
+                .unwrap();
+        }
+        assert_eq!(registry.position_of("c"), Some(2));
+
+        registry.remove_human("b").unwrap();
+        assert_eq!(registry.position_of("a"), Some(0));
+        assert_eq!(registry.position_of("b"), None);
+        assert_eq!(registry.position_of("c"), Some(1));
+        assert_eq!(registry.get_human("d").unwrap().agent_id(), "d");
+
+        // Iteration order is unchanged by the index.
+        let order: Vec<_> = registry.iter().map(|h| h.agent_id().to_string()).collect();
+        assert_eq!(order, ["a", "c", "d"]);
+
+        let json = serde_json::to_string(&registry).unwrap();
+        assert!(!json.contains("\"index\""), "the index is derived state");
+        let reloaded: HumanRegistry = serde_json::from_str(&json).unwrap();
+        assert_eq!(reloaded.position_of("d"), Some(2));
+        assert!(reloaded.get_human("c").is_some());
+
+        registry.clear();
+        assert_eq!(registry.position_of("a"), None);
+        assert!(registry.get_human("a").is_none());
     }
 
     #[test]
