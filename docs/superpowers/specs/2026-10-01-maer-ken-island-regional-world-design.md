@@ -500,3 +500,18 @@ night follow the 36-hour rotation. Human biology runs in real time; where the hu
 disagrees with real physiology (for example, it has no intrinsic ~24.2-hour body clock), it is
 corrected upstream first.
 
+## 19. Energy, industry, town and economy
+
+The estate sits beside a real river; a run-of-river micro-hydro plant on it powers the house, and a
+larger hydro plant on the same river later powers a town. Output follows river discharge and head,
+falls in drought and leaves an environmental flow in the river. Where the island's geology holds a
+petroleum basin, an oil and gas field feeds a small modular refinery and a gas plant that make the
+island's petrol, diesel, kerosene and LPG; production declines as the reservoir is drawn down, and
+flaring, combustion and methane leaks are booked against the climate. A founding town houses the
+people who operate and maintain these plants and feed the community — every one a complete human
+with their own folder — working real shifts under their own decision-making. Money is conserved and
+double-entry; the enterprises sell electricity and fuel, pay wages and costs, and pay their profits
+to their owners, Gem-D and Gem-K. Equipment that cannot be manufactured on the island (turbines,
+generators, rigs, refinery units) exists from the start as imported before the simulation began,
+with finite spares; this is a declared deviation.
+

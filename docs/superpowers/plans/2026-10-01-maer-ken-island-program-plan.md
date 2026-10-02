@@ -46,6 +46,7 @@
 2. `2026-10-01-island-water-atmosphere.md` — dependency inventory, zonal background forcing, regional climate/weather/ocean/hydrology/tides and boundary exchange.
 3. `2026-10-01-island-life-property-humans.md` — ecology/vegetation/resources, dense local vegetation, canonical property inventory with a metric estate layout, founders and human interactions.
 4. `2026-10-01-island-runtime-persistence.md` — regional world composition, scheduler, deterministic replay, save/load, state hashing, per-human folders, and the web dashboard with the Human Creator.
+4b. `2026-10-02-island-phase4b-energy-industry-town.md` — river hydro for the estate and town, island grid, oil and gas field, refinery and gas plant, founding town and workforce, jobs and trades, money, enterprises owned by Gem-D and Gem-K, dashboard pages.
 5. `2026-10-01-island-app-ui-performance.md` — regional Bevy application, assets/inspectors, benchmarks, upstream sync and planetary-code pruning.
 
 ## Program gates
@@ -57,6 +58,7 @@
 - [ ] **Gate 2:** Phase 2 tests prove local ocean/atmosphere/hydrology coupling with explicit non-wrapping edge forcing and a zonal background calibrated against the upstream global model; preview emits temperature/rain/river maps.
 - [ ] **Gate 3:** Phase 3 tests prove the retained ecology, founders, property inventory, metric estate layout (computer room inside the house), dense local vegetation, computers and material economy operate on regional cells, with carbon, oxygen and water budgets closing every step; preview emits the estate plan and local tree map.
 - [ ] **Gate 4:** Phase 4 tests prove complete snapshot/replay determinism and scheduler cadence behaviour; every human has a folder; the owner can create a human from the dashboard and see them in the world and on disk.
+- [ ] **Gate 4b:** For one simulated local year the estate and town run on river hydro (with recorded low-flow backup), the refinery makes the island's fuel, the town's workers keep the plants running, every ledger closes (water, carbon, oxygen, methane, money), and Gem-D and Gem-K receive dividends equal to their shares of profit.
 - [ ] **Gate 5:** Phase 5 tests/benchmarks prove the regional app renders/inspects the retained world and normal execution no longer depends on planetary-only modules.
 
 ## Test tiers
@@ -84,12 +86,13 @@ Decided (2026-10-02):
 
 Open (defaults apply until decided):
 
+- **Industry and town (Phase 4b):** 25 kW house micro-hydro then 2 MW town hydro; 3-well oil and gas field; ~500 bbl/day modular refinery run in campaigns; gas plant; ~150-person founding town (operators, electricians, mechanics, drillers, refinery operators, farmers, fishers, store-keeper, nurse, teacher and families); island dollar; Gem-D and Gem-K own every enterprise 50/50; cost + 20% pricing; 50% of profit paid out quarterly.
 - **Estate energy:** default one 10 kW diesel generator, 2,000 L diesel, 400 L petrol, 5 kW rooftop solar and a 10 kWh battery (Phase 3 Task 4b).
 - **Performance targets:** default at least one simulated day per real minute headless, and real time with the UI open (Phase 5 Task 6).
 
 Population:
 
-11. **Population.** The island starts with Gem-D and Gem-K (the only humans upstream defines, running the complete runtime). The owner adds people through the dashboard Human Creator (first in Phase 0b, then with island placement in Phase 4 Task 6); further people are born through the reproduction system. Every human, however created, gets their own folder.
+11. **Population.** The island starts with Gem-D and Gem-K (the only humans upstream defines, running the complete runtime) and, from Phase 4b, the founding town's workforce and families, all complete humans created deterministically through the same creator path. The owner adds people through the dashboard Human Creator (first in Phase 0b, then with island placement in Phase 4 Task 6); further people are born through the reproduction system. Every human, however created, gets their own folder.
 
 ## Final verification
 
@@ -99,4 +102,4 @@ Population:
 - [ ] Run the fixed-seed replay command defined in Phase 4 twice and require byte-identical final hashes.
 - [ ] Run the benchmark command defined in Phase 5 and commit the baseline report under `benchmarks/`.
 - [ ] Update `UPSTREAM.md` with every imported path and island divergence introduced by the phases.
-- [ ] Tick the program complete only after all eight gates are green.
+- [ ] Tick the program complete only after all nine gates are green.
