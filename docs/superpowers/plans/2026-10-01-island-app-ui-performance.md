@@ -146,7 +146,7 @@ The engine is already identical to upstream; this task brings the surrounding de
 
 **Interfaces:**
 - Inspector exposes simulation clock, selected terrain cell, selected space/item/tree, human summary (including current space), property/building/item/network-account summary and physical/environmental values from `IslandView`.
-- Controls send `ControlCommand::{Pause, Resume, Step(n), Snapshot}` (Phase 4 Task 4); no arbitrary state mutation through the renderer.
+- Controls send `ControlCommand::{Pause, Resume, Step(n), Snapshot, SetSpeed}` (Phase 4 Task 4): a speed selector (real time, 10×, 60×, 360×, 1,440×, max) showing both requested and achieved speed, plus the local date and time (36-hour day, 323-day year) and the equivalent elapsed Earth time; no arbitrary state mutation through the renderer.
 
 - [ ] **Step 1:** Write tests for selection lookup and inspector data coming only from current `IslandView`.
 - [ ] **Step 2:** Implement egui panels and the control command path.
