@@ -52,7 +52,7 @@
 - [ ] **Gate 0b:** The owner creates a human in the browser dashboard; they appear in the roster, have their own folder with a `created` event, and survive a restart.
 - [ ] **Gate 1:** Phase 1 tests prove deterministic one-island generation within land-area tolerance and ocean-buffer constraints; `island_preview` emits the elevation/land-mask PNG.
 - [ ] **Gate 2:** Phase 2 tests prove local ocean/atmosphere/hydrology coupling with explicit non-wrapping edge forcing and a zonal background calibrated against the upstream global model; preview emits temperature/rain/river maps.
-- [ ] **Gate 3:** Phase 3 tests prove the retained ecology, founders, property inventory, metric estate layout, dense local vegetation, computers and material economy operate on regional cells; preview emits the estate plan and local tree map.
+- [ ] **Gate 3:** Phase 3 tests prove the retained ecology, founders, property inventory, metric estate layout (computer room inside the house), dense local vegetation, computers and material economy operate on regional cells, with carbon, oxygen and water budgets closing every step; preview emits the estate plan and local tree map.
 - [ ] **Gate 4:** Phase 4 tests prove complete snapshot/replay determinism and scheduler cadence behaviour; every human has a folder; the owner can create a human from the dashboard and see them in the world and on disk.
 - [ ] **Gate 5:** Phase 5 tests/benchmarks prove the regional app renders/inspects the retained world and normal execution no longer depends on planetary-only modules.
 
@@ -70,10 +70,12 @@ Decided (2026-10-02):
 2. **Upstream resync:** not needed — upstream `dylmarriner/Maer-Ken` HEAD equals the pinned commit `7c05f0d` as of 2026-10-02. Phase 0 Task 6 re-checks before Phase 1 starts.
 3. **Bevy:** upgrade to Bevy 0.19 (current) rather than upstream's 0.13. Upstream `mk_ui`/`mk_view` render and UI code is a behavioural reference to port, not code to copy unchanged.
 4. **Detail patch:** one 4 km × 4 km high-detail patch centred on the founders' estate holds the house, shed, garage, workshop, rooms, vehicles, tools, computers and individually simulated trees.
+5. **Computer room:** part of the house — laid out as a room inside the House, reached through it (Phase 3 Task 5).
+6. **Physical materials:** gathered wood, food, fibre, resin, coal and water move real carbon, oxygen and water; burning and human metabolism release CO₂; biotic resources regrow only as biomass regrows (Phase 3 Task 3).
 
 Population:
 
-5. **Population.** The island starts with Gem-D and Gem-K (the only humans upstream defines, running the complete runtime). The owner adds people through the dashboard Human Creator (first in Phase 0b, then with island placement in Phase 4 Task 6); further people are born through the reproduction system. Every human, however created, gets their own folder.
+7. **Population.** The island starts with Gem-D and Gem-K (the only humans upstream defines, running the complete runtime). The owner adds people through the dashboard Human Creator (first in Phase 0b, then with island placement in Phase 4 Task 6); further people are born through the reproduction system. Every human, however created, gets their own folder.
 
 ## Final verification
 

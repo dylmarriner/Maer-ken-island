@@ -96,7 +96,7 @@
 - [ ] **Step 2:** Port/adapt deterministic procgen helpers required for flora, humans, buildings and current named vehicles.
 - [ ] **Step 2a:** Vegetation: render every patch `TreeInstance` individually inside the estate patch; outside it, render GPU-instanced trees whose per-chunk density and kind mix come from the aggregate biomass/biome fields. Instanced trees are presentation-only and deterministic from chunk ID; they are never resource nodes.
 - [ ] **Step 2b:** Buildings and interiors: generate meshes from `EstateLayout` footprints/rooms/doors and place items at their `ItemPlacement` positions; an interior view shows rooms with their furniture, tools, vehicles and computers.
-- [ ] **Step 3:** Write tests covering all six property building kinds, every room in the layout, every current named vehicle class, founder model aliases, instanced-tree density following aggregate biomass, and deterministic offsets.
+- [ ] **Step 3:** Write tests covering all six property building kinds (the computer room rendered as a room inside the House, not a separate building), every room in the layout, every current named vehicle class, founder model aliases, instanced-tree density following aggregate biomass, and deterministic offsets.
 - [ ] **Step 4:** Implement render synchronization from `IslandView` in flat regional coordinates.
 - [ ] **Step 5:** Run app/render tests; expect PASS.
 - [ ] **Step 6:** Commit `feat(ui): render island life and property`.

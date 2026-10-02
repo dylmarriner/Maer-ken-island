@@ -2,7 +2,7 @@
 
 Date: 2026-10-01
 Status: Approved architecture, implementation pending plan
-Amended: 2026-10-02 — zonal background forcing (§6), vegetation and estate representation levels (§4.5, §4.7), Phase-0 baseline (§17), per-phase previews (§13); owner decisions on island shape (§2), Bevy 0.19 (§13), human tooling (§4.6)
+Amended: 2026-10-02 — zonal background forcing (§6), vegetation and estate representation levels (§4.5, §4.7), Phase-0 baseline (§17), per-phase previews (§13); owner decisions on island shape (§2), Bevy 0.19 (§13), human tooling (§4.6), computer room inside the house (§4.7), physical material flows (§4.9)
 Source project: `dylmarriner/Maer-Ken`
 Target project: `dylmarriner/Maer-ken-island`
 
@@ -191,7 +191,7 @@ Retain and use the existing Maer-Ken property concepts/assets, including at mini
 - bathroom
 - kitchen
 - lounge
-- computer room
+- computer room (a room inside the house)
 - garage/workshop spaces
 - furniture and household fixtures represented in current data/assets
 - storage and inventory relationships
@@ -199,7 +199,9 @@ Retain and use the existing Maer-Ken property concepts/assets, including at mini
 Rooms are navigable/semantic locations in the simulation, not merely decorative labels. The
 estate is laid out in metres inside its high-detail patch: building footprints, rooms, doors and
 item positions, with a door graph humans route through. The layout derives from the existing
-property inventory and never defines items of its own.
+property inventory and never defines items of its own. The computer room is a room of the house,
+reached through the house; upstream data that lists it as its own building is kept, and only its
+placement changes.
 
 ### 4.8 Vehicles, tools, equipment and computers
 
@@ -226,6 +228,13 @@ Retain local resource economy behaviour needed for:
 - resource depletion/regeneration when represented
 
 Only resources present in the island/ocean domain participate.
+
+Materials are physical. Gathering wood, food, fibre or resin moves carbon out of living biomass
+(both the cell's biomass and the producer species that hold it); coal comes out of crustal carbon;
+water comes out of the cell's rivers, lakes or groundwater. Crafting conserves mass, buildings store
+their carbon until they decay, burning fuel releases CO₂ and consumes O₂, and humans eating and
+breathing turn food carbon into exhaled CO₂. Biotic resources regrow only as biomass regrows from
+NPP. The carbon, oxygen and water budgets close every step.
 
 ## 5. Systems removed or bounded
 

@@ -4,14 +4,14 @@
 
 **Goal:** Populate the regional island with retained Maer-Ken habitats, vegetation, resources, canonical property/equipment laid out in real metric space, individually simulated trees around the estate, and the full Gem-D/Gem-K human runtime moving on the island.
 
-**Architecture:** Derive regional biome/ecology/resource state from the Phase-2 physical world, then instantiate property and humans through the already imported canonical engine types. Add regional adapters for placement, observation and interaction. Human cognition, biology and behaviour code is not forked; the one engine change is geometry — the human and organism runtimes currently assume the planetary grid (spherical cell sizes, east/west wrap, lat/lon from grid rows), so Task 5 threads a topology abstraction through them that reproduces upstream exactly on the planet and uses flat, non-wrapping geometry on the island.
+**Architecture:** Derive regional biome/ecology/resource state from the Phase-2 physical world, then instantiate property and humans through the already imported canonical engine types. Add regional adapters for placement, observation and interaction. Human cognition, biology and behaviour code is not forked; the one engine change is geometry — the human and organism runtimes currently assume the planetary grid (spherical cell sizes, east/west wrap, lat/lon from grid rows), so Task 6 threads a topology abstraction through them that reproduces upstream exactly on the planet and uses flat, non-wrapping geometry on the island.
 
 Two representation levels exist:
 
-- **Regional (medium cells, 8 km):** habitat, NPP, a derived standing-biomass density and resources as per-cell fields; species populations as upstream. Upstream has no per-cell biomass stock — living biomass carbon is `Σ species population × body mass` (`conservation.rs:255-285`) — so the per-cell biomass field here is a *derived diagnostic* used to seed and scale the patch, not a ledger stock. Upstream `VegetationSystem::seed_from_biomes` materializes about one plant per 11 cells; that remains a sparse view, not the forest.
+- **Regional (medium cells, 8 km):** habitat, NPP, a prognostic standing-biomass field and resources as per-cell fields; species populations as upstream. Upstream living biomass carbon is `Σ species population × body mass` (`conservation.rs:255-285`) with no spatial distribution, so `biomass_kgc_m2` is the *spatial distribution* of producer carbon: it grows with NPP and loses to turnover, harvest and disturbance, and after each ecology step it is renormalised so `Σ cell biomass × area` equals producer species carbon. Species carbon stays the authoritative total; the field says where it is. Upstream `VegetationSystem::seed_from_biomes` materializes about one plant per 11 cells; that remains a sparse view, not the forest.
 - **High-detail estate patch:** 4 km × 4 km at 5 m cells (800 × 800), centred on the estate's medium cell centre, so it covers 25% of exactly one 8 km cell. Buildings, rooms, doors and items have metric positions; trees within 1 km of the estate centre are individual stems, the rest of the patch is stand-level cover. Upstream property stores the whole estate as one grid cell with room *labels* only; the layout adds geometry without copying the inventory.
 
-**Tech Stack:** Rust 2021, existing `mk_engine::biosphere`, `organisms`, `resource_economy`, `humans`, `perception`, `mk_island` scenario/profile types.
+**Tech Stack:** Rust 2021, existing `mk_core::flux` ledger, `mk_engine::biosphere`, `conservation`, `organisms`, `resource_economy`, `humans`, `perception`, `mk_island` scenario/profile types.
 
 **Spec:** `docs/superpowers/specs/2026-10-01-maer-ken-island-regional-world-design.md`
 
@@ -19,14 +19,15 @@ Two representation levels exist:
 
 ## Global Constraints
 
-- Gem-D/Gem-K constructors and human cognition/biology modules remain sourced from the pinned Maer-Ken runtime; geometry changes (Task 5) must leave every existing upstream test result unchanged.
+- Gem-D/Gem-K constructors and human cognition/biology modules remain sourced from the pinned Maer-Ken runtime; geometry changes (Task 6) must leave every existing upstream test result unchanged.
 - The founders' estate retains every building upstream defines — House, Shed, Workshop, Armoury, ComputerRoom, Garage (`PropertyBuildingKind`) — plus rooms, named vehicles, attachments, tools, furniture, computers and network accounts.
 - Only the founders' estate (the `StarterProperty` whose `owner_agent_ids` contains `"Gem-D"`) is laid out and placed. The unowned homestead template that `PropertySystem::new` always includes stays unplaced. Placements are keyed by `(property_id, item_id)` because item ids restart at 1 per property.
 - Only regional island/ocean cells may seed living populations or resources.
-- Computer access requires the upstream gate (a ComputerRoom building and a matching `NetworkAccount`) *and*, on the island, that the human's current estate space is inside the ComputerRoom building (Task 7).
+- The computer room is part of the House. Upstream data models it as its own `PropertyBuildingKind::ComputerRoom` building; that data is kept unchanged (so upstream tests and access gates still work), and the layout places it as a room inside the House footprint, reached through the House, with no outside door.
+- Computer access requires the upstream gate (a ComputerRoom building and a matching `NetworkAccount`) *and*, on the island, that the human is in the computer room space (Task 8).
 - Every founders'-estate `PropertyItem` appears exactly once in the layout; the layout derives from `PropertySystem` and never defines items of its own.
-- At seed time, patch tree + stand biomass equals the estate cell's derived biomass × 0.25 within ±2%, with the tree cap active.
-- Wood gathering stays an economy action as upstream; it does not debit species biomass carbon (upstream does not couple them either). This limitation is recorded in `UPSTREAM.md`, not silently "fixed".
+- At seed time, patch tree + stand biomass equals the estate cell's biomass × 0.25 within ±2%, with the tree cap active; afterwards patch biomass and the cell field change together.
+- **Materials are physical.** Every gathered, crafted, built, burned, eaten or drunk material moves real carbon, oxygen and water through the `mk_core::flux` ledger (Task 3). Nothing gathered appears from nowhere: biotic resource nodes are views of cell biomass, not free-regenerating counters. Upstream couples none of this; the coupling is an island divergence recorded in `UPSTREAM.md` and suitable for upstreaming.
 
 ## Review Focus
 
@@ -36,7 +37,8 @@ Two representation levels exist:
 - Re-seeding vegetation/ecology must be idempotent for already initialized state.
 - Building footprints must not overlap each other, the patch edge, water or slopes above the buildable limit; trees must not stand inside footprints or the cleared yard.
 - Every room/zone must be reachable from outdoors through the door graph.
-- Planet-topology results must be bit-identical before and after Task 5.
+- Planet-topology results must be bit-identical before and after Task 6.
+- After any step, the conservation stock audit closes for carbon, oxygen and water including the new material and human reservoirs.
 
 ---
 
@@ -51,9 +53,9 @@ Two representation levels exist:
 **Interfaces:**
 - Produces: `RegionalEcologyState { biome_grid: Grid2<BiomeType>, biosphere: BiosphereState, organisms, vegetation: VegetationSystem, biomass_kgc_m2: Grid2<f64> }` on Medium.
 - Produces: `bootstrap_regional_ecology(canon: &Arc<CanonLocked>, physical: &RegionalPhysicalState, domain: &IslandDomain, seed: [u8; 32]) -> Result<RegionalEcologyState, RegionalEcologyError>` and `step_regional_ecology(&mut self, …, dt_seconds)`.
-- `biomass_kgc_m2 = npp_kgc_m2_yr × residence_years(biome)`, with a per-biome residence-time table in code citing its source for each value.
+- `biomass_kgc_m2` is initialised at equilibrium `npp_kgc_m2_yr × residence_years(biome)` (per-biome residence-time table in code, citing a source for each value), then stepped as `dB/dt = NPP − B / residence − harvest − disturbance`, and renormalised to producer species carbon after each ecology step.
 
-- [ ] **Step 1:** Write tests asserting ocean/land biome consistency, at least one tree/shrub/grass on eligible land, no terrestrial plant in ocean cells, NPP higher in warm wet lowland than cold alpine cells, `biomass_kgc_m2` zero over ocean, and deterministic bootstrap.
+- [ ] **Step 1:** Write tests asserting ocean/land biome consistency, at least one tree/shrub/grass on eligible land, no terrestrial plant in ocean cells, NPP higher in warm wet lowland than cold alpine cells, `biomass_kgc_m2` zero over ocean, `Σ biomass × area` equal to producer species carbon after a step, and deterministic bootstrap.
 - [ ] **Step 2:** Run `cargo test -p mk_engine --test regional_ecology`; expect FAIL.
 - [ ] **Step 3:** Upstream `update_primary_production` derives latitude as `(row+0.5)/nlat·π−π/2` and uses planet radius and `dlon` (`biosphere/mod.rs:628-660`); `habitat_cells` takes `&WorldState` (`habitat.rs:55`). Extract the latitude/area inputs as parameters (global path filled exactly as today; regional path from `domain.latitude_rad_for_row` and flat area) and add a habitat function over explicit grids. Reuse biome classification and biosphere/vegetation systems against regional climatology/hydrology/elevation resampled to Medium.
 - [ ] **Step 4:** Run `cargo test -p mk_engine --test regional_ecology` and `cargo test -p mk_engine --lib biosphere:: organisms::vegetation`; expect PASS.
@@ -67,7 +69,7 @@ Two representation levels exist:
 
 **Interfaces:**
 - Produces: `bootstrap_regional_resources(ecology: &RegionalEcologyState, physical: &RegionalPhysicalState, domain: &IslandDomain) -> ResourceEconomyState` calling upstream `ResourceEconomyState::from_terrain(&biome_grid, &volcanic_area_fraction_medium)`.
-- Existing `ResourceEconomyState::{apply_human_action, regenerate}` remains the action API. `regenerate()` takes no `dt` and applies one regeneration per call (`resource_economy.rs:238`), so regrowth rate is tied to the scheduler cadence (21,600 s by default, Phase 4). Record that coupling; changing the cadence changes regrowth.
+- Existing `ResourceEconomyState::{apply_human_action, regenerate}` remains the action API. `regenerate()` takes no `dt` and applies one regeneration per call (`resource_economy.rs:238`); after Task 3 it applies only to abiotic nodes, and biotic node stock follows cell biomass instead.
 - Buildability: upstream `is_buildable` allows at most `MAX_CLIMB_HEIGHT_M = 2.0` between neighbouring cells (`physics.rs:34, 76`), which almost no 8 km cell passes. Inside the estate patch, buildability uses patch terrain at 5 m; outside it, `regional_is_buildable` applies the same 2 m rise over the 5 m patch spacing as a slope limit (0.4) to medium-cell slope. Record as a divergence.
 
 - [ ] **Step 1:** Write tests asserting no nodes in aquatic cells, forest tree/food nodes, volcanic ore contribution, finite non-renewable deposits, deterministic IDs/order, and that a gentle lowland medium cell is buildable while a steep alpine one is not.
@@ -76,7 +78,38 @@ Two representation levels exist:
 - [ ] **Step 4:** Run `cargo test -p mk_engine --test regional_resources` and `cargo test -p mk_engine --lib resource_economy::`; expect PASS.
 - [ ] **Step 5:** Commit `feat(engine): bind resources to island terrain`.
 
-### Task 3: Island scenario and canonical estate placement
+### Task 3: Physical materials — carbon, oxygen and water through the economy
+
+Upstream gathering, crafting, building, smelting, eating and drinking move no carbon, oxygen or water: a Tree node yields `Wood` without touching biomass, `regenerate()` refills nodes from nothing, `Fuel` (made from coal, `resource_economy.rs:730-734`) is consumed by smelting (`:712-713`) without CO₂, and humans eat `Food` and drink `Water` (`humans/lifecycle.rs:556-565`) with no metabolism in the ledger. This task makes every material transfer physical.
+
+**Files:**
+- Modify: `crates/mk_core/src/flux/mod.rs` (new reservoirs `MaterialCarbon`, `MaterialWater`, `HumanCarbon`; covered by Phase 0's exhaustive `reservoir_all` test)
+- Modify: `crates/mk_engine/src/conservation.rs` (stock audit includes the new reservoirs)
+- Create: `crates/mk_engine/src/regional/materials.rs`
+- Modify: `crates/mk_engine/src/resource_economy.rs` (hooks: gather, craft, build, smelt, demolish/decay; biotic node stock as a view of cell biomass)
+- Modify: `crates/mk_engine/src/humans/lifecycle.rs` (eat/drink hook in `consume_carried_rations`)
+- Test: `crates/mk_engine/tests/island_material_flows.rs`
+
+**Interfaces:**
+- Produces: `MaterialComposition` table, one row per `ItemKind`: dry mass (kg per item unit), carbon fraction, water content, and origin (`Biotic(BiomeClass)`, `Fossil`, `Mineral`). Initial values with a cited source each (e.g. dry wood ≈ 50% carbon by mass); a test asserts every `ItemKind` has a row.
+- Produces: `MaterialLedger` hooks called by the regional economy with the cell and amount:
+  - **Gather biotic** (Tree/FoodPatch/Fiber/Herbal/Resin nodes): `BiomassCarbon → MaterialCarbon`, debiting the cell's `biomass_kgc_m2` and producer species carbon by the same amount. Species are debited in proportion to their carbon share, with a per-species fractional accumulator so integer populations stay exact. A biotic node's available yield is `min(node cap, cell biomass available for harvest)`; biotic `regenerate()` is replaced by biomass regrowth from NPP. Abiotic nodes (stone, clay, sand, ore) keep upstream behaviour.
+  - **Gather coal:** `CrustCarbon → MaterialCarbon`.
+  - **Gather water:** the cell's hydrology store (rivers/lakes/groundwater) `→ MaterialWater`; refused if the store is empty.
+  - **Craft:** carbon follows mass; any recipe mass loss (e.g. offcuts) goes to `DetritusCarbon` at the cell.
+  - **Build:** carbon stays in `MaterialCarbon`, attributed to the structure; demolition or decay over a documented lifetime moves it to `DetritusCarbon`.
+  - **Burn / smelt:** fuel carbon `MaterialCarbon → AtmosCO2` with stoichiometric O₂ `AtmosO2 →` consumed (C + O₂ → CO₂, 2.664 kg O₂ per kg C).
+  - **Eat:** food carbon `MaterialCarbon → HumanCarbon`; respiration returns it `HumanCarbon → AtmosCO2` and consumes O₂ at a documented respiratory quotient, at the rate set by the human's metabolic expenditure. On death, remaining `HumanCarbon` for that body goes to `DetritusCarbon` at the cell.
+  - **Drink:** `MaterialWater → ` the human, returned to `Atmosphere`/`SoilWater` at the cell by respiration, sweat and excretion so the human water store stays bounded.
+- Wildfire and other disturbances keep upstream's existing biomass carbon handling; harvested `MaterialCarbon` in structures at a burned cell burns too.
+
+- [ ] **Step 1:** Write tests: felling/gathering moves exactly the item's carbon from biomass (cell field and species) to `MaterialCarbon`; a cell harvested to zero yields nothing until NPP regrows it; smelting with coal fuel raises atmospheric CO₂ and lowers O₂ by the stoichiometric amounts; a human eating and living one day moves food carbon through `HumanCarbon` to atmospheric CO₂; drinking from a dry cell is refused; a built shelter holds its carbon until demolished; after each step the carbon, oxygen and water stock audits close.
+- [ ] **Step 2:** Run `cargo test -p mk_engine --test island_material_flows`; expect FAIL.
+- [ ] **Step 3:** Add the reservoirs and audit terms; implement the composition table and hooks; route regional economy actions and human eating/drinking through them.
+- [ ] **Step 4:** Run the test plus `cargo test -p mk_core --lib flux::`, `cargo test -p mk_engine --lib conservation:: resource_economy:: humans::` and `cargo test -p mk_engine --test conservation_audit`; expect PASS. Planetary `WorldState` keeps upstream behaviour unless the hooks are explicitly enabled, so existing tests are unaffected.
+- [ ] **Step 5:** Record the coupling and every composition value's source in `UPSTREAM.md`. Commit `feat(engine): make gathered materials move real carbon, oxygen and water`.
+
+### Task 4: Island scenario and canonical estate placement
 
 **Files:**
 - Create: `crates/mk_island/src/scenario.rs`
@@ -97,7 +130,7 @@ Two representation levels exist:
 - [ ] **Step 4:** Run both tests and `cargo test -p mk_engine --lib organisms::property`; expect PASS.
 - [ ] **Step 5:** Commit `feat(island): place canonical founders estate`.
 
-### Task 4: Metric estate layout and navigation
+### Task 5: Metric estate layout and navigation
 
 **Files:**
 - Create: `crates/mk_engine/src/regional/estate_layout.rs`
@@ -107,18 +140,18 @@ Two representation levels exist:
 **Interfaces:**
 - Produces: `EstateLayout { property_id, patch: LocalPatchSpec, terrain_m: Grid2<f64>, buildings: Vec<BuildingFootprint>, spaces: Vec<SpaceLayout>, doors: Vec<Door>, items: Vec<ItemPlacement>, yard: Rect }`.
 - `BuildingFootprint { building_id, kind: PropertyBuildingKind, rect_m, rotation_deg }`.
-- `SpaceLayout { id: SpaceId, building_id, label, kind: SpaceKind, rect_m }` where `SpaceKind::{Room, Zone, WholeBuilding}`. Mapping from upstream labels: House items with `room` = `"Kitchen"`, `"Lounge"`, `"Bathroom"`, `"<name>'s Bedroom"` → `Room`; House `"General"` → `Zone` (hall); Shed items' tool categories (`"Construction Tools"`, `"Digging Tools"`, `"Repair Tools"`, `"Exploration Tools"`, `"Smithing Tools"`) → `Zone`s inside the Shed; Workshop, Armoury, ComputerRoom and Garage items (`room: None`) → one `WholeBuilding` space each.
+- `SpaceLayout { id: SpaceId, building_id, label, kind: SpaceKind, rect_m }` where `SpaceKind::{Room, Zone, WholeBuilding}`. Mapping from upstream labels: House items with `room` = `"Kitchen"`, `"Lounge"`, `"Bathroom"`, `"<name>'s Bedroom"` → `Room`; House `"General"` → `Zone` (hall); Shed items' tool categories (`"Construction Tools"`, `"Digging Tools"`, `"Repair Tools"`, `"Exploration Tools"`, `"Smithing Tools"`) → `Zone`s inside the Shed; Workshop, Armoury and Garage items (`room: None`) → one `WholeBuilding` space each, each its own footprint. ComputerRoom building items → a `Room` labelled `"Computer Room"` **inside the House footprint**, with its only door opening into the House (`"General"` hall). Footprints: House (including the computer room), Shed, Workshop, Armoury, Garage.
 - `Door { a: Space, b: Space, position_m }` where `Space::{Outdoors, Inside(SpaceId)}`; `ItemPlacement { property_id, item_id, space, position_m }` (vehicles in the Garage or yard; computers in the ComputerRoom).
 - Produces: `layout_estate(property: &StarterProperty, physical: &RegionalPhysicalState, domain: &IslandDomain, patch: &LocalPatchSpec, seed: [u8; 32]) -> Result<EstateLayout, EstateLayoutError>`, `EstateLayout::space_at(position_m) -> Space`, `EstateLayout::route(from: Space, to: Space) -> Option<Vec<Space>>`.
 - Patch terrain is the medium-cell elevation bilinearly interpolated plus bounded deterministic detail; it never changes the regional elevation.
 
-- [ ] **Step 1:** Write tests: every founders'-estate item placed exactly once in the space its label/building maps to; homestead items not placed; no footprint overlaps; footprints on dry land under the slope limit; every space routable from `Outdoors`; `space_at` round-trips each placement; identical bytes for identical inputs; a patch with no buildable site returns `EstateLayoutError::NoBuildableSite`.
+- [ ] **Step 1:** Write tests: every founders'-estate item placed exactly once in the space its label/building maps to; the computer room lies inside the House footprint and is reachable from `Outdoors` only through the House; there are five footprints; homestead items not placed; no footprint overlaps; footprints on dry land under the slope limit; every space routable from `Outdoors`; `space_at` round-trips each placement; identical bytes for identical inputs; a patch with no buildable site returns `EstateLayoutError::NoBuildableSite`.
 - [ ] **Step 2:** Run `cargo test -p mk_engine --test island_estate_layout`; expect FAIL.
 - [ ] **Step 3:** Implement deterministic site selection inside the patch, rectangle packing per building kind sized from its space/item count, space subdivision and door placement.
 - [ ] **Step 4:** Run the test and `cargo test -p mk_engine --lib organisms::property`; expect PASS.
 - [ ] **Step 5:** Commit `feat(engine): lay out the founders estate in metres`.
 
-### Task 5: Grid topology for the human and organism runtimes
+### Task 6: Grid topology for the human and organism runtimes
 
 **Files:**
 - Create: `crates/mk_engine/src/topology.rs`
@@ -142,7 +175,7 @@ Two representation levels exist:
 - [ ] **Step 4:** Re-run Step 1; expect identical results and identical 10-step hash.
 - [ ] **Step 5:** Record in `UPSTREAM.md` as a geometry-only divergence suitable for upstreaming. Commit `refactor(engine): grid topology for human and organism movement`.
 
-### Task 6: Dense vegetation in the estate patch
+### Task 7: Dense vegetation in the estate patch
 
 **Files:**
 - Create: `crates/mk_engine/src/regional/local_vegetation.rs`
@@ -151,16 +184,17 @@ Two representation levels exist:
 **Interfaces:**
 - Produces: `LocalVegetationPatch { trees: Vec<TreeInstance>, stands: Grid2<StandCover>, individual_radius_m: f64, cap: usize }`, `TreeInstance { id, kind: PlantKind, position_m, height_m, stem_diameter_m, biomass_kgc, alive }`, `StandCover { biome, biomass_kgc, stem_density_per_ha }` per 5 m cell outside the individual radius (and under footprints/yard: zero).
 - Individual stems are trees with stem diameter ≥ 0.10 m within `individual_radius_m` of the estate centre. If seeding would exceed `cap`, the radius shrinks deterministically (halving the excess area per iteration) until it fits; the displaced biomass stays in `stands`, so totals are unchanged.
+- Patch biomass and the estate cell's `biomass_kgc_m2` stay consistent: patch growth/mortality and felling change the cell field by the same carbon.
 - Produces: `seed_local_vegetation(ecology: &RegionalEcologyState, layout: &EstateLayout, domain: &IslandDomain, config: &EstatePatchConfig, seed: [u8; 32]) -> Result<LocalVegetationPatch, LocalVegetationError>` and `step_local_vegetation(&mut self, ecology: &RegionalEcologyState, dt_seconds: u64)` (growth/mortality scaled to the estate cell's NPP).
-- Produces: `fell_tree(&mut self, tree_id, economy: &mut ResourceEconomyState) -> Result<WoodYield, LocalVegetationError>` — the stem is removed, wood enters the economy through the same item kinds a Tree node yields. Species biomass is not debited (Global Constraints).
+- Produces: `fell_tree(&mut self, tree_id, economy: &mut ResourceEconomyState, materials: &mut MaterialLedger) -> Result<WoodYield, LocalVegetationError>` — the stem is removed, wood enters the economy through the same item kinds a Tree node yields, and its carbon moves `BiomassCarbon → MaterialCarbon` through Task 3, debiting the estate cell's biomass and producer species.
 
-- [ ] **Step 1:** Write tests: stem density follows biome/biomass (forest ≫ grassland, none in water); trees + stands sum to the cell's derived biomass × 0.25 within ±2% with the cap both inactive and forced active (cap = 1,000); no tree in footprints or yard; count never exceeds `cap`; felling removes the stem and adds wood; deterministic bytes.
+- [ ] **Step 1:** Write tests: stem density follows biome/biomass (forest ≫ grassland, none in water); trees + stands sum to the cell's derived biomass × 0.25 within ±2% with the cap both inactive and forced active (cap = 1,000); no tree in footprints or yard; count never exceeds `cap`; felling removes the stem, adds wood and moves exactly its carbon; deterministic bytes.
 - [ ] **Step 2:** Run `cargo test -p mk_engine --test island_local_vegetation`; expect FAIL.
 - [ ] **Step 3:** Implement deterministic Poisson-disc placement with spacing from biome/kind, size distribution from biomass, stands for the remainder, and growth/mortality tied to NPP.
 - [ ] **Step 4:** Run the test and `cargo test -p mk_engine --lib organisms::vegetation`; expect PASS.
 - [ ] **Step 5:** Commit `feat(engine): simulate individual trees around the estate`.
 
-### Task 7: Founders on the island, observation and interaction
+### Task 8: Founders on the island, observation and interaction
 
 **Files:**
 - Create: `crates/mk_engine/src/humans/observation.rs` (extracted)
@@ -174,16 +208,16 @@ Two representation levels exist:
 - Produces: `HumanEstatePositions(BTreeMap<String, EstatePosition { space: Space, position_m: (f64, f64) }>)` — serialized side-table for humans inside the patch; humans outside the patch have no entry.
 - Produces: `bootstrap_regional_humans(property: &PropertySystem, layout: &EstateLayout, topology: &GridTopology) -> Result<(HumanSystem, HumanEstatePositions), RegionalHumanError>`; founders start in their own bedrooms.
 - Produces: `step_regional_humans(humans: &mut HumanSystem, positions: &mut HumanEstatePositions, economy: &mut ResourceEconomyState, property: &PropertySystem, layout: &EstateLayout, vegetation: &mut LocalVegetationPatch, physical: &RegionalPhysicalState, ecology: &RegionalEcologyState, topology: &GridTopology, tick: Tick, dt_seconds: u64, rng: &RngRegistry) -> Result<(), RegionalHumanError>` — calls upstream `HumanSystem::step` with the regional topology and `build_observation`; movement inside the patch follows `EstateLayout::route`.
-- Computer access (island divergence): `computer_access` is the upstream gate (ComputerRoom on the cell and a matching `NetworkAccount`, `world_integration.rs:2130-2146`) AND `positions[agent].space` is inside the ComputerRoom building. The network-account gate itself is unchanged.
+- Computer access (island divergence): `computer_access` is the upstream gate (ComputerRoom on the cell and a matching `NetworkAccount`, `world_integration.rs:2130-2146`) AND `positions[agent].space` is the House's computer room. The network-account gate itself is unchanged.
 
 - [ ] **Step 1:** Run `cargo test -p mk_engine --test humans_world_integration` and record results; extract `build_observation`; re-run; expect identical results.
-- [ ] **Step 2:** Write tests: exactly Gem-D/Gem-K by default, each starting in their own bedroom; IDs/profiles match canonical constructors; a founder routed to the ComputerRoom gains access, a founder in the Kitchen does not, and a non-account human in the ComputerRoom remains denied; a founder felling a patch tree adds wood; a founder walking out of the patch loses their `HumanEstatePositions` entry and moves on medium cells without wrapping.
+- [ ] **Step 2:** Write tests: exactly Gem-D/Gem-K by default, each starting in their own bedroom; IDs/profiles match canonical constructors; a founder routed to the computer room (through the House) gains access, a founder in the Kitchen does not, and a non-account human in the computer room remains denied; a founder felling a patch tree adds wood and moves its carbon through Task 3's hooks; a founder eating from their supplies produces respired CO₂; a founder walking out of the patch loses their `HumanEstatePositions` entry and moves on medium cells without wrapping.
 - [ ] **Step 3:** Run `cargo test -p mk_engine --test island_human_runtime`; expect FAIL.
 - [ ] **Step 4:** Implement the adapter without changing human cognition/body modules.
 - [ ] **Step 5:** Run the test, `cargo test -p mk_core human`, and `cargo test -p mk_engine --lib humans::`; expect 0 failures.
 - [ ] **Step 6:** Record the observation extraction and room-level computer access in `UPSTREAM.md`. Commit `feat(engine): run canonical humans on island`.
 
-### Task 8: Phase-3 integrated life/property acceptance
+### Task 9: Phase-3 integrated life/property acceptance
 
 **Files:**
 - Create: `crates/mk_engine/tests/island_life_acceptance.rs`
@@ -192,7 +226,7 @@ Two representation levels exist:
 **Interfaces:**
 - Consumes all Phase-3 APIs.
 
-- [ ] **Step 1:** Bootstrap fixed-seed physical + ecology + resources + property + layout + local vegetation + humans, advance one simulated week at 60 s human steps (hourly physical, 6-hourly ecology — call the Phase-2/3 step functions directly; the scheduler arrives in Phase 4), and assert living vegetation (regional and patch), resources, both founders inside the layout, intact estate inventory, economy events and deterministic final serialization. Hash a canonical form (serialize to `serde_json::Value`, whose maps are sorted, then to bytes): upstream state such as `AdvancedMemorySnapshot` holds `HashMap`s (`advanced_memory.rs:70-85`) whose iteration order is not stable across processes. Slow tier.
+- [ ] **Step 1:** Bootstrap fixed-seed physical + ecology + resources + property + layout + local vegetation + humans, advance one simulated week at 60 s human steps (hourly physical, 6-hourly ecology — call the Phase-2/3 step functions directly; the scheduler arrives in Phase 4), and assert living vegetation (regional and patch), resources, both founders inside the layout, intact estate inventory, economy events, closed carbon/oxygen/water stock audits every step, and deterministic final serialization. Hash a canonical form (serialize to `serde_json::Value`, whose maps are sorted, then to bytes): upstream state such as `AdvancedMemorySnapshot` holds `HashMap`s (`advanced_memory.rs:70-85`) whose iteration order is not stable across processes. Slow tier.
 - [ ] **Step 2:** Run the acceptance test twice in separate processes; expect identical blake3 digests and PASS.
 - [ ] **Step 3:** Update provenance for scenario/adapter files; run fmt, clippy `-D warnings` and Phase-3 focused tests.
 - [ ] **Step 4:** Commit `test(island): lock life property human acceptance`.
