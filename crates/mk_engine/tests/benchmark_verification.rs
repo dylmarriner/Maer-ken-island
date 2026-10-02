@@ -3,8 +3,8 @@ use mk_engine::long_horizon_verification::{
 };
 
 #[test]
-#[ignore = "slow: 1 kyr verification horizon, >12 min in debug; run with: cargo test --release -- --ignored slow_"]
-fn slow_test_verification_horizon_1kyr_benchmark() {
+#[ignore = "deep: 1,000-year whole-planet verification horizon; >12 min in debug and unfinished after 1 h 45 min in release; run manually with: cargo test --release -p mk_engine --test benchmark_verification -- --ignored deep_"]
+fn deep_test_verification_horizon_1kyr_benchmark() {
     let config = VerificationConfig {
         horizon: VerificationHorizon::Kyr1,
         initial_seed: [123u8; 32],
