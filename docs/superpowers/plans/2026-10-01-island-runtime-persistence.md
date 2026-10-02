@@ -70,6 +70,25 @@
 - [ ] **Step 5:** Re-run; expect PASS. Slow tier for the 1,440-step comparison if it exceeds ~30 s debug.
 - [ ] **Step 6:** Commit `feat(engine): schedule island subsystems`.
 
+### Task 2b: Deep-time spin-up
+
+A realistic island starts with mature soils, rivers and forests, which take centuries to form. Simulating centuries at full detail would take months of computing (~15 s per simulated day ⇒ ~75 days per 1,000 years), so the world is spun up in a fast deep-time mode **before any humans exist**, saved once, and reused. Humans are never fast-forwarded this way: their lives always run at full detail.
+
+**Files:**
+- Create: `crates/mk_engine/src/regional/deep_time.rs`
+- Modify: `crates/mk_island/src/scenario.rs` (`spin_up_years`, default 1,000), `crates/mk_engine/src/regional/world.rs`
+- Test: `crates/mk_engine/tests/island_deep_time.rs`
+
+**Interfaces:**
+- `IslandWorldState::spin_up(years: u32) -> Result<SpinUpReport, IslandWorldError>`, allowed only before founders and town are placed. Steps per local year: tectonics, earthquakes, uplift and erosion (annual); soils (annual); hydrology, ecology, biomass, vegetation succession and resources (monthly, 10 steps per local year); climate and weather replaced by a **climatology**, the mean annual cycle (monthly means and variability) measured from one full-detail spin-up year at the start and re-measured every 100 years as terrain and vegetation change. Synoptic weather and the diurnal cycle are represented only by their statistics in this mode.
+- `SpinUpReport { years, wall_seconds, equilibrium: EquilibriumMetrics }` with soil carbon, forest biomass and river discharge trends over the last 100 years.
+- The spun-up state is snapshotted and cached under `<save_root>/spinup/<digest>.snap`, keyed by the digest of canon + scenario + seed + spin-up settings. Later runs load the cache instead of repeating the spin-up. Bootstrap order becomes: geophysics → physical → ecology → deep-time spin-up → property and estate → founders → town.
+
+- [ ] **Step 1:** Write tests (small test island): spin-up is deterministic and its cache key changes when any input changes; after spin-up, soil carbon and forest biomass trends over the last 100 years are below 1% per century (near equilibrium); spin-up refuses to run once humans exist; one full-detail local year after spin-up has climate statistics matching the climatology used during spin-up within the Phase-2 realism tolerances; loading the cached spin-up then running gives the same hash as spinning up and running.
+- [ ] **Step 2:** Run `cargo test -p mk_engine --test island_deep_time`; expect FAIL; implement; re-run; expect PASS.
+- [ ] **Step 3:** Measure the full-island 1,000-year spin-up in release (target: a few hours on the reference machine, done once per scenario) and record it in the Phase-5 benchmark.
+- [ ] **Step 4:** Add deviation row "deep-time climatology during spin-up" to `docs/island/DEVIATIONS.md` (seeded in Phase 0c as D20). Commit `feat(island): deep-time world spin-up before humans arrive`.
+
 ### Task 3: Complete island snapshot save/load
 
 **Files:**

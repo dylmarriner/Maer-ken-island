@@ -67,6 +67,8 @@ Design baseline:
 - documented fallback `24 km` / `4 km` only if Phase-5 benchmarks require it;
 - target land area acceptance window `254,600..=281,400 km²` (±5% around 268,000 km²).
 
+Speed rules: functional tests use a small test island (~8,000 km²) and only gate tests use the full island; per-cell physics runs on all cores with results identical at any thread count; centuries of world formation run once in a cached deep-time spin-up before humans exist, while human lives always run at full detail.
+
 Grid values are implementation baselines, not sacred numbers. Change them only from measured performance/fidelity evidence in the performance phase.
 
 ## 4. Execution order

@@ -164,7 +164,7 @@ The engine is already identical to upstream; this task brings the surrounding de
 - Test: `crates/mk_engine/tests/island_allocation_bounds.rs`
 
 **Interfaces:**
-- `island_bench --scenario fixtures/island/default_scenario.json --ticks 1000 --dt 60 --json` emits `bootstrap_ms`, `serialized_state_bytes`, `ticks_per_second`, `save_ms`, `load_ms`, `snapshot_bytes`, `peak_rss_bytes` (Linux `VmHWM` from `/proc/self/status`; `null` elsewhere), `human_store_sync_ms`, and named per-major-subsystem elapsed milliseconds. All measured from the real regional paths; nothing estimated.
+- `island_bench --scenario fixtures/island/default_scenario.json --ticks 1000 --dt 60 --json` emits `bootstrap_ms`, `serialized_state_bytes`, `ticks_per_second`, `save_ms`, `load_ms`, `snapshot_bytes`, `peak_rss_bytes` (Linux `VmHWM` from `/proc/self/status`; `null` elsewhere), `human_store_sync_ms`, `threads` and the speed-up from 1 thread to all cores, `spin_up_1000y_seconds`, and named per-major-subsystem elapsed milliseconds. All measured from the real regional paths; nothing estimated.
 
 - [ ] **Step 1:** Add an allocation-bound test, run with `--features construction-counters`: `WorldState::new` (`world_integration.rs:462`, the planetary `GridSpec::new(32, 64)` bootstrap) increments a static counter; building and stepping `IslandWorldState` for 10 ticks leaves it at zero; default coarse/medium cell counts match the profile.
 - [ ] **Step 2:** Implement benchmark instrumentation around the actual regional bootstrap/step/save/load/store-sync paths.

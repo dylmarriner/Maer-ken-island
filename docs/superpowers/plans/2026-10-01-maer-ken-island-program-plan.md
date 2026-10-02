@@ -67,6 +67,7 @@
 - **Slow tier** (`cargo test --workspace --release -- --ignored slow_`): long-horizon, benchmark and multi-year acceptance tests, marked `#[ignore = "slow: ..."]` and named with a `slow_` prefix. Runs nightly and before each gate is ticked.
 - **Deep tier** (`--ignored deep_`): 100-kyr verification runs; never scheduled, run by hand.
 - Any test that exceeds ~30 s debug goes in the slow tier, wherever a plan puts it.
+- **Speed rules (Phase 1 Task 1b, Phase 4 Task 2b):** functional tests use the small test island (`IslandProfile::test_small()`, ~8,000 km²); only gate acceptance tests use the full island. Per-cell physics runs on all CPU cores through deterministic helpers, so results are identical at any thread count. Centuries of world formation run once in deep-time spin-up before humans exist and are cached; human lives always run at full detail.
 - Multi-filter commands use libtest syntax: `cargo test -p <crate> --lib -- <filter> <filter>`.
 
 ## Owner decisions
