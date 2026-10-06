@@ -40,6 +40,7 @@ pub mod perception;
 pub mod phase7_release_artifacts;
 pub mod physics;
 pub mod planet;
+pub mod regional;
 pub mod replay;
 pub mod resource_economy;
 pub mod rotation;

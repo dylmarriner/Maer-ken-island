@@ -8,6 +8,7 @@ description = "Phase 2+ physical world engine for Marr'Kena MK-I simulation"
 [dependencies]
 mk_core = { path = "../mk_core" }
 mk_interventions = { path = "../mk_interventions" }
+mk_island = { path = "../mk_island" }
 serde.workspace = true
 serde_json.workspace = true
 uuid.workspace = true
@@ -24,6 +25,7 @@ thiserror.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 ureq.workspace = true
+rayon.workspace = true
 
 [dev-dependencies]
 tempfile = "3"

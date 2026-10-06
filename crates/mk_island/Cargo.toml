@@ -1,0 +1,13 @@
+[package]
+name = "mk_island"
+version = "0.1.0"
+edition = "2021"
+description = "Regional island domain, profile and forcing data contracts (no engine code)"
+
+[dependencies]
+mk_core = { path = "../mk_core" }
+serde.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true

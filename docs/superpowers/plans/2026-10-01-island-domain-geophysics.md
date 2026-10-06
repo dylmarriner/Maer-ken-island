@@ -52,11 +52,13 @@
 - Produces: `DomainLevel::{Coarse, Medium}`, `IslandDomain::{rows, cols}(level) -> usize`, `storage_spec(level) -> mk_core::grid::GridSpec` (`GridSpec::new(rows, cols)`), `cell_size_m(level) -> f64`, `cell_center_m(level, row, col) -> (f64, f64)`, `cell_area_m2(level) -> f64`, `latitude_rad_for_row(level, row) -> f64`, `longitude_rad_for_col(level, col) -> f64`, `lat_lon_at_m(x_m, y_m) -> (f64, f64)` (for positions inside cells, e.g. estate metres), `is_edge_buffer_cell(level, row, col) -> bool`, and `active_cells(level) -> &[(usize, usize)]` — set after Task 4's land mask is known to land cells plus a coastal band of `coastal_band_m` (default 20 km) on Medium, and all cells on Coarse.
 - Produces: `LocalPatchSpec { origin_x_m, origin_y_m, width_m, height_m, cell_size_m, rows, cols }` and `IslandDomain::local_patch(center_x_m, center_y_m, extent_m, cell_size_m) -> Result<LocalPatchSpec, IslandDomainError>` for high-detail property/interior/navigation windows without allocating a world-wide fine grid. A patch may span several medium cells; it must lie fully inside the domain.
 
-- [ ] **Step 1:** Write `domain_contract.rs` tests asserting default numeric values, `160 × 200` / `960 × 1,200` dimensions, the fallback profile's `80 × 100` / `480 × 600`, flat cell area, row 0 = southernmost latitude, latitude/longitude at the centre equal the reference values, coordinate round-trip, bounded local-patch geometry, profile JSON round-trip, unknown `version` rejected, and all invalid profile/local-patch cases.
-- [ ] **Step 2:** Run `cargo test -p mk_island --test domain_contract`; expect compile/test failure because the crate/types do not exist.
-- [ ] **Step 3:** Add the workspace member and implement the profile/domain interfaces without changing `Grid2` storage semantics.
-- [ ] **Step 4:** Re-run `cargo test -p mk_island --test domain_contract`; expect PASS.
-- [ ] **Step 5:** Commit `feat(island): add regional domain contract`.
+- [x] **Step 1:** Write `domain_contract.rs` tests asserting default numeric values, `160 × 200` / `960 × 1,200` dimensions, the fallback profile's `80 × 100` / `480 × 600`, flat cell area, row 0 = southernmost latitude, latitude/longitude at the centre equal the reference values, coordinate round-trip, bounded local-patch geometry, profile JSON round-trip, unknown `version` rejected, and all invalid profile/local-patch cases.
+- [x] **Step 2:** Run `cargo test -p mk_island --test domain_contract`; expect compile/test failure because the crate/types do not exist.
+- [x] **Step 3:** Add the workspace member and implement the profile/domain interfaces without changing `Grid2` storage semantics.
+- [x] **Step 4:** Re-run `cargo test -p mk_island --test domain_contract`; expect PASS.
+- [x] **Step 5:** Commit `feat(island): add regional domain contract`.
+
+Deviation from the interface list: `IslandProfile` also carries `planet_radius_m` (default: the island canon's 19,113 km) and `coastal_band_m` (default 20 km), because the metre-to-latitude mapping needs a radius and `mk_island` cannot read the canon through `mk_engine`. `IslandDomain` adds `cell_containing_m` (the inverse of `cell_center_m`) and `set_active_cells`.
 
 ### Task 1b: Small test island and deterministic multi-core iteration
 
@@ -78,10 +80,10 @@ Two speed rules every later phase relies on.
 - `par_map_cells(cells: &[(usize, usize)], f) -> Vec<T>` (results in input order), `par_for_each_cell_mut(grid, cells, f)` (disjoint cells only), and `det_sum(values: &[f64]) -> f64` / `det_sum_by(cells, f)` (fixed 4,096-element chunks summed in order, then the chunk sums in order). All regional per-cell steps from here on use these; plain `rayon` iterators with `.sum()` are not allowed in simulation code.
 - Thread count comes from `RAYON_NUM_THREADS` or all cores; it never affects results.
 
-- [ ] **Step 1:** Write tests: `test_small()` validates and has the dimensions above; `det_sum` of a fixed random vector is bit-identical with 1, 2 and 8 threads and equals itself across runs; `par_map_cells` preserves order; a synthetic per-cell step gives identical grid bytes with 1 and 8 threads.
-- [ ] **Step 2:** Run `cargo test -p mk_island --test domain_contract` and `cargo test -p mk_engine --test regional_par_determinism`; expect FAIL; implement; re-run; expect PASS.
-- [ ] **Step 3:** Rule for every later task: functional tests use `test_small()`; acceptance and gate tests use the default profile; every acceptance test also runs once with `RAYON_NUM_THREADS=1` in CI and must produce the same hash.
-- [ ] **Step 4:** Commit `feat(island): small test island and deterministic multi-core cell iteration`.
+- [x] **Step 1:** Write tests: `test_small()` validates and has the dimensions above; `det_sum` of a fixed random vector is bit-identical with 1, 2 and 8 threads and equals itself across runs; `par_map_cells` preserves order; a synthetic per-cell step gives identical grid bytes with 1 and 8 threads.
+- [x] **Step 2:** Run `cargo test -p mk_island --test domain_contract` and `cargo test -p mk_engine --test regional_par_determinism`; expect FAIL; implement; re-run; expect PASS.
+- [x] **Step 3:** Rule for every later task: functional tests use `test_small()`; acceptance and gate tests use the default profile; every acceptance test also runs once with `RAYON_NUM_THREADS=1` in CI and must produce the same hash.
+- [x] **Step 4:** Commit `feat(island): small test island and deterministic multi-core cell iteration`.
 
 ### Task 2: Deterministic regional boundary forcing
 
