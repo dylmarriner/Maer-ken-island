@@ -4,4 +4,5 @@
 
 pub mod boundary;
 pub mod par;
+pub mod seismicity;
 pub mod tectonics;

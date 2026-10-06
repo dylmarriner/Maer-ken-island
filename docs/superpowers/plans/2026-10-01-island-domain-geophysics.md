@@ -139,9 +139,11 @@ The spec promises earthquakes; the engine has none. Earthquakes are the release 
 - Produces: `step_seismicity(faults: &mut FaultSystem, dt_seconds, rng: &RngRegistry) -> Vec<Earthquake { fault_id, epicentre_m, depth_km, magnitude_mw, slip_m, rupture_length_km }>`: stress loads at the fault's slip rate; events nucleate when stress exceeds a threshold drawn deterministically; magnitude from rupture area and slip (Wells & Coppersmith 1994 scaling); aftershocks follow Omori–Utsu decay; long-run magnitude–frequency follows Gutenberg–Richter with b ≈ 1.
 - Earthquakes feed back into the world: co-seismic uplift/subsidence at the fault (elevation change), landslides on steep slopes (Phase 2 hydrology sediment), shaking intensity per cell (Phase 3 structures and humans).
 
-- [ ] **Step 1:** Write tests: fault slip rates match plate relative velocities; a 10,000-year run's magnitude–frequency has b within 0.8–1.2 and moment release matches the tectonic loading budget within 10%; aftershock rate decays as Omori–Utsu (p ≈ 1); events are deterministic per seed; no event on an aseismic interior.
-- [ ] **Step 2:** Run `cargo test -p mk_engine --test regional_seismicity`; expect FAIL; implement; re-run; expect PASS (the 10,000-year run is a slow-tier test).
-- [ ] **Step 3:** Commit `feat(engine): earthquakes from regional fault stress`.
+- [x] **Step 1:** Write tests: fault slip rates match plate relative velocities; a 10,000-year run's magnitude–frequency has b within 0.8–1.2 and moment release matches the tectonic loading budget within 10%; aftershock rate decays as Omori–Utsu (p ≈ 1); events are deterministic per seed; no event on an aseismic interior.
+- [x] **Step 2:** Run `cargo test -p mk_engine --test regional_seismicity`; expect FAIL; implement; re-run; expect PASS (the 10,000-year run is a slow-tier test).
+- [x] **Step 3:** Commit `feat(engine): earthquakes from regional fault stress`.
+
+Implementation notes: one fault per pair of plates in contact, typed by the dominant boundary kind; moment loads at μ·L·W·v·coupling and mainshocks follow a time-predictable renewal over a truncated Gutenberg–Richter sequence (b = 1, Mw 4 to the whole-fault Wells & Coppersmith maximum), so release balances loading by construction (10,000-year full-island run: within 10%, slow tier). `step_seismicity` takes no RNG: each fault draws one key from the registry at construction and per-event values hash (key, purpose, index) with SplitMix64, so catalogues are independent of step length. Co-seismic uplift, landslides and shaking intensity are consumers wired in Phase 2 (sediment), Phase 3 (structures, humans) and Phase 4 (runtime); `Earthquake` carries what they need (epicentre, depth, magnitude, slip, rupture length).
 
 ### Task 4: Volcanism, one-island terrain, target area and shape
 
