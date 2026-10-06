@@ -70,9 +70,10 @@ pub struct HormoneLevels {
     /// `cortisol` above; driven by immediate threat/fear rather than
     /// sustained fatigue/immune stress.
     pub adrenaline: f64,
-    /// Circadian hormone; driven by the real `daylight_fraction` signal
-    /// from this human's local `AgentWorldObservation` (low daylight ->
-    /// high melatonin).
+    /// Circadian hormone, owned by the circadian clock
+    /// ([`super::circadian::CircadianClock`]): secreted in the biological
+    /// night and suppressed by light. `step` leaves it unchanged;
+    /// [`NeurochemistrySnapshot::apply_circadian`] sets it.
     pub melatonin: f64,
 }
 
@@ -90,6 +91,9 @@ pub struct NeurochemistrySnapshot {
     pub neurotransmitters: NeurotransmitterLevels,
     pub hormones: HormoneLevels,
     pub modulation_effects: ModulationEffects,
+    /// Whether the circadian clock's sleep gate has this human asleep.
+    #[serde(default)]
+    pub asleep: bool,
 }
 
 impl NeurochemistrySnapshot {
@@ -144,12 +148,13 @@ impl NeurochemistrySnapshot {
             melatonin: nz(eb.melatonin, 0.3),
         };
 
-        let modulation_effects = Self::compute_modulation(&neurotransmitters, &hormones);
+        let modulation_effects = Self::compute_modulation(&neurotransmitters, &hormones, false);
 
         Self {
             neurotransmitters,
             hormones,
             modulation_effects,
+            asleep: false,
         }
     }
 
@@ -192,7 +197,6 @@ impl NeurochemistrySnapshot {
             .clamp(0.0, 1.0);
         let adrenaline_target =
             (emotion.current.fear * 0.6 + observation.hazard_index * 0.4).clamp(0.0, 1.0);
-        let melatonin_target = (1.0 - observation.daylight_fraction).clamp(0.0, 1.0);
 
         let neurotransmitters = NeurotransmitterLevels {
             dopamine: lerp(self.neurotransmitters.dopamine, dopamine_target, blend),
@@ -219,20 +223,38 @@ impl NeurochemistrySnapshot {
             progesterone: lerp(self.hormones.progesterone, progesterone_target, blend),
             vasopressin: lerp(self.hormones.vasopressin, vasopressin_target, blend),
             adrenaline: lerp(self.hormones.adrenaline, adrenaline_target, blend),
-            melatonin: lerp(self.hormones.melatonin, melatonin_target, blend),
+            melatonin: self.hormones.melatonin,
         };
 
-        let modulation_effects = Self::compute_modulation(&neurotransmitters, &hormones);
+        let modulation_effects =
+            Self::compute_modulation(&neurotransmitters, &hormones, self.asleep);
 
         Self {
             neurotransmitters,
             hormones,
             modulation_effects,
+            asleep: self.asleep,
         }
     }
 
-    fn compute_modulation(n: &NeurotransmitterLevels, h: &HormoneLevels) -> ModulationEffects {
-        let current_brain_state = if h.adrenaline > 0.7 || h.cortisol > 0.7 {
+    /// Take melatonin and the sleep/wake state from the circadian clock.
+    pub fn apply_circadian(&mut self, clock: &super::circadian::CircadianClock) {
+        self.hormones.melatonin = clock.melatonin.clamp(0.0, 1.0);
+        self.asleep = clock.asleep;
+        self.modulation_effects =
+            Self::compute_modulation(&self.neurotransmitters, &self.hormones, self.asleep);
+    }
+
+    fn compute_modulation(
+        n: &NeurotransmitterLevels,
+        h: &HormoneLevels,
+        asleep: bool,
+    ) -> ModulationEffects {
+        // Sleep is decided by the circadian clock's two-process gate; an
+        // asleep brain is in the sleep state whatever else is happening.
+        let current_brain_state = if asleep {
+            BrainState::Fatigued
+        } else if h.adrenaline > 0.7 || h.cortisol > 0.7 {
             BrainState::Stressed
         } else if n.norepinephrine + n.dopamine > 1.3 {
             BrainState::Excited
@@ -240,7 +262,7 @@ impl NeurochemistrySnapshot {
             BrainState::Focused
         } else if n.gaba > 0.6 && h.cortisol < 0.3 {
             BrainState::Relaxed
-        } else if (n.norepinephrine < 0.2 && n.acetylcholine < 0.3) || h.melatonin > 0.7 {
+        } else if n.norepinephrine < 0.2 && n.acetylcholine < 0.3 {
             BrainState::Fatigued
         } else {
             BrainState::Resting
@@ -275,11 +297,12 @@ impl NeurochemistrySnapshot {
             adrenaline: 0.3,
             melatonin: 0.3,
         };
-        let modulation_effects = Self::compute_modulation(&neurotransmitters, &hormones);
+        let modulation_effects = Self::compute_modulation(&neurotransmitters, &hormones, false);
         Self {
             neurotransmitters,
             hormones,
             modulation_effects,
+            asleep: false,
         }
     }
 }

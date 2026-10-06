@@ -105,7 +105,7 @@ fn step_world_can_grow_population_via_reproduction() {
     let conceived = conceived_at_week.expect("the couple should conceive within six years");
     let born = born_at_week.expect("a conceived child should be born");
     assert!(
-        born - conceived >= 39,
+        born - conceived >= 38,
         "birth must follow a full gestation (conceived week {conceived}, born week {born})"
     );
 }

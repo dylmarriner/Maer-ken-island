@@ -322,6 +322,17 @@ pub fn step_lifecycle(
         }
         _ => super::needs::EffortFocus::none(),
     };
+    // The body clock and sleep pressure run first: whether this human is
+    // asleep this step decides what light reaches their eyes and whether
+    // their sleep pressure builds or dissipates.
+    let dt_hours = dt_years.max(0.0) / super::rates::HOUR_YEARS;
+    human.needs.fatigue = human.circadian.step(
+        observation.daylight_fraction,
+        human.needs.fatigue,
+        dt_hours,
+        human.needs.sleep_pressure_rate_factor(),
+        observation.shelter_quality,
+    );
     human.needs = human.needs.step(
         observation,
         human.physical_capacity.effectiveness,
@@ -430,6 +441,7 @@ pub fn step_lifecycle(
         observation,
         dt_years,
     );
+    human.neurochemistry.apply_circadian(&human.circadian);
     human.comprehensive_emotion = human.comprehensive_emotion.step(
         &human.emotion.current,
         &human.neurochemistry,
@@ -515,8 +527,8 @@ pub fn step_lifecycle(
 /// exponential rate of increase with age: human adult mortality doubles
 /// roughly every 7.5 years, giving a realistic spread of lifespans instead
 /// of everyone dying at one fixed age.
-const GOMPERTZ_BASELINE_HAZARD_PER_YEAR: f64 = 5.0e-5;
-const GOMPERTZ_AGING_RATE_PER_YEAR: f64 = 0.093;
+pub const GOMPERTZ_BASELINE_HAZARD_PER_YEAR: f64 = 5.0e-5;
+pub const GOMPERTZ_AGING_RATE_PER_YEAR: f64 = 0.093;
 /// Keyed RNG epoch for the per-step age-mortality roll.
 const AGE_MORTALITY_EPOCH: u32 = 0x4147_4544;
 

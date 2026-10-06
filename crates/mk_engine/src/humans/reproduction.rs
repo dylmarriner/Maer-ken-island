@@ -13,8 +13,12 @@ use mk_core::human::HumanProfile;
 use mk_core::time::Tick;
 use serde::{Deserialize, Serialize};
 
-/// Full-term human gestation: 40 weeks from conception.
-pub const GESTATION_YEARS: f64 = 40.0 * 7.0 / 365.25;
+/// Full-term human gestation: 268 days from conception (ovulation), the
+/// median of naturally conceived singleton pregnancies (Jukic et al. 2013,
+/// Hum. Reprod. 28:2848; fixtures/reference/humans/life_history.json). The
+/// obstetric "40 weeks" counts from the last menstrual period, about two
+/// weeks before conception.
+pub const GESTATION_YEARS: f64 = 268.0 / 365.25;
 /// Postpartum anovulatory period after a birth, during which the cycle is
 /// suspended and conception cannot occur.
 pub const POSTPARTUM_INFERTILE_YEARS: f64 = 0.25;
@@ -376,8 +380,10 @@ impl ReproductiveSystemSnapshot {
 
         // Sustained deprivation (hunger/thirst/exhaustion) suppresses
         // reproductive drive — a real evolved response, not modeled purely
-        // as a static trait.
-        let deprivation_suppression = needs.fatigue.clamp(0.0, 1.0);
+        // as a static trait. `fatigue` is the daily sleep pressure, so only
+        // pressure beyond a normal waking day counts as exhaustion.
+        let normal = super::circadian::NORMAL_WAKING_SLEEP_PRESSURE;
+        let deprivation_suppression = ((needs.fatigue - normal) / (1.0 - normal)).clamp(0.0, 1.0);
         let blend = (0.3 * dt).clamp(0.0, 1.0);
         let libido_target =
             (self.baseline_libido * (1.0 - deprivation_suppression * 0.6)).clamp(0.0, 1.0);

@@ -7,6 +7,7 @@ pub mod attractor_control;
 pub mod autonomy;
 pub mod body;
 pub mod brain_regions;
+pub mod circadian;
 pub mod cognition;
 pub mod comprehensive_emotion;
 pub mod computer_bridge;
@@ -1302,6 +1303,10 @@ pub struct HumanBeing {
     /// module docs. Stepped from real emotion/needs/immune/attention/
     /// social/dark-triad state, not a pure profile projection.
     pub neurochemistry: NeurochemistrySnapshot,
+    /// Circadian pacemaker and sleep/wake state — see [`circadian`]. Owns
+    /// melatonin and the sleep gate; `needs.fatigue` is its sleep pressure.
+    #[serde(default)]
+    pub circadian: circadian::CircadianClock,
     /// Multistable attractor dynamics over overall psychological stability
     /// (`NeurochemicalAttractorControlSchema`): the built-in stable and
     /// crisis basins plus any canon-defined ones. See [`attractor_control`].
@@ -1680,6 +1685,7 @@ impl HumanBeing {
         let brain_regions = BrainRegionsSnapshot::from_profile(&profile);
         let population_dynamics = PopulationDynamicsSnapshot::from_profile(&profile);
         let neurochemistry = NeurochemistrySnapshot::from_profile(&profile);
+        let circadian = circadian::CircadianClock::for_human(profile.human_id.0);
         let attractor_control = AttractorControlSnapshot::from_profile(&profile);
         let pathology = PathologySnapshot::from_profile(&profile);
         let mesoscale_brain = MesoscaleBrainSnapshot::from_layers(
@@ -1723,6 +1729,7 @@ impl HumanBeing {
             brain_regions,
             population_dynamics,
             neurochemistry,
+            circadian,
             attractor_control,
             pathology,
             mesoscale_brain,

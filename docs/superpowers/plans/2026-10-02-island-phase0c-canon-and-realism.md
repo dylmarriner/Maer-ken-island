@@ -111,13 +111,15 @@ Each item records a `confidence` (`high`, `medium`, `low`). Low-confidence value
 - Create: `crates/mk_engine/tests/human_realism.rs`
 - Upstream PRs to `dylmarriner/Maer-Ken` for fixes; sync per `UPSTREAM.md`
 
-- [ ] **Step 1:** Write validation tests comparing the human runtime against the Task-3 human pack under Earth-like conditions: daily energy expenditure for sedentary and labouring adults; time to death without water and without food; sleep duration; growth and ageing; gestation; fertility and mortality by age. Each test states its tolerance and source.
-- [ ] **Step 2:** Add a circadian test: under a 36-h light/dark cycle, the body clock must not lock to 36 h; it free-runs near 24.2 h with light-driven phase shifts limited to the published phase-response curve (Kronauer/Jewett–Forger model), producing realistic sleep disruption unless the human adopts an artificial schedule.
-- [ ] **Step 3:** Run; record every failure in `docs/island/DEVIATIONS.md` with its measured error.
-- [ ] **Step 4:** Fix failures upstream (circadian oscillator, energy expenditure, survival times, as needed), keeping cognition/behaviour code unchanged; sync; re-run until each test passes or its deviation is accepted by the owner.
-- [ ] **Step 5:** Commit `test(humans): validate human runtime against real-world data`.
+- [x] **Step 1:** Write validation tests comparing the human runtime against the Task-3 human pack under Earth-like conditions: daily energy expenditure for sedentary and labouring adults; time to death without water and without food; sleep duration; growth and ageing; gestation; fertility and mortality by age. Each test states its tolerance and source.
+- [x] **Step 2:** Add a circadian test: under a 36-h light/dark cycle, the body clock must not lock to 36 h; it free-runs near 24.2 h with light-driven phase shifts limited to the published phase-response curve (Kronauer/Jewett–Forger model), producing realistic sleep disruption unless the human adopts an artificial schedule.
+- [x] **Step 3:** Run; record every failure in `docs/island/DEVIATIONS.md` with its measured error.
+- [x] **Step 4:** Fix failures upstream (circadian oscillator, energy expenditure, survival times, as needed), keeping cognition/behaviour code unchanged; sync; re-run until each test passes or its deviation is accepted by the owner.
+- [x] **Step 5:** Commit `test(humans): validate human runtime against real-world data`.
+
+Result (2026-10-07): 16 tests in `crates/mk_engine/tests/human_realism.rs` pass. Fixed: the body clock (new `humans/circadian.rs`, D8 resolved), survival without water (was ~1 year, now 4-5 days) and without food (now ~60 days on fat stores), sleep (melatonin no longer relaxes over two years; 7-9 h nightly on a 24 h day, ~4-5 h broken sleep on the 36 h day), and gestation (268 days from conception, was 280). The fixes were made in this repository and recorded in `UPSTREAM.md` (Phase 0c divergences) for an upstream PR, as with the Phase 0 fixes. Not yet validated, recorded as deviations: infant, child and accident mortality (D21), per-body, per-activity energy expenditure (D22, Phase 3 labour), artificial light (D23). Energy expenditure and growth are compared in Phase 3, when work has a MET cost.
 
 ### Task 5: Gate 0c
 
-- [ ] **Step 1:** Island canon passes `validate_physical_consistency` with only the declared exception; reference packs load; human realism results are recorded and either passing or accepted.
-- [ ] **Step 2:** Tick Gate 0c in the program plan.
+- [x] **Step 1:** Island canon passes `validate_physical_consistency` with only the declared exception; reference packs load; human realism results are recorded and either passing or accepted.
+- [x] **Step 2:** Tick Gate 0c in the program plan.

@@ -37,6 +37,16 @@ Each of these changes imported code. None has been proposed upstream yet; per th
 
 1. `mk_engine::humans::spawn` (new) — the human-building core of `interventions::spawn_human` is extracted into `build_spawned_human`, `build_authored_human` and `agent_id_for_name` (now taking a `HumanRegistry` instead of a `WorldState`), with `SPAWN_HUMAN_EPOCH` moved alongside. `spawn_human` calls them, so intervention spawns are unchanged (all intervention tests pass unmodified); the island population uses the same functions to create people without a planetary world. Suitable for upstreaming as a pure refactor.
 
+## Phase 0c divergences (2026-10-07)
+
+Human biology changes made here to pass `crates/mk_engine/tests/human_realism.rs` against `fixtures/reference/humans/`. Like Phase 0 items 4-7, each needs an upstream PR before the next resync; cognition and behaviour code is unchanged.
+
+1. `mk_engine::humans::circadian` (new) — the Forger–Jewett–Kronauer (1999) light-driven circadian pacemaker with a per-human intrinsic period (mean 24.15 h observed, SD 0.2 h), light-suppressed melatonin, and a two-process (Borbély) sleep gate. `HumanBeing` gains `circadian` (`#[serde(default)]`); `step_lifecycle` steps it before `needs`.
+2. `mk_engine::humans::needs` — `fatigue` is now the homeostatic sleep pressure, owned by the clock (rises with an 18.2 h time constant awake, falls with 4.2 h asleep, slower in poor shelter). Rates are per day instead of per year: water is lost at 0.2 of the reserve per day plus sweating above 25 °C (death in 4-5 days without water), glycogen lasts a day, and the new `energy_reserve` (fat and protein, `#[serde(default)]` = full) carries a fasting human for ~60 days. Eating capacity is ~3x a day's expenditure, so food access above ~0.35 sustains a person (before, under 0.77 was a slow death). Drinking capacity is now ~10x the resting loss (about 1 L/h), so water access above ~0.1 keeps a person hydrated; before, anywhere under 0.77 was a slow death.
+3. `mk_engine::humans::neurochemistry` — melatonin is no longer a two-year relaxation toward darkness; `apply_circadian` takes it and the sleep state from the clock, and an asleep human is in `BrainState::Fatigued` (which `autonomy` already treats as sleep). New `asleep` field, `#[serde(default)]`.
+4. `mk_engine::humans::reproduction::GESTATION_YEARS` — 268 days from conception (Jukic et al. 2013) instead of 280 (40 weeks counts from the last menstrual period, not conception).
+5. `mk_engine::humans::lifecycle` — the Gompertz constants are `pub` so the realism suite can check them.
+
 ## Drift check (2026-10-02)
 
 Upstream `dylmarriner/Maer-Ken` default-branch HEAD is `7c05f0dcf254387ffd7322dbb525fe4807228602`, equal to the pin: no upstream commits since the extraction, so upstream has not fixed the Phase 0 defects either. Re-check immediately before Phase 1.
