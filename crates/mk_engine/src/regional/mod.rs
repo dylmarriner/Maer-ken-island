@@ -4,3 +4,4 @@
 
 pub mod boundary;
 pub mod par;
+pub mod tectonics;

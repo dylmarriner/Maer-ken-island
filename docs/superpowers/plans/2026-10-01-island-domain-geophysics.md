@@ -118,11 +118,13 @@ Two speed rules every later phase relies on.
 - Produces: `step_regional_tectonics(canon: &CanonLocked, tick: Tick, domain: &IslandDomain, forcing: &TectonicBoundaryForcing) -> TectonicsState` on the coarse grid.
 - Produces: `regional_neighbours(row, col, rows, cols) -> impl Iterator<Item = (usize, usize)>` (Moore neighbourhood, no wrap).
 
-- [ ] **Step 1:** Write tests asserting deterministic plate assignment, at least 3 local plates, at least one convergent and one divergent boundary, heat flow finite and within `20..=200` mW/m² (upstream units; default 50), and that west-edge neighbours never include east-edge cells.
-- [ ] **Step 2:** Run `cargo test -p mk_engine --test regional_tectonics`; expect FAIL.
-- [ ] **Step 3:** Implement planar deterministic plate seeds/velocities and classify boundaries using regional neighbours plus edge tectonic forcing; reuse `PlateCell`, `PlateType`, `BoundaryType`, `TectonicsState`.
-- [ ] **Step 4:** Run `cargo test -p mk_engine --test regional_tectonics` and `cargo test -p mk_engine --lib tectonics::`; expect PASS.
-- [ ] **Step 5:** Commit `feat(engine): step tectonics on island domain`.
+- [x] **Step 1:** Write tests asserting deterministic plate assignment, at least 3 local plates, at least one convergent and one divergent boundary, heat flow finite and within `20..=200` mW/m² (upstream units; default 50), and that west-edge neighbours never include east-edge cells.
+- [x] **Step 2:** Run `cargo test -p mk_engine --test regional_tectonics`; expect FAIL.
+- [x] **Step 3:** Implement planar deterministic plate seeds/velocities and classify boundaries using regional neighbours plus edge tectonic forcing; reuse `PlateCell`, `PlateType`, `BoundaryType`, `TectonicsState`.
+- [x] **Step 4:** Run `cargo test -p mk_engine --test regional_tectonics` and `cargo test -p mk_engine --lib tectonics::`; expect PASS.
+- [x] **Step 5:** Commit `feat(engine): step tectonics on island domain`.
+
+Implementation notes: plates are warped planar Voronoi regions — four far-field plates beyond the edges (velocities from the forcing), two core plates converging across the centre (30-60 mm/yr, continental overriding; oceanic downgoing, or continental one time in four), a back-arc plate rifting behind the overriding plate (8-20 mm/yr, Taupō/Havre analogue) and two further interior plates. `regional_plates(domain, forcing)` exposes velocities for Task 3b. Heat flow uses Stein & Stein (1992) plate cooling and Pollack et al. (1993) continental values, clamped to 20-200 mW/m².
 
 ### Task 3b: Earthquakes and fault slip
 
