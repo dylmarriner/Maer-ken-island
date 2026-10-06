@@ -33,7 +33,7 @@ use crate::tectonics::{seafloor_depth_m, BoundaryType, PlateType, TectonicsState
 use crate::volcanism::VolcanismState;
 
 /// Depth of submerged continental crust away from margins (m).
-const CONTINENTAL_PLATEAU_M: f64 = -1_400.0;
+const CONTINENTAL_PLATEAU_M: f64 = -2_000.0;
 /// Mean main-range uplift of a convergent margin before noise (m).
 const RANGE_UPLIFT_M: f64 = 2_700.0;
 /// Distance of the main range from the plate boundary, and its half-width
@@ -60,6 +60,14 @@ const RIFT_HALF_WIDTH_KM: f64 = 30.0;
 const NOISE_AMPLITUDE_M: f64 = 750.0;
 const NOISE_WAVELENGTH_KM: f64 = 420.0;
 const NOISE_OCTAVES: u32 = 7;
+/// Amplitude ratio between successive noise octaves. Coastlines are
+/// statistically self-similar with a fractal dimension near 1.2-1.3
+/// (Mandelbrot 1967); a gain of 0.6 (Hurst exponent ~0.74) keeps
+/// 30-100 km headlands and bays instead of smoothing them away.
+const NOISE_GAIN: f64 = 0.6;
+/// Coast-scale relief (m) and wavelength (km): peninsulas and embayments.
+const COASTAL_AMPLITUDE_M: f64 = 350.0;
+const COASTAL_WAVELENGTH_KM: f64 = 90.0;
 /// Domain warp (km) that bends coasts into headlands and bays.
 const WARP_KM: f64 = 70.0;
 /// Mountain valley texture amplitude at full uplift (m).
@@ -113,12 +121,17 @@ fn value_noise(key: u64, x: f64, y: f64) -> f64 {
 
 /// Fractal Brownian motion in about [-1, 1].
 pub(crate) fn fbm(key: u64, x_m: f64, y_m: f64, wavelength_m: f64, octaves: u32) -> f64 {
+    fbm_gain(key, x_m, y_m, wavelength_m, octaves, 0.5)
+}
+
+/// Fractal Brownian motion with a chosen octave gain.
+fn fbm_gain(key: u64, x_m: f64, y_m: f64, wavelength_m: f64, octaves: u32, gain: f64) -> f64 {
     let (mut sum, mut norm, mut amp, mut freq) = (0.0, 0.0, 1.0, 1.0 / wavelength_m);
     for o in 0..octaves {
         let k = mix(key ^ (u64::from(o) << 56));
         sum += amp * value_noise(k, x_m * freq, y_m * freq);
         norm += amp;
-        amp *= 0.5;
+        amp *= gain;
         freq *= 2.0;
     }
     sum / norm
@@ -440,7 +453,7 @@ pub fn raw_elevation(
         let mut u = match here.role {
             MarginRole::Overriding => {
                 a * (-((d - km(RANGE_OFFSET_KM)) / km(RANGE_HALF_WIDTH_KM)).powi(2)).exp()
-                    + 0.35 * a * (-(d / km(220.0)).powi(2)).exp()
+                    + 0.5 * a * (-(d / km(240.0)).powi(2)).exp()
             }
             MarginRole::Downgoing => {
                 -TRENCH_DEPTH_M * (-((d - km(TRENCH_OFFSET_KM)) / km(20.0)).powi(2)).exp()
@@ -460,7 +473,24 @@ pub fn raw_elevation(
         let wy = y + warp_m * fbm(warp_key ^ 7, x, y, 2.0 * noise_wavelength_m, 4);
         let b = bilinear(&base, cr, cc, coarse_m, wx, wy);
         let (u, _) = uplift_of(wx, wy);
-        b + u + NOISE_AMPLITUDE_M * fbm(noise_key, wx, wy, noise_wavelength_m, NOISE_OCTAVES)
+        b + u
+            + NOISE_AMPLITUDE_M
+                * fbm_gain(
+                    noise_key,
+                    wx,
+                    wy,
+                    noise_wavelength_m,
+                    NOISE_OCTAVES,
+                    NOISE_GAIN,
+                )
+            + COASTAL_AMPLITUDE_M
+                * fbm(
+                    noise_key ^ 0xC0A5,
+                    wx,
+                    wy,
+                    COASTAL_WAVELENGTH_KM * 1000.0 * scale,
+                    4,
+                )
     });
     // Erosion stand-in: smooth, then cut valleys into the uplifted ground.
     smooth(&mut elevation, mr, mc, 2);

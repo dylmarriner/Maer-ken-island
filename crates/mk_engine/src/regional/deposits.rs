@@ -480,9 +480,21 @@ pub fn allowed_hosts(kind: DepositKind) -> &'static [Lithology] {
     }
 }
 
+/// Deepest water (m) over which onshore-type deposits are generated: the
+/// continental shelf edge. Deeper ore is beyond any reach the island's
+/// people will have; only seafloor deposit types form there.
+const SHELF_EDGE_M: f64 = -200.0;
+
 fn permits_site(kind: DepositKind, s: &Site, scale: f64) -> bool {
     use DepositKind as K;
     use Lithology::*;
+    let offshore_kind = matches!(
+        kind,
+        K::VolcanogenicMassiveSulfide | K::Petroleum | K::Phosphate | K::Evaporite
+    );
+    if !offshore_kind && s.elevation_m < SHELF_EDGE_M {
+        return false;
+    }
     match kind {
         K::OrogenicGold => matches!(s.rock, Greywacke | Schist) && s.margin_km <= 150.0 * scale,
         K::EpithermalGoldSilver => {

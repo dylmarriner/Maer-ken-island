@@ -6,6 +6,7 @@ members = [
     "crates/mk_island",
     "apps/island_humans",
     "apps/island",
+    "apps/island_preview",
 ]
 resolver = "2"
 

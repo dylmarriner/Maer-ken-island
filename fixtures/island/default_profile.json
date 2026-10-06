@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "width_m": 2400000.0,
+  "height_m": 1920000.0,
+  "coarse_cell_m": 12000.0,
+  "medium_cell_m": 2000.0,
+  "reference_latitude_deg": -41.0,
+  "reference_longitude_deg": 174.0,
+  "planet_radius_m": 19113000.0,
+  "target_land_area_m2": 268000000000.0,
+  "land_area_tolerance_fraction": 0.05,
+  "minimum_ocean_buffer_m": 300000.0,
+  "coastal_band_m": 20000.0,
+  "shape": {
+    "max_compactness": 0.3,
+    "max_convexity": 0.8,
+    "min_major_headlands": 3,
+    "min_major_bays": 3
+  },
+  "geology": {
+    "ancient_basement": true,
+    "basement_age_ma": 2700.0,
+    "basement_area_fraction": 0.08
+  },
+  "seed": "0000000000000000000000000000000000000000000000000000000000000000"
+}

@@ -26,11 +26,19 @@ fn generate(profile: IslandProfile, seed: [u8; 32]) -> Option<(IslandDomain, Reg
         .map(|g| (d, g))
 }
 
-/// The small-island seeds 0..32 that make an island of the right area.
+/// The small-island seeds 0..32 that make an island of the right area,
+/// plus full-size islands for seeds 0..6: rare deposits of a few per
+/// 10,000 km² of host rock (porphyry copper, tin–tungsten, uranium in
+/// granite) need more ground than the 8,000 km² test island has.
 fn islands() -> Vec<(IslandDomain, RegionalGeophysics)> {
-    (0u8..32)
-        .filter_map(|s| generate(IslandProfile::test_small(), [s; 32]))
-        .collect()
+    use rayon::prelude::*;
+    let small = (0u8..32)
+        .into_par_iter()
+        .filter_map(|s| generate(IslandProfile::test_small(), [s; 32]));
+    let full = (0u8..6)
+        .into_par_iter()
+        .filter_map(|s| generate(IslandProfile::default_nz_scale(), [s; 32]));
+    small.chain(full).collect()
 }
 
 #[test]
@@ -48,7 +56,7 @@ fn lithology_and_deposits_are_deterministic() {
 fn rules_hold_and_every_deposit_kind_forms_somewhere() {
     let islands = islands();
     assert!(
-        islands.len() >= 16,
+        islands.len() >= 20,
         "only {} seeds made an island",
         islands.len()
     );

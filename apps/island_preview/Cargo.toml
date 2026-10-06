@@ -1,0 +1,22 @@
+[package]
+name = "island_preview"
+version = "0.1.0"
+edition = "2021"
+description = "Headless previews of the island's geophysics and the seed gallery"
+
+[[bin]]
+name = "island_preview"
+path = "src/main.rs"
+
+[dependencies]
+mk_core = { path = "../../crates/mk_core" }
+mk_engine = { path = "../../crates/mk_engine" }
+mk_island = { path = "../../crates/mk_island" }
+serde.workspace = true
+serde_json.workspace = true
+hex.workspace = true
+png.workspace = true
+blake3.workspace = true
+
+[lints]
+workspace = true

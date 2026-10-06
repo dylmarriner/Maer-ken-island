@@ -18,7 +18,7 @@ use mk_island::{DomainLevel, IslandDomain, IslandProfile};
 /// `[0u8; 32]`, `[1u8; 32]`, …; Task 7 replaces the full-island seed with
 /// the owner's choice.
 const FULL_SEED: [u8; 32] = [0u8; 32];
-const SMALL_SEED: [u8; 32] = [4u8; 32];
+const SMALL_SEED: [u8; 32] = [7u8; 32];
 /// A small-island seed whose outline fails the shape requirements.
 const SMALL_FAILING_SEED: [u8; 32] = [1u8; 32];
 

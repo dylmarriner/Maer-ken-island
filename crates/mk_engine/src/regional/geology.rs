@@ -59,14 +59,15 @@ pub enum Lithology {
 /// Distances (km at full scale) of the margin's metamorphic and magmatic
 /// belts from the plate boundary. Alpine Schist grade rises to
 /// amphibolite facies within ~20 km of the Alpine Fault (Grapes & Watanabe
-/// 1992); arc–trench gaps are 100–200 km (Gill 1981); Cordilleran
-/// batholiths lie ~150–350 km inboard.
+/// 1992); arc–trench gaps are 100–200 km (Gill 1981); arc plutons and
+/// Cordilleran batholiths lie ~60–300 km inboard (the Sierra Nevada and
+/// Coast Mountains batholiths; NZ's Median Batholith).
 const GNEISS_KM: f64 = 20.0;
 const SCHIST_KM: f64 = 45.0;
 const GREYWACKE_KM: f64 = 110.0;
 const SUTURE_KM: f64 = 8.0;
 const ARC_BELT_KM: (f64, f64) = (100.0, 200.0);
-const BATHOLITH_KM: (f64, f64) = (130.0, 320.0);
+const BATHOLITH_KM: (f64, f64) = (70.0, 250.0);
 const RIFT_KM: f64 = 25.0;
 /// Wavelength (km at full scale) of the noise that patches rock bodies.
 const BODY_WAVELENGTH_KM: f64 = 25.0;
@@ -199,8 +200,16 @@ pub fn generate_lithology(
             if let Some(m) = metamorphic {
                 return if noise(0x13, x, y) > 0.55 { Marble } else { m };
             }
-            if d < k(GREYWACKE_KM) {
-                return Greywacke;
+            if (k(BATHOLITH_KM.0)..=k(BATHOLITH_KM.1)).contains(&d) {
+                let pluton = noise(0x16, x, y);
+                if pluton > 0.35 {
+                    return Granite;
+                }
+                // Roof pendants of limestone baked to marble at pluton
+                // margins: where skarns form.
+                if pluton > 0.25 && noise(0x13, x, y) > 0.3 {
+                    return Marble;
+                }
             }
             if s.role == MarginRole::Overriding
                 && (k(ARC_BELT_KM.0)..=k(ARC_BELT_KM.1)).contains(&d)
@@ -212,16 +221,8 @@ pub fn generate_lithology(
                     ArcAndesite
                 };
             }
-            if (k(BATHOLITH_KM.0)..=k(BATHOLITH_KM.1)).contains(&d) {
-                let pluton = noise(0x16, x, y);
-                if pluton > 0.35 {
-                    return Granite;
-                }
-                // Roof pendants of limestone baked to marble at pluton
-                // margins: where skarns form.
-                if pluton > 0.25 && noise(0x13, x, y) > 0.3 {
-                    return Marble;
-                }
+            if d < k(GREYWACKE_KM) {
+                return Greywacke;
             }
         }
         if s.rift_km < k(RIFT_KM) {
@@ -246,7 +247,7 @@ pub fn generate_lithology(
         } else if e < 250.0 {
             if noise(0x19, x, y) > 0.45 {
                 CoalMeasures
-            } else if noise(0x1A, x, y) > 0.7 {
+            } else if noise(0x1A, x, y) > 0.6 {
                 Evaporite
             } else if noise(0x1B, x, y) > 0.0 {
                 Sandstone

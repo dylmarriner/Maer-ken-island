@@ -140,6 +140,10 @@ pub struct IslandProfile {
     pub coastal_band_m: f64,
     pub shape: ShapeRequirements,
     pub geology: GeologyProfile,
+    /// The island's world seed (64 hex characters), when the profile pins
+    /// one: the owner's chosen island.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub seed: Option<String>,
 }
 
 /// Why a profile cannot be used.
@@ -200,6 +204,7 @@ impl IslandProfile {
             coastal_band_m: 20_000.0,
             shape: ShapeRequirements::default(),
             geology: GeologyProfile::default(),
+            seed: None,
         }
     }
 
@@ -355,7 +360,24 @@ impl IslandProfile {
                 "must lie in [0, 0.5]",
             ));
         }
+        if let Some(seed) = &self.seed {
+            self.seed_bytes()
+                .ok_or_else(|| invalid("seed", format!("{seed:?} is not 64 hex characters")))?;
+        }
         Ok(())
+    }
+
+    /// The pinned seed as bytes, if present and well formed.
+    pub fn seed_bytes(&self) -> Option<[u8; 32]> {
+        let hex = self.seed.as_deref()?;
+        if hex.len() != 64 {
+            return None;
+        }
+        let mut out = [0u8; 32];
+        for (i, byte) in out.iter_mut().enumerate() {
+            *byte = u8::from_str_radix(hex.get(2 * i..2 * i + 2)?, 16).ok()?;
+        }
+        Some(out)
     }
 
     /// Accepted land area range (m²).

@@ -7,10 +7,12 @@
 //! - Convexity: land area over the area of the convex hull of the land
 //!   cells' corners.
 //! - Bays: connected pieces of sea inside the convex hull ("hull
-//!   deficits"); headlands: pieces of land a morphological opening with a
-//!   disc of radius [`HEADLAND_OPENING_FRACTION`]·√(hull area) removes
-//!   (protrusions narrower than the disc). Both count only pieces larger
-//!   than `max(2 coarse cells, 1% of hull area)`.
+//!   deficits"); headlands: pieces of land a morphological opening removes
+//!   (protrusions narrower than the opening disc), the disc's radius being
+//!   [`HEADLAND_OPENING_DEPTH_FACTOR`] times the median distance from the
+//!   island's land to the sea, so a peninsula counts when it is thinner
+//!   than the island's own body. Both count only pieces larger than
+//!   `max(2 coarse cells, 1% of hull area)`.
 //!
 //! All passes are linear in the number of cells (two-pass chamfer distance
 //! transforms, scanline hull fill), so the 1.15-million-cell medium grid
@@ -22,8 +24,13 @@ use mk_core::grid::Grid2;
 use mk_island::ShapeMetrics;
 
 /// Radius of the opening that separates headlands from the island's body,
-/// as a fraction of √(hull area): ~50 km on an NZ-sized island.
-pub const HEADLAND_OPENING_FRACTION: f64 = 0.1;
+/// in multiples of the median land-to-sea distance (for a long strip of
+/// width W that median is W/4, so protrusions narrower than ~0.75 W count).
+pub const HEADLAND_OPENING_DEPTH_FACTOR: f64 = 1.5;
+/// Smallest major headland or bay, as a fraction of the hull area (with a
+/// floor of two coarse cells): ~0.5% admits a Coromandel-sized peninsula
+/// (~2,000 km²) on an NZ-sized island.
+pub const MAJOR_FEATURE_HULL_FRACTION: f64 = 0.005;
 
 /// Two-pass chamfer distance (in cells, weights 1 and √2) from every cell
 /// to the nearest `target` cell. With `outside_is_target`, the space
@@ -362,7 +369,8 @@ pub fn measure_shape(land: &Grid2<bool>, cell_m: f64, coarse_cell_m: f64) -> Sha
     let hull = convex_hull(corners);
     let hull_area_m2 = polygon_area(&hull) * cell_area;
     let convexity = (area_m2 / hull_area_m2.max(f64::MIN_POSITIVE)).min(1.0);
-    let threshold_cells = ((2.0 * coarse_cell_m * coarse_cell_m).max(0.01 * hull_area_m2)
+    let threshold_cells = ((2.0 * coarse_cell_m * coarse_cell_m)
+        .max(MAJOR_FEATURE_HULL_FRACTION * hull_area_m2)
         / cell_area)
         .ceil() as usize;
 
@@ -375,9 +383,16 @@ pub fn measure_shape(land: &Grid2<bool>, cell_m: f64, coarse_cell_m: f64) -> Sha
         .count() as u32;
 
     // Headlands: land removed by an opening (erode, then dilate).
-    let radius = (HEADLAND_OPENING_FRACTION * hull_area_m2.sqrt() / cell_m).max(1.0);
     let sea: Vec<bool> = mask.iter().map(|&l| !l).collect();
     let to_sea = chamfer_distance(&sea, rows, cols, true);
+    let mut depths: Vec<f64> = to_sea
+        .iter()
+        .zip(mask)
+        .filter(|(_, &l)| l)
+        .map(|(&d, _)| d)
+        .collect();
+    depths.sort_by(f64::total_cmp);
+    let radius = (HEADLAND_OPENING_DEPTH_FACTOR * depths[depths.len() / 2]).max(1.0);
     let eroded: Vec<bool> = to_sea.iter().map(|&d| d > radius).collect();
     let to_core = chamfer_distance(&eroded, rows, cols, false);
     let protrusion: Vec<bool> = mask

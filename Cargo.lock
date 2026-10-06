@@ -2644,6 +2644,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "island_preview"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "hex",
+ "mk_core",
+ "mk_engine",
+ "mk_island",
+ "png",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "itertools"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
