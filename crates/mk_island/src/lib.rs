@@ -15,6 +15,6 @@ pub use domain::{
     DomainLevel, IslandDomain, IslandDomainError, LocalPatchSpec, MAX_LOCAL_PATCH_CELLS,
 };
 pub use profile::{
-    GeologyProfile, IslandProfile, IslandProfileError, ShapeRequirements, ISLAND_CANON_RADIUS_M,
-    PROFILE_VERSION,
+    GeologyProfile, IslandProfile, IslandProfileError, ShapeMetrics, ShapeRequirements,
+    ISLAND_CANON_RADIUS_M, PROFILE_VERSION,
 };

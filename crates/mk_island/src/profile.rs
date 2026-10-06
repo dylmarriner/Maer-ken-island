@@ -41,6 +41,53 @@ impl Default for ShapeRequirements {
     }
 }
 
+/// Measured outline of a land mask (Phase 1 Task 4).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ShapeMetrics {
+    pub area_m2: f64,
+    /// Length of the marching-squares coastline contour (m).
+    pub perimeter_m: f64,
+    /// `4πA/P²` (a circle is 1).
+    pub compactness: f64,
+    /// Land area over convex-hull area.
+    pub convexity: f64,
+    pub major_headlands: u32,
+    pub major_bays: u32,
+}
+
+impl ShapeRequirements {
+    /// The requirements a measured shape fails, as readable reasons (empty
+    /// when it passes).
+    pub fn unmet(&self, m: &ShapeMetrics) -> Vec<String> {
+        let mut reasons = Vec::new();
+        if m.compactness > self.max_compactness {
+            reasons.push(format!(
+                "compactness {:.3} exceeds {:.3}",
+                m.compactness, self.max_compactness
+            ));
+        }
+        if m.convexity > self.max_convexity {
+            reasons.push(format!(
+                "convexity {:.3} exceeds {:.3}",
+                m.convexity, self.max_convexity
+            ));
+        }
+        if m.major_headlands < self.min_major_headlands {
+            reasons.push(format!(
+                "{} major headlands, need {}",
+                m.major_headlands, self.min_major_headlands
+            ));
+        }
+        if m.major_bays < self.min_major_bays {
+            reasons.push(format!(
+                "{} major bays, need {}",
+                m.major_bays, self.min_major_bays
+            ));
+        }
+        reasons
+    }
+}
+
 /// The island's deep geology.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GeologyProfile {

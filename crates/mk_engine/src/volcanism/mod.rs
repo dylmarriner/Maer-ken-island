@@ -254,8 +254,89 @@ impl VolcanismState {
     }
 }
 
+/// Cell sizes and neighbours a volcanism step runs on. The planetary grid
+/// ([`SphericalVolcanismGeometry`]) has latitude-dependent cells and wraps
+/// east–west; the island region (`crate::regional::volcanism`) has flat
+/// cells and no wrap.
+pub trait VolcanismGeometry {
+    /// North–south extent of a cell in `row` (km).
+    fn cell_height_km(&self, row: usize) -> f64;
+    /// East–west extent of a cell in `row` (km).
+    fn cell_width_km(&self, row: usize) -> f64;
+    /// The Moore neighbours of a cell as `(row, col, row offset, col
+    /// offset)`, excluding the cell itself.
+    fn neighbours(&self, row: usize, col: usize) -> Vec<(usize, usize, i64, i64)>;
+}
+
+/// The planetary latitude–longitude grid on the canon sphere.
+pub struct SphericalVolcanismGeometry<'a> {
+    pub grid_spec: &'a mk_core::grid::GridSpec,
+}
+
+impl VolcanismGeometry for SphericalVolcanismGeometry<'_> {
+    // Rows are evenly spaced in latitude, columns shrink with cos(latitude).
+    fn cell_height_km(&self, _row: usize) -> f64 {
+        let planet_radius_km = mk_core::grid::CANON_PLANET_RADIUS_M / 1000.0;
+        std::f64::consts::PI * planet_radius_km / self.grid_spec.nlat as f64
+    }
+
+    fn cell_width_km(&self, row: usize) -> f64 {
+        let planet_radius_km = mk_core::grid::CANON_PLANET_RADIUS_M / 1000.0;
+        (std::f64::consts::TAU * planet_radius_km * self.grid_spec.lat_rad(row).cos().abs()
+            / self.grid_spec.nlon as f64)
+            .max(1.0)
+    }
+
+    fn neighbours(&self, row: usize, col: usize) -> Vec<(usize, usize, i64, i64)> {
+        let (grid_rows, grid_cols) = (self.grid_spec.nlat, self.grid_spec.nlon);
+        let row_start = row.saturating_sub(1);
+        let row_end = (row + 1).min(grid_rows - 1);
+        let mut out = Vec::with_capacity(8);
+        for neighbor_row in row_start..=row_end {
+            for dc in [-1i64, 0, 1] {
+                if neighbor_row == row && dc == 0 {
+                    continue;
+                }
+                let neighbor_col = (col as i64 + dc).rem_euclid(grid_cols as i64) as usize;
+                out.push((
+                    neighbor_row,
+                    neighbor_col,
+                    neighbor_row as i64 - row as i64,
+                    dc,
+                ));
+            }
+        }
+        out
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn step_volcanism(
+    canon: &CanonLocked,
+    tick: Tick,
+    plate_config: &Grid2<super::tectonics::PlateCell>,
+    heat_flow: &Grid2<f64>,
+    previous_degassed_fraction: f64,
+    dt_seconds: f64,
+    rng: &mk_core::rng::RngRegistry,
+    grid_spec: &mk_core::grid::GridSpec,
+) -> VolcanismState {
+    step_volcanism_on(
+        canon,
+        tick,
+        plate_config,
+        heat_flow,
+        previous_degassed_fraction,
+        dt_seconds,
+        rng,
+        grid_spec,
+        &SphericalVolcanismGeometry { grid_spec },
+    )
+}
+
+/// [`step_volcanism`] on any cell geometry.
+#[allow(clippy::too_many_arguments)]
+pub fn step_volcanism_on(
     _canon: &CanonLocked,
     _tick: Tick,
     plate_config: &Grid2<super::tectonics::PlateCell>,
@@ -264,10 +345,10 @@ pub fn step_volcanism(
     dt_seconds: f64,
     rng: &mk_core::rng::RngRegistry,
     grid_spec: &mk_core::grid::GridSpec,
+    geometry: &dyn VolcanismGeometry,
 ) -> VolcanismState {
     let grid_rows = grid_spec.nlat;
     let grid_cols = grid_spec.nlon;
-    let planet_radius_km = mk_core::grid::CANON_PLANET_RADIUS_M / 1000.0;
 
     let mut volcanism = Grid2::new(grid_spec, VolcanicCell::new(500.0, false));
     let mut outgassed_co2 = Grid2::new(grid_spec, 0.0);
@@ -290,40 +371,27 @@ pub fn step_volcanism(
             let mantle_temp =
                 (REFERENCE_MANTLE_TEMP_K + (heat - 100.0) * 0.5).clamp(1200.0, 2200.0);
 
-            // Cell dimensions on the sphere (km): rows are evenly spaced in
-            // latitude, columns shrink with cos(latitude).
-            let cell_height_km = std::f64::consts::PI * planet_radius_km / grid_rows as f64;
-            let cell_width_km =
-                (std::f64::consts::TAU * planet_radius_km * grid_spec.lat_rad(row).cos().abs()
-                    / grid_cols as f64)
-                    .max(1.0);
+            let cell_height_km = geometry.cell_height_km(row);
+            let cell_width_km = geometry.cell_width_km(row);
 
             // Nearest-boundary distance from the local Moore neighbourhood,
             // at the real spacing between cell centres.
             let distance_to_boundary: f64 = if plate.boundary.is_some() {
                 0.0
             } else {
-                let row_start = row.saturating_sub(1);
-                let row_end = (row + 1).min(grid_rows - 1);
                 let mut min_dist_km = cell_width_km.min(cell_height_km);
                 let mut found = false;
-                for neighbor_row in row_start..=row_end {
-                    for dc in [-1i64, 0, 1] {
-                        let neighbor_col = (col as i64 + dc).rem_euclid(grid_cols as i64) as usize;
-                        if neighbor_row == row && dc == 0 {
-                            continue;
-                        }
-                        if plate_config
-                            .get(neighbor_row, neighbor_col)
-                            .boundary
-                            .is_some()
-                        {
-                            let dy = neighbor_row.abs_diff(row) as f64 * cell_height_km;
-                            let dx = dc.unsigned_abs() as f64 * cell_width_km;
-                            let d = (dx * dx + dy * dy).sqrt();
-                            min_dist_km = if found { min_dist_km.min(d) } else { d };
-                            found = true;
-                        }
+                for (neighbor_row, neighbor_col, dr, dc) in geometry.neighbours(row, col) {
+                    if plate_config
+                        .get(neighbor_row, neighbor_col)
+                        .boundary
+                        .is_some()
+                    {
+                        let dy = dr.unsigned_abs() as f64 * cell_height_km;
+                        let dx = dc.unsigned_abs() as f64 * cell_width_km;
+                        let d = (dx * dx + dy * dy).sqrt();
+                        min_dist_km = if found { min_dist_km.min(d) } else { d };
+                        found = true;
                     }
                 }
                 min_dist_km
