@@ -100,11 +100,11 @@ Two speed rules every later phase relies on.
 - Produces (in `mk_island::boundary`, serde data only): `OceanBoundaryForcing`, `AtmosphereBoundaryForcing`, `TectonicBoundaryForcing`, `AstronomyForcing { solar_declination_rad, sub_solar_longitude_rad, moon_sub_longitudes_rad: Vec<f64>, season_phase, … }`, `RegionalBoundaryState { ocean, atmosphere, tectonic, astronomy, sim_time_seconds }`.
 - Produces (in `mk_engine::regional::boundary`): `sample_regional_boundaries(seed: [u8; 32], canon: &CanonLocked, domain: &IslandDomain, sim_time_seconds: f64) -> RegionalBoundaryState`. Astronomy comes from the existing `orbit` and `rotation` modules (analytic). Ocean/atmosphere fields in Phase 1 are seed-derived placeholders flagged `provisional: true`; Phase 2 Task 2 replaces them with zonal-background-derived values through a second function rather than changing this signature.
 
-- [ ] **Step 1:** Write tests asserting identical samples for identical inputs, changed samples for changed seed/time, finite forcing values on every edge, declination matching `orbit`/`rotation` at the same time, and no wall-clock fields.
-- [ ] **Step 2:** Run `cargo test -p mk_engine --test regional_boundary_determinism`; expect FAIL.
-- [ ] **Step 3:** Implement sampling with named blake3-derived deterministic streams and analytic canonical astronomy; store only serializable forcing data.
-- [ ] **Step 4:** Re-run the test; expect PASS. Confirm `cargo tree -p mk_island` contains no `mk_engine`.
-- [ ] **Step 5:** Commit `feat(island): add deterministic regional boundaries`.
+- [x] **Step 1:** Write tests asserting identical samples for identical inputs, changed samples for changed seed/time, finite forcing values on every edge, declination matching `orbit`/`rotation` at the same time, and no wall-clock fields.
+- [x] **Step 2:** Run `cargo test -p mk_engine --test regional_boundary_determinism`; expect FAIL.
+- [x] **Step 3:** Implement sampling with named blake3-derived deterministic streams and analytic canonical astronomy; store only serializable forcing data.
+- [x] **Step 4:** Re-run the test; expect PASS. Confirm `cargo tree -p mk_island` contains no `mk_engine`.
+- [x] **Step 5:** Commit `feat(island): add deterministic regional boundaries`.
 
 ### Task 3: Regional tectonics and non-wrapping neighbours
 

@@ -2,4 +2,5 @@
 //! the `mk_island` domain contract (dependency direction `mk_engine →
 //! mk_island → mk_core`).
 
+pub mod boundary;
 pub mod par;
