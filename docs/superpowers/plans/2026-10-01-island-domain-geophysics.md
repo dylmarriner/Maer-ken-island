@@ -215,11 +215,13 @@ Upstream places every resource by biome and has no rock-type map; gold, silver, 
 - Abundance: each kind's deposit count, size and grade are drawn deterministically from distributions documented in code with a cited source, scaled by the area of suitable host rock — precious metals and gems are rare, building stone is everywhere its rock is. Bauxite (needs tropical laterite weathering) is evaluated in Phase 3 from climate and is expected to be absent at the reference latitude.
 - Produces: `generate_primary_deposits(lithology, tectonics, volcanism, domain, profile, seed) -> Vec<MineralDeposit>` (deterministic order by cell, then kind).
 
-- [ ] **Step 1:** Write tests: lithology is deterministic; arc volcanics lie along convergent boundaries; no kimberlite outside cratonic gneiss and none at all with `ancient_basement = false`; every `DepositKind` has a formation rule and appears for at least one of 32 fixed test seeds; no deposit sits in a host rock its rule forbids; gold and diamond deposits are rarer than building-stone deposits by at least two orders of magnitude of tonnage; deposit list is byte-identical for identical inputs.
-- [ ] **Step 2:** Run `cargo test -p mk_engine --test regional_geology`; expect FAIL.
-- [ ] **Step 3:** Implement the lithology rules and deposit generation; record every abundance distribution's source in code.
-- [ ] **Step 4:** Re-run; expect PASS.
-- [ ] **Step 5:** Commit `feat(engine): generate island rock types and mineral deposits`.
+- [x] **Step 1:** Write tests: lithology is deterministic; arc volcanics lie along convergent boundaries; no kimberlite outside cratonic gneiss and none at all with `ancient_basement = false`; every `DepositKind` has a formation rule and appears for at least one of 32 fixed test seeds; no deposit sits in a host rock its rule forbids; gold and diamond deposits are rarer than building-stone deposits by at least two orders of magnitude of tonnage; deposit list is byte-identical for identical inputs.
+- [x] **Step 2:** Run `cargo test -p mk_engine --test regional_geology`; expect FAIL.
+- [x] **Step 3:** Implement the lithology rules and deposit generation; record every abundance distribution's source in code.
+- [x] **Step 4:** Re-run; expect PASS.
+- [x] **Step 5:** Commit `feat(engine): generate island rock types and mineral deposits`.
+
+Implementation notes: the terrain's tectonic setting is shared as `regional::terrain::GeologicalSetting`, so rocks and landforms agree. `generate_lithology(domain, setting, volcanoes, elevation, basement, key)` and `generate_primary_deposits(domain, lithology, elevation, setting, volcanoes, key)` take that setting instead of the raw tectonic and volcanic state the interface list named. `generate_regional_geophysics` builds everything without the shape check (gallery and geology tests use it); `bootstrap_regional_geophysics` adds the check. The basement craton sits on continental land of the overriding side farthest from the margin, sized to `basement_area_fraction` of the island; kimberlite pipes occupy ~1.2% of cells in its thick-lithosphere interior. Grade–tonnage medians come from the Phase 0c geology pack (Cox & Singer 1986) where available; other kinds are marked order-of-magnitude in their model's `source`. Scaled belt widths never fall below 1.5 medium cells.
 
 ### Task 6: Headless preview tool and island gallery
 

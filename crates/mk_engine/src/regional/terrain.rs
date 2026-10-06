@@ -91,7 +91,7 @@ pub fn terrain_key(seed: &[u8; 32]) -> u64 {
 }
 
 /// Uniform in [0, 1) for a key and two indices.
-fn hash01(key: u64, a: u64, b: u64) -> f64 {
+pub(crate) fn hash01(key: u64, a: u64, b: u64) -> f64 {
     (mix(mix(key ^ a) ^ b) >> 11) as f64 / (1u64 << 53) as f64
 }
 
@@ -112,7 +112,7 @@ fn value_noise(key: u64, x: f64, y: f64) -> f64 {
 }
 
 /// Fractal Brownian motion in about [-1, 1].
-fn fbm(key: u64, x_m: f64, y_m: f64, wavelength_m: f64, octaves: u32) -> f64 {
+pub(crate) fn fbm(key: u64, x_m: f64, y_m: f64, wavelength_m: f64, octaves: u32) -> f64 {
     let (mut sum, mut norm, mut amp, mut freq) = (0.0, 0.0, 1.0, 1.0 / wavelength_m);
     for o in 0..octaves {
         let k = mix(key ^ (u64::from(o) << 56));
@@ -140,7 +140,7 @@ fn ridged(key: u64, x_m: f64, y_m: f64, wavelength_m: f64, octaves: u32) -> f64 
 
 /// How a plate behaves at convergent margins.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum MarginRole {
+pub enum MarginRole {
     None,
     Overriding,
     Downgoing,
@@ -203,6 +203,122 @@ fn margin_roles(tectonics: &TectonicsState, plates: &[RegionalPlate]) -> Vec<Mar
     roles
 }
 
+/// Landform length scale of a domain: √(target land area / NZ-scale
+/// area). 1 for the full island.
+pub fn landform_scale(domain: &IslandDomain) -> f64 {
+    (domain.profile().target_land_area_m2 / REFERENCE_LAND_AREA_M2).sqrt()
+}
+
+/// The tectonic setting of any point: shared by terrain and geology so the
+/// rocks and the landforms agree.
+pub struct GeologicalSetting {
+    rows: usize,
+    cols: usize,
+    coarse_m: f64,
+    plate_id: Vec<u8>,
+    crust: Vec<PlateType>,
+    roles: Vec<(u8, MarginRole)>,
+    /// Coarse distances (km) to convergent and to continental rift cells.
+    pub to_margin_km: Vec<f64>,
+    pub to_rift_km: Vec<f64>,
+    /// Coarse cells that are continental rifts.
+    pub rift: Vec<bool>,
+    pub scale: f64,
+    plate_key: u64,
+}
+
+/// The setting at one point.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SettingAt {
+    pub plate_id: u8,
+    pub crust: PlateType,
+    pub role: MarginRole,
+    pub margin_km: f64,
+    pub rift_km: f64,
+}
+
+impl GeologicalSetting {
+    pub fn new(
+        domain: &IslandDomain,
+        tectonics: &TectonicsState,
+        plates: &[RegionalPlate],
+        key: u64,
+    ) -> Self {
+        let coarse = DomainLevel::Coarse;
+        let (rows, cols) = (domain.rows(coarse), domain.cols(coarse));
+        let coarse_m = domain.cell_size_m(coarse);
+        let grid = tectonics.plates.data();
+        let convergent: Vec<bool> = grid
+            .iter()
+            .map(|c| {
+                matches!(
+                    c.boundary,
+                    Some(BoundaryType::Subduction | BoundaryType::Collision)
+                )
+            })
+            .collect();
+        let rift: Vec<bool> = grid
+            .iter()
+            .map(|c| {
+                c.boundary == Some(BoundaryType::Ridge) && c.crust_type == PlateType::Continental
+            })
+            .collect();
+        let km = |d: Vec<f64>| {
+            d.iter()
+                .map(|d| d * coarse_m / 1000.0)
+                .collect::<Vec<f64>>()
+        };
+        let roles = margin_roles(tectonics, plates);
+        Self {
+            rows,
+            cols,
+            coarse_m,
+            plate_id: grid.iter().map(|c| c.plate_id).collect(),
+            crust: grid.iter().map(|c| c.crust_type).collect(),
+            roles: plates.iter().zip(&roles).map(|(p, &r)| (p.id, r)).collect(),
+            to_margin_km: km(chamfer_distance(&convergent, rows, cols, false)),
+            to_rift_km: km(chamfer_distance(&rift, rows, cols, false)),
+            rift,
+            scale: landform_scale(domain),
+            plate_key: mix(key ^ 4),
+        }
+    }
+
+    pub fn role_of(&self, plate_id: u8) -> MarginRole {
+        self.roles
+            .iter()
+            .find(|(id, _)| *id == plate_id)
+            .map_or(MarginRole::None, |(_, r)| *r)
+    }
+
+    /// The setting at domain metres (x, y). Plate membership is read
+    /// through a small warp so plate edges on the medium grid are not
+    /// 12 km stair steps.
+    pub fn at(&self, x: f64, y: f64) -> SettingAt {
+        let s = self.scale;
+        let wl = 30_000.0 * s;
+        let jx = x + 8_000.0 * s * value_noise(self.plate_key, x / wl, y / wl);
+        let jy = y + 8_000.0 * s * value_noise(self.plate_key ^ 9, x / wl, y / wl);
+        let r = ((jy.max(0.0) / self.coarse_m) as usize).min(self.rows - 1);
+        let c = ((jx.max(0.0) / self.coarse_m) as usize).min(self.cols - 1);
+        let i = r * self.cols + c;
+        SettingAt {
+            plate_id: self.plate_id[i],
+            crust: self.crust[i],
+            role: self.role_of(self.plate_id[i]),
+            margin_km: bilinear(
+                &self.to_margin_km,
+                self.rows,
+                self.cols,
+                self.coarse_m,
+                x,
+                y,
+            ),
+            rift_km: bilinear(&self.to_rift_km, self.rows, self.cols, self.coarse_m, x, y),
+        }
+    }
+}
+
 /// Bilinear sample of a coarse field at domain metres.
 fn bilinear(field: &[f64], rows: usize, cols: usize, cell_m: f64, x: f64, y: f64) -> f64 {
     let gx = (x / cell_m - 0.5).clamp(0.0, (cols - 1) as f64);
@@ -238,12 +354,15 @@ fn smooth(field: &mut [f64], rows: usize, cols: usize, passes: usize) {
 }
 
 /// A volcano: centre (m), relief (m) and basal radius (m).
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Volcano {
     pub x_m: f64,
     pub y_m: f64,
     pub relief_m: f64,
     pub radius_m: f64,
+    /// A continental-rift volcano rather than an arc volcano.
+    #[serde(default)]
+    pub rift: bool,
 }
 
 /// Raw (unfitted) elevation on the medium grid, in metres relative to an
@@ -272,40 +391,11 @@ pub fn raw_elevation(
         .collect();
     smooth(&mut base, cr, cc, 3);
 
-    // Distances (km) to convergent and to rift (ridge in continental
-    // crust) boundary cells, on the coarse grid.
-    let convergent: Vec<bool> = grid
-        .data()
-        .iter()
-        .map(|c| {
-            matches!(
-                c.boundary,
-                Some(BoundaryType::Subduction | BoundaryType::Collision)
-            )
-        })
-        .collect();
-    let rift: Vec<bool> = grid
-        .data()
-        .iter()
-        .map(|c| c.boundary == Some(BoundaryType::Ridge) && c.crust_type == PlateType::Continental)
-        .collect();
-    let to_margin: Vec<f64> = chamfer_distance(&convergent, cr, cc, false)
-        .iter()
-        .map(|d| d * coarse_m / 1000.0)
-        .collect();
-    let to_rift: Vec<f64> = chamfer_distance(&rift, cr, cc, false)
-        .iter()
-        .map(|d| d * coarse_m / 1000.0)
-        .collect();
-    let roles = margin_roles(tectonics, plates);
-    let role_of = |id: u8| {
-        plates
-            .iter()
-            .position(|p| p.id == id)
-            .map_or(MarginRole::None, |i| roles[i])
-    };
+    let setting = GeologicalSetting::new(domain, tectonics, plates, key);
+    let (to_margin, rift) = (&setting.to_margin_km, &setting.rift);
+    let role_of = |id: u8| setting.role_of(id);
 
-    let scale = (domain.profile().target_land_area_m2 / REFERENCE_LAND_AREA_M2).sqrt();
+    let scale = setting.scale;
     // Volcanoes: arc volcanoes on overriding plates in the arc–trench gap,
     // rift volcanoes in continental rifts with volcanic ground.
     let mut volcanoes = Vec::new();
@@ -327,6 +417,7 @@ pub fn raw_elevation(
                 relief_m: VOLCANO_RELIEF_M.0 + u(3) * (VOLCANO_RELIEF_M.1 - VOLCANO_RELIEF_M.0),
                 radius_m: 1000.0
                     * (VOLCANO_RADIUS_KM.0 + u(4) * (VOLCANO_RADIUS_KM.1 - VOLCANO_RADIUS_KM.0)),
+                rift: rift_volcanic && !arc,
             });
         }
     }
@@ -338,32 +429,15 @@ pub fn raw_elevation(
     let warp_m = WARP_KM * 1000.0 * scale;
     let noise_wavelength_m = NOISE_WAVELENGTH_KM * 1000.0 * scale;
     let km = |v: f64| v * scale;
-    let (warp_key, noise_key, strike_key, plate_key) =
-        (mix(key ^ 1), mix(key ^ 2), mix(key ^ 3), mix(key ^ 4));
+    let (warp_key, noise_key, strike_key) = (mix(key ^ 1), mix(key ^ 2), mix(key ^ 3));
 
     let uplift_of = |x: f64, y: f64| -> (f64, f64) {
-        // Plate membership read through a small warp so plate edges on the
-        // medium grid are not 12 km stair steps.
-        let jx = x + 8_000.0
-            * scale
-            * value_noise(plate_key, x / (30_000.0 * scale), y / (30_000.0 * scale));
-        let jy = y + 8_000.0
-            * scale
-            * value_noise(
-                plate_key ^ 9,
-                x / (30_000.0 * scale),
-                y / (30_000.0 * scale),
-            );
-        let (pr, pc) = (
-            ((jy / coarse_m) as usize).min(cr - 1),
-            ((jx / coarse_m) as usize).min(cc - 1),
-        );
-        let d = bilinear(&to_margin, cr, cc, coarse_m, x, y);
-        let d_rift = bilinear(&to_rift, cr, cc, coarse_m, x, y);
+        let here = setting.at(x, y);
+        let (d, d_rift) = (here.margin_km, here.rift_km);
         // Along-strike variation of range height, 0.55-1.35.
         let strike = 0.95 + 0.4 * fbm(strike_key, x, y, 350_000.0 * scale, 3);
         let a = RANGE_UPLIFT_M * strike;
-        let mut u = match role_of(grid.get(pr, pc).plate_id) {
+        let mut u = match here.role {
             MarginRole::Overriding => {
                 a * (-((d - km(RANGE_OFFSET_KM)) / km(RANGE_HALF_WIDTH_KM)).powi(2)).exp()
                     + 0.35 * a * (-(d / km(220.0)).powi(2)).exp()

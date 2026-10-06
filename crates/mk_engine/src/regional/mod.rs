@@ -3,6 +3,8 @@
 //! mk_island → mk_core`).
 
 pub mod boundary;
+pub mod deposits;
+pub mod geology;
 pub mod geophysics;
 pub mod par;
 pub mod seismicity;

@@ -14,9 +14,11 @@ use mk_core::rng::RngRegistry;
 use mk_island::{DomainLevel, IslandDomain, RegionalBoundaryState, ShapeMetrics};
 use serde::{Deserialize, Serialize};
 
+use super::deposits::{generate_primary_deposits, MineralDeposit};
+use super::geology::{generate_lithology, place_basement, Basement, Lithology};
 use super::shape::{label_components, measure_shape};
 use super::tectonics::{regional_plates, step_regional_tectonics, RegionalPlate};
-use super::terrain::{raw_elevation, terrain_key, Volcano};
+use super::terrain::{raw_elevation, terrain_key, GeologicalSetting, Volcano};
 use super::volcanism::step_regional_volcanism;
 use crate::tectonics::TectonicsState;
 use crate::volcanism::{VolcanismState, INITIAL_DEGASSED_FRACTION};
@@ -46,8 +48,13 @@ pub struct RegionalGeophysics {
     /// How far sea level was raised above the raw terrain's datum (m).
     pub sea_level_offset_m: f64,
     pub shape: ShapeMetrics,
-    /// Volcano centres, relief and radius (m).
-    pub volcanoes: Vec<(f64, f64, f64, f64)>,
+    pub volcanoes: Vec<Volcano>,
+    /// The ancient craton fragment, if the profile has one.
+    pub basement: Option<Basement>,
+    /// Medium-grid rock types.
+    pub lithology: Grid2<Lithology>,
+    /// Primary mineral deposits, ordered by cell then kind.
+    pub deposits: Vec<MineralDeposit>,
 }
 
 /// Why a seed cannot make a valid island.
@@ -213,6 +220,26 @@ pub fn bootstrap_regional_geophysics(
     boundaries: &RegionalBoundaryState,
     seed: [u8; 32],
 ) -> Result<RegionalGeophysics, RegionalGeophysicsError> {
+    let geophysics = generate_regional_geophysics(canon, domain, boundaries, seed)?;
+    let reasons = domain.profile().shape.unmet(&geophysics.shape);
+    if !reasons.is_empty() {
+        return Err(RegionalGeophysicsError::ShapeRequirementsUnmet {
+            metrics: geophysics.shape,
+            reasons,
+        });
+    }
+    Ok(geophysics)
+}
+
+/// [`bootstrap_regional_geophysics`] without the shape check: the island
+/// meets its area and buffer, whatever its outline. The gallery and the
+/// geology tests use it to inspect every seed.
+pub fn generate_regional_geophysics(
+    canon: &CanonLocked,
+    domain: &IslandDomain,
+    boundaries: &RegionalBoundaryState,
+    seed: [u8; 32],
+) -> Result<RegionalGeophysics, RegionalGeophysicsError> {
     let rng = RngRegistry::new(seed);
     let tectonics = step_regional_tectonics(canon, 0, domain, &boundaries.tectonic);
     let volcanism = step_regional_volcanism(
@@ -225,8 +252,8 @@ pub fn bootstrap_regional_geophysics(
         &rng,
     );
     let plates = regional_plates(domain, &boundaries.tectonic);
-    let (raw, volcanoes) =
-        raw_elevation(domain, &tectonics, &volcanism, &plates, terrain_key(&seed));
+    let key = terrain_key(&seed);
+    let (raw, volcanoes) = raw_elevation(domain, &tectonics, &volcanism, &plates, key);
 
     let p = domain.profile();
     let (elevation_m, sea_level_offset_m) = fit_sea_level_to_target(
@@ -250,13 +277,11 @@ pub fn bootstrap_regional_geophysics(
         domain.cell_size_m(medium),
         domain.cell_size_m(DomainLevel::Coarse),
     );
-    let reasons = p.shape.unmet(&shape);
-    if !reasons.is_empty() {
-        return Err(RegionalGeophysicsError::ShapeRequirementsUnmet {
-            metrics: shape,
-            reasons,
-        });
-    }
+    let setting = GeologicalSetting::new(domain, &tectonics, &plates, key);
+    let basement = place_basement(domain, &setting, &land_mask, land_area_m2, key);
+    let lithology = generate_lithology(domain, &setting, &volcanoes, &elevation_m, basement, key);
+    let deposits =
+        generate_primary_deposits(domain, &lithology, &elevation_m, &setting, &volcanoes, key);
     Ok(RegionalGeophysics {
         tectonics,
         volcanism,
@@ -267,9 +292,9 @@ pub fn bootstrap_regional_geophysics(
         land_area_m2,
         sea_level_offset_m,
         shape,
-        volcanoes: volcanoes
-            .iter()
-            .map(|v: &Volcano| (v.x_m, v.y_m, v.relief_m, v.radius_m))
-            .collect(),
+        volcanoes,
+        basement,
+        lithology,
+        deposits,
     })
 }
