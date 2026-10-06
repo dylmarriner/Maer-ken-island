@@ -1,0 +1,244 @@
+{
+  "id": "seismic_volcanic_mineral",
+  "domain": "geology",
+  "title": "Earthquake statistics, active-margin rates, eruption frequency and deposit grade-tonnage",
+  "retrieved": "2026-10-07",
+  "licence": "Numerical values cited as facts with attribution; no text, figures or datasets reproduced.",
+  "sources": [
+    {
+      "key": "gutenberg1944",
+      "citation": "Gutenberg, B. and Richter, C. F. (1944). Frequency of earthquakes in California. Bulletin of the Seismological Society of America 34, 185-188.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "frohlich1993",
+      "citation": "Frohlich, C. and Davis, S. D. (1993). Teleseismic b values; or, much ado about 1.0. Journal of Geophysical Research 98(B1), 631-644.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "utsu1995",
+      "citation": "Utsu, T., Ogata, Y. and Matsu'ura, R. S. (1995). The centenary of the Omori formula for a decay law of aftershock activity. Journal of Physics of the Earth 43, 1-33.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "bath1965",
+      "citation": "Bath, M. (1965). Lateral inhomogeneities of the upper mantle. Tectonophysics 2, 483-514.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "norris2001",
+      "citation": "Norris, R. J. and Cooper, A. F. (2001). Late Quaternary slip rates and slip partitioning on the Alpine Fault, New Zealand. Journal of Structural Geology 23, 507-520.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "cochran2017",
+      "citation": "Cochran, U. A. et al. (2017). A plate boundary earthquake record from a wetland adjacent to the Alpine fault in New Zealand refines hazard estimates. Earth and Planetary Science Letters 464, 175-188.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "hovius1997",
+      "citation": "Hovius, N., Stark, C. P. and Allen, P. A. (1997). Sediment flux from a mountain belt derived by landslide mapping. Geology 25, 231-234.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "portenga2011",
+      "citation": "Portenga, E. W. and Bierman, P. R. (2011). Understanding Earth's eroding surface with 10Be. GSA Today 21(8), 4-10.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "newhall1982",
+      "citation": "Newhall, C. G. and Self, S. (1982). The volcanic explosivity index (VEI): an estimate of explosive magnitude for historical volcanism. Journal of Geophysical Research 87(C2), 1231-1238.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "cox1986",
+      "citation": "Cox, D. P. and Singer, D. A. (eds) (1986). Mineral Deposit Models. U.S. Geological Survey Bulletin 1693.",
+      "licence": "Public domain (U.S. Government work)"
+    },
+    {
+      "key": "tissot1984",
+      "citation": "Tissot, B. P. and Welte, D. H. (1984). Petroleum Formation and Occurrence, 2nd edition. Springer.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "pollack1993",
+      "citation": "Pollack, H. N., Hurter, S. J. and Johnson, J. R. (1993). Heat flow from the Earth's interior: analysis of the global data set. Reviews of Geophysics 31, 267-280.",
+      "licence": "Facts cited with attribution"
+    }
+  ],
+  "items": [
+    {
+      "key": "gutenberg_richter_b",
+      "description": "Gutenberg-Richter b-value in log10 N(>=M) = a - b M",
+      "unit": "dimensionless",
+      "source": "frohlich1993",
+      "confidence": "high",
+      "value": { "range": { "min": 0.8, "max": 1.2, "typical": 1.0 } }
+    },
+    {
+      "key": "bath_law_delta_m",
+      "description": "Magnitude difference between a mainshock and its largest aftershock (Bath's law)",
+      "unit": "magnitude units",
+      "source": "bath1965",
+      "confidence": "high",
+      "value": { "range": { "min": 0.8, "max": 1.6, "typical": 1.2 } }
+    },
+    {
+      "key": "omori_utsu",
+      "description": "Modified Omori (Omori-Utsu) aftershock rate n(t) = K / (c + t)^p",
+      "unit": "p dimensionless; c days",
+      "source": "utsu1995",
+      "confidence": "high",
+      "value": {
+        "table": {
+          "row_label": "parameter",
+          "columns": ["min", "max", "typical"],
+          "rows": [
+            { "label": "p", "values": [0.9, 1.5, 1.1] },
+            { "label": "c_days", "values": [0.003, 0.3, 0.05] }
+          ]
+        }
+      }
+    },
+    {
+      "key": "plate_boundary_fault_slip_rate",
+      "description": "Long-term strike-slip rate of a major transpressive plate-boundary fault (Alpine Fault, New Zealand)",
+      "unit": "mm/yr",
+      "source": "norris2001",
+      "confidence": "high",
+      "value": { "range": { "min": 21.0, "max": 31.0, "typical": 27.0 } }
+    },
+    {
+      "key": "great_earthquake_recurrence",
+      "description": "Mean recurrence interval of M~8 ruptures on the Alpine Fault",
+      "unit": "years (Earth)",
+      "source": "cochran2017",
+      "confidence": "high",
+      "value": { "range": { "min": 268.0, "max": 314.0, "typical": 291.0 } }
+    },
+    {
+      "key": "active_margin_uplift_rate",
+      "description": "Rock uplift rate in rapidly uplifting collisional ranges (Southern Alps, Taiwan)",
+      "unit": "mm/yr",
+      "source": "norris2001",
+      "confidence": "medium",
+      "value": { "range": { "min": 2.0, "max": 12.0, "typical": 8.0 } }
+    },
+    {
+      "key": "active_range_erosion_rate",
+      "description": "Basin-averaged erosion rate in a steady-state active mountain belt (western Southern Alps)",
+      "unit": "mm/yr",
+      "source": "hovius1997",
+      "confidence": "medium",
+      "value": { "range": { "min": 5.0, "max": 12.0, "typical": 9.0 } }
+    },
+    {
+      "key": "global_erosion_rates",
+      "description": "Global mean 10Be erosion rates of outcrops and drainage basins",
+      "unit": "mm/yr",
+      "source": "portenga2011",
+      "confidence": "high",
+      "value": {
+        "table": {
+          "row_label": "setting",
+          "columns": ["mean"],
+          "rows": [
+            { "label": "outcrop", "values": [0.012] },
+            { "label": "drainage_basin", "values": [0.218] }
+          ]
+        }
+      }
+    },
+    {
+      "key": "vei_global_frequency",
+      "description": "Approximate global recurrence interval of explosive eruptions by Volcanic Explosivity Index",
+      "unit": "years (Earth) between eruptions, globally",
+      "source": "newhall1982",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "vei",
+          "columns": ["interval_years", "min_tephra_m3"],
+          "rows": [
+            { "label": "2", "values": [0.02, 1.0e6] },
+            { "label": "3", "values": [1.0, 1.0e7] },
+            { "label": "4", "values": [10.0, 1.0e8] },
+            { "label": "5", "values": [50.0, 1.0e9] },
+            { "label": "6", "values": [100.0, 1.0e10] },
+            { "label": "7", "values": [1000.0, 1.0e11] },
+            { "label": "8", "values": [10000.0, 1.0e12] }
+          ]
+        }
+      },
+      "note": "Order-of-magnitude global rates from Newhall & Self (1982) Table 1 (VEI 2 ~ weekly). Per-volcano rates are far lower; the island's volcanic centres are a small fraction of the world's ~1,350 Holocene volcanoes."
+    },
+    {
+      "key": "grade_tonnage_medians",
+      "description": "Median tonnage and median grade of deposit types (USGS descriptive and grade-tonnage models)",
+      "unit": "tonnage Mt; grade unit in the row label",
+      "source": "cox1986",
+      "confidence": "low",
+      "value": {
+        "table": {
+          "row_label": "deposit_type__grade_unit",
+          "columns": ["median_tonnage_mt", "median_grade"],
+          "rows": [
+            { "label": "porphyry_cu__cu_pct", "values": [140.0, 0.54] },
+            { "label": "porphyry_cu_au__au_g_t", "values": [100.0, 0.38] },
+            { "label": "low_sulfide_au_quartz_vein__au_g_t", "values": [0.03, 16.0] },
+            { "label": "comstock_epithermal__au_g_t", "values": [0.77, 7.5] },
+            { "label": "comstock_epithermal__ag_g_t", "values": [0.77, 110.0] },
+            { "label": "kuroko_vms__cu_pct", "values": [1.5, 1.3] },
+            { "label": "kuroko_vms__zn_pct", "values": [1.5, 2.0] },
+            { "label": "sedex_zn_pb__zn_pct", "values": [15.0, 5.6] },
+            { "label": "sedex_zn_pb__pb_pct", "values": [15.0, 2.8] },
+            { "label": "sn_greisen__sn_pct", "values": [7.2, 0.28] },
+            { "label": "fe_skarn__fe_pct", "values": [7.2, 49.0] },
+            { "label": "cu_skarn__cu_pct", "values": [0.56, 1.7] },
+            { "label": "w_skarn__wo3_pct", "values": [1.1, 0.67] },
+            { "label": "superior_bif__fe_pct", "values": [170.0, 53.0] },
+            { "label": "placer_au__au_g_t", "values": [1.1, 0.25] },
+            { "label": "phosphorite__p2o5_pct", "values": [200.0, 24.0] }
+          ]
+        }
+      },
+      "note": "Medians transcribed from Cox & Singer (1986) model summaries without the bulletin to hand; treat each as correct to within a factor of ~2 in tonnage and ~30% in grade, and verify against the bulletin before any test gates on them more tightly. Deposit sizes are lognormal with log10 standard deviations of roughly 0.6-0.9 in tonnage."
+    },
+    {
+      "key": "kimberlite_diamond_grade",
+      "description": "Diamond grade of economic kimberlite pipes",
+      "unit": "carats / tonne",
+      "source": "cox1986",
+      "confidence": "low",
+      "value": { "range": { "min": 0.1, "max": 1.5, "typical": 0.4 } },
+      "note": "Only about 1% of known kimberlites are economic; most carry trace or no diamonds."
+    },
+    {
+      "key": "oil_and_gas_windows",
+      "description": "Source-rock temperature windows for oil and gas generation",
+      "unit": "degC",
+      "source": "tissot1984",
+      "confidence": "high",
+      "value": {
+        "table": {
+          "row_label": "window",
+          "columns": ["min", "max"],
+          "rows": [
+            { "label": "oil", "values": [60.0, 120.0] },
+            { "label": "wet_gas", "values": [120.0, 150.0] },
+            { "label": "dry_gas", "values": [150.0, 225.0] }
+          ]
+        }
+      }
+    },
+    {
+      "key": "continental_geothermal_gradient",
+      "description": "Typical upper-crustal geothermal gradient on continents",
+      "unit": "K/km",
+      "source": "pollack1993",
+      "confidence": "medium",
+      "value": { "range": { "min": 20.0, "max": 40.0, "typical": 27.0 } },
+      "note": "Mean continental heat flow 65 mW/m2 (Pollack et al. 1993) with conductivity ~2.5 W/(m K)."
+    }
+  ]
+}

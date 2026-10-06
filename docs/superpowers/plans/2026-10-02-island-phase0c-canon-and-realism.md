@@ -98,10 +98,12 @@
 - **Humans:** basal metabolic rate (Mifflin–St Jeor), activity energy costs (Compendium of Physical Activities, MET values), water needs and dehydration/starvation survival times, sleep need, intrinsic circadian period and entrainment range, walking speed and load carriage, gestation length distribution, fertility by age, mortality by age (life tables / Gompertz), growth curves (WHO).
 - **Labour:** realistic productivity — trees felled per day by hand axe and by chainsaw, hand-mining rates, gold panning throughput and yields, smelting yields and fuel ratios, construction labour hours per m², vehicle fuel consumption and speeds on terrain.
 
-- [ ] **Step 1:** Write loader tests: every pack parses, carries a source and licence, and covers the items listed.
-- [ ] **Step 2:** Assemble the packs from published sources; record licences (use only values whose licence permits inclusion).
-- [ ] **Step 3:** Run `cargo test -p mk_engine --test reference_packs`; expect PASS.
-- [ ] **Step 4:** Commit `test(island): real-world reference data packs`.
+- [x] **Step 1:** Write loader tests: every pack parses, carries a source and licence, and covers the items listed.
+- [x] **Step 2:** Assemble the packs from published sources; record licences (use only values whose licence permits inclusion).
+- [x] **Step 3:** Run `cargo test -p mk_engine --test reference_packs`; expect PASS.
+- [x] **Step 4:** Commit `test(island): real-world reference data packs`.
+
+Each item records a `confidence` (`high`, `medium`, `low`). Low-confidence values (labour productivity, grade-tonnage medians transcribed without the bulletin to hand) carry a note and may gate tests only as order-of-magnitude checks until checked against their source.
 
 ### Task 4: Human realism validation (upstream first)
 

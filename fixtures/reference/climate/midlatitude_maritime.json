@@ -1,0 +1,173 @@
+{
+  "id": "midlatitude_maritime",
+  "domain": "climate",
+  "title": "Mid-latitude maritime climate structure",
+  "retrieved": "2026-10-07",
+  "licence": "Numerical values cited as facts with attribution; no text, figures or datasets reproduced.",
+  "sources": [
+    {
+      "key": "ussa1976",
+      "citation": "NOAA, NASA and USAF (1976). U.S. Standard Atmosphere, 1976. NOAA-S/T 76-1562. Washington, D.C.",
+      "licence": "Public domain (U.S. Government work)"
+    },
+    {
+      "key": "dai1999",
+      "citation": "Dai, A., Trenberth, K. E. and Karl, T. R. (1999). Effects of clouds, soil moisture, precipitation, and water vapor on diurnal temperature range. Journal of Climate 12, 2451-2473.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "kawai2007",
+      "citation": "Kawai, Y. and Wada, A. (2007). Diurnal sea surface temperature variation and its impact on the atmosphere and ocean: a review. Journal of Oceanography 63, 721-744.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "geiger2009",
+      "citation": "Geiger, R., Aron, R. H. and Todhunter, P. (2009). The Climate Near the Ground, 7th edition. Rowman & Littlefield.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "niwa_cliflo",
+      "citation": "NIWA (National Institute of Water and Atmospheric Research, New Zealand). Climate summaries and the National Climate Database (CliFlo), 1981-2010 normals for Hokitika Aero, Christchurch Aero, Lake Tekapo and Alexandra.",
+      "licence": "CC BY 4.0 (NIWA CliFlo data); facts cited with attribution"
+    },
+    {
+      "key": "henderson1999",
+      "citation": "Henderson, R. D. and Thompson, S. M. (1999). Extreme rainfalls in the Southern Alps of New Zealand. Journal of Hydrology (New Zealand) 38(2), 309-330.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "reynolds2007",
+      "citation": "Reynolds, R. W. et al. (2007). Daily high-resolution-blended analyses for sea surface temperature. Journal of Climate 20, 5473-5496 (NOAA OISST v2).",
+      "licence": "Public domain (NOAA data); facts cited with attribution"
+    },
+    {
+      "key": "blackmon1976",
+      "citation": "Blackmon, M. L. (1976). A climatological spectral study of the 500 mb geopotential height of the Northern Hemisphere. Journal of the Atmospheric Sciences 33, 1607-1623.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "simmonds2000",
+      "citation": "Simmonds, I. and Keay, K. (2000). Mean Southern Hemisphere extratropical cyclone behavior in the 40-year NCEP-NCAR reanalysis. Journal of Climate 13, 873-885.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "hoskins2002",
+      "citation": "Hoskins, B. J. and Hodges, K. I. (2002). New perspectives on the Northern Hemisphere winter storm tracks. Journal of the Atmospheric Sciences 59, 1041-1061.",
+      "licence": "Facts cited with attribution"
+    }
+  ],
+  "items": [
+    {
+      "key": "environmental_lapse_rate",
+      "description": "Standard tropospheric temperature lapse rate",
+      "unit": "K/km",
+      "source": "ussa1976",
+      "confidence": "high",
+      "value": { "point": 6.5 },
+      "note": "Defined value for 0-11 km geopotential altitude. Observed environmental lapse rates vary about 4-8 K/km with humidity and stability; independent of planetary rotation."
+    },
+    {
+      "key": "dry_adiabatic_lapse_rate",
+      "description": "Dry adiabatic lapse rate g/c_p",
+      "unit": "K/km",
+      "source": "ussa1976",
+      "confidence": "high",
+      "value": { "point": 9.76 },
+      "note": "g / c_p with g = 9.80665 m/s2 and c_p = 1004.7 J/(kg K); applies directly because the island canon uses Earth gravity and air."
+    },
+    {
+      "key": "diurnal_temperature_range_by_surface",
+      "description": "Typical diurnal range of near-surface air temperature (ocean: skin SST) by surface type, mid-latitudes",
+      "unit": "K",
+      "source": "dai1999",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "surface",
+          "columns": ["min", "max"],
+          "rows": [
+            { "label": "open_ocean_sst", "values": [0.1, 0.5] },
+            { "label": "coastal_maritime_land", "values": [5.0, 9.0] },
+            { "label": "forest", "values": [6.0, 10.0] },
+            { "label": "inland_grass_or_crop", "values": [9.0, 15.0] },
+            { "label": "arid_basin", "values": [14.0, 22.0] }
+          ]
+        }
+      },
+      "note": "Representative ranges for a 24 h day; clouds reduce DTR by 25-50% (Dai et al. 1999). Open-ocean SST range from Kawai & Wada (2007), land surfaces from Geiger et al. (2009). A 36 h day lengthens heating and cooling and is expected to widen the land range; the model is compared on the energy-balance mechanism, not these numbers directly."
+    },
+    {
+      "key": "cloud_reduction_of_dtr",
+      "description": "Fractional reduction of land DTR under overcast vs clear skies",
+      "unit": "fraction",
+      "source": "dai1999",
+      "confidence": "medium",
+      "value": { "range": { "min": 0.25, "max": 0.5 } }
+    },
+    {
+      "key": "orographic_precipitation_southern_alps",
+      "description": "Mean annual precipitation across the Southern Alps (New Zealand), a mountain range in mid-latitude westerlies",
+      "unit": "mm/yr",
+      "source": "niwa_cliflo",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "site",
+          "columns": ["annual_mm", "distance_east_of_divide_km"],
+          "rows": [
+            { "label": "hokitika_windward_coast", "values": [2875.0, -35.0] },
+            { "label": "main_divide_peak", "values": [11000.0, 0.0] },
+            { "label": "lake_tekapo_leeward_basin", "values": [600.0, 45.0] },
+            { "label": "alexandra_leeward_basin", "values": [360.0, 110.0] },
+            { "label": "christchurch_leeward_coast", "values": [620.0, 130.0] }
+          ]
+        }
+      },
+      "note": "Main-divide peak from Henderson & Thompson (1999), who estimate 10-12 m/yr at the wettest ridge; the station values are 1981-2010 normals. Distances are approximate perpendicular distances from the divide. Windward:leeward-basin ratio is about 5-8; peak:leeward-basin ratio about 20-30."
+    },
+    {
+      "key": "windward_to_leeward_precipitation_ratio",
+      "description": "Ratio of windward lowland to leeward basin annual precipitation for a high (>2 km) mountain barrier in westerlies",
+      "unit": "ratio",
+      "source": "niwa_cliflo",
+      "confidence": "medium",
+      "value": { "range": { "min": 3.0, "max": 8.0, "typical": 5.0 } },
+      "note": "Southern Alps (~5); similar ratios across the Cascades and the southern Andes."
+    },
+    {
+      "key": "sst_seasonal_range_40_45",
+      "description": "Seasonal (warmest minus coldest month) range of sea-surface temperature, open ocean at 40-45 degrees latitude",
+      "unit": "K",
+      "source": "reynolds2007",
+      "confidence": "medium",
+      "value": { "range": { "min": 3.0, "max": 10.0, "typical": 5.0 } },
+      "note": "About 3-6 K in the Southern Ocean and around New Zealand; larger (8-15 K) only in western-boundary-current regions of the northern hemisphere, which the island does not have."
+    },
+    {
+      "key": "synoptic_period",
+      "description": "Period band of mid-latitude synoptic variability (passage interval of cyclones and anticyclones)",
+      "unit": "days (Earth)",
+      "source": "blackmon1976",
+      "confidence": "high",
+      "value": { "range": { "min": 2.5, "max": 6.0 } },
+      "note": "Band-pass 2.5-6 day variance defines the storm track. Compare via the Eady growth rate on Marr'Kena, whose 36 h rotation changes f."
+    },
+    {
+      "key": "cyclone_lifetime",
+      "description": "Lifetime of extratropical cyclones in the storm tracks",
+      "unit": "days (Earth)",
+      "source": "simmonds2000",
+      "confidence": "medium",
+      "value": { "range": { "min": 2.0, "max": 7.0, "typical": 3.5 } },
+      "note": "Mean tracked-system lifetime is about 3-4 days (Simmonds & Keay 2000; Hoskins & Hodges 2002); a long tail exceeds a week."
+    },
+    {
+      "key": "cyclone_translation_speed",
+      "description": "Eastward translation speed of mid-latitude cyclones",
+      "unit": "m/s",
+      "source": "hoskins2002",
+      "confidence": "medium",
+      "value": { "range": { "min": 8.0, "max": 15.0, "typical": 11.0 } }
+    }
+  ]
+}

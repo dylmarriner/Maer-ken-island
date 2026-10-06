@@ -1,0 +1,186 @@
+{
+  "id": "life_history",
+  "domain": "humans",
+  "title": "Human growth, gestation, fertility and mortality",
+  "retrieved": "2026-10-07",
+  "licence": "Numerical values cited as facts with attribution; no text, figures or datasets reproduced.",
+  "sources": [
+    {
+      "key": "who2006",
+      "citation": "WHO Multicentre Growth Reference Study Group (2006). WHO Child Growth Standards: Length/height-for-age, weight-for-age. World Health Organization, Geneva; and de Onis, M. et al. (2007). Development of a WHO growth reference for school-aged children and adolescents. Bulletin of the WHO 85, 660-667.",
+      "licence": "Median values cited as facts with attribution (WHO material is CC BY-NC-SA 3.0 IGO); no tables reproduced"
+    },
+    {
+      "key": "jukic2013",
+      "citation": "Jukic, A. M., Baird, D. D., Weinberg, C. R., McConnaughey, D. R. and Wilcox, A. J. (2013). Length of human pregnancy and contributors to its natural variation. Human Reproduction 28, 2848-2855.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "coale1974",
+      "citation": "Coale, A. J. and Trussell, T. J. (1974). Model fertility schedules: variations in the age structure of childbearing in human populations. Population Index 40, 185-258.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "wilcox1995",
+      "citation": "Wilcox, A. J., Weinberg, C. R. and Baird, D. D. (1995). Timing of sexual intercourse in relation to ovulation. New England Journal of Medicine 333, 1517-1521.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "mckinlay1992",
+      "citation": "McKinlay, S. M., Brambilla, D. J. and Posner, J. G. (1992). The normal menopause transition. Maturitas 14, 103-115.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "arias2022",
+      "citation": "Arias, E. and Xu, J. (2022). United States Life Tables, 2019. National Vital Statistics Reports 70(19). National Center for Health Statistics.",
+      "licence": "Public domain (U.S. Government work)"
+    },
+    {
+      "key": "finch1990",
+      "citation": "Finch, C. E., Pike, M. C. and Witten, M. (1990). Slow mortality rate accelerations during aging in some animals approximate that of humans. Science 249, 902-905.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "robine1998",
+      "citation": "Robine, J.-M. and Allard, M. (1998). The oldest human. Science 279, 1834-1835.",
+      "licence": "Facts cited with attribution"
+    }
+  ],
+  "items": [
+    {
+      "key": "median_height_for_age",
+      "description": "Median length (to 2 y) or height for age",
+      "unit": "cm",
+      "source": "who2006",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "age_years",
+          "columns": ["boys", "girls"],
+          "rows": [
+            { "label": "0", "values": [49.9, 49.1] },
+            { "label": "1", "values": [75.7, 74.0] },
+            { "label": "2", "values": [87.8, 86.4] },
+            { "label": "5", "values": [110.0, 109.4] },
+            { "label": "10", "values": [137.8, 138.6] },
+            { "label": "18", "values": [176.1, 163.1] }
+          ]
+        }
+      },
+      "note": "Adult height is reached at about 16-17 y in girls and 18-19 y in boys."
+    },
+    {
+      "key": "median_weight_for_age",
+      "description": "Median weight for age, birth to 5 years",
+      "unit": "kg",
+      "source": "who2006",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "age_years",
+          "columns": ["boys", "girls"],
+          "rows": [
+            { "label": "0", "values": [3.3, 3.2] },
+            { "label": "1", "values": [9.6, 8.9] },
+            { "label": "2", "values": [12.2, 11.5] },
+            { "label": "5", "values": [18.3, 18.2] }
+          ]
+        }
+      }
+    },
+    {
+      "key": "gestation_length",
+      "description": "Length of natural pregnancy from ovulation to spontaneous birth",
+      "unit": "days",
+      "source": "jukic2013",
+      "confidence": "high",
+      "value": { "range": { "min": 250.0, "max": 287.0, "typical": 268.0 } },
+      "note": "Median 268 days from ovulation (282 from the last menstrual period); the range is 37 days among singletons excluding preterm births. About 10% of births are preterm (< 259 days from LMP)."
+    },
+    {
+      "key": "natural_marital_fertility",
+      "description": "Coale-Trussell natural (marital) fertility schedule n(a): births per woman-year",
+      "unit": "births / woman / yr",
+      "source": "coale1974",
+      "confidence": "high",
+      "value": {
+        "table": {
+          "row_label": "age_group",
+          "columns": ["births_per_woman_year"],
+          "rows": [
+            { "label": "20-24", "values": [0.460] },
+            { "label": "25-29", "values": [0.431] },
+            { "label": "30-34", "values": [0.396] },
+            { "label": "35-39", "values": [0.321] },
+            { "label": "40-44", "values": [0.167] },
+            { "label": "45-49", "values": [0.024] }
+          ]
+        }
+      },
+      "note": "Derived from populations without deliberate birth control (Hutterites and others); a total of ~9 births for women married from 20 to 50."
+    },
+    {
+      "key": "fecundability_per_cycle",
+      "description": "Probability of conception per menstrual cycle for fertile couples with regular intercourse",
+      "unit": "probability",
+      "source": "wilcox1995",
+      "confidence": "medium",
+      "value": { "range": { "min": 0.15, "max": 0.30, "typical": 0.2 } }
+    },
+    {
+      "key": "menopause_age",
+      "description": "Age at natural menopause",
+      "unit": "years",
+      "source": "mckinlay1992",
+      "confidence": "high",
+      "value": { "range": { "min": 45.0, "max": 55.0, "typical": 51.3 } }
+    },
+    {
+      "key": "annual_mortality_by_age",
+      "description": "Probability of dying within a year at exact age x, total population, United States 2019",
+      "unit": "probability",
+      "source": "arias2022",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "age_years",
+          "columns": ["qx"],
+          "rows": [
+            { "label": "0", "values": [0.0056] },
+            { "label": "20", "values": [0.0009] },
+            { "label": "40", "values": [0.0022] },
+            { "label": "60", "values": [0.0095] },
+            { "label": "70", "values": [0.0190] },
+            { "label": "80", "values": [0.0500] },
+            { "label": "90", "values": [0.1550] }
+          ]
+        }
+      },
+      "note": "Rounded; life expectancy at birth 78.8 years. A population without modern medicine has several-fold higher child and adult mortality."
+    },
+    {
+      "key": "life_expectancy_at_birth",
+      "description": "Period life expectancy at birth, total population, United States 2019",
+      "unit": "years",
+      "source": "arias2022",
+      "confidence": "high",
+      "value": { "point": 78.8 }
+    },
+    {
+      "key": "mortality_rate_doubling_time",
+      "description": "Adult mortality rate doubling time (Gompertz slope ln2/MRDT)",
+      "unit": "years",
+      "source": "finch1990",
+      "confidence": "high",
+      "value": { "range": { "min": 7.0, "max": 9.0, "typical": 8.0 } }
+    },
+    {
+      "key": "maximum_verified_lifespan",
+      "description": "Longest verified human lifespan (Jeanne Calment)",
+      "unit": "years",
+      "source": "robine1998",
+      "confidence": "high",
+      "value": { "point": 122.45 }
+    }
+  ]
+}

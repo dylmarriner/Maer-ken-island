@@ -1,0 +1,128 @@
+{
+  "id": "catchments",
+  "domain": "hydrology",
+  "title": "Catchment water balance, river scaling and flood frequency",
+  "retrieved": "2026-10-07",
+  "licence": "Numerical values cited as facts with attribution; no text, figures or datasets reproduced.",
+  "sources": [
+    {
+      "key": "budyko1974",
+      "citation": "Budyko, M. I. (1974). Climate and Life. Academic Press, New York.",
+      "licence": "Facts cited with attribution (formula)"
+    },
+    {
+      "key": "zhang2004",
+      "citation": "Zhang, L., Hickel, K., Dawes, W. R., Chiew, F. H. S., Western, A. W. and Briggs, P. R. (2004). A rational function approach for estimating mean annual evapotranspiration. Water Resources Research 40, W02502.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "hack1957",
+      "citation": "Hack, J. T. (1957). Studies of longitudinal stream profiles in Virginia and Maryland. U.S. Geological Survey Professional Paper 294-B.",
+      "licence": "Public domain (U.S. Government work)"
+    },
+    {
+      "key": "leopold1964",
+      "citation": "Leopold, L. B., Wolman, M. G. and Miller, J. P. (1964). Fluvial Processes in Geomorphology. W. H. Freeman, San Francisco.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "mckerchar1989",
+      "citation": "McKerchar, A. I. and Pearson, C. P. (1989). Flood Frequency in New Zealand. Publication 20, Hydrology Centre, DSIR, Christchurch.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "nerc1975",
+      "citation": "NERC (1975). Flood Studies Report, Volume I: Hydrological Studies. Natural Environment Research Council, London.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "gupta1994",
+      "citation": "Gupta, V. K., Mesa, O. J. and Dawdy, D. R. (1994). Multiscaling theory of flood peaks: regional quantile analysis. Water Resources Research 30, 3405-3421.",
+      "licence": "Facts cited with attribution"
+    }
+  ],
+  "items": [
+    {
+      "key": "budyko_curve",
+      "description": "Budyko curve: mean annual evapotranspiration ratio E/P as a function of aridity index phi = PET/P, E/P = sqrt(phi * tanh(1/phi) * (1 - exp(-phi)))",
+      "unit": "fraction",
+      "source": "budyko1974",
+      "confidence": "high",
+      "value": {
+        "table": {
+          "row_label": "aridity_index",
+          "columns": ["aridity_index", "evaporative_ratio", "runoff_ratio"],
+          "rows": [
+            { "label": "0.25", "values": [0.25, 0.2351, 0.7649] },
+            { "label": "0.5", "values": [0.5, 0.4355, 0.5645] },
+            { "label": "1", "values": [1.0, 0.6938, 0.3062] },
+            { "label": "2", "values": [2.0, 0.8940, 0.1060] },
+            { "label": "4", "values": [4.0, 0.9807, 0.0193] }
+          ]
+        }
+      },
+      "note": "Values computed from the formula; runoff_ratio = 1 - evaporative_ratio for a catchment in long-term steady state. Real catchments scatter about +/-0.1 in E/P around the curve."
+    },
+    {
+      "key": "fu_omega",
+      "description": "Fu-Zhang parameter omega in E/P = 1 + phi - (1 + phi^omega)^(1/omega) fitted to global catchments",
+      "unit": "dimensionless",
+      "source": "zhang2004",
+      "confidence": "medium",
+      "value": { "range": { "min": 1.5, "max": 3.5, "typical": 2.6 } },
+      "note": "omega = 2.6 reproduces the Budyko curve; forested catchments sit higher, grassland lower."
+    },
+    {
+      "key": "hack_law",
+      "description": "Hack's law: main-stream length L = c * A^h",
+      "unit": "L in km, A in km2",
+      "source": "hack1957",
+      "confidence": "high",
+      "value": {
+        "table": {
+          "row_label": "parameter",
+          "columns": ["value"],
+          "rows": [
+            { "label": "exponent_h", "values": [0.6] },
+            { "label": "coefficient_c_km", "values": [1.27] }
+          ]
+        }
+      },
+      "note": "Hack's original fit is L = 1.4 A^0.6 in miles and square miles; converted: 1.4 * 1.609 / 2.590^0.6 = 1.27 for km and km2. Exponent 0.5-0.6 across basins worldwide."
+    },
+    {
+      "key": "mean_discharge_area_exponent",
+      "description": "Exponent b in mean annual discharge Q ~ A^b within a climatically uniform region",
+      "unit": "dimensionless",
+      "source": "leopold1964",
+      "confidence": "medium",
+      "value": { "range": { "min": 0.8, "max": 1.0, "typical": 0.95 } }
+    },
+    {
+      "key": "flood_peak_area_exponent",
+      "description": "Exponent theta in flood quantile Q_T ~ A^theta (peak discharge scaling with catchment area)",
+      "unit": "dimensionless",
+      "source": "gupta1994",
+      "confidence": "medium",
+      "value": { "range": { "min": 0.5, "max": 0.9, "typical": 0.7 } },
+      "note": "Flood peaks grow less than linearly with area because storms do not cover large catchments uniformly."
+    },
+    {
+      "key": "q100_to_mean_annual_flood",
+      "description": "Ratio of the 100-year flood to the mean annual flood, temperate humid catchments",
+      "unit": "ratio",
+      "source": "mckerchar1989",
+      "confidence": "medium",
+      "value": { "range": { "min": 1.8, "max": 3.5, "typical": 2.5 } },
+      "note": "Regional growth curves in New Zealand (McKerchar & Pearson 1989) and the UK (NERC 1975) give Q100/mean annual flood of about 2-3 in most regions."
+    },
+    {
+      "key": "bankfull_return_period",
+      "description": "Return period of bankfull discharge in alluvial rivers",
+      "unit": "years (Earth)",
+      "source": "leopold1964",
+      "confidence": "medium",
+      "value": { "range": { "min": 1.0, "max": 2.5, "typical": 1.5 } }
+    }
+  ]
+}

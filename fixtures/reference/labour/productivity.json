@@ -1,0 +1,523 @@
+{
+  "id": "productivity",
+  "domain": "labour",
+  "title": "Productivity of manual and mechanised work, processing yields and vehicle use",
+  "retrieved": "2026-10-07",
+  "licence": "Numerical values cited as facts with attribution; no text, figures or datasets reproduced.",
+  "sources": [
+    {
+      "key": "saraydar1971",
+      "citation": "Saraydar, S. and Shimada, I. (1971). A quantitative comparison of efficiency between a stone axe and a steel axe. American Antiquity 36, 216-217.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "conway1982",
+      "citation": "Conway, S. (1982). Logging Practices: Principles of Timber Harvesting Systems, revised edition. Miller Freeman, San Francisco.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "johannessen2008",
+      "citation": "Johannessen, B. (2008). Building Rural Roads. International Labour Organization, Bangkok.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "hentschel2002",
+      "citation": "Hentschel, T., Hruschka, F. and Priester, M. (2002). Global Report on Artisanal and Small-Scale Mining. MMSD report 70, IIED/WBCSD.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "wells1969",
+      "citation": "Wells, J. H. (1969). Placer Examination: Principles and Practice. U.S. Bureau of Land Management Technical Bulletin 4.",
+      "licence": "Public domain (U.S. Government work)"
+    },
+    {
+      "key": "veiga2006",
+      "citation": "Veiga, M. M., Maxson, P. A. and Hylander, L. D. (2006). Origin and consumption of mercury in small-scale gold mining. Journal of Cleaner Production 14, 436-447.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "marsden2006",
+      "citation": "Marsden, J. O. and House, C. I. (2006). The Chemistry of Gold Extraction, 2nd edition. SME, Littleton, Colorado.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "fao1987",
+      "citation": "FAO (1987). Simple Technologies for Charcoal Making. FAO Forestry Paper 41, Rome.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "pleiner2000",
+      "citation": "Pleiner, R. (2000). Iron in Archaeology: The European Bloomery Smelters. Archeologicky ustav AV CR, Praha.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "rsmeans",
+      "citation": "RSMeans (Gordian). Residential Cost Data, crew productivity tables (various editions).",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "asabe_d497",
+      "citation": "ASABE (2011). Agricultural Machinery Management Data, ASAE D497.7. American Society of Agricultural and Biological Engineers.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "epa_fueleconomy",
+      "citation": "U.S. Department of Energy and EPA. fueleconomy.gov combined-cycle ratings for 4WD pickups and SUVs.",
+      "licence": "Public domain (U.S. Government work)"
+    }
+  ],
+  "items": [
+    {
+      "key": "felling_time_30cm_tree",
+      "description": "Working time to fell one 30 cm DBH tree, by tool, experienced worker",
+      "unit": "minutes",
+      "source": "saraydar1971",
+      "confidence": "low",
+      "value": {
+        "table": {
+          "row_label": "tool",
+          "columns": [
+            "min",
+            "max"
+          ],
+          "rows": [
+            {
+              "label": "stone_axe",
+              "values": [
+                40.0,
+                120.0
+              ]
+            },
+            {
+              "label": "steel_axe",
+              "values": [
+                10.0,
+                40.0
+              ]
+            },
+            {
+              "label": "two_person_crosscut_saw",
+              "values": [
+                8.0,
+                25.0
+              ]
+            },
+            {
+              "label": "chainsaw",
+              "values": [
+                1.0,
+                4.0
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Stone axes take roughly 3-4 times as long as steel (Saraydar & Shimada 1971); saw and chainsaw times from logging practice (Conway 1982). Hardwoods take about twice as long as softwoods. Order-of-magnitude only."
+    },
+    {
+      "key": "felling_daily_output",
+      "description": "Timber felled per worker per 8 h day",
+      "unit": "m3 / worker / day",
+      "source": "conway1982",
+      "confidence": "low",
+      "value": {
+        "table": {
+          "row_label": "method",
+          "columns": [
+            "min",
+            "max"
+          ],
+          "rows": [
+            {
+              "label": "axe_and_handsaw",
+              "values": [
+                2.0,
+                8.0
+              ]
+            },
+            {
+              "label": "chainsaw_faller",
+              "values": [
+                30.0,
+                150.0
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Includes limbing and walking between trees; depends strongly on tree size and terrain. Order-of-magnitude only."
+    },
+    {
+      "key": "hand_excavation_rate",
+      "description": "Excavation by pick and shovel per worker per 8 h day",
+      "unit": "m3 / worker / day",
+      "source": "johannessen2008",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "material",
+          "columns": [
+            "min",
+            "max"
+          ],
+          "rows": [
+            {
+              "label": "soft_soil",
+              "values": [
+                3.0,
+                6.0
+              ]
+            },
+            {
+              "label": "hard_clay_or_gravel",
+              "values": [
+                1.5,
+                3.0
+              ]
+            },
+            {
+              "label": "soft_rock",
+              "values": [
+                0.5,
+                1.5
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Labour-based road-works task rates; throwing the spoil more than ~4 m adds time."
+    },
+    {
+      "key": "artisanal_hard_rock_mining",
+      "description": "Ore broken and hauled by hand per artisanal miner per day",
+      "unit": "t / worker / day",
+      "source": "hentschel2002",
+      "confidence": "low",
+      "value": {
+        "range": {
+          "min": 0.2,
+          "max": 2.0,
+          "typical": 0.5
+        }
+      },
+      "note": "Hand drilling, blasting or fire-setting and hauling; widely variable with rock hardness and depth. Order-of-magnitude only."
+    },
+    {
+      "key": "gold_panning_throughput",
+      "description": "Gravel processed per person per 8-10 h day",
+      "unit": "m3 / worker / day",
+      "source": "wells1969",
+      "confidence": "low",
+      "value": {
+        "table": {
+          "row_label": "method",
+          "columns": [
+            "min",
+            "max"
+          ],
+          "rows": [
+            {
+              "label": "gold_pan",
+              "values": [
+                0.3,
+                1.0
+              ]
+            },
+            {
+              "label": "sluice_box",
+              "values": [
+                1.0,
+                4.0
+              ]
+            },
+            {
+              "label": "rocker",
+              "values": [
+                1.0,
+                3.0
+              ]
+            }
+          ]
+        }
+      },
+      "note": "A pan holds ~0.006-0.01 m3; an experienced panner washes 50-100 pans a day. Yield = in-place grade x volume x recovery."
+    },
+    {
+      "key": "placer_gold_recovery",
+      "description": "Fraction of contained gold recovered by gravity methods",
+      "unit": "fraction",
+      "source": "wells1969",
+      "confidence": "low",
+      "value": {
+        "table": {
+          "row_label": "method_and_gold_size",
+          "columns": [
+            "min",
+            "max"
+          ],
+          "rows": [
+            {
+              "label": "pan_coarse_gold",
+              "values": [
+                0.8,
+                0.95
+              ]
+            },
+            {
+              "label": "pan_fine_gold",
+              "values": [
+                0.4,
+                0.7
+              ]
+            },
+            {
+              "label": "sluice_coarse_gold",
+              "values": [
+                0.6,
+                0.9
+              ]
+            },
+            {
+              "label": "sluice_fine_gold",
+              "values": [
+                0.2,
+                0.5
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Fine (< 0.1 mm) gold is lost readily from pans and sluices; field practice figures, order-of-magnitude only."
+    },
+    {
+      "key": "hard_rock_gold_recovery",
+      "description": "Fraction of gold in milled ore recovered, by process",
+      "unit": "fraction",
+      "source": "marsden2006",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "process",
+          "columns": [
+            "min",
+            "max"
+          ],
+          "rows": [
+            {
+              "label": "whole_ore_amalgamation_artisanal",
+              "values": [
+                0.2,
+                0.5
+              ]
+            },
+            {
+              "label": "gravity_concentration",
+              "values": [
+                0.3,
+                0.7
+              ]
+            },
+            {
+              "label": "cyanide_leach_free_milling",
+              "values": [
+                0.85,
+                0.97
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Artisanal amalgamation from Veiga et al. (2006); cyanidation from Marsden & House (2006)."
+    },
+    {
+      "key": "charcoal_yield",
+      "description": "Charcoal produced per mass of oven-dry wood, by kiln",
+      "unit": "fraction of dry wood mass",
+      "source": "fao1987",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "kiln",
+          "columns": [
+            "min",
+            "max"
+          ],
+          "rows": [
+            {
+              "label": "earth_mound_or_pit",
+              "values": [
+                0.1,
+                0.2
+              ]
+            },
+            {
+              "label": "brick_kiln",
+              "values": [
+                0.2,
+                0.3
+              ]
+            },
+            {
+              "label": "steel_retort",
+              "values": [
+                0.25,
+                0.35
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Charcoal is ~75-85% fixed carbon; the remaining wood carbon leaves as CO2, CO, methane and tars."
+    },
+    {
+      "key": "bloomery_iron",
+      "description": "Bloomery iron smelting ratios (experimental and archaeological)",
+      "unit": "kg per kg",
+      "source": "pleiner2000",
+      "confidence": "low",
+      "value": {
+        "table": {
+          "row_label": "ratio",
+          "columns": [
+            "min",
+            "max"
+          ],
+          "rows": [
+            {
+              "label": "charcoal_per_kg_ore",
+              "values": [
+                1.0,
+                2.0
+              ]
+            },
+            {
+              "label": "bloom_per_kg_ore",
+              "values": [
+                0.1,
+                0.25
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Experimental reconstructions vary widely with ore richness and furnace operation; order-of-magnitude only."
+    },
+    {
+      "key": "timber_frame_construction_labour",
+      "description": "On-site labour to build a single-storey timber-frame house, per m2 of floor area",
+      "unit": "person-hours / m2",
+      "source": "rsmeans",
+      "confidence": "low",
+      "value": {
+        "range": {
+          "min": 15.0,
+          "max": 35.0,
+          "typical": 22.0
+        }
+      },
+      "note": "Skilled trades with power tools; hand tools only roughly double it."
+    },
+    {
+      "key": "tractor_specific_fuel_consumption",
+      "description": "Diesel consumption of an agricultural tractor per kWh of PTO work",
+      "unit": "L / kWh",
+      "source": "asabe_d497",
+      "confidence": "medium",
+      "value": {
+        "range": {
+          "min": 0.22,
+          "max": 0.4,
+          "typical": 0.27
+        }
+      },
+      "note": "Lowest at full load; rises at part load."
+    },
+    {
+      "key": "light_4wd_fuel_consumption",
+      "description": "Fuel consumption of a light 4WD pickup or SUV",
+      "unit": "L / 100 km",
+      "source": "epa_fueleconomy",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "surface",
+          "columns": [
+            "min",
+            "max"
+          ],
+          "rows": [
+            {
+              "label": "sealed_road",
+              "values": [
+                9.0,
+                14.0
+              ]
+            },
+            {
+              "label": "gravel_road",
+              "values": [
+                11.0,
+                18.0
+              ]
+            },
+            {
+              "label": "off_road_track",
+              "values": [
+                15.0,
+                30.0
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Sealed-road values from EPA combined ratings; unsealed and off-road factors (1.2-2x) are field practice (low confidence)."
+    },
+    {
+      "key": "vehicle_speed_by_surface",
+      "description": "Practical travel speed of a light 4WD by surface",
+      "unit": "km/h",
+      "source": "epa_fueleconomy",
+      "confidence": "low",
+      "value": {
+        "table": {
+          "row_label": "surface",
+          "columns": [
+            "min",
+            "max"
+          ],
+          "rows": [
+            {
+              "label": "sealed_road",
+              "values": [
+                70.0,
+                100.0
+              ]
+            },
+            {
+              "label": "gravel_road",
+              "values": [
+                40.0,
+                70.0
+              ]
+            },
+            {
+              "label": "farm_track",
+              "values": [
+                15.0,
+                30.0
+              ]
+            },
+            {
+              "label": "cross_country",
+              "values": [
+                5.0,
+                15.0
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Field-practice figures for safe travel, not EPA test data; order-of-magnitude only."
+    }
+  ]
+}

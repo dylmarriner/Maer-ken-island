@@ -48,6 +48,7 @@ pub mod sim;
 pub mod tectonics;
 pub mod tides;
 pub mod transparent_ui;
+pub mod validation;
 pub mod verification;
 pub mod volcanism;
 pub mod weather;

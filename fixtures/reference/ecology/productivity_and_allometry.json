@@ -1,0 +1,439 @@
+{
+  "id": "productivity_and_allometry",
+  "domain": "ecology",
+  "title": "Primary production, forest structure, soil carbon and metabolic scaling",
+  "retrieved": "2026-10-07",
+  "licence": "Numerical values cited as facts with attribution; no text, figures or datasets reproduced.",
+  "sources": [
+    {
+      "key": "zhao2005",
+      "citation": "Zhao, M., Heinsch, F. A., Nemani, R. R. and Running, S. W. (2005). Improvements of the MODIS terrestrial gross and net primary production global data set. Remote Sensing of Environment 95, 164-176 (MOD17).",
+      "licence": "MODIS products are public domain (NASA); facts cited with attribution"
+    },
+    {
+      "key": "whittaker1975",
+      "citation": "Whittaker, R. H. and Likens, G. E. (1975). The biosphere and man. In Lieth, H. and Whittaker, R. H. (eds), Primary Productivity of the Biosphere, 305-328. Springer.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "chave2014",
+      "citation": "Chave, J. et al. (2014). Improved allometric models to estimate the aboveground biomass of tropical trees. Global Change Biology 20, 3177-3190.",
+      "licence": "Facts cited with attribution (formulae)"
+    },
+    {
+      "key": "crowther2015",
+      "citation": "Crowther, T. W. et al. (2015). Mapping tree density at a global scale. Nature 525, 201-205.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "stephenson2005",
+      "citation": "Stephenson, N. L. and van Mantgem, P. J. (2005). Forest turnover rates follow global and regional patterns of productivity. Ecology Letters 8, 524-531.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "jobbagy2000",
+      "citation": "Jobbagy, E. G. and Jackson, R. B. (2000). The vertical distribution of soil organic carbon and its relation to climate and vegetation. Ecological Applications 10, 423-436.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "kleiber1932",
+      "citation": "Kleiber, M. (1932). Body size and metabolism. Hilgardia 6, 315-353; Kleiber, M. (1961). The Fire of Life. Wiley.",
+      "licence": "Facts cited with attribution (formula)"
+    }
+  ],
+  "items": [
+    {
+      "key": "npp_by_biome",
+      "description": "Net primary production by biome",
+      "unit": "g C / m2 / yr",
+      "source": "zhao2005",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "biome",
+          "columns": [
+            "min",
+            "max",
+            "typical"
+          ],
+          "rows": [
+            {
+              "label": "tropical_evergreen_forest",
+              "values": [
+                800.0,
+                1300.0,
+                1000.0
+              ]
+            },
+            {
+              "label": "temperate_broadleaf_forest",
+              "values": [
+                400.0,
+                900.0,
+                600.0
+              ]
+            },
+            {
+              "label": "temperate_evergreen_forest",
+              "values": [
+                350.0,
+                900.0,
+                600.0
+              ]
+            },
+            {
+              "label": "boreal_forest",
+              "values": [
+                150.0,
+                450.0,
+                300.0
+              ]
+            },
+            {
+              "label": "savanna",
+              "values": [
+                300.0,
+                700.0,
+                450.0
+              ]
+            },
+            {
+              "label": "temperate_grassland",
+              "values": [
+                150.0,
+                500.0,
+                300.0
+              ]
+            },
+            {
+              "label": "shrubland",
+              "values": [
+                80.0,
+                350.0,
+                200.0
+              ]
+            },
+            {
+              "label": "cropland",
+              "values": [
+                250.0,
+                700.0,
+                450.0
+              ]
+            },
+            {
+              "label": "tundra",
+              "values": [
+                30.0,
+                180.0,
+                70.0
+              ]
+            },
+            {
+              "label": "desert",
+              "values": [
+                0.0,
+                100.0,
+                40.0
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Biome ranges from MOD17 annual NPP (Zhao et al. 2005) consistent with Whittaker & Likens (1975) dry-matter means converted at 0.47 g C per g dry matter. Temperate maritime forests (e.g. New Zealand) sit in the upper half of the temperate ranges."
+    },
+    {
+      "key": "carbon_fraction_of_dry_biomass",
+      "description": "Carbon content of dry plant biomass",
+      "unit": "fraction",
+      "source": "whittaker1975",
+      "confidence": "high",
+      "value": {
+        "range": {
+          "min": 0.45,
+          "max": 0.5,
+          "typical": 0.47
+        }
+      }
+    },
+    {
+      "key": "chave_agb",
+      "description": "Pantropical aboveground biomass allometry AGB = a * (rho * D^2 * H)^b (Chave et al. 2014 eq. 4)",
+      "unit": "AGB kg; rho g/cm3; D cm; H m",
+      "source": "chave2014",
+      "confidence": "high",
+      "value": {
+        "table": {
+          "row_label": "parameter",
+          "columns": [
+            "value"
+          ],
+          "rows": [
+            {
+              "label": "a",
+              "values": [
+                0.0673
+              ]
+            },
+            {
+              "label": "b",
+              "values": [
+                0.976
+              ]
+            },
+            {
+              "label": "example_rho_g_cm3",
+              "values": [
+                0.6
+              ]
+            },
+            {
+              "label": "example_d_cm",
+              "values": [
+                30.0
+              ]
+            },
+            {
+              "label": "example_h_m",
+              "values": [
+                25.0
+              ]
+            },
+            {
+              "label": "example_agb_kg",
+              "values": [
+                723.0
+              ]
+            }
+          ]
+        }
+      },
+      "note": "The example row is computed from the formula (0.0673 * 13500^0.976). Fitted on tropical trees; widely used for temperate broadleaf trees as an approximation (error ~ +/-30% per tree)."
+    },
+    {
+      "key": "chave_height_diameter",
+      "description": "Height-diameter allometry ln H = 0.893 - E + 0.760 ln D - 0.0340 (ln D)^2 (Chave et al. 2014 eq. 6a), E = environmental stress index",
+      "unit": "H m; D cm",
+      "source": "chave2014",
+      "confidence": "high",
+      "value": {
+        "table": {
+          "row_label": "parameter",
+          "columns": [
+            "value"
+          ],
+          "rows": [
+            {
+              "label": "intercept",
+              "values": [
+                0.893
+              ]
+            },
+            {
+              "label": "ln_d",
+              "values": [
+                0.76
+              ]
+            },
+            {
+              "label": "ln_d_squared",
+              "values": [
+                -0.034
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "key": "stem_density_by_forest",
+      "description": "Density of stems with diameter at breast height >= 10 cm",
+      "unit": "stems / ha",
+      "source": "crowther2015",
+      "confidence": "low",
+      "value": {
+        "table": {
+          "row_label": "forest_type",
+          "columns": [
+            "min",
+            "max"
+          ],
+          "rows": [
+            {
+              "label": "tropical_moist_forest",
+              "values": [
+                400.0,
+                750.0
+              ]
+            },
+            {
+              "label": "temperate_broadleaf_forest",
+              "values": [
+                200.0,
+                600.0
+              ]
+            },
+            {
+              "label": "temperate_conifer_forest",
+              "values": [
+                200.0,
+                800.0
+              ]
+            },
+            {
+              "label": "boreal_forest",
+              "values": [
+                400.0,
+                1500.0
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Plot-scale ranges; Crowther et al. (2015) map total stem density (all sizes), which is several times higher. Use as an order-of-magnitude check."
+    },
+    {
+      "key": "tree_mortality_rate",
+      "description": "Annual mortality rate of trees in mature undisturbed forest",
+      "unit": "fraction / yr",
+      "source": "stephenson2005",
+      "confidence": "medium",
+      "value": {
+        "range": {
+          "min": 0.005,
+          "max": 0.025,
+          "typical": 0.012
+        }
+      },
+      "note": "Turnover rises with productivity: ~0.5-1%/yr in cold or dry temperate forests, ~1.5-2.5%/yr in productive tropical forests."
+    },
+    {
+      "key": "tree_diameter_increment",
+      "description": "Mean annual diameter increment of canopy trees",
+      "unit": "cm / yr",
+      "source": "stephenson2005",
+      "confidence": "low",
+      "value": {
+        "range": {
+          "min": 0.1,
+          "max": 1.0,
+          "typical": 0.3
+        }
+      },
+      "note": "Varies tenfold with species, light and site; use only to check that modelled growth is of the right order."
+    },
+    {
+      "key": "soil_carbon_by_biome",
+      "description": "Soil organic carbon in the top 1 m",
+      "unit": "kg C / m2",
+      "source": "jobbagy2000",
+      "confidence": "high",
+      "value": {
+        "table": {
+          "row_label": "biome",
+          "columns": [
+            "top_1m"
+          ],
+          "rows": [
+            {
+              "label": "boreal_forest",
+              "values": [
+                9.3
+              ]
+            },
+            {
+              "label": "crops",
+              "values": [
+                11.2
+              ]
+            },
+            {
+              "label": "deserts",
+              "values": [
+                6.2
+              ]
+            },
+            {
+              "label": "sclerophyllous_shrubs",
+              "values": [
+                8.9
+              ]
+            },
+            {
+              "label": "temperate_deciduous_forest",
+              "values": [
+                17.4
+              ]
+            },
+            {
+              "label": "temperate_evergreen_forest",
+              "values": [
+                14.5
+              ]
+            },
+            {
+              "label": "temperate_grassland",
+              "values": [
+                11.7
+              ]
+            },
+            {
+              "label": "tropical_deciduous_forest",
+              "values": [
+                15.8
+              ]
+            },
+            {
+              "label": "tropical_evergreen_forest",
+              "values": [
+                18.6
+              ]
+            },
+            {
+              "label": "tropical_grassland_savanna",
+              "values": [
+                13.2
+              ]
+            },
+            {
+              "label": "tundra",
+              "values": [
+                14.2
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "key": "kleiber_law",
+      "description": "Kleiber's law for mammalian basal metabolic rate: B = c * M^k",
+      "unit": "B kcal/day; M kg",
+      "source": "kleiber1932",
+      "confidence": "high",
+      "value": {
+        "table": {
+          "row_label": "parameter",
+          "columns": [
+            "value"
+          ],
+          "rows": [
+            {
+              "label": "coefficient_kcal_per_day",
+              "values": [
+                70.0
+              ]
+            },
+            {
+              "label": "exponent",
+              "values": [
+                0.75
+              ]
+            }
+          ]
+        }
+      },
+      "note": "70 kcal/day = 3.39 W per kg^0.75. A 70 kg mammal: ~1,694 kcal/day."
+    }
+  ]
+}
