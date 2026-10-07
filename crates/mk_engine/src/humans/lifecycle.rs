@@ -322,11 +322,20 @@ pub fn step_lifecycle(
         | super::ActionKind::SeekShelter => Some(WALKING_MET),
         // "hand_mining".
         super::ActionKind::Mine => Some(HAND_MINING_MET),
-        // "carpentry_general": building with timber and tools.
-        super::ActionKind::Build => Some(CARPENTRY_MET),
-        // Everything else — gathering, crafting, carrying, social approach,
-        // harm, intimacy, idling, resting, working at a computer — has no
-        // row that fits it, so it costs what it costs today.
+        // "carpentry_general": building and crafting are both working timber
+        // and tools by hand, and the pack's row covers the activity rather
+        // than the product.
+        super::ActionKind::Build | super::ActionKind::Craft => Some(CARPENTRY_MET),
+        // Gathering wild food is walking and stooping, not the sustained
+        // cultivation "farming_manual" measures, so it is costed as the
+        // walking it mostly is. Leaving it at the baseline would be the
+        // stranger claim: a human pays to walk to the food and then picks it
+        // for free.
+        super::ActionKind::Gather => Some(WALKING_MET),
+        // Carrying, social approach, harm, intimacy, idling, resting and
+        // working at a computer have no row that fits them — the pack's
+        // "carrying_heavy_load" is a load this model does not track, and the
+        // rest are brief or sub-baseline — so they cost what they cost today.
         _ => None,
     };
     let activity = activity_met.map_or(1.0, |met| {

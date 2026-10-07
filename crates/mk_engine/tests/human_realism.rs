@@ -601,3 +601,42 @@ fn fertility_ends_before_the_published_menopause_window_closes() {
          ending the decade before menopause the constants claim"
     );
 }
+
+/// Survival holds for a person who is actually resting, not only for one
+/// the test hands the baseline to.
+///
+/// The survival tests above all pass `EffortFocus::none()`, which is exactly
+/// the 1.5 MET the drain rates are calibrated at, so they cannot see what
+/// happens when a real activity level reaches the needs model. That left a
+/// blind spot: a human asleep or idle through the whole ordeal goes through
+/// the full lifecycle, not through `NeedsSnapshot::step` directly. This
+/// walks one through it and holds them to the same published range.
+#[test]
+fn a_sleeping_adult_still_dies_of_thirst_within_the_published_range() {
+    use mk_core::human::BiologicalSex;
+    use mk_core::rng::RngRegistry;
+    use mk_engine::humans::{lifecycle::step_lifecycle, ActionKind, HumanBeing};
+
+    let (lo, hi) = range("survival_without_water");
+    let rng = RngRegistry::new([21u8; 32]);
+    // Fed and sheltered at a temperate 20 °C, with nothing to drink.
+    let world = observation(1.0, 0.0, 20.0);
+
+    let mut human = HumanBeing::new("resting".into(), BiologicalSex::Female);
+    human.development.age_years = 30.0;
+    let mut died_on_day = None;
+    for hour in 1..=(24 * 30) {
+        human.economy_action.kind = ActionKind::Rest;
+        step_lifecycle(&mut human, HOUR_YEARS, hour as u64, &world, &rng, (0, 0));
+        if human.needs.hydration <= 0.0 {
+            died_on_day = Some(hour as f64 / 24.0);
+            break;
+        }
+    }
+
+    let days = died_on_day.expect("a resting adult with no water runs dry within a month");
+    assert!(
+        days >= lo && days <= hi,
+        "a resting adult ran dry after {days} days, outside the published {lo}-{hi}"
+    );
+}
