@@ -20,7 +20,7 @@ const DAY: u64 = 86_400;
 /// scenario (`fixtures/island/default_scenario.json`), identical across
 /// processes. Changing any Phase 1-3 behaviour changes it: update it
 /// deliberately, in the commit that changes the behaviour.
-const WEEK_DIGEST: &str = "e5b5258a03414d14c6f4d2740b0a84d68258ed8a0190b311775cd09f7e0c74b1";
+const WEEK_DIGEST: &str = "57ae72503c0bb5bb51b538289747fc58fe71d55c021fa612e04e71b9a963a4ab";
 
 fn repo(path: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -140,13 +140,14 @@ fn slow_a_week_on_the_island_matches_the_reference_packs() {
         let expected = w.humans.registry.get_human(id).unwrap().body.weight_kg
             * mk_engine::regional::materials::WHOLE_BODY_CARBON_FRACTION;
         println!("{id}: body carbon {carbon:.1} kg of an expected {expected:.1} kg");
-        // Two-sided: under-eating wastes them away, over-eating would mean
-        // the routine is feeding them more than they burn. Measured over this
-        // week: Gem-D ends at 1.05x and Gem-K at 1.10x, so the routine runs
-        // slightly rich (D10).
+        // A meal replaces exactly the carbon its eater has burned since the
+        // last one, so an adult's body carbon should not move at all over a
+        // week. The band is tight on purpose: a fixed portion sat at 1.05x
+        // and 1.10x, and gating the harvest on chosen actions at 0.90x, and
+        // both would pass anything looser.
         assert!(
-            (0.9 * expected..=1.2 * expected).contains(&carbon),
-            "{id} holds {carbon:.1} kg of carbon against an expected {expected:.1}: the routine \
+            (0.98 * expected..=1.02 * expected).contains(&carbon),
+            "{id} holds {carbon:.2} kg of carbon against an expected {expected:.2}: what they eat \
              and what they burn have come apart"
         );
     }

@@ -15,6 +15,7 @@
 //! `MaterialCarbon`, `HumanCarbon` and `MaterialWater` must equal the change
 //! in those stocks, or the step fails.
 
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use mk_core::canon::CanonLocked;
@@ -32,7 +33,7 @@ use super::humans::{
 use super::hydrology::discharge_m3_s;
 use super::labour::{LabourBody, LabourError, LabourTable};
 use super::local_vegetation::{seed_local_vegetation, LocalVegetationError, LocalVegetationPatch};
-use super::materials::{Material, MaterialError, MaterialLedger};
+use super::materials::{composition, Material, MaterialError, MaterialLedger};
 use super::physical::{RegionalPhysicalError, RegionalPhysicalState};
 use super::property::{place_regional_estate, PlaceEstateError, PlacedEstate};
 use super::scheduler::IslandScheduler;
@@ -59,10 +60,7 @@ fn home_activity(asleep: bool) -> &'static str {
         AWAKE_AT_HOME_ACTIVITY
     }
 }
-/// Food and water each founder takes per 6 hours: ~2.4 kg of plant food
-/// (~2,000 kcal at the packs' energy density is not claimed; carbon is
-/// what is tracked) and 2.6 L of drinking water a day.
-const FOOD_KG_PER_MEAL: f64 = 0.6;
+/// Drinking water each founder takes per 6 hours: 2.6 L a day.
 const WATER_KG_PER_DRINK: f64 = 0.65;
 /// Share of the body's water loss that is excretion to the soil.
 const EXCRETION_TO_SOIL_FRACTION: f64 = 0.6;
@@ -111,6 +109,9 @@ pub struct IslandLife {
     pub tick: u64,
     pub audits_closed: u64,
     pub shortfalls: Shortfalls,
+    /// Carbon each founder has respired since their last meal (kg), which is
+    /// what the next meal has to put back.
+    respired_since_meal: BTreeMap<String, f64>,
     pub scheduler: IslandScheduler,
     labour: LabourTable,
     rng: RngRegistry,
@@ -225,6 +226,7 @@ impl IslandLife {
             tick: 0,
             audits_closed: 0,
             shortfalls: Shortfalls::default(),
+            respired_since_meal: BTreeMap::new(),
             scheduler: IslandScheduler::new(scenario_cadences),
             labour: LabourTable::load_default().map_err(IslandLifeError::Labour)?,
             food_cell,
@@ -334,7 +336,9 @@ impl IslandLife {
                 let kcal = labour
                     .energy_kcal(body, met, dt_physical as f64)
                     .unwrap_or(0.0);
-                let _ = life.materials.respire(id, kcal, ledger);
+                if let Ok(kgc) = life.materials.respire(id, kcal, ledger) {
+                    *life.respired_since_meal.entry(id.clone()).or_insert(0.0) += kgc;
+                }
             }
         })
     }
@@ -347,24 +351,38 @@ impl IslandLife {
         let area = self.domain.cell_area_m2(DomainLevel::Medium);
         self.audited(|life, ledger| {
             for (id, _, _) in &founders {
-                // A fixed home routine, deliberately, not each human's own
-                // chosen action — see D10, and the measurement in it. Gating
-                // the harvest on `economy_action` was tried and reverted: the
-                // founders then chose to look for food too rarely to cover
-                // what they burn, and lost a tenth of their body carbon in a
-                // week. Matching harvest to expenditure is the open economy
-                // work, not a condition on this loop.
-                {
+                // A meal is what this human has actually burned since the
+                // last one, not a fixed portion: the hourly tick records the
+                // carbon each of them respires, and the harvest asks the food
+                // cell for exactly the plant matter that carbon takes to
+                // replace. Intake and expenditure therefore come from one
+                // model instead of two, and an adult's body carbon holds
+                // steady by construction rather than by a constant that
+                // happened to be close.
+                //
+                // Which human harvests is still the routine's choice, not
+                // theirs — see D10.
+                let owed_kgc = life.respired_since_meal.get(id).copied().unwrap_or(0.0);
+                let wanted_kg = owed_kgc / composition(Material::PlantFood).carbon_per_kg;
+                if wanted_kg > 0.0 {
                     match life.materials.gather_biotic(
                         Material::PlantFood,
-                        FOOD_KG_PER_MEAL,
+                        wanted_kg,
                         &mut life.ecology,
                         life.food_cell,
                         area,
                         ledger,
                     ) {
                         Ok(kg) => {
-                            let _ = life.materials.eat(id, Material::PlantFood, kg, ledger);
+                            if life
+                                .materials
+                                .eat(id, Material::PlantFood, kg, ledger)
+                                .is_ok()
+                            {
+                                let eaten_kgc = kg * composition(Material::PlantFood).carbon_per_kg;
+                                let left = (owed_kgc - eaten_kgc).max(0.0);
+                                life.respired_since_meal.insert(id.clone(), left);
+                            }
                         }
                         Err(_) => life.shortfalls.food += 1,
                     }
