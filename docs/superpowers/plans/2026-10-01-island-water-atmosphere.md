@@ -175,12 +175,12 @@ Implementation notes: upstream's one-cell-per-step routing cannot make real rive
 - Produces: `RegionalPhysicalState::bootstrap(canon: &Arc<CanonLocked>, domain: &IslandDomain, seed: [u8; 32]) -> Result<Self, RegionalPhysicalError>` (runs Phase 1 geophysics bootstrap, zonal spin-up and regional climate spin-up) and `RegionalPhysicalState::step(&mut self, canon: &Arc<CanonLocked>, domain: &IslandDomain, seed: [u8; 32], sim_time_seconds: f64, tick: Tick, dt_seconds: u64) -> Result<(), RegionalPhysicalError>`.
 - Step order inside `step`: zonal background → `sample_regional_boundaries_with_background` (stored in `self.boundaries`) → insolation → tides → climate (+ diurnal) → synoptic systems → weather (+ orographic) → resample to medium → hydrology → aggregate runoff → ocean → slow geophysics cadence hook (no-op until Phase 4's scheduler).
 
-- [ ] **Step 1:** Write an acceptance test stepping 30 simulated days and asserting changing weather/ocean/hydrology, finite state, preserved land mask, water budget closure across the step, and deterministic final serialized hash. Add a slow-tier realism test over one simulated year comparing lapse rate, diurnal range, windward/leeward rainfall ratio, sea-surface temperature range, storm frequency and river runoff ratios against the Phase-0c climate and hydrology reference packs (scaled for the planet), with each tolerance stated.
-- [ ] **Step 2:** Run `cargo test -p mk_engine --test regional_physical_coupling`; expect FAIL.
-- [ ] **Step 3:** Implement `bootstrap` and `step` in the order above.
-- [ ] **Step 4:** Re-run the test twice and assert identical final blake3 hash.
-- [ ] **Step 5:** Update `UPSTREAM.md` with regional physical wrappers; run `cargo fmt --all -- --check` and `cargo clippy --workspace --all-targets -- -D warnings`.
-- [ ] **Step 6:** Commit `feat(engine): couple island physical systems`.
+- [x] **Step 1:** Write an acceptance test stepping 30 simulated days and asserting changing weather/ocean/hydrology, finite state, preserved land mask, water budget closure across the step, and deterministic final serialized hash. Add a slow-tier realism test over one simulated year comparing lapse rate, diurnal range, windward/leeward rainfall ratio, sea-surface temperature range, storm frequency and river runoff ratios against the Phase-0c climate and hydrology reference packs (scaled for the planet), with each tolerance stated.
+- [x] **Step 2:** Run `cargo test -p mk_engine --test regional_physical_coupling`; expect FAIL.
+- [x] **Step 3:** Implement `bootstrap` and `step` in the order above.
+- [x] **Step 4:** Re-run the test twice and assert identical final blake3 hash.
+- [x] **Step 5:** Update `UPSTREAM.md` with regional physical wrappers; run `cargo fmt --all -- --check` and `cargo clippy --workspace --all-targets -- -D warnings`.
+- [x] **Step 6:** Commit `feat(engine): couple island physical systems`.
 - [ ] **Step 7:** Add `island_preview physical --profile <path> --seed <hex> --days <n> --out <dir>` writing surface temperature, mean rainfall, river/lake, ocean surface temperature and current-vector PNGs plus `summary.json`; same determinism test pattern as Phase 1 Task 6.
 - [ ] **Step 8:** Commit the default-seed 30-day preview under `docs/previews/phase2/` and commit `feat(preview): render island physical state`.
 - [ ] **Step 9 (Gate 2 review):** The owner checks the previews for plausibility (warmer north/cooler south at the reference latitude, wetter windward and drier leeward of ranges, rivers reaching the sea) before Phase 3.

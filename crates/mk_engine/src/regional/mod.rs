@@ -12,6 +12,7 @@ pub mod hydrology;
 pub mod levels;
 pub mod ocean;
 pub mod par;
+pub mod physical;
 pub mod seismicity;
 pub mod shape;
 pub mod synoptic;

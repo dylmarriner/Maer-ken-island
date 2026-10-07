@@ -45,6 +45,41 @@ pub fn step_insolation(
     dt_seconds: f64,
     ledger: &mut Ledger,
 ) -> InsolationField {
+    let latitudes: Vec<f64> = (0..grid_spec.nlat).map(|r| grid_spec.lat_rad(r)).collect();
+    let longitudes: Vec<f64> = (0..grid_spec.nlon).map(|c| grid_spec.lon_rad(c)).collect();
+    step_insolation_on(
+        canon,
+        orbit,
+        rotation,
+        grid_spec,
+        &latitudes,
+        &longitudes,
+        &|row| {
+            grid_spec
+                .cell_area_at_row_m2(row, canon.planet_radius_m)
+                .expect("row index is within the grid")
+        },
+        dt_seconds,
+        ledger,
+    )
+}
+
+/// [`step_insolation`] on cells at the given row `latitudes` and column
+/// `longitudes` (rad), with `row_area_m2(row)` the area of a cell in a row
+/// (the island's is flat). With the grid's own geometry it is exactly
+/// `step_insolation`.
+#[allow(clippy::too_many_arguments)]
+pub fn step_insolation_on(
+    canon: &CanonLocked,
+    orbit: &crate::orbit::OrbitState,
+    rotation: &crate::rotation::RotationState,
+    grid_spec: &mk_core::grid::GridSpec,
+    latitudes: &[f64],
+    longitudes: &[f64],
+    row_area_m2: &dyn Fn(usize) -> f64,
+    dt_seconds: f64,
+    ledger: &mut Ledger,
+) -> InsolationField {
     let solar_constant = canon.solar_constant_w_m2;
 
     // Relative flux = (a/r)²
@@ -59,18 +94,13 @@ pub fn step_insolation(
     let mut toa_data = vec![0.0f64; grid_spec.nlat * grid_spec.nlon];
     let mut total_power_w = 0.0;
 
-    for ilat in 0..grid_spec.nlat {
-        let lat_rad = grid_spec.lat_rad(ilat);
-        // Exact spherical area of a cell in this latitude row (m²).
-        let cell_area = grid_spec
-            .cell_area_at_row_m2(ilat, canon.planet_radius_m)
-            .expect("row index is within the grid");
+    for (ilat, &lat_rad) in latitudes.iter().enumerate().take(grid_spec.nlat) {
+        // Area of a cell in this latitude row (m²).
+        let cell_area = row_area_m2(ilat);
         let sin_lat = lat_rad.sin();
         let cos_lat = lat_rad.cos();
 
-        for ilon in 0..grid_spec.nlon {
-            let lon_rad = grid_spec.lon_rad(ilon);
-
+        for (ilon, &lon_rad) in longitudes.iter().enumerate().take(grid_spec.nlon) {
             // Hour angle H = lon + rotation_angle
             let hour_angle = lon_rad - rotation.subsolar_longitude;
 
