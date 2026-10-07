@@ -691,6 +691,45 @@ impl IslandLife {
         Ok(())
     }
 
+    /// A child born during the step joins the household books: its body
+    /// enters the materials ledger with carbon taken from its mother, and it
+    /// starts where she stands. Without this a newborn never eats, drinks or
+    /// respires in the ledger.
+    fn adopt_newborns(&mut self) {
+        let newcomers: Vec<(String, f64, Option<String>)> = self
+            .humans
+            .registry
+            .iter()
+            .filter(|h| !self.materials.is_registered(h.agent_id()))
+            .map(|h| {
+                let mother = h
+                    .profile
+                    .canonical_schema
+                    .as_ref()
+                    .and_then(|s| {
+                        s.reproductive_systems
+                            .genetics_system
+                            .birth_records
+                            .last()
+                            .map(|r| r.mother_id.clone())
+                    })
+                    .filter(|m| !m.is_empty());
+                (h.agent_id().to_string(), h.body.weight_kg, mother)
+            })
+            .collect();
+        for (id, weight_kg, mother) in newcomers {
+            self.materials
+                .register_birth(&id, weight_kg, mother.as_deref());
+            if let Some(at) = mother
+                .as_ref()
+                .and_then(|m| self.positions.0.get(m))
+                .copied()
+            {
+                self.positions.0.insert(id, at);
+            }
+        }
+    }
+
     /// One human substep and whatever fires at its end.
     fn substep(&mut self) -> Result<(), IslandLifeError> {
         let human_s = self.scenario.cadences.human_seconds;
@@ -718,6 +757,7 @@ impl IslandLife {
                 &self.rng,
             );
         }
+        self.adopt_newborns();
         let due = self.scheduler.due(self.sim_time_s);
         if due.weather_ocean {
             self.hourly()?;

@@ -605,6 +605,37 @@ impl MaterialLedger {
         });
     }
 
+    /// Whether this person's body is in the ledger.
+    pub fn is_registered(&self, id: &str) -> bool {
+        self.bodies.contains_key(id)
+    }
+
+    /// A child's body enters the ledger at birth with its carbon taken out
+    /// of the mother's body (a mother who has less gives what she has), so
+    /// the total of body carbon is conserved. Without a registered mother
+    /// the child is registered as an arrival (see [`Self::register_human`]).
+    pub fn register_birth(&mut self, child: &str, weight_kg: f64, mother: Option<&str>) {
+        if self.bodies.contains_key(child) {
+            return;
+        }
+        let wanted = weight_kg * BODY_CARBON_PER_KG;
+        let given = match mother.and_then(|m| self.bodies.get_mut(m)) {
+            Some(body) => {
+                let take = wanted.min(body.carbon_kg.max(0.0));
+                body.carbon_kg -= take;
+                take
+            }
+            None => wanted,
+        };
+        self.bodies.insert(
+            child.to_string(),
+            Body {
+                carbon_kg: given,
+                water_kg: 0.0,
+            },
+        );
+    }
+
     fn body_mut(&mut self, id: &str) -> Result<&mut Body, MaterialError> {
         self.bodies
             .get_mut(id)

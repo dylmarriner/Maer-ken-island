@@ -22,6 +22,7 @@ fidelity limits. The project is **not complete**: see "Not done".
 | Island scenario and estate placement (Phase 3 Task 4) | Done | `mk_island/src/scenario.rs`, `regional/property.rs`, `fixtures/island/default_scenario.json` |
 | World composition, scheduler, snapshot, commands and replay (Phase 4 Tasks 1-4) | Done | `regional/{world,scheduler,commands,replay}.rs`, `io/island_snapshot.rs`, `tests/island_{world_bootstrap,scheduler,snapshot,replay}.rs` |
 | Per-human folders through upstream storage, written in rotating shards (Phase 4 Task 3b) | Done | `regional/store.rs`, `tests/island_human_store.rs` |
+| Births on the island: newborn age and WHO growth, adoption into the household books (mother's carbon, mother's position) | Done; one birth seen in a year run; 10 water shortfalls over that year not yet explained | `humans/growth.rs`, `regional/life.rs` (`adopt_newborns`), `tests/island_newborn.rs`, UPSTREAM.md #27 |
 | Headless runner and run inspection (Phase 4 Task 5) | Done except nothing pending | `apps/island/src/runner.rs`, `tests/island_runtime_acceptance.rs`, `apps/island/tests/runner_cli.rs` |
 | Live island server, pacing, creator with authored people and locations (Phase 4 Task 6) | Nearly done; see "Not done" | `apps/island/src/serve/island_{sim,api}.rs`, `regional/pacing.rs`, `tests/island_{pacing,create_human}.rs` |
 
@@ -75,6 +76,7 @@ Phase 3 Tasks 3 and 4b (D10, D13).
   tectonics model to spin up, and ecology already starts at its equilibrium (plan, Task 2b).
 - Phase 4 Task 6, remainder: a map picker for island cells,
   `agent_id` slugging from a display name, and a manual browser check.
+- Children: they are small and grow on the WHO curves, but they still act like adults (they choose their own actions, walk alone and gather food); caregiving, dependent infants and school-age behaviour are not modelled.
 - Phase 4b: energy, industry, town, economy beyond the estate.
 - Phase 5: pruning, lifetime-scale runs (births, deaths and growth over decades), final
   benchmarks, README.
