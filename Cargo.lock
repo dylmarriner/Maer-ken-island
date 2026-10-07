@@ -2624,6 +2624,7 @@ dependencies = [
  "mk_core",
  "mk_engine",
  "mk_interventions",
+ "mk_island",
  "serde",
  "serde_json",
  "tempfile",

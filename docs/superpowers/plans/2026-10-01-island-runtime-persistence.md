@@ -198,12 +198,34 @@ worth the records.
 **Interfaces:**
 - CLI: `island run --scenario <path> --steps <n> --dt <seconds> [--save <path>] [--save-root <dir>]`, `island replay --scenario <path> --log <path> [--save <path>]`, `island inspect --snapshot <path>`; no UI dependency. `--save-root` enables per-human folders under `<save-root>/<run_id>/humans/` (default `./island-data`); the chosen `run_id` is printed.
 
-- [ ] **Step 1:** Add an acceptance test running the default scenario for 100 ticks at `--dt 60`, snapshotting, loading, continuing 100 ticks and matching an uninterrupted 200-tick hash. Slow tier if it exceeds ~30 s debug.
-- [ ] **Step 2:** Implement the headless CLI around `IslandWorldState`; default with no command prints a concise world summary and exits successfully.
-- [ ] **Step 3:** Run the fixed-seed CLI twice and compare printed final hash; require exact equality.
-- [ ] **Step 4:** Run fmt, clippy `-D warnings` and all Phase-4 tests; update `UPSTREAM.md`.
-- [ ] **Step 5:** Commit `feat(app): add deterministic island runner`.
+- [x] **Step 1:** Add an acceptance test running the default scenario for 100 ticks at `--dt 60`, snapshotting, loading, continuing 100 ticks and matching an uninterrupted 200-tick hash. Slow tier if it exceeds ~30 s debug.
+- [x] **Step 2:** Implement the headless CLI around `IslandWorldState`; default with no command prints a concise world summary and exits successfully.
+- [x] **Step 3:** Run the fixed-seed CLI twice and compare printed final hash; require exact equality.
+- [x] **Step 4:** Run fmt, clippy `-D warnings` and all Phase-4 tests; update `UPSTREAM.md`.
+- [x] **Step 5:** Commit `feat(app): add deterministic island runner`.
 - [ ] **Step 6:** Add `island_preview world --snapshot <path> --out <dir>` reusing the Phase 1–3 renderers on a loaded `IslandWorldState`, so any saved run can be inspected headlessly.
+
+**Built (2026-10-07):** `island run` and `island inspect`, in `apps/island/src/run.rs`. Measured on
+the full island from the command line, not only in tests:
+
+    island run --scenario fixtures/island/default_scenario.json --steps 60   -> 4f6502fd…
+    island run --scenario fixtures/island/default_scenario.json --steps 60   -> 4f6502fd…
+    island run --snapshot a.mks --steps 60                                   -> d645a097…
+    island run --scenario fixtures/island/default_scenario.json --steps 120  -> d645a097…
+
+Two runs of one scenario and seed agree, and a run that stopped at 60 steps and resumed from the
+file reaches the same digest as one that never stopped — at the island's real size, 199,997 stems
+and a 43 MB snapshot. `island_runtime_acceptance.rs` pins both, plus the independence of `--dt`:
+the same simulated hour in six steps of ten lands where one step of sixty does.
+
+`--save-root` enables Task 3b's per-human folders and prints the run id. `island inspect` reads a
+snapshot and describes it without running it.
+
+**Not built:** `island replay --log`, which needs Task 4's command log, and Step 6's
+`island_preview world --snapshot`. The pacing and speed control in Task 6's interfaces section
+belong with the sim thread; `island run` is deliberately unpaced — wall-clock time never enters
+simulation state, so a headless run goes as fast as the machine allows.
+
 
 ### Task 6: Dashboard and Human Creator on the live island
 

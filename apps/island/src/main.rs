@@ -1,24 +1,43 @@
 //! `island` — Maer-Ken Island.
 //!
-//! `island serve [--data-dir DIR] [--seed HEX64] [--bind ADDR]` serves the
-//! dashboard: an overview of the population, the roster with everything
-//! stored about each person, and the Human Creator.
+//! `island serve` serves the dashboard: an overview of the population, the
+//! roster with everything stored about each person, and the Human Creator.
+//! `island run` advances the simulated island without a browser, and
+//! `island inspect` describes a saved one.
 
+use island::run as headless;
 use island::serve;
 use island::serve::auth::{ControlAuth, TOKEN_ENV};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 const USAGE: &str = "\
-island serve [--data-dir ./island-data] [--seed <64 hex chars>] [--bind 127.0.0.1:8080]
+island serve   [--data-dir ./island-data] [--seed <64 hex>] [--bind 127.0.0.1:8080]
+island run     (--scenario <path> | --snapshot <path>) [--steps <n>] [--dt <seconds>]
+               [--save <path>] [--save-root <dir>]
+island inspect --snapshot <path> [--scenario <path>]
 
-Serves the island dashboard: the overview at /, the roster at /people and the
-Human Creator at /creator, with the JSON behind them under /api.
-
+serve    the dashboard: the overview at /, the roster at /people and the Human
+         Creator at /creator, with the JSON behind them under /api.
   --data-dir DIR   where people are stored (default ./island-data)
   --seed HEX       64 hex characters; the same seed and the same creations
                    rebuild the same people (default all zeroes)
   --bind ADDR      address and port to listen on (default 127.0.0.1:8080)
+
+run      the simulated island, headless, printing its canonical state digest.
+         Two runs of one scenario and seed print the same digest.
+  --scenario PATH  start a new island from a scenario
+  --snapshot PATH  carry on from a saved one instead
+  --steps N        how many steps to advance (default 1440, a simulated day
+                   at the default --dt)
+  --dt SECONDS     simulated seconds per step (default 60, the human step)
+  --save PATH      write the island to a file when the run ends
+  --save-root DIR  keep a folder for every human under DIR/<run id>/humans
+
+inspect  what is in a saved island, without running it.
+  --snapshot PATH  the file to describe
+  --scenario PATH  which canon it was written under (default the island
+                   fixture canon)
 
 Reading never needs a token. Creating people needs ISLAND_CONTROL_TOKEN as a
 bearer token when it is set; without one, only a loopback bind accepts
@@ -36,6 +55,60 @@ fn usage() -> ! {
     std::process::exit(2);
 }
 
+/// The value after `name`, if it was given.
+fn flag(args: &[String], name: &str) -> Option<String> {
+    args.windows(2).find(|w| w[0] == name).map(|w| w[1].clone())
+}
+
+/// A numeric flag, or the default when it was not given.
+fn number(args: &[String], name: &str, default: u64) -> u64 {
+    match flag(args, name) {
+        None => default,
+        Some(value) => value.parse().unwrap_or_else(|_| {
+            eprintln!("{name} {value:?} is not a number.\n");
+            usage()
+        }),
+    }
+}
+
+/// Anything the headless commands fail on is a message, not a panic: these
+/// are run from scripts, where an exit status and one line matter more than
+/// a backtrace.
+fn finish(result: Result<(), String>) {
+    if let Err(message) = result {
+        eprintln!("{message}");
+        std::process::exit(1);
+    }
+}
+
+fn headless_run(args: &[String]) {
+    if args.iter().any(|a| matches!(a.as_str(), "--help" | "-h")) {
+        help();
+    }
+    finish(headless::run(headless::RunArgs {
+        scenario: flag(args, "--scenario").map(PathBuf::from),
+        snapshot: flag(args, "--snapshot").map(PathBuf::from),
+        steps: number(args, "--steps", 1_440),
+        dt_seconds: number(args, "--dt", 60),
+        save: flag(args, "--save").map(PathBuf::from),
+        save_root: flag(args, "--save-root").map(PathBuf::from),
+    }));
+}
+
+fn headless_inspect(args: &[String]) {
+    if args.iter().any(|a| matches!(a.as_str(), "--help" | "-h")) {
+        help();
+    }
+    let Some(snapshot) = flag(args, "--snapshot") else {
+        eprintln!("inspect needs --snapshot.\n");
+        usage()
+    };
+    finish(headless::inspect(
+        &PathBuf::from(snapshot),
+        flag(args, "--scenario").map(PathBuf::from).as_deref(),
+    ));
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let Some((command, rest)) = args.split_first() else {
@@ -44,9 +117,14 @@ fn main() {
     if matches!(command.as_str(), "help" | "--help" | "-h") {
         help();
     }
-    if command != "serve" {
-        eprintln!("island has one command, `serve`, not `{command}`.\n");
-        usage();
+    match command.as_str() {
+        "serve" => {}
+        "run" => return headless_run(rest),
+        "inspect" => return headless_inspect(rest),
+        other => {
+            eprintln!("island has `serve`, `run` and `inspect`, not `{other}`.\n");
+            usage();
+        }
     }
     let mut data_dir = PathBuf::from("island-data");
     let mut seed = island_humans::DEFAULT_SEED;
