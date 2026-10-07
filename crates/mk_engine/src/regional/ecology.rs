@@ -10,9 +10,15 @@
 //! - **Biomes** from the annual-mean climatology (temperature, rain),
 //!   lapse-corrected from the coarse cell's mean elevation to each medium
 //!   cell, with soil moisture from the hydrology and volcanic cones from
-//!   the geophysics. Rivers (discharge ≥ [`RIVER_MIN_DISCHARGE_M3_S`])
-//!   are `River`; lakes are `CoastalWaters` (there is no lake biome, and
-//!   this keeps land plants out).
+//!   the geophysics. Two island corrections to upstream's classifier:
+//!   cold dry ground between [`PERMANENT_ICE_BELOW_K`] and freezing is cold
+//!   steppe or tundra, not ice (upstream calls anything under 283 K and
+//!   1 mm/day an ice sheet, which on this island labelled half the land
+//!   as ice at 2-7 °C); and a cell is `River` only if the river's width
+//!   fills at least half of it ([`river_width_m`]), not whenever a stream
+//!   crosses it (channels are tens of metres wide, cells are 2 km). Lakes
+//!   are `CoastalWaters` (there is no lake biome, and this keeps land
+//!   plants out).
 //! - **NPP** (kgC m⁻² yr⁻¹) on land cells only.
 //! - **Biomass** (kgC m⁻²) is the *distribution* of producer carbon: it
 //!   starts at `NPP × residence_years(biome)`, then follows
@@ -31,7 +37,7 @@ use mk_core::grid::Grid2;
 use mk_island::{DomainLevel, IslandDomain};
 
 use super::climate::LAPSE_RATE_K_PER_M;
-use super::hydrology::{discharge_m3_s, RIVER_MIN_DISCHARGE_M3_S};
+use super::hydrology::discharge_m3_s;
 use super::levels::sample_coarse_at_medium;
 use super::physical::RegionalPhysicalState;
 use crate::biosphere::miami_npp_kgc_m2_yr;
@@ -41,6 +47,31 @@ use crate::organisms::vegetation::VegetationSystem;
 const CARBON_FRACTION_OF_DRY_MASS: f64 = 0.475;
 /// Days in the Earth year the Miami model's annual rain is per.
 const EARTH_YEAR_DAYS: f64 = 365.25;
+/// Annual-mean temperature (K) below which cold ground is permanent ice:
+/// upstream's own hard limit for `IceSheet` (`classify_biome`: `< 260`).
+pub const PERMANENT_ICE_BELOW_K: f64 = 260.0;
+/// Cold ground warmer than this (K) is steppe shrubland, colder is tundra.
+const COLD_STEPPE_ABOVE_K: f64 = 278.0;
+/// A river's channel width (m) from its discharge (m³/s): Leopold &
+/// Maddock (1953) hydraulic geometry, `w = 3.0 Q^0.5` for a typical river.
+pub fn river_width_m(discharge_m3_s: f64) -> f64 {
+    3.0 * discharge_m3_s.max(0.0).sqrt()
+}
+
+/// The island's biome from upstream's classification: dry cold ground that
+/// is not frozen year-round is not an ice sheet.
+fn island_biome(classified: BiomeType, temperature_k: f64) -> BiomeType {
+    if classified == BiomeType::IceSheet && temperature_k >= PERMANENT_ICE_BELOW_K {
+        if temperature_k < COLD_STEPPE_ABOVE_K {
+            BiomeType::Tundra
+        } else {
+            BiomeType::Shrubland
+        }
+    } else {
+        classified
+    }
+}
+
 /// A cone's volcanic core, as a fraction of its radius.
 const VOLCANIC_CORE_FRACTION: f64 = 0.35;
 const SECONDS_PER_YEAR: f64 = 365.25 * 86_400.0;
@@ -169,21 +200,24 @@ impl RegionalEcologyState {
                 let biome = if h > 0.0 {
                     if net.lake_depth_m(row, col) > 0.0 {
                         BiomeType::CoastalWaters
-                    } else if discharge_m3_s(&physical.hydrology, domain, row, col)
-                        >= RIVER_MIN_DISCHARGE_M3_S
+                    } else if river_width_m(discharge_m3_s(&physical.hydrology, domain, row, col))
+                        >= 0.5 * domain.cell_size_m(medium)
                     {
                         BiomeType::River
                     } else {
-                        classify_biome(
-                            h,
+                        island_biome(
+                            classify_biome(
+                                h,
+                                temperature_k,
+                                rain_mm_day,
+                                physical
+                                    .hydrology
+                                    .soil_water
+                                    .get(row, col)
+                                    .moisture_fraction,
+                                is_volcanic(domain, physical, row, col),
+                            ),
                             temperature_k,
-                            rain_mm_day,
-                            physical
-                                .hydrology
-                                .soil_water
-                                .get(row, col)
-                                .moisture_fraction,
-                            is_volcanic(domain, physical, row, col),
                         )
                     }
                 } else {

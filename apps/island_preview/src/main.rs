@@ -4,6 +4,7 @@
 //! island_preview geophysics --profile <path> [--seed <64 hex>] --out <dir>
 //! island_preview gallery --profile <path> --seeds <n> --out <dir>
 //! island_preview physical --profile <path> [--seed <64 hex>] --days <n> --out <dir>
+//! island_preview life --scenario <path> --out <dir>
 //! ```
 
 use std::path::PathBuf;
@@ -17,7 +18,8 @@ use mk_island::IslandProfile;
 const USAGE: &str = "usage:
   island_preview geophysics --profile <path> [--seed <64 hex chars>] --out <dir>
   island_preview gallery --profile <path> --seeds <n> --out <dir>
-  island_preview physical --profile <path> [--seed <64 hex chars>] --days <n> --out <dir>";
+  island_preview physical --profile <path> [--seed <64 hex chars>] --days <n> --out <dir>
+  island_preview life --scenario <path> --out <dir>";
 
 fn flag(args: &[String], name: &str) -> Option<String> {
     args.windows(2).find(|w| w[0] == name).map(|w| w[1].clone())
@@ -46,6 +48,14 @@ fn parse_seed(hex: &str) -> Result<[u8; 32], String> {
 
 fn run(args: Vec<String>) -> Result<(), String> {
     let command = args.first().ok_or(USAGE)?;
+    if command == "life" {
+        let scenario_path = flag(&args, "--scenario").ok_or(USAGE)?;
+        let out = PathBuf::from(flag(&args, "--out").ok_or(USAGE)?);
+        let scenario = mk_island::IslandScenario::load(&PathBuf::from(&scenario_path))
+            .map_err(|e| e.to_string())?;
+        let life = island_preview::bootstrap_life(scenario).map_err(|e| e.to_string())?;
+        return write_all(&out, &island_preview::life::render_life(&life));
+    }
     let profile_path = flag(&args, "--profile").ok_or(USAGE)?;
     let out = PathBuf::from(flag(&args, "--out").ok_or(USAGE)?);
     let profile = IslandProfile::load(&PathBuf::from(&profile_path)).map_err(|e| e.to_string())?;

@@ -1,0 +1,37 @@
+{
+  "biome_area_km2": {
+    "Alpine": 31508.0,
+    "BorealForest": 31188.0,
+    "CoastalWaters": 63840.0,
+    "DeepOcean": 1811560.0,
+    "Desert": 200.0,
+    "Grassland": 172.0,
+    "MontaneForest": 1652.0,
+    "SemiDesert": 1556.0,
+    "ShallowOcean": 2478888.0,
+    "Shrubland": 21628.0,
+    "TemperateForest": 844.0,
+    "Tundra": 141084.0,
+    "Volcanic": 6848.0,
+    "Wetland": 16960.0,
+    "Woodland": 72.0
+  },
+  "buildings": 5,
+  "deposits": 1526,
+  "doors": 14,
+  "estate_cell": [
+    474,
+    544
+  ],
+  "founders": [
+    "Gem-D",
+    "Gem-K"
+  ],
+  "items": 84,
+  "land_biomass_kgc": 629689489627.7894,
+  "patch_carbon_kgc": 258460929.45368335,
+  "patch_individual_radius_m": 806.8399595382144,
+  "patch_trees": 199999,
+  "spaces": 14,
+  "state_digest": "0d298b1a950ff1e31e9434f81d2df665522cd14f2c1ffac81e4dfe66c93e5586"
+}

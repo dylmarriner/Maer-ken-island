@@ -291,7 +291,13 @@ fn walking_out_of_the_patch_drops_the_estate_entry_and_nothing_wraps() {
         !positions.0.contains_key("Gem-D"),
         "Gem-D left the patch but kept an entry"
     );
-    assert!(positions.0.contains_key("Gem-K"), "Gem-K never left");
+    // Gem-K has an estate entry exactly while their cell is in the block
+    // (a human may legitimately walk across a cell boundary in an hour).
+    let k = humans.registry.get_human("Gem-K").unwrap().position;
+    let (r0, c0) = b.placed.location;
+    let in_block =
+        (r0 as i32..r0 as i32 + 2).contains(&k.row) && (c0 as i32..c0 as i32 + 2).contains(&k.col);
+    assert_eq!(positions.0.contains_key("Gem-K"), in_block);
 
     // On the domain's west edge a human never appears on the east edge.
     let cols = b.domain.cols(M) as i32;

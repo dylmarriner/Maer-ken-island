@@ -6,6 +6,7 @@
 //! physical world, life and the running world.
 
 pub mod font;
+pub mod life;
 
 use std::collections::BTreeMap;
 
@@ -802,4 +803,12 @@ pub fn render_physical(run: &PhysicalRun) -> Vec<Output> {
             serde_json::to_vec_pretty(&summary).expect("summary serialises"),
         ),
     ]
+}
+
+/// Bootstraps the integrated island for `scenario_path` (the `life`
+/// subcommand's input).
+pub fn bootstrap_life(
+    scenario: mk_island::IslandScenario,
+) -> Result<mk_engine::regional::life::IslandLife, mk_engine::regional::life::IslandLifeError> {
+    mk_engine::regional::life::IslandLife::bootstrap(scenario, Arc::new(island_canon()))
 }

@@ -22,7 +22,7 @@ Cadences: humans 60 s, physics hourly, ecology and households 6-hourly.
 | Stock audits (material carbon, body carbon, water) | 196, all closed |
 | Founders | both alive, both in the estate |
 | Food and water shortfalls | 0 |
-| State digest, two separate processes | identical (`18b75e34...aa29`) |
+| State digest, two separate processes | identical (`9ea5558f...f16c`) |
 
 Not in this number: Phases 4, 4b and 5 (persistence, replay, the app, a larger population, the
 refinery and town). The population is two humans; `benchmarks/humans_population.md` measures the
