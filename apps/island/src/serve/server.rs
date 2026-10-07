@@ -4,9 +4,11 @@
 use super::auth::ControlAuth;
 use super::pages;
 use super::read;
-use super::sim::SimHandle;
+use super::sim::{IslandCommand, SimHandle};
 use super::view;
 use island_humans::{CreateHumanError, CreateHumanRequest, IslandHumanPopulation};
+use mk_engine::regional::create_human::{CreateLocation, IslandCreateHuman};
+use mk_engine::regional::estate_layout::SpaceId;
 use std::sync::{Arc, Mutex};
 use warp::http::StatusCode;
 use warp::Filter;
@@ -210,6 +212,101 @@ pub fn create(
     }
 }
 
+/// A request to create somebody *in the world*.
+///
+/// The dashboard's stored-person fields, plus where on the island they
+/// start. `space` names a room of the estate by its layout id; `row`/`col`
+/// put them on a cell. Exactly one is required, because "somewhere" is not
+/// a place and guessing one would put a person where nobody asked.
+#[derive(Debug, serde::Deserialize)]
+struct WorldCreateRequest {
+    name: String,
+    biological_sex: String,
+    birth_timestamp: String,
+    age_years: f64,
+    height_cm: f64,
+    build: String,
+    hair_color: String,
+    eye_color: String,
+    skin_tone: String,
+    space: Option<u32>,
+    row: Option<usize>,
+    col: Option<usize>,
+    /// Default true: somebody created on the island was, as a rule, born
+    /// there. A creator who means otherwise says so and gives coordinates.
+    #[serde(default = "yes")]
+    birthplace_here: bool,
+    #[serde(default)]
+    birth_latitude: f64,
+    #[serde(default)]
+    birth_longitude: f64,
+}
+
+fn yes() -> bool {
+    true
+}
+
+impl WorldCreateRequest {
+    /// Turn the wire shape into a command, or say what is wrong with it.
+    ///
+    /// Only the parts the engine cannot check are checked here: the sex
+    /// word and the choice of location. Everything else — the age, the
+    /// height, whether that room exists, whether that cell is in the sea —
+    /// belongs to the island and is checked on its own thread against the
+    /// live world, which is the only place those answers are true.
+    fn into_command(self) -> Result<IslandCreateHuman, Vec<String>> {
+        let mut problems = Vec::new();
+        let sex = match self.biological_sex.trim().to_ascii_lowercase().as_str() {
+            "male" => Some(mk_core::human::BiologicalSex::Male),
+            "female" => Some(mk_core::human::BiologicalSex::Female),
+            other => {
+                problems.push(format!(
+                    "biological_sex: {other:?} is not one the spawn templates support; use male or female."
+                ));
+                None
+            }
+        };
+        let location = match (self.space, self.row, self.col) {
+            (Some(id), None, None) => Some(CreateLocation::EstateSpace(SpaceId(id))),
+            (None, Some(row), Some(col)) => Some(CreateLocation::IslandCell { row, col }),
+            (None, None, None) => {
+                problems.push(
+                    "location: say where they start — `space` for a room of the estate, or `row` and `col` for a cell of the island."
+                        .to_string(),
+                );
+                None
+            }
+            _ => {
+                problems.push(
+                    "location: give either `space` or both `row` and `col`, not a mixture."
+                        .to_string(),
+                );
+                None
+            }
+        };
+        match (sex, location) {
+            (Some(biological_sex), Some(location)) if problems.is_empty() => {
+                Ok(IslandCreateHuman {
+                    name: self.name,
+                    biological_sex,
+                    birth_timestamp: self.birth_timestamp,
+                    age_years: self.age_years,
+                    height_cm: self.height_cm,
+                    build: self.build,
+                    hair_color: self.hair_color,
+                    eye_color: self.eye_color,
+                    skin_tone: self.skin_tone,
+                    location,
+                    birthplace_here: self.birthplace_here,
+                    birth_latitude: self.birth_latitude,
+                    birth_longitude: self.birth_longitude,
+                })
+            }
+            _ => Err(problems),
+        }
+    }
+}
+
 #[derive(Debug, serde::Deserialize)]
 struct ActivityQuery {
     limit: Option<usize>,
@@ -345,7 +442,7 @@ pub fn routes_with_world(
         .and(warp::body::content_length_limit(MAX_CREATE_BODY))
         .and(warp::body::bytes())
         .and(with(population))
-        .and(with(auth))
+        .and(with(auth.clone()))
         .map(
             |authorization: Option<String>,
              body: bytes::Bytes,
@@ -369,6 +466,99 @@ pub fn routes_with_world(
             },
         );
 
+    // Creating somebody *in the world*, as against storing them. The reply
+    // is 202 and a command id: the island applies it on its own thread
+    // before its next step, and the page polls for what happened. A
+    // request cannot be allowed to reach into a running world and change
+    // it mid-step, so there is no way to answer this synchronously.
+    let post_world_human = warp::path!("api" / "world" / "humans")
+        .and(warp::post())
+        .and(warp::header::optional::<String>("authorization"))
+        .and(warp::body::content_length_limit(MAX_CREATE_BODY))
+        .and(warp::body::bytes())
+        .and(with(world.clone()))
+        .and(with(auth.clone()))
+        .map(
+            |authorization: Option<String>,
+             body: bytes::Bytes,
+             world: Option<SimHandle>,
+             auth: ControlAuth| {
+                let Some(world) = world else {
+                    return json(
+                        StatusCode::CONFLICT,
+                        &serde_json::json!({ "errors": ["No island is running, so there is nowhere to put anybody. Start the server with --scenario."] }),
+                    );
+                };
+                if !auth.permits(authorization.as_deref()) {
+                    // The same rule as storing a person: a world write is
+                    // no less a write for happening a step later.
+                    return json(
+                        StatusCode::UNAUTHORIZED,
+                        &serde_json::json!({
+                            "errors": [match auth.mode() {
+                                "token" => "That control token was not accepted.",
+                                _ => "This dashboard is not allowed to create people.",
+                            }],
+                            "writes": auth.describe(),
+                            "writes_mode": auth.mode(),
+                        }),
+                    );
+                }
+                let request: WorldCreateRequest = match serde_json::from_slice(&body) {
+                    Ok(request) => request,
+                    Err(err) => {
+                        return json(
+                            StatusCode::BAD_REQUEST,
+                            &serde_json::json!({ "errors": [format!(
+                                "That request body is not the JSON this endpoint expects: {err}."
+                            )] }),
+                        )
+                    }
+                };
+                match request.into_command() {
+                    Err(problems) => json(
+                        StatusCode::UNPROCESSABLE_ENTITY,
+                        &serde_json::json!({ "errors": problems }),
+                    ),
+                    Ok(command) => match world.send(IslandCommand::CreateHuman(Box::new(command))) {
+                        Some(id) => json(
+                            StatusCode::ACCEPTED,
+                            &serde_json::json!({
+                                "command": id,
+                                "poll": format!("/api/world/commands/{id}"),
+                            }),
+                        ),
+                        None => json(
+                            StatusCode::CONFLICT,
+                            &serde_json::json!({ "errors": ["The island has stopped, so nothing more will be applied."] }),
+                        ),
+                    },
+                }
+            },
+        );
+
+    let get_command = warp::path!("api" / "world" / "commands" / u64)
+        .and(read())
+        .and(with(world.clone()))
+        .map(|id: u64, world: Option<SimHandle>| match world {
+            None => json(
+                StatusCode::NOT_FOUND,
+                &serde_json::json!({ "errors": ["No island is running."] }),
+            ),
+            Some(world) => match world.outcome(id) {
+                Some(outcome) => json(
+                    StatusCode::OK,
+                    &serde_json::to_value(outcome).unwrap_or_default(),
+                ),
+                None => json(
+                    StatusCode::NOT_FOUND,
+                    &serde_json::json!({ "errors": [format!(
+                        "Command {id} is not one this island remembers. Outcomes are kept only briefly."
+                    )] }),
+                ),
+            },
+        });
+
     // Anything under /api that matched no route is a client error worth
     // returning as JSON, so a script never has to parse an HTML page to find
     // out it asked for the wrong thing. Everything else gets the page.
@@ -389,12 +579,14 @@ pub fn routes_with_world(
             }
             json(
                 StatusCode::NOT_FOUND,
-                &serde_json::json!({ "errors": ["No such endpoint. The dashboard serves /api/status, /api/world, /api/health, /api/humans, /api/humans/<agent-id>, /api/activity and /api/creator/options."] }),
+                &serde_json::json!({ "errors": ["No such endpoint. The dashboard serves /api/status, /api/world, /api/world/humans, /api/world/commands/<id>, /api/health, /api/humans, /api/humans/<agent-id>, /api/activity and /api/creator/options."] }),
             )
         });
 
     let api = get_status
         .or(get_world)
+        .or(post_world_human)
+        .or(get_command)
         .or(get_health)
         .or(get_options)
         .or(get_activity)

@@ -4,6 +4,7 @@
 
 pub mod boundary;
 pub mod climate;
+pub mod create_human;
 pub mod deposits;
 pub mod ecology;
 pub mod edge;

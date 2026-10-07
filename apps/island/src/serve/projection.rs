@@ -97,9 +97,21 @@ pub struct Estate {
     pub cell: (usize, usize),
     pub buildings: usize,
     pub items: usize,
+    /// Every space somebody can be put in, by the layout's own id and
+    /// label. The creator page offers exactly these, so it can never ask
+    /// for a room the island will refuse.
+    pub spaces: Vec<SpaceChoice>,
     pub battery_charge_kwh: f64,
     pub battery_capacity_kwh: f64,
     pub fuel_litres: f64,
+}
+
+/// A place on the estate a person can be created in.
+#[derive(Debug, Clone, Serialize)]
+pub struct SpaceChoice {
+    pub id: u32,
+    pub label: String,
+    pub kind: String,
 }
 
 /// The ground the estate stands on.
@@ -220,6 +232,17 @@ fn estate(life: &IslandLife) -> Estate {
         battery_charge_kwh: energy.batteries.iter().map(|b| b.charge_kwh).sum(),
         battery_capacity_kwh: energy.batteries.iter().map(|b| b.capacity_kwh).sum(),
         fuel_litres: energy.fuel_stores.iter().map(|s| s.litres).sum(),
+        spaces: life
+            .placed
+            .layout
+            .spaces
+            .iter()
+            .map(|s| SpaceChoice {
+                id: s.id.0,
+                label: s.label.clone(),
+                kind: format!("{:?}", s.kind),
+            })
+            .collect(),
     }
 }
 

@@ -79,13 +79,44 @@ function lockForm(reason) {
   submitHintEl.textContent = reason;
 }
 
+const placeFieldset = document.getElementById("place-fieldset");
+const placeEl = document.getElementById("place");
+const placeHint = document.getElementById("place-hint");
+
+/// Whether a world is running, and which rooms it offers. Decided once at
+/// load: a dashboard does not gain or lose its island while a form is open.
+let world = null;
+
+/// Offer the estate's own spaces, by the ids the island will accept, so the
+/// page can never ask for a room that does not exist.
+function offerPlaces(w) {
+  world = w && w.running === true ? w : null;
+  placeFieldset.hidden = world === null;
+  if (!world) return;
+  const spaces = (world.estate && world.estate.spaces) || [];
+  placeEl.replaceChildren(
+    ...spaces.map((space) => {
+      const option = el("option", `${space.label} (${space.kind.toLowerCase()})`);
+      option.value = String(space.id);
+      return option;
+    }),
+  );
+  const home = spaces.find((s) => /bedroom/i.test(s.label));
+  if (home) placeEl.value = String(home.id);
+  placeHint.textContent =
+    "The island is running, so this person is put into it and starts living " +
+    "from the next step. They are placed in this space on the founders' estate.";
+}
+
 async function setup() {
   form.token.value = storedToken();
   try {
-    const [options, status] = await Promise.all([
+    const [options, status, w] = await Promise.all([
       getJson("/api/creator/options"),
       getJson("/api/status"),
+      getJson("/api/world"),
     ]);
+    offerPlaces(w);
     clearOffline();
     fill(form.biological_sex, options.biological_sex);
     fill(form.build, options.build, "Average");
@@ -181,6 +212,63 @@ function showCreated(created) {
   }
 }
 
+/// Follow a queued world creation until the island has answered.
+///
+/// The request is accepted, not done: the island applies it between steps.
+/// Polling the command rather than guessing means the page reports what
+/// actually happened, including a refusal the island alone could make.
+async function followCommand(queued, name) {
+  const path = queued.poll || `/api/world/commands/${queued.command}`;
+  resultEl.replaceChildren(el("p", `${name} is queued for the island…`, { class: "hint" }));
+  const deadline = Date.now() + 30000;
+  for (;;) {
+    let outcome;
+    try {
+      outcome = await getJson(path);
+    } catch (error) {
+      showErrors("The island was asked, but the answer did not arrive:", [error.message]);
+      return;
+    }
+    if (outcome.state === "created") {
+      const box = el("div", null, { class: "created" });
+      box.append(el("h3", `${name} is on the island.`));
+      const where = outcome.space
+        ? `They are in ${outcome.space}, as ${outcome.agent_id}, and from the next step they live there with everyone else.`
+        : `They are at cell ${outcome.cell[0]}, ${outcome.cell[1]}, as ${outcome.agent_id}.`;
+      box.append(el("p", where));
+      if (outcome.storage_error) {
+        // Never swallowed: a person whose folder would not write still
+        // exists, and only saying so lets anybody notice the gap.
+        box.append(
+          el(
+            "p",
+            `Their folder could not be written: ${outcome.storage_error}. They are on the island regardless.`,
+            { class: "banner is-error" },
+          ),
+        );
+      }
+      const links = el("div", null, { class: "quick-links" });
+      links.append(el("a", "See the island", { class: "button secondary", href: "/" }));
+      box.append(links);
+      resultEl.replaceChildren(box);
+      form.name.value = "";
+      form.name.focus();
+      return;
+    }
+    if (outcome.state === "refused") {
+      showErrors("The island would not take that:", outcome.problems || []);
+      return;
+    }
+    if (Date.now() > deadline) {
+      showErrors("The island has not answered:", [
+        `Command ${queued.command} is still queued after 30 seconds.`,
+      ]);
+      return;
+    }
+    await new Promise((wake) => setTimeout(wake, 250));
+  }
+}
+
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
   const body = request();
@@ -196,8 +284,16 @@ form.addEventListener("submit", async (event) => {
   submitEl.textContent = "Creating…";
   resultEl.replaceChildren(el("p", `Building ${body.name}…`, { class: "hint" }));
   try {
-    const { status, body: answer } = await postJson("/api/humans", body, token);
-    if (status === 201) {
+    // With a world, the person goes into it: the island applies the request
+    // on its own thread before its next step, so the answer is a command id
+    // to follow rather than a person. Without one, they are stored as
+    // before.
+    const path = world ? "/api/world/humans" : "/api/humans";
+    if (world) body.space = Number(placeEl.value);
+    const { status, body: answer } = await postJson(path, body, token);
+    if (status === 202) {
+      await followCommand(answer, body.name);
+    } else if (status === 201) {
       showCreated(answer);
       form.name.value = "";
       form.name.focus();

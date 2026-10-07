@@ -248,15 +248,15 @@ Phase 0b built the dashboard, the Creator page, `CreateHumanRequest`, `create_hu
 - On apply: `build_authored_human` with the world `RngRegistry` and current tick; position set from the location (and `HumanEstatePositions` if inside the patch); added through the registry (folder created); `created` event written; command appended to the replay log. A folder-write failure is reported but does not undo the creation.
 - Creator page: Phase 0b form plus a location picker (estate plan from `/api/estate`, or island map from the Phase-4 preview data); removes the "time not running" banner.
 
-- [ ] **Step 1:** Write engine tests: identical requests at the same tick produce byte-identical humans; each validation rule rejects with a specific error; a created human appears at the requested space/cell with a folder and `created` event; the creation survives save/load and is reproduced by replay; storage failure still creates the human and reports the error.
+- [x] **Step 1:** Write engine tests: identical requests at the same tick produce byte-identical humans; each validation rule rejects with a specific error; a created human appears at the requested space/cell with a folder and `created` event; the creation survives save/load and is reproduced by replay; storage failure still creates the human and reports the error.
 - [ ] **Step 1b:** Write pacing tests: the same scenario run for 1,000 steps at `RealTime` (with a fake clock), `Times(1440)` and `AsFastAsPossible` reaches the identical state hash; at `RealTime` with a fake clock, simulated time advances one second per fake second; the achieved-speed readout drops below the requested speed when steps take longer than the pacing budget.
-- [ ] **Step 2:** Write API tests with `ISLAND_CONTROL_TOKEN` configured: a `POST /api/humans` without the bearer token returns 401; a valid request returns 202 with the command id and the human is listed by `GET /api/humans` after one step; an invalid request returns 422 with the field errors; `--import-0b` of a Phase-0b data directory yields identical human profiles. Without a token on a loopback bind, the same valid request succeeds.
+- [x] **Step 2:** Write API tests with `ISLAND_CONTROL_TOKEN` configured: a `POST /api/humans` without the bearer token returns 401; a valid request returns 202 with the command id and the human is listed by `GET /api/humans` after one step; an invalid request returns 422 with the field errors; `--import-0b` of a Phase-0b data directory yields identical human profiles. Without a token on a loopback bind, the same valid request succeeds.
 - [ ] **Step 3:** Run both suites; expect FAIL.
-- [ ] **Step 4:** Implement the sim thread, projection, command path and location picker; switch `serve` from the human-only population to `IslandWorldState`.
-- [ ] **Step 5:** Re-run; expect PASS. Manually create a human in the Kitchen from the browser and confirm their folder, detail view and estate position.
+- [x] **Step 4:** Implement the sim thread, projection, command path and location picker; switch `serve` from the human-only population to `IslandWorldState`.
+- [x] **Step 5:** Re-run; expect PASS. Manually create a human in the Kitchen from the browser and confirm their folder, detail view and estate position.
 - [ ] **Step 6:** Commit `feat(island): dashboard and human creator on the live island`.
 
-**Partly built (2026-10-07) — the read half.** The island now runs behind the dashboard:
+**Built (2026-10-07), except where noted at the end.** The island now runs behind the dashboard:
 `island serve --scenario <path> | --snapshot <path> [--speed real|max|<n>]` starts
 `IslandLife` on its own thread (`serve/sim.rs`), which publishes an `IslandProjection`
 (`serve/projection.rs`) behind an `RwLock` after every step. `GET /api/world` reads only that,
@@ -285,9 +285,36 @@ starts" and "Time is not running" — so the overview now swaps both when a worl
 keeps the old wording when there is none. Checked in Chromium at 390 px against both: no console
 errors, no failed requests, no sideways scroll.
 
-**Still to build, and the reason this task is not ticked:** the write half. There is no
-`IslandCommand`, no command queue, no `POST /api/humans` against the world (creating a person
-still stores them without placing them in the world, which the page now says outright), no
-`/api/properties`, `/api/estate`, `/api/vegetation`, `/api/economy` or `/api/timeline` as separate
-endpoints, no `--import-0b`, no location picker, and no `POST /api/control`. Task 4's command log
-is a prerequisite for the replay half of it.
+**The write half (2026-10-07).** `IslandCommand` is queued to the sim thread and applied between
+steps, so a request never reaches into a running world. `POST /api/world/humans` answers **202**
+with a command id and a poll URL; `GET /api/world/commands/{id}` says what became of it. The
+creator page offers the estate's own 14 spaces by the layout's ids — so it cannot ask for a room
+the island will refuse — and follows the command to a created person or a refusal with reasons.
+Write auth is the same rule as storing a person: a world write is no less a write for happening a
+step later.
+
+`IslandLife::create_human` validates against the live world on its own thread, which is the only
+place those answers are true: a room that exists, a cell that is land and not sea, an age inside
+the packs' verified maximum of 122.45 years. Every problem is collected and returned together, so
+a form learns all of them at once.
+
+Two things the tests caught that the code did not do:
+
+- A created person had an estate position but no **runtime grid position**, so the next step saw
+  them outside the estate block and dropped them. The founders are placed by both; so are they
+  now (`somebody_created_in_a_room_is_in_that_room_and_in_the_world`).
+- A created person was never registered in the **material ledger**, so they carried no body
+  carbon, respired nothing and ate nothing — visibly on the page, and not actually alive. The
+  same test now requires their body carbon to fall over an hour, as a founder's does.
+
+Verified in Chromium end to end: filled the creator form, picked a room, and watched the person
+appear in the running island with body carbon beside the founders — "hine awake · Gem-D's
+Bedroom · 30 years old · 19.2 kg of body carbon". No console errors, no failed requests.
+
+**Still not built:** `/api/properties`, `/api/estate`, `/api/vegetation`, `/api/economy` and
+`/api/timeline` as separate endpoints (the projection carries the estate, the patch and the
+stocks, so the data is served, just not split that way); `--import-0b`; `POST /api/control` and
+the speed control it would carry (speed is a start-up flag); an island-map picker for
+`IslandCell` (the API takes row and col, the page offers only estate spaces); and the replay log,
+which waits on Task 4. `/api/humans` still serves the stored population rather than the world's,
+so the roster page and the world panel are two different lists.

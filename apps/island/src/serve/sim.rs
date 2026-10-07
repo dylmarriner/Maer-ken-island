@@ -13,13 +13,52 @@
 //! a busy machine would quietly produce a different world, and the digest
 //! the whole project is built on would stop meaning anything.
 
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, RwLock};
+use std::collections::BTreeMap;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
+use mk_engine::regional::create_human::{CreateHumanError, CreatedIslander, IslandCreateHuman};
 use mk_engine::regional::life::IslandLife;
 
 use super::projection::{Digest, IslandProjection};
+
+/// Something the world is asked to do.
+///
+/// Writes never touch the island directly. They are queued here and applied
+/// by the thread that owns it, between steps, so the world is only ever
+/// changed from one place and a request can never land in the middle of a
+/// step.
+#[derive(Debug)]
+pub enum IslandCommand {
+    CreateHuman(Box<IslandCreateHuman>),
+}
+
+/// What became of a command.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(tag = "state", rename_all = "snake_case")]
+pub enum Outcome {
+    /// Accepted and waiting for the next step to apply it.
+    Queued,
+    Created {
+        agent_id: String,
+        space: Option<String>,
+        cell: (usize, usize),
+        tick: u64,
+        /// A folder that could not be written. The person exists anyway.
+        storage_error: Option<String>,
+    },
+    Refused {
+        problems: Vec<String>,
+    },
+}
+
+/// A queued command and the id it will be answered under.
+struct Queued {
+    id: u64,
+    command: IslandCommand,
+}
 
 /// How fast simulated time should pass against real time.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -76,11 +115,21 @@ impl std::str::FromStr for SimSpeed {
     }
 }
 
+/// How many command outcomes are remembered.
+///
+/// Long enough that a page polling every couple of seconds will always find
+/// its own, short enough that a dashboard left running for a week does not
+/// grow without bound.
+const OUTCOMES_KEPT: usize = 256;
+
 /// The dashboard's end of the simulation.
 #[derive(Clone)]
 pub struct SimHandle {
     projection: Arc<RwLock<IslandProjection>>,
     stop: Arc<AtomicBool>,
+    commands: Sender<Queued>,
+    outcomes: Arc<Mutex<BTreeMap<u64, Outcome>>>,
+    next_id: Arc<AtomicU64>,
 }
 
 impl SimHandle {
@@ -100,6 +149,43 @@ impl SimHandle {
     /// Ask the thread to finish its current step and stop.
     pub fn stop(&self) {
         self.stop.store(true, Ordering::Relaxed);
+    }
+
+    /// Queue a command and give back the id it will be answered under.
+    ///
+    /// Returns as soon as it is queued — the island applies it before its
+    /// next step. `None` means the simulation has stopped and nothing more
+    /// will be applied, which the caller should say rather than leave
+    /// somebody polling an id that will never resolve.
+    pub fn send(&self, command: IslandCommand) -> Option<u64> {
+        let id = self.next_id.fetch_add(1, Ordering::Relaxed);
+        self.remember(id, Outcome::Queued);
+        self.commands.send(Queued { id, command }).ok()?;
+        Some(id)
+    }
+
+    /// What became of a command, if it is still remembered.
+    pub fn outcome(&self, id: u64) -> Option<Outcome> {
+        self.locked_outcomes().get(&id).cloned()
+    }
+
+    fn remember(&self, id: u64, outcome: Outcome) {
+        let mut outcomes = self.locked_outcomes();
+        outcomes.insert(id, outcome);
+        while outcomes.len() > OUTCOMES_KEPT {
+            let oldest = *outcomes.keys().next().expect("not empty");
+            outcomes.remove(&oldest);
+        }
+    }
+
+    /// The only writers are this handle and the sim thread, and neither
+    /// holds the lock across anything that can panic, so a poisoned lock is
+    /// recovered from rather than propagated.
+    fn locked_outcomes(&self) -> std::sync::MutexGuard<'_, BTreeMap<u64, Outcome>> {
+        match self.outcomes.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        }
     }
 }
 
@@ -147,57 +233,89 @@ pub fn spawn(life: IslandLife, speed: SimSpeed) -> SimHandle {
         None,
         first.clone(),
     )));
+    let (commands, inbox) = channel();
     let handle = SimHandle {
         projection: Arc::clone(&projection),
         stop: Arc::new(AtomicBool::new(false)),
+        commands,
+        outcomes: Arc::new(Mutex::new(BTreeMap::new())),
+        next_id: Arc::new(AtomicU64::new(1)),
     };
     let stop = Arc::clone(&handle.stop);
+    let outcomes = Arc::clone(&handle.outcomes);
 
     std::thread::Builder::new()
         .name("island-sim".into())
-        .spawn(move || run(life, speed, step_seconds, projection, stop, first))
+        .spawn(move || {
+            run(Loop {
+                life,
+                speed,
+                step_seconds,
+                projection,
+                stop,
+                digest: first,
+                inbox,
+                outcomes,
+            })
+        })
         .expect("the simulation thread starts");
 
     handle
 }
 
-/// The loop itself: step, publish, wait if there is time to spare.
-fn run(
-    mut life: IslandLife,
+/// Everything the thread owns.
+struct Loop {
+    life: IslandLife,
     speed: SimSpeed,
     step_seconds: u64,
     projection: Arc<RwLock<IslandProjection>>,
     stop: Arc<AtomicBool>,
-    mut digest: Digest,
-) {
+    digest: Digest,
+    inbox: Receiver<Queued>,
+    outcomes: Arc<Mutex<BTreeMap<u64, Outcome>>>,
+}
+
+/// The loop itself: apply what was asked, step, publish, wait if there is
+/// time to spare.
+fn run(mut it: Loop) {
     // (when, simulated time then), oldest first. Speed is the simulated
     // time between the ends of the window over the real time between them.
     let mut recent: std::collections::VecDeque<(Instant, u64)> = std::collections::VecDeque::new();
 
-    while !stop.load(Ordering::Relaxed) {
+    while !it.stop.load(Ordering::Relaxed) {
         // Timed around the whole iteration, not just the step. Publishing
-        // is real work the island has to do before it can step again, and
-        // a readout that left it out would have claimed the island was
-        // keeping up while it ran two hundred times slower.
+        // and applying commands are real work the island has to do before
+        // it can step again, and a readout that left them out would have
+        // claimed the island was keeping up while it ran much slower.
         let started = Instant::now();
-        if let Err(e) = life.advance(step_seconds) {
+
+        // Commands first: a creation applies at the tick it was queued for,
+        // before the step that then moves that person along with everybody
+        // else.
+        while let Ok(Queued { id, command }) = it.inbox.try_recv() {
+            let outcome = apply(&mut it.life, command);
+            record(&it.outcomes, id, outcome);
+        }
+
+        if let Err(e) = it.life.advance(it.step_seconds) {
             // The island cannot continue — an audit that did not close, a
             // step that failed. Publishing a stale projection forever would
             // be a lie, so the thread stops, says why on the console the
             // operator is already watching, and marks the projection as no
             // longer running so the page says so too.
-            eprintln!("the island stopped at t={} s: {e}", life.sim_time_s);
-            if let Ok(mut slot) = projection.write() {
+            eprintln!("the island stopped at t={} s: {e}", it.life.sim_time_s);
+            if let Ok(mut slot) = it.projection.write() {
                 slot.running = false;
             }
             break;
         }
-        if life.tick.is_multiple_of(DIGEST_EVERY) {
-            digest = IslandProjection::digest_now(&life);
+
+        if it.life.tick.is_multiple_of(DIGEST_EVERY) {
+            it.digest = IslandProjection::digest_now(&it.life);
         }
 
         let now = Instant::now();
-        recent.push_back((now, life.sim_time_s));
+        recent.push_back((now, it.life.sim_time_s));
         while recent
             .front()
             .is_some_and(|(at, _)| now.duration_since(*at) > SPEED_WINDOW)
@@ -206,11 +324,11 @@ fn run(
             recent.pop_front();
         }
         publish(
-            &projection,
-            &life,
-            &speed,
+            &it.projection,
+            &it.life,
+            &it.speed,
             achieved_speed(&recent),
-            digest.clone(),
+            it.digest.clone(),
         );
 
         let took = started.elapsed();
@@ -218,16 +336,53 @@ fn run(
         // Only ever sleep off time that is left over. A step that overran
         // its budget is not slept on at all, so the island catches up where
         // it can rather than falling further behind.
-        if let Some(budget) = speed.budget(step_seconds) {
+        if let Some(budget) = it.speed.budget(it.step_seconds) {
             if let Some(spare) = budget.checked_sub(took) {
                 // Woken often enough that a stop is acted on promptly even
                 // at real time, where a budget is a whole minute.
                 let deadline = Instant::now() + spare;
-                while Instant::now() < deadline && !stop.load(Ordering::Relaxed) {
+                while Instant::now() < deadline && !it.stop.load(Ordering::Relaxed) {
                     std::thread::sleep(Duration::from_millis(50).min(deadline - Instant::now()));
                 }
             }
         }
+    }
+}
+
+/// Do what was asked of the world, on the thread that owns it.
+fn apply(life: &mut IslandLife, command: IslandCommand) -> Outcome {
+    match command {
+        IslandCommand::CreateHuman(request) => match life.create_human(*request) {
+            Ok(CreatedIslander {
+                agent_id,
+                space,
+                cell,
+                storage_error,
+                ..
+            }) => Outcome::Created {
+                agent_id,
+                space,
+                cell,
+                tick: life.tick,
+                storage_error,
+            },
+            Err(CreateHumanError::Invalid(problems)) => Outcome::Refused { problems },
+            Err(e) => Outcome::Refused {
+                problems: vec![e.to_string()],
+            },
+        },
+    }
+}
+
+fn record(outcomes: &Mutex<BTreeMap<u64, Outcome>>, id: u64, outcome: Outcome) {
+    let mut outcomes = match outcomes.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    outcomes.insert(id, outcome);
+    while outcomes.len() > OUTCOMES_KEPT {
+        let oldest = *outcomes.keys().next().expect("not empty");
+        outcomes.remove(&oldest);
     }
 }
 

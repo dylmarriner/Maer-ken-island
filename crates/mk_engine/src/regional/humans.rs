@@ -100,7 +100,7 @@ fn founders_estate(property: &PropertySystem) -> Option<&StarterProperty> {
         .find(|p| p.owner_agent_ids.iter().any(|id| id == "Gem-D"))
 }
 
-fn medium_cell_of(domain: &IslandDomain, position_m: (f64, f64)) -> GridPosition {
+pub(crate) fn medium_cell_of(domain: &IslandDomain, position_m: (f64, f64)) -> GridPosition {
     let size = domain.cell_size_m(DomainLevel::Medium);
     GridPosition::new(
         (position_m.1 / size).floor() as i32,

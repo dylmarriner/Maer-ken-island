@@ -203,3 +203,207 @@ fn tick_of(body: &str) -> u64 {
     let value: serde_json::Value = serde_json::from_str(json.trim()).expect("the world is JSON");
     value["clock"]["tick"].as_u64().expect("a tick")
 }
+
+/// Ask with a body, and give back the status and response.
+async fn post(port: u16, path: &str, body: &str) -> (u16, String) {
+    let stream = tokio::net::TcpStream::connect(("127.0.0.1", port))
+        .await
+        .expect("the dashboard is listening");
+    let (mut reader, mut writer) = stream.into_split();
+    let request = format!(
+        "POST {path} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\
+         Content-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}",
+        body.len()
+    );
+    {
+        use tokio::io::AsyncWriteExt;
+        writer.write_all(request.as_bytes()).await.unwrap();
+        writer.flush().await.unwrap();
+    }
+    let mut response = Vec::new();
+    {
+        use tokio::io::AsyncReadExt;
+        reader.read_to_end(&mut response).await.unwrap();
+    }
+    let response = String::from_utf8_lossy(&response).into_owned();
+    let status = response
+        .split_whitespace()
+        .nth(1)
+        .and_then(|c| c.parse().ok())
+        .unwrap_or(0);
+    (status, response)
+}
+
+/// Somebody can be created in a room of the estate, from the API, and ends
+/// up in the world rather than only on disk.
+#[tokio::test]
+async fn a_person_created_through_the_api_turns_up_in_the_world() {
+    let (world, port, server) = a_running_dashboard().await;
+
+    // The estate's own spaces, as the creator page offers them.
+    let (_, world_body) = get(port, "/api/world").await;
+    assert!(world_body.contains("Bedroom"), "{world_body}");
+
+    let body = r#"{"name":"Rangi","biological_sex":"female","birth_timestamp":"2001-01-02T03:04:05Z",
+        "age_years":30,"height_cm":170,"build":"average","hair_color":"black","eye_color":"brown",
+        "skin_tone":"olive","space":1}"#;
+    let (status, response) = post(port, "/api/world/humans", body).await;
+    assert_eq!(status, 202, "{response}");
+    let queued: serde_json::Value = serde_json::from_str(body_of(&response)).unwrap();
+    let id = queued["command"].as_u64().expect("a command id");
+
+    // The island applies it before its next step; poll for the outcome.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    let outcome = loop {
+        let (status, response) = get(port, &format!("/api/world/commands/{id}")).await;
+        if status == 200 {
+            let value: serde_json::Value = serde_json::from_str(body_of(&response)).unwrap();
+            if value["state"] != "queued" {
+                break value;
+            }
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the command never resolved"
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    };
+
+    assert_eq!(outcome["state"], "created", "{outcome}");
+    let agent_id = outcome["agent_id"].as_str().expect("an agent id");
+    assert!(
+        outcome["space"].is_string(),
+        "they were put nowhere: {outcome}"
+    );
+
+    // And they are in the world the dashboard serves, not just in a reply.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    loop {
+        let (_, body) = get(port, "/api/world").await;
+        if body.contains(agent_id) {
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "{agent_id} was created but never appeared in the world"
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+
+    world.stop();
+    server.abort();
+}
+
+/// A request the island refuses comes back as a refusal with reasons, not as
+/// a person who quietly went somewhere else.
+#[tokio::test]
+async fn the_island_refuses_a_creation_it_cannot_honour_and_says_why() {
+    let (world, port, server) = a_running_dashboard().await;
+
+    // No location at all: refused before it is even queued.
+    let no_place = r#"{"name":"Nowhere","biological_sex":"female","birth_timestamp":"2001-01-02T03:04:05Z",
+        "age_years":30,"height_cm":170,"build":"average","hair_color":"black","eye_color":"brown",
+        "skin_tone":"olive"}"#;
+    let (status, response) = post(port, "/api/world/humans", no_place).await;
+    assert_eq!(status, 422, "{response}");
+    assert!(response.contains("location"), "{response}");
+
+    // A room that does not exist: queued, then refused by the island with
+    // the spaces that do exist.
+    let nonsense = r#"{"name":"Ghost","biological_sex":"male","birth_timestamp":"2001-01-02T03:04:05Z",
+        "age_years":300,"height_cm":170,"build":"average","hair_color":"black","eye_color":"brown",
+        "skin_tone":"olive","space":9999}"#;
+    let (status, response) = post(port, "/api/world/humans", nonsense).await;
+    assert_eq!(status, 202, "{response}");
+    let id = serde_json::from_str::<serde_json::Value>(body_of(&response)).unwrap()["command"]
+        .as_u64()
+        .unwrap();
+
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    let outcome = loop {
+        let (_, response) = get(port, &format!("/api/world/commands/{id}")).await;
+        let value: serde_json::Value = serde_json::from_str(body_of(&response)).unwrap();
+        if value["state"] != "queued" {
+            break value;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the command never resolved"
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    };
+    assert_eq!(outcome["state"], "refused", "{outcome}");
+    let problems = outcome["problems"].to_string();
+    assert!(problems.contains("no space 9999"), "{problems}");
+    // Every problem at once, not one trip per mistake.
+    assert!(problems.contains("age_years"), "{problems}");
+
+    world.stop();
+    server.abort();
+}
+
+/// A dashboard with no island says so rather than pretending to queue.
+#[tokio::test]
+async fn creating_in_a_world_that_is_not_running_is_refused() {
+    let data_dir = tempfile::tempdir().unwrap();
+    let (population, _) =
+        island_humans::IslandHumanPopulation::open(data_dir.path(), [9u8; 32]).unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let routes = server::routes(Arc::new(Mutex::new(population)), ControlAuth::LoopbackOnly);
+    let server = tokio::spawn(async move { warp::serve(routes).incoming(listener).run().await });
+
+    let body = r#"{"name":"Nobody","biological_sex":"female","birth_timestamp":"2001-01-02T03:04:05Z",
+        "age_years":30,"height_cm":170,"build":"average","hair_color":"black","eye_color":"brown",
+        "skin_tone":"olive","space":1}"#;
+    let (status, response) = post(port, "/api/world/humans", body).await;
+    assert_eq!(status, 409, "{response}");
+    assert!(response.contains("--scenario"), "{response}");
+
+    server.abort();
+}
+
+/// A dashboard with a small island running on it, and its port.
+async fn a_running_dashboard() -> (
+    island::serve::sim::SimHandle,
+    u16,
+    tokio::task::JoinHandle<()>,
+) {
+    use island::serve::sim::{spawn, SimSpeed};
+    use std::path::PathBuf;
+
+    let repo = |path: &str| {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .join(path)
+    };
+    let mut scenario =
+        mk_island::IslandScenario::load(&repo("fixtures/island/default_scenario.json")).unwrap();
+    scenario.estate_patch.tree_cap = 50;
+    let canon =
+        Arc::new(mk_core::canon::CanonLocked::load(&repo("fixtures/island/canon.json")).unwrap());
+    let life = mk_engine::regional::life::IslandLife::bootstrap(scenario, canon).unwrap();
+    let world = spawn(life, SimSpeed::AsFastAsPossible);
+
+    let data_dir = Box::leak(Box::new(tempfile::tempdir().unwrap()));
+    let (population, _) =
+        island_humans::IslandHumanPopulation::open(data_dir.path(), [11u8; 32]).unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let routes = server::routes_with_world(
+        Arc::new(Mutex::new(population)),
+        ControlAuth::LoopbackOnly,
+        Some(world.clone()),
+    );
+    let server = tokio::spawn(async move { warp::serve(routes).incoming(listener).run().await });
+    (world, port, server)
+}
+
+/// The body of an HTTP response, after the headers.
+fn body_of(response: &str) -> &str {
+    response
+        .split("\r\n\r\n")
+        .nth(1)
+        .expect("a body after the headers")
+        .trim()
+}

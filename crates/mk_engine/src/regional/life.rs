@@ -154,7 +154,10 @@ pub struct IslandLife {
     sleep_seconds: BTreeMap<String, (f64, f64)>,
     pub scheduler: IslandScheduler,
     labour: LabourTable,
-    rng: RngRegistry,
+    /// The world's keyed streams. Readable because creating a person in the
+    /// world draws from them (`create_human`), and a creation keyed on
+    /// anything else would not replay.
+    pub(crate) rng: RngRegistry,
     /// This run's folder tree, once somebody asks for one. Records rather
     /// than state: it is absent from the snapshot and from the state digest,
     /// and an island with one behaves exactly like an island without.

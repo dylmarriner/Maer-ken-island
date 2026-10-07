@@ -55,6 +55,10 @@ the three things a browser decides rather than a test:
   here),
 - nothing scrolls sideways at a phone width of 390 px,
 - the dark theme is legible (switch the OS or browser to dark and reload),
+- that a person created from the creator page lands in the room you picked
+  and turns up in the world panel *with body carbon* — without that they are
+  drawn on the page but outside the material flows, which looks identical
+  until you read the line,
 - and, with a world, that the page's own claims are still true of it. The
   overview says "Time is not running" when there is no world and "Time is
   running" when there is; a page that contradicts the panel below it is a
