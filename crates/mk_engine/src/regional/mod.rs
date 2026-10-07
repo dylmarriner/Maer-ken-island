@@ -20,6 +20,7 @@ pub mod life;
 pub mod local_vegetation;
 pub mod materials;
 pub mod ocean;
+pub mod pacing;
 pub mod par;
 pub mod physical;
 pub mod property;
