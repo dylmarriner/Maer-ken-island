@@ -602,17 +602,19 @@ fn fertility_ends_before_the_published_menopause_window_closes() {
     );
 }
 
-/// Survival holds for a person who is actually resting, not only for one
-/// the test hands the baseline to.
+/// Survival holds for a person whose chosen action is Rest, not only for
+/// one the test hands the baseline to directly.
 ///
 /// The survival tests above all pass `EffortFocus::none()`, which is exactly
 /// the 1.5 MET the drain rates are calibrated at, so they cannot see what
 /// happens when a real activity level reaches the needs model. That left a
-/// blind spot: a human asleep or idle through the whole ordeal goes through
-/// the full lifecycle, not through `NeedsSnapshot::step` directly. This
-/// walks one through it and holds them to the same published range.
+/// blind spot: a human whose action is Rest goes through the full lifecycle,
+/// not through `NeedsSnapshot::step` directly. This walks one through it and
+/// holds them to the same published range. It does not test sleep itself —
+/// the circadian clock owns `asleep` and the action does not set it — which
+/// is why the name says resting.
 #[test]
-fn a_sleeping_adult_still_dies_of_thirst_within_the_published_range() {
+fn a_resting_adult_still_dies_of_thirst_within_the_published_range() {
     use mk_core::human::BiologicalSex;
     use mk_core::rng::RngRegistry;
     use mk_engine::humans::{lifecycle::step_lifecycle, ActionKind, HumanBeing};

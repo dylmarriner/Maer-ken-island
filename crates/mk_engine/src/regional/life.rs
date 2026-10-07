@@ -313,12 +313,13 @@ impl IslandLife {
             .map(|s| solar_output_kw(s.rated_kw, toa, cloud))
             .sum();
         let founders = self.founders();
-        let labour = self.labour.clone();
         let dt_physical = self.scenario.cadences.weather_ocean_seconds;
-        let asleep_met = labour
+        let asleep_met = self
+            .labour
             .met(ASLEEP_ACTIVITY)
             .map_err(IslandLifeError::Labour)?;
-        let awake_met = labour
+        let awake_met = self
+            .labour
             .met(AWAKE_AT_HOME_ACTIVITY)
             .map_err(IslandLifeError::Labour)?;
         self.audited(|life, ledger| {
@@ -328,10 +329,14 @@ impl IslandLife {
                 // actually spent in, not at whichever state the clock
                 // happened to be in when this hour's accounting ran.
                 let (asleep_s, awake_s) = life.sleep_seconds.remove(id).unwrap_or((0.0, 0.0));
-                let kcal = labour
+                let kcal = life
+                    .labour
                     .energy_kcal(body, asleep_met, asleep_s)
                     .unwrap_or(0.0)
-                    + labour.energy_kcal(body, awake_met, awake_s).unwrap_or(0.0);
+                    + life
+                        .labour
+                        .energy_kcal(body, awake_met, awake_s)
+                        .unwrap_or(0.0);
                 if let Ok(kgc) = life.materials.respire(id, kcal, ledger) {
                     *life.respired_since_meal.entry(id.clone()).or_insert(0.0) += kgc;
                 }
@@ -443,14 +448,27 @@ impl IslandLife {
                     &self.rng,
                 );
             }
-            for (id, _, asleep) in self.founders() {
-                let spent = self.sleep_seconds.entry(id).or_insert((0.0, 0.0));
-                if asleep {
-                    spent.0 += human_s as f64;
+            // Taken out and put back so the registry can be read while the
+            // tally is written, without rebuilding a body and cloning an
+            // agent id per human per substep just to look at one bool.
+            let mut spent = std::mem::take(&mut self.sleep_seconds);
+            for human in self.humans.registry.iter() {
+                if !matches!(human.profile.status, mk_core::human::HumanStatus::Alive) {
+                    continue;
+                }
+                let entry = match spent.get_mut(human.agent_id()) {
+                    Some(entry) => entry,
+                    None => spent
+                        .entry(human.agent_id().to_string())
+                        .or_insert((0.0, 0.0)),
+                };
+                if human.circadian.asleep {
+                    entry.0 += human_s as f64;
                 } else {
-                    spent.1 += human_s as f64;
+                    entry.1 += human_s as f64;
                 }
             }
+            self.sleep_seconds = spent;
             let due = self.scheduler.due(self.sim_time_s);
             if due.weather_ocean {
                 self.hourly()?;
