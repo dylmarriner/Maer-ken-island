@@ -22,6 +22,7 @@ pub mod dialogue;
 pub mod emotion;
 pub mod formal_predictive_processing;
 pub mod genetics;
+pub mod growth;
 pub mod immune;
 pub mod language;
 pub mod learning;

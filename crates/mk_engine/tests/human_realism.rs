@@ -435,3 +435,48 @@ fn adult_mortality_follows_the_reference_life_table() {
     let (lo, hi) = range("mortality_rate_doubling_time");
     assert!(doubling >= lo && doubling <= hi, "{doubling}");
 }
+
+#[test]
+fn child_growth_follows_the_who_reference_tables() {
+    // Reference `median_height_for_age` (0-18 y) and `median_weight_for_age`
+    // (0-5 y), WHO 2006/2007, for a person whose adult size is the 18-year
+    // median. Tolerance: within 1% of every tabulated median (the model
+    // interpolates linearly between them, so the tabulated ages are exact).
+    use mk_core::human::BiologicalSex;
+    use mk_engine::humans::growth::{adult_reference_weight_kg, height_fraction, weight_fraction};
+    let lib = reference();
+    let heights = lib
+        .item(ReferenceDomain::Humans, "median_height_for_age")
+        .unwrap()
+        .table()
+        .unwrap()
+        .clone();
+    let weights = lib
+        .item(ReferenceDomain::Humans, "median_weight_for_age")
+        .unwrap()
+        .table()
+        .unwrap()
+        .clone();
+    for (sex, column) in [
+        (BiologicalSex::Male, "boys"),
+        (BiologicalSex::Female, "girls"),
+    ] {
+        let adult_cm = heights.get("18", column).unwrap();
+        for age in ["0", "1", "2", "5", "10", "18"] {
+            let reference = heights.get(age, column).unwrap();
+            let got = adult_cm * height_fraction(sex, age.parse().unwrap());
+            assert!(
+                (got - reference).abs() / reference < 0.01,
+                "{column} height at {age} y: model {got:.1} vs {reference:.1} cm"
+            );
+        }
+        for age in ["0", "1", "2", "5"] {
+            let reference = weights.get(age, column).unwrap();
+            let got = adult_reference_weight_kg(sex) * weight_fraction(sex, age.parse().unwrap());
+            assert!(
+                (got - reference).abs() / reference < 0.01,
+                "{column} weight at {age} y: model {got:.2} vs {reference:.2} kg"
+            );
+        }
+    }
+}

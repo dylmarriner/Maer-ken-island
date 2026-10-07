@@ -284,8 +284,19 @@ pub fn step_lifecycle(
         return;
     }
 
-    // Age the human and recompute every age-derived development curve.
+    // Age the human and recompute every age-derived development curve; a
+    // child grows toward their adult size (adults are not changed).
+    let age_before = human.development.age_years;
     human.development.step(dt_years);
+    let (height, weight) = super::growth::growth_ratio(
+        *human.biological_sex(),
+        age_before,
+        human.development.age_years,
+    );
+    if height != 1.0 || weight != 1.0 {
+        human.body.height_cm *= height;
+        human.body.weight_kg *= weight;
+    }
     human.refresh_phase11_layers();
 
     // Physical capacity reads last tick's proprioception/body/immune
@@ -979,6 +990,13 @@ pub fn deliver_birth(
     };
     assign_birth_chart(&mut child, current_instant_of(mother), coordinates, tick);
     child.set_runtime_position(mother.position);
+    // A newborn is a newborn. The embryo's schema age of 0 reads as "unset"
+    // and falls back to 25 years, which made every child a 25-year-old adult
+    // with an adult body; set age 0 and the WHO birth size explicitly.
+    child.development = super::DevelopmentSnapshot::new(0.0);
+    let sex = *child.biological_sex();
+    child.body.height_cm *= super::growth::height_fraction(sex, 0.0);
+    child.body.weight_kg *= super::growth::weight_fraction(sex, 0.0);
 
     let child_id = child.agent_id().to_string();
     let birth_timestamp = child.profile.core_identity.birth_timestamp.clone();
@@ -1555,6 +1573,72 @@ mod tests {
             embryo: Box::new(embryo),
         };
         deliver_birth(mother, pregnancy, tick, &grid())
+    }
+
+    #[test]
+    fn a_newborn_is_a_newborn_and_grows_along_the_who_curve() {
+        let registry_rng = rng();
+        let mother = adult("nb_mother", BiologicalSex::Female);
+        let father = adult("nb_father", BiologicalSex::Male);
+        let mut child = born(&mother, &father, &registry_rng, 0);
+        let sex = *child.biological_sex();
+        // Not the 25-year-old adult the schema's age-0 fallback used to make.
+        assert!(
+            child.development.age_years < 0.01,
+            "{}",
+            child.development.age_years
+        );
+        assert_eq!(
+            child.development.stage,
+            super::super::DevelopmentStage::Infant
+        );
+        let adult_kg = child.body.weight_kg / super::super::growth::weight_fraction(sex, 0.0);
+        let adult_cm = child.body.height_cm / super::super::growth::height_fraction(sex, 0.0);
+        assert!(
+            (2.0..5.0).contains(&child.body.weight_kg),
+            "{} kg",
+            child.body.weight_kg
+        );
+        assert!(
+            (40.0..60.0).contains(&child.body.height_cm),
+            "{} cm",
+            child.body.height_cm
+        );
+
+        // One year of ticks: the child is a one-year-old, near the WHO medians
+        // for a person whose adult size is this child's.
+        let months: u64 = 12;
+        for tick in 1..=months {
+            step_lifecycle(
+                &mut child,
+                1.0 / months as f64,
+                tick,
+                &benign_observation(),
+                &registry_rng,
+                (0, 0),
+            );
+        }
+        assert!(
+            matches!(child.profile.status, HumanStatus::Alive),
+            "the infant died"
+        );
+        assert!((child.development.age_years - 1.0).abs() < 0.01);
+        let want_kg = adult_kg * super::super::growth::weight_fraction(sex, 1.0);
+        let want_cm = adult_cm * super::super::growth::height_fraction(sex, 1.0);
+        assert!(
+            (child.body.weight_kg - want_kg).abs() / want_kg < 1e-6,
+            "{} vs {want_kg}",
+            child.body.weight_kg
+        );
+        assert!(
+            (child.body.height_cm - want_cm).abs() / want_cm < 1e-6,
+            "{} vs {want_cm}",
+            child.body.height_cm
+        );
+        assert!(
+            child.body.weight_kg > 2.0 * 3.3,
+            "a one-year-old is not a newborn"
+        );
     }
 
     #[test]
