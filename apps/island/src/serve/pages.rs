@@ -1,6 +1,7 @@
 //! The dashboard's pages and their assets, embedded in the binary so the
 //! server runs from one file with nothing to install beside it.
 
+use super::read;
 use warp::{Filter, Reply};
 
 const OVERVIEW: &str = include_str!("../../static/index.html");
@@ -41,22 +42,19 @@ fn page(body: &'static str) -> impl warp::Reply {
 }
 
 pub fn routes() -> impl Filter<Extract = (impl Reply,), Error = std::convert::Infallible> + Clone {
-    let overview = warp::path::end().and(warp::get()).map(|| page(OVERVIEW));
-    let people = warp::path!("people").and(warp::get()).map(|| page(PEOPLE));
-    let creator = warp::path!("creator")
-        .and(warp::get())
-        .map(|| page(CREATOR));
-    let assets =
-        warp::path!("static" / String)
-            .and(warp::get())
-            .and_then(|name: String| async move {
-                match ASSETS.iter().find(|(asset, _, _)| *asset == name) {
-                    Some((_, body, content_type)) => {
-                        Ok(served(body, content_type, ASSET_CACHE).into_response())
-                    }
-                    None => Err(warp::reject::not_found()),
+    let overview = warp::path::end().and(read()).map(|| page(OVERVIEW));
+    let people = warp::path!("people").and(read()).map(|| page(PEOPLE));
+    let creator = warp::path!("creator").and(read()).map(|| page(CREATOR));
+    let assets = warp::path!("static" / String)
+        .and(read())
+        .and_then(|name: String| async move {
+            match ASSETS.iter().find(|(asset, _, _)| *asset == name) {
+                Some((_, body, content_type)) => {
+                    Ok(served(body, content_type, ASSET_CACHE).into_response())
                 }
-            });
+                None => Err(warp::reject::not_found()),
+            }
+        });
     // Anything else is a mistyped address, and a person is reading it, so it
     // gets the page that says so rather than warp's bare 404.
     let missing = warp::any().map(|| {

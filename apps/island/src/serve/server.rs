@@ -3,6 +3,7 @@
 
 use super::auth::ControlAuth;
 use super::pages;
+use super::read;
 use super::view;
 use island_humans::{CreateHumanError, CreateHumanRequest, IslandHumanPopulation};
 use std::sync::{Arc, Mutex};
@@ -243,7 +244,7 @@ pub fn routes(
     auth: ControlAuth,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = std::convert::Infallible> + Clone {
     let get_status = warp::path!("api" / "status")
-        .and(warp::get())
+        .and(read())
         .and(with(population.clone()))
         .and(with(auth.clone()))
         .map(|population: SharedPopulation, auth: ControlAuth| {
@@ -255,7 +256,7 @@ pub fn routes(
         .or(warp::path!("api" / "health"))
         .unify()
         .and(warp::path::end())
-        .and(warp::get())
+        .and(read())
         .and(with(population.clone()))
         .map(|population: SharedPopulation| {
             let population = locked(&population);
@@ -263,7 +264,7 @@ pub fn routes(
         });
 
     let list = warp::path!("api" / "humans")
-        .and(warp::get())
+        .and(read())
         .and(with(population.clone()))
         .map(|population: SharedPopulation| {
             let population = locked(&population);
@@ -274,7 +275,7 @@ pub fn routes(
         });
 
     let one = warp::path!("api" / "humans" / String)
-        .and(warp::get())
+        .and(read())
         .and(with(population.clone()))
         .map(|agent_id: String, population: SharedPopulation| {
             let population = locked(&population);
@@ -288,7 +289,7 @@ pub fn routes(
         });
 
     let get_activity = warp::path!("api" / "activity")
-        .and(warp::get())
+        .and(read())
         .and(warp::query::<ActivityQuery>())
         .and(with(population.clone()))
         .map(|query: ActivityQuery, population: SharedPopulation| {
@@ -300,7 +301,7 @@ pub fn routes(
         });
 
     let get_options = warp::path!("api" / "creator" / "options")
-        .and(warp::get())
+        .and(read())
         .map(|| json(StatusCode::OK, &options()));
 
     // The body is read as bytes and parsed here rather than by
@@ -656,6 +657,26 @@ mod tests {
             .as_str()
             .unwrap()
             .contains("larger than"));
+    }
+
+    #[tokio::test]
+    async fn a_monitor_may_ask_with_head() {
+        let (_tmp, population) = stored();
+        let filter = routes(population, ControlAuth::resolve(None, LOOPBACK));
+        for path in [
+            "/healthz",
+            "/api/status",
+            "/",
+            "/people",
+            "/static/style.css",
+        ] {
+            let response = warp::test::request()
+                .method("HEAD")
+                .path(path)
+                .reply(&filter)
+                .await;
+            assert_eq!(response.status(), 200, "{path}");
+        }
     }
 
     #[tokio::test]
