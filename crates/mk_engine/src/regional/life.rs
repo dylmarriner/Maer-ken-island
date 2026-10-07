@@ -60,6 +60,24 @@ const FULL_RATION_WEIGHT_KG: f64 = 55.0;
 /// where to go (they are carried, then toddle behind her).
 const DEPENDENT_AGE_YEARS: f64 = 5.0;
 
+/// Wall-clock time spent in each major part of the island step. Runtime-only
+/// instrumentation: never hashed, saved or read by the simulation.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct SubsystemTimings {
+    /// Human substeps run.
+    pub substeps: u64,
+    /// The people: movement, needs, cognition, estate interaction (every substep).
+    pub humans: std::time::Duration,
+    /// Children following mothers and newborn adoption (every substep).
+    pub households: std::time::Duration,
+    /// Weather, ocean, tides, insolation, hydrology step and the estate energy and respiration (hourly).
+    pub physics_hourly: std::time::Duration,
+    /// Ecology, vegetation, food and water (six-hourly).
+    pub ecology_six_hourly: std::time::Duration,
+    /// Per-human folder writes (store cadence).
+    pub human_store: std::time::Duration,
+}
+
 /// The share of a full meal or drink a person of this weight takes. Exactly
 /// 1 from `FULL_RATION_WEIGHT_KG` up, so adults are unaffected.
 fn ration_factor(weight_kg: f64) -> f64 {
@@ -160,6 +178,8 @@ pub struct IslandLife {
     pub commands: CommandState,
     /// Per-human folders for this run (runtime-only; not hashed or saved).
     pub store: Option<super::store::HumanStoreStatus>,
+    /// Where the step time goes (runtime-only; not hashed or saved).
+    pub timings: SubsystemTimings,
     labour: LabourTable,
     rng: RngRegistry,
     food_cell: (usize, usize),
@@ -276,6 +296,7 @@ impl IslandLife {
             scheduler: IslandScheduler::new(scenario_cadences),
             commands: CommandState::default(),
             store: None,
+            timings: SubsystemTimings::default(),
             labour: LabourTable::load_default().map_err(IslandLifeError::Labour)?,
             food_cell,
             water_cell,
@@ -346,6 +367,7 @@ impl IslandLife {
             scheduler: snap.scheduler,
             commands: snap.commands,
             store: None,
+            timings: SubsystemTimings::default(),
             labour: LabourTable::load_default().map_err(IslandLifeError::Labour)?,
             food_cell: snap.food_cell,
             water_cell: snap.water_cell,
@@ -806,6 +828,7 @@ impl IslandLife {
         let human_s = self.scenario.cadences.human_seconds;
         self.sim_time_s += human_s;
         self.tick += 1;
+        let started = std::time::Instant::now();
         {
             let energy = self.energy.clone();
             let ctx = RegionalHumanContext {
@@ -828,18 +851,28 @@ impl IslandLife {
                 &self.rng,
             );
         }
+        let humans_done = std::time::Instant::now();
+        self.timings.humans += humans_done - started;
         self.keep_children_with_mothers();
         self.adopt_newborns();
+        self.timings.households += humans_done.elapsed();
         let due = self.scheduler.due(self.sim_time_s);
         if due.weather_ocean {
+            let t = std::time::Instant::now();
             self.hourly()?;
+            self.timings.physics_hourly += t.elapsed();
         }
         if due.hydrology_ecology_resource {
+            let t = std::time::Instant::now();
             self.six_hourly()?;
+            self.timings.ecology_six_hourly += t.elapsed();
         }
         if due.human_store {
+            let t = std::time::Instant::now();
             self.sync_store_shard();
+            self.timings.human_store += t.elapsed();
         }
+        self.timings.substeps += 1;
         self.scheduler.record(due);
         Ok(())
     }

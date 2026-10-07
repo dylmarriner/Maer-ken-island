@@ -36,7 +36,8 @@ fidelity limits. The project is **not complete**: see "Not done".
 | **Combined island, one simulated week** (physics, ecology, estate, 200,000 trees, 2 founders, energy, materials) | 49 s, **307 MB peak** | `benchmarks/island_week.md` |
 
 | Island with 1,002 / 5,002 people (360 / 120 minute-steps) | 594 MB / 1,017 MB peak; 115 / 511 ms per step | `benchmarks/island_population.md` |
-| Snapshot of 5,002 people | 923 MB file, 30 s save, 10 s load, 1.7 GB peak (was OOM-killed at 3.6 GB before the streaming fix) | `benchmarks/island_population.md` |
+| Snapshot of 5,002 people | 923 MB file before compression, 30 s save, 10 s load, 1.7 GB peak (was OOM-killed at 3.6 GB before the streaming fix); snapshots are now compressed about 7x | `benchmarks/island_population.md` |
+| **Regional baseline** (`island_bench`, two founders, 1,000 steps) | 12.9 simulated days per real minute, 3.2 ms per step, 466 MB peak, snapshot 49 MB (save 1.9 s, load 2.2 s); no speedup from more cores (0.96x) | `benchmarks/2026-10-08-regional-baseline.json`, `benchmarks/README.md` |
 | Two founders, one simulated year | about 33 min wall clock, 713 MB peak including the final snapshot; a birth occurred | `benchmarks/island_week.md` |
 
 Limits of this evidence: populated runs are short (six hours or less) and add no births, deaths or

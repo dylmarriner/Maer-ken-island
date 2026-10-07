@@ -1,0 +1,35 @@
+{
+  "bootstrap_ms": 12261.717702,
+  "dt_seconds": 60,
+  "human_store_sync_ms": 33.162718,
+  "load_ms": 2199.923921,
+  "notes": [
+    "spin_up_1000y_seconds is null: no deep-time spin-up exists (plan Task 2b is blocked on missing soil, erosion and tectonics models)."
+  ],
+  "peak_rss_bytes": 466100224,
+  "population": 2,
+  "save_ms": 1872.514422,
+  "scenario": "fixtures/island/default_scenario.json",
+  "serialized_state_bytes": 49065368,
+  "simulated_days_per_real_minute": 12.889486860163112,
+  "snapshot_bytes": 49065368,
+  "snapshot_round_trip_hash_equal": true,
+  "spin_up_1000y_seconds": null,
+  "step_ms_per_tick": 3.232608646,
+  "subsystem_ms": {
+    "ecology_six_hourly": 1823.095405,
+    "households": 0.12448000000000001,
+    "human_store_cadence": 401.520076,
+    "humans": 363.312489,
+    "physics_hourly": 644.385009
+  },
+  "thread_comparison": {
+    "all_threads_ticks_per_second": 932.2164882621826,
+    "one_thread_ticks_per_second": 976.048911450715,
+    "speedup": 0.9550919808686804,
+    "ticks": 200
+  },
+  "threads": 8,
+  "ticks": 1000,
+  "ticks_per_second": 309.34768464391465
+}

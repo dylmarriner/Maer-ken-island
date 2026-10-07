@@ -62,3 +62,20 @@ Honest limits:
   writes everyone. The per-firing cost at 5,000 (one shard of 1,000) has not
   been re-measured separately.
 - Short spans, no births, deaths or long-run growth (unchanged).
+
+## Snapshot compression (format 2) and the regional baseline
+
+Snapshots are now zlib-compressed JSON (flate2, pure-Rust backend, level 1): the two-founder
+snapshot went from 338 MB to about 49 MB (7x; a one-year snapshot from 357 MB to about 50 MB), and
+format 1 files still load. An unbatched first version was *slower* (32 s to save): the JSON
+writer fed the compressor a few bytes at a time; batching the writes through a 1 MB buffer fixed
+it. Measured by `island_bench` (`benchmarks/2026-10-08-regional-baseline.json`, two founders,
+1,000 steps): save 1.9 s, load 2.2 s, round trip hash-equal. Earlier uncompressed saves took 11-18
+s on this machine, so most of that was writing 338 MB. The large-population snapshot figures
+above (923 MB for 5,002 people) are the uncompressed numbers and were not re-measured; expect
+roughly a seventh of the size.
+
+`island_bench` also showed that **stepping does not use the extra cores**: 200 steps run at 976
+steps/s with one thread and 932 with eight (speedup 0.96). The island step is effectively
+single-threaded for a small population, so a faster CPU core helps more than more cores. Whether
+a populated island (thousands of people) parallelises better was not measured.

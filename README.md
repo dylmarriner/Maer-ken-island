@@ -81,7 +81,8 @@ Measured on a 16 GB development machine, release build (`benchmarks/`):
 | Two founders, one simulated year | about 400 MB | about 32 min |
 | 1,000 people | about 600 MB | 115 ms per simulated minute |
 | 5,000 people | about 1.0 GB | 0.5 s per simulated minute |
-| Snapshot file, two people / 5,000 people | 0.34 GB / 0.92 GB | save 1-30 s, load 1-10 s |
+| Snapshot file, two people | 0.05 GB (compressed) | save about 2 s, load about 2 s |
+| Snapshot file, 5,000 people | about 0.9 GB measured before compression, so expect roughly 0.13 GB | save 30 s, load 10 s before compression |
 
 An 8 GB machine is comfortable for the founders and for thousands of people. Compiling is the heavy part: `rustc` can use 4 GB or more, so on a small or busy machine build with `cargo build -j 1`, and keep large files out of `/tmp` where it is RAM-backed.
 

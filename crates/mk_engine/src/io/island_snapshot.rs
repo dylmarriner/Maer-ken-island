@@ -1,15 +1,16 @@
 //! Complete island snapshots (Phase 4 Task 3).
 //!
 //! File layout: an 8-byte magic, a `u32` format version, a blake3 digest of
-//! the payload, then the payload: a JSON `Envelope` holding the scenario,
-//! the canon and the whole island state. The digest makes tampering and
+//! the payload bytes as stored, then the payload: a JSON `Envelope` holding
+//! the scenario, the canon and the whole island state, zlib-compressed from
+//! format version 2 (about 7x smaller: 357 MB becomes 53 MB, which is most of
+//! the time a save takes on a slow disk). Version 1 (uncompressed) is still read. The digest makes tampering and
 //! truncation fail loudly; the canon and scenario are validated before any
 //! state is returned. Writing is atomic (temp file, fsync, rename).
 //!
 //! The payload is JSON, as the plan says (upstream human state embeds
 //! `serde_json::Value`s, which compact binary formats cannot read back). It
-//! is large: the medium hydrology grids dominate. Compression is a
-//! Phase 5 option.
+//! is large: the medium hydrology grids dominate.
 
 use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
@@ -24,7 +25,11 @@ use crate::regional::world::IslandWorldState;
 
 const MAGIC: &[u8; 8] = b"MKISLSNP";
 /// The snapshot format this code reads and writes.
-pub const FORMAT_VERSION: u32 = 1;
+pub const FORMAT_VERSION: u32 = 2;
+/// The oldest format this code still reads (uncompressed JSON).
+const OLDEST_READABLE_VERSION: u32 = 1;
+/// Most bytes a snapshot may expand to on load; a guard against a crafted file.
+const MAX_DECOMPRESSED_BYTES: u64 = 16 << 30;
 const HEADER_LEN: usize = 8 + 4 + 32;
 
 #[derive(Debug)]
@@ -139,8 +144,17 @@ pub fn save_island_snapshot(
             inner: &mut out,
             hasher: blake3::Hasher::new(),
         };
-        serde_json::to_writer(&mut hashing, &envelope)
-            .map_err(|e| IslandSnapshotError::Serialization(e.to_string()))?;
+        let mut encoder =
+            flate2::write::ZlibEncoder::new(&mut hashing, flate2::Compression::new(1));
+        {
+            // serde_json writes a few bytes at a time; batch them so the
+            // compressor sees large blocks (unbatched, the save was 3x slower).
+            let mut batched = BufWriter::with_capacity(1 << 20, &mut encoder);
+            serde_json::to_writer(&mut batched, &envelope)
+                .map_err(|e| IslandSnapshotError::Serialization(e.to_string()))?;
+            batched.flush().map_err(io)?;
+        }
+        encoder.finish().map_err(io)?;
         let digest = hashing.hasher.finalize();
         out.flush().map_err(io)?;
         let mut file = out.into_inner().map_err(|e| io(e.into_error()))?;
@@ -168,7 +182,7 @@ pub fn load_island_snapshot(path: &Path) -> Result<IslandWorldState, IslandSnaps
         return Err(IslandSnapshotError::BadMagic);
     }
     let version = u32::from_le_bytes(header[8..12].try_into().expect("4 bytes"));
-    if version != FORMAT_VERSION {
+    if !(OLDEST_READABLE_VERSION..=FORMAT_VERSION).contains(&version) {
         return Err(IslandSnapshotError::UnsupportedFormat(version));
     }
     // Verify the digest in chunks, then parse from the same file: the
@@ -187,8 +201,14 @@ pub fn load_island_snapshot(path: &Path) -> Result<IslandWorldState, IslandSnaps
         return Err(IslandSnapshotError::DigestMismatch);
     }
     file.seek(SeekFrom::Start(HEADER_LEN as u64)).map_err(io)?;
-    let envelope: Envelope = serde_json::from_reader(BufReader::with_capacity(1 << 20, file))
-        .map_err(|e| IslandSnapshotError::Serialization(e.to_string()))?;
+    let reader = BufReader::with_capacity(1 << 20, file);
+    let envelope: Envelope = if version >= 2 {
+        let decoded = flate2::read::ZlibDecoder::new(reader).take(MAX_DECOMPRESSED_BYTES);
+        serde_json::from_reader(BufReader::with_capacity(1 << 20, decoded))
+    } else {
+        serde_json::from_reader(reader)
+    }
+    .map_err(|e| IslandSnapshotError::Serialization(e.to_string()))?;
     envelope
         .scenario
         .validate()

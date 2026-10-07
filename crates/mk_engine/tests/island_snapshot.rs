@@ -168,3 +168,40 @@ fn an_incompatible_scenario_or_an_invalid_canon_is_rejected_before_any_state_is_
         Err(IslandSnapshotError::IncompatibleScenario(_))
     ));
 }
+
+#[test]
+fn snapshots_are_compressed_and_the_older_uncompressed_format_still_loads() {
+    use std::io::Read;
+    let dir = tempfile::tempdir().unwrap();
+    let w = world();
+    let path = saved(&w, &dir);
+    let v2 = std::fs::read(&path).unwrap();
+    assert_eq!(
+        u32::from_le_bytes(v2[8..12].try_into().unwrap()),
+        2,
+        "written as format 2"
+    );
+
+    // Decompress the payload to get the raw JSON a version-1 file held.
+    let mut raw = Vec::new();
+    flate2::read::ZlibDecoder::new(&v2[44..])
+        .read_to_end(&mut raw)
+        .unwrap();
+    assert!(
+        v2.len() * 3 < raw.len(),
+        "compression should be well over 3x: {} bytes stored for {} of JSON",
+        v2.len(),
+        raw.len()
+    );
+
+    // Rebuild a version-1 file: magic, version 1, digest of the raw payload, payload.
+    let mut v1 = Vec::new();
+    v1.extend_from_slice(&v2[..8]);
+    v1.extend_from_slice(&1u32.to_le_bytes());
+    v1.extend_from_slice(blake3::hash(&raw).as_bytes());
+    v1.extend_from_slice(&raw);
+    let old = dir.path().join("old.snap");
+    std::fs::write(&old, &v1).unwrap();
+    let loaded = load_island_snapshot(&old).expect("a version-1 snapshot still loads");
+    assert_eq!(loaded.state_hash().unwrap(), w.state_hash().unwrap());
+}
