@@ -646,10 +646,22 @@ impl IslandLife {
             self.six_hourly()?;
         }
         if due.human_store {
-            self.sync_store();
+            self.sync_store_shard();
         }
         self.scheduler.record(due);
         Ok(())
+    }
+
+    /// The cadence write: one rotating shard of at most `max_per_sync`
+    /// humans, so a large population never costs one huge pause.
+    fn sync_store_shard(&mut self) {
+        let Some(store) = self.store.as_mut() else {
+            return;
+        };
+        let n = self.humans.registry.iter().count();
+        let shards = n.div_ceil(store.max_per_sync.max(1)).max(1);
+        let shard = (self.scheduler.counters.human_store as usize) % shards;
+        store.record(self.humans.sync_store_shard(shard, shards));
     }
 
     /// Write every human's folder; failures are counted in the store status.

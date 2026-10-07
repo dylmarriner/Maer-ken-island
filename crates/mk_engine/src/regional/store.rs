@@ -39,7 +39,15 @@ pub struct HumanStoreStatus {
     /// Failed folder writes, summed over all syncs.
     pub errors: u64,
     pub last_error: Option<String>,
+    /// Most humans written by one cadence firing. A larger population is
+    /// written in rotating shards (each human at least every
+    /// `ceil(n / max_per_sync)` firings); a snapshot save writes everyone.
+    pub max_per_sync: usize,
 }
+
+/// Default shard size: about 17 s of disk work per firing on the reference
+/// machine (`benchmarks/island_population.md`).
+pub const DEFAULT_MAX_PER_SYNC: usize = 1_000;
 
 impl HumanStoreStatus {
     pub(crate) fn record(&mut self, errors: Vec<HumanStorageError>) {
@@ -103,6 +111,7 @@ impl IslandWorldState {
             syncs: 0,
             errors: 0,
             last_error: None,
+            max_per_sync: DEFAULT_MAX_PER_SYNC,
         });
         Ok(id)
     }
@@ -111,6 +120,13 @@ impl IslandWorldState {
     /// folders match it). A no-op without a store; failures are counted.
     pub fn sync_human_store(&mut self) {
         self.life.sync_store();
+    }
+
+    /// Change the shard size (at least 1).
+    pub fn set_store_max_per_sync(&mut self, n: usize) {
+        if let Some(s) = self.life.store.as_mut() {
+            s.max_per_sync = n.max(1);
+        }
     }
 
     pub fn human_store_status(&self) -> Option<&HumanStoreStatus> {

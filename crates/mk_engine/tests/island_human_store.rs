@@ -160,3 +160,35 @@ fn the_state_hash_is_the_same_with_the_store_off_on_or_failing() {
     assert_eq!(hex(&on), hex(&off));
     assert_eq!(hex(&failing), hex(&off));
 }
+
+#[test]
+fn a_large_population_is_written_in_rotating_shards_and_a_snapshot_writes_everyone() {
+    let root = tempfile::tempdir().unwrap();
+    let mut w = world();
+    w.enable_human_store(root.path()).unwrap();
+    w.set_store_max_per_sync(1); // two founders -> two shards
+    let ids = ids(&w);
+    for _ in 0..60 {
+        w.step(60).unwrap(); // first hour: shard 0 only
+    }
+    let status = w.human_store_status().unwrap();
+    assert_eq!(status.syncs, 1);
+    let fresh = |w: &IslandWorldState, id: &str| stored_json(w, id) == live_json(w, id);
+    let first_hour: Vec<bool> = ids.iter().map(|i| fresh(&w, i)).collect();
+    assert_eq!(
+        first_hour.iter().filter(|b| **b).count(),
+        1,
+        "one shard written: {first_hour:?}"
+    );
+    for _ in 0..60 {
+        w.step(60).unwrap(); // second hour: shard 1
+    }
+    let second_hour: Vec<bool> = ids.iter().map(|i| fresh(&w, i)).collect();
+    assert_eq!(second_hour.iter().filter(|b| **b).count(), 1);
+    assert_ne!(first_hour, second_hour, "the shards rotate");
+    w.sync_human_store();
+    assert!(
+        ids.iter().all(|i| fresh(&w, i)),
+        "a snapshot save writes everyone"
+    );
+}

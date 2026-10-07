@@ -192,6 +192,22 @@ impl HumanSystem {
         sink(log.to_string().as_bytes());
     }
 
+    /// Write one shard of the population: the humans whose position in
+    /// the registry is `shard` modulo `shards`. Errors are returned.
+    pub fn sync_store_shard(
+        &self,
+        shard: usize,
+        shards: usize,
+    ) -> Vec<crate::io::human_storage::HumanStorageError> {
+        let shards = shards.max(1);
+        self.registry
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| i % shards == shard % shards)
+            .filter_map(|(_, h)| self.registry.sync_human_to_storage(h.agent_id()).err())
+            .collect()
+    }
+
     /// Choose whether each step rewrites every human's folder. When off,
     /// the caller syncs with [`Self::sync_store`]; a human who dies is still
     /// written the same step.

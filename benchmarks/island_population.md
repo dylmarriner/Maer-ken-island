@@ -55,8 +55,10 @@ Honest limits:
   the 5,002 run, against 0.5-0.7 s in quieter runs) are pessimistic and noisy;
   peak memory is the reliable column.
 - A **full folder sync of 5,000 humans takes about 49 s**, against about 31 s
-  of wall clock per simulated hour at 117x. Syncing every human hourly does
-  not scale to that size; the store needs dirty-only writes or a slower
-  cadence at large populations. Up to about 1,000 humans (17 s per sync) it
-  is workable. Open.
+  of wall clock per simulated hour at 117x, so the hourly cadence writes a
+  rotating shard of at most 1,000 humans (`HumanStoreStatus::max_per_sync`,
+  about 17 s per firing here); each human is rewritten at least every
+  `ceil(n / 1000)` hours. Deaths are still written at once and a snapshot save
+  writes everyone. The per-firing cost at 5,000 (one shard of 1,000) has not
+  been re-measured separately.
 - Short spans, no births, deaths or long-run growth (unchanged).
