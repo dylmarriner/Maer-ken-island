@@ -177,6 +177,34 @@ pub fn respired_carbon_kg_per_kcal() -> f64 {
 }
 /// Share of a river's flow a household may draw per day.
 pub const RIVER_WITHDRAWAL_FRACTION: f64 = 0.01;
+
+/// The cells a person tries for a drink, in order: the usual cell, then its
+/// eight neighbours in row-major order (a stream cell can be dry for a day
+/// while the next one holds water). Cells off the grid are left out.
+pub fn water_search_cells(cell: (usize, usize), rows: usize, cols: usize) -> Vec<(usize, usize)> {
+    let mut cells = vec![cell];
+    for dr in -1i64..=1 {
+        for dc in -1i64..=1 {
+            let (r, c) = (cell.0 as i64 + dr, cell.1 as i64 + dc);
+            if (dr, dc) != (0, 0) && (0..rows as i64).contains(&r) && (0..cols as i64).contains(&c)
+            {
+                cells.push((r as usize, c as usize));
+            }
+        }
+    }
+    cells
+}
+
+/// Water a cell offers a drinker right now: standing water plus the river's
+/// withdrawable share, kg.
+pub fn water_available_kg(
+    hydrology: &HydrologyState,
+    cell: (usize, usize),
+    cell_area_m2: f64,
+) -> f64 {
+    hydrology.surface_water.get(cell.0, cell.1).max(0.0) * cell_area_m2
+        + hydrology.runoff.get(cell.0, cell.1).max(0.0) * cell_area_m2 * RIVER_WITHDRAWAL_FRACTION
+}
 /// Service life (years) of a timber structure: decay moves its carbon to
 /// detritus at this e-folding time.
 pub const TIMBER_STRUCTURE_LIFETIME_YEARS: f64 = 60.0;

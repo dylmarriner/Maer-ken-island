@@ -46,3 +46,21 @@ One run only: not re-run in a second process, and what the household economy
 did over the year (food and water shortfalls, the child's health) was not
 inspected beyond the population count. Memory over the year was not sampled
 over time, so growth cannot be separated from the snapshot save peak.
+
+### Re-run on the current code (newborn fix, streamed snapshot)
+
+| Quantity | Result |
+|---|---|
+| Wall clock | 32 min 11 s (about 16x real time while sharing the machine) |
+| Peak resident memory | 397 MB (includes the final snapshot save) |
+| People at day 365 | 3: both founders alive and a child, **age 0.266 y, Infant, 5.1 kg, 56 cm** (the earlier run showed the same child as 25 y, 59 kg) |
+| Food shortfalls | 0 |
+| Water shortfalls | 10 (before the neighbour-cell fix below) |
+| State hash | `27772f9e...361d` (binary built before the water fix; not comparable with the pinned week digest) |
+
+Water shortfalls explained (`tests/island_water_supply.rs`, slow tier, physics only,
+about 6 min): the household's stream cell holds a thin film of water (a few
+millimetres over a 4 km2 cell on a typical day, 10^7 kg) but reads exactly zero
+for one continuous day (days 202.75-203.75, five 6-hourly draws). People now try the
+eight neighbouring cells when the usual one is dry; with that, the household had
+water at every one of 1,460 draws in the year (lowest supply 372 tonnes).

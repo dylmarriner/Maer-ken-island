@@ -37,7 +37,7 @@ use super::humans::{
 use super::hydrology::discharge_m3_s;
 use super::labour::{LabourBody, LabourError, LabourTable};
 use super::local_vegetation::{seed_local_vegetation, LocalVegetationError, LocalVegetationPatch};
-use super::materials::{Material, MaterialError, MaterialLedger};
+use super::materials::{water_search_cells, Material, MaterialError, MaterialLedger};
 use super::physical::{PhysicalSnapshot, RegionalPhysicalError, RegionalPhysicalState};
 use super::property::{place_regional_estate, PlaceEstateError, PlacedEstate};
 use super::scheduler::IslandScheduler;
@@ -133,7 +133,7 @@ pub struct IslandLife {
     labour: LabourTable,
     rng: RngRegistry,
     food_cell: (usize, usize),
-    water_cell: Option<(usize, usize)>,
+    pub water_cell: Option<(usize, usize)>,
     topology: GridTopology,
 }
 
@@ -433,18 +433,26 @@ impl IslandLife {
                     Err(MaterialError::NothingToHarvest) => life.shortfalls.food += 1,
                     Err(_) => life.shortfalls.food += 1,
                 }
-                let drawn = life
-                    .water_cell
-                    .ok_or(MaterialError::DryCell)
-                    .and_then(|cell| {
-                        life.materials.gather_water(
+                // The usual stream cell, or the next wet one beside it.
+                let mut drawn = Err(MaterialError::DryCell);
+                if let Some(cell) = life.water_cell {
+                    let (rows, cols) = (
+                        life.domain.rows(DomainLevel::Medium),
+                        life.domain.cols(DomainLevel::Medium),
+                    );
+                    for candidate in water_search_cells(cell, rows, cols) {
+                        drawn = life.materials.gather_water(
                             WATER_KG_PER_DRINK,
                             &mut life.physical.hydrology,
-                            cell,
+                            candidate,
                             area,
                             ledger,
-                        )
-                    });
+                        );
+                        if drawn.is_ok() {
+                            break;
+                        }
+                    }
+                }
                 match drawn {
                     Ok(kg) => {
                         let _ = life.materials.drink(id, kg);
