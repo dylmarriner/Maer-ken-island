@@ -274,11 +274,14 @@ Implementation notes: baseline before the refactor was 309 humans/perception/org
 - Produces: `seed_local_vegetation(ecology: &RegionalEcologyState, layout: &EstateLayout, domain: &IslandDomain, config: &EstatePatchConfig, seed: [u8; 32]) -> Result<LocalVegetationPatch, LocalVegetationError>` and `step_local_vegetation(&mut self, ecology: &RegionalEcologyState, dt_seconds: u64)` (growth/mortality scaled to the NPP of the estate-block cell under each tree).
 - Produces: `fell_tree(&mut self, tree_id, economy: &mut ResourceEconomyState, materials: &mut MaterialLedger) -> Result<WoodYield, LocalVegetationError>` — the stem is removed, wood enters the economy through the same item kinds a Tree node yields, and its carbon moves `BiomassCarbon → MaterialCarbon` through Task 3, debiting the biomass of the estate-block cell under the tree and producer species.
 
-- [ ] **Step 1:** Write tests: stem density follows biome/biomass (forest ≫ grassland, none in water); trees + stands sum to the four estate cells' biomass within ±2% with the cap both inactive and forced active (cap = 1,000); no tree in footprints or yard; count never exceeds `cap`; felling removes the stem, adds wood and moves exactly its carbon; deterministic bytes.
-- [ ] **Step 2:** Run `cargo test -p mk_engine --test island_local_vegetation`; expect FAIL.
-- [ ] **Step 3:** Implement deterministic Poisson-disc placement with spacing from biome/kind, size distribution from biomass, stands for the remainder, and growth/mortality tied to NPP.
-- [ ] **Step 4:** Run the test and `cargo test -p mk_engine --lib organisms::vegetation`; expect PASS.
-- [ ] **Step 5:** Commit `feat(engine): simulate individual trees around the estate`.
+- [x] **Step 1:** Write tests: stem density follows biome/biomass (forest ≫ grassland, none in water); trees + stands sum to the four estate cells' biomass within ±2% with the cap both inactive and forced active (cap = 1,000); no tree in footprints or yard; count never exceeds `cap`; felling removes the stem, adds wood and moves exactly its carbon; deterministic bytes.
+- [x] **Step 2:** Run `cargo test -p mk_engine --test island_local_vegetation`; expect FAIL.
+- [x] **Step 3:** Implement deterministic Poisson-disc placement with spacing from biome/kind, size distribution from biomass, stands for the remainder, and growth/mortality tied to NPP.
+- [x] **Step 4:** Run the test and `cargo test -p mk_engine --lib organisms::vegetation`; expect PASS.
+- [x] **Step 5:** Commit `feat(engine): simulate individual trees around the estate`.
+
+Implementation notes: `fell_tree` takes the ecology and a ledger instead of the plan's `ResourceEconomyState`/`MaterialLedger` (Task 3 does not exist yet) and returns a `WoodYield`; wiring the wood into economy items and `MaterialCarbon` is Task 3's. Per medium cell the stems are scaled to exactly their stem share of the cell's carbon over the ground inside the radius, so totals match the field apart from the yard's tiny share (tests assert +/-2%). A rich forest (9 kgC/m²) seeds ~241,000 stems within 1 km uncapped, so the default 200,000 cap is real. The 10 cm minimum is enforced by scaling only the excess over the minimum stem and dropping the smallest stems if even minimum stems exceed the cell's stem carbon.
+
 
 ### Task 8: Founders on the island, observation and interaction
 

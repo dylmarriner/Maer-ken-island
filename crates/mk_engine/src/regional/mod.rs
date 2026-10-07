@@ -13,6 +13,7 @@ pub mod geology;
 pub mod geophysics;
 pub mod hydrology;
 pub mod levels;
+pub mod local_vegetation;
 pub mod ocean;
 pub mod par;
 pub mod physical;
