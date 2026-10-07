@@ -40,8 +40,25 @@ use crate::humans::HumanSystem;
 use crate::resource_economy::ResourceEconomyState;
 use crate::topology::GridTopology;
 
-/// Light daily activity while the founders live at home (MET).
-const HOME_MET: f64 = 1.3;
+/// What a founder at home is doing, as the reference packs' activity names.
+/// A sleeping body burns measurably less than a waking one (Compendium of
+/// Physical Activities: sleeping 0.9-1.0 MET against 1.0-1.3 sitting
+/// quietly), and the circadian clock already knows which of the two this
+/// human is doing, so the tick asks it rather than assuming one rate all
+/// day. On a 36-hour day that difference is not academic: sleep is already
+/// short and broken here (D23), and expenditure has to follow it.
+const ASLEEP_ACTIVITY: &str = "sleeping";
+const AWAKE_AT_HOME_ACTIVITY: &str = "sitting_quietly";
+
+/// Which of the two a human at home is doing, from the circadian clock's
+/// own sleep state.
+fn home_activity(asleep: bool) -> &'static str {
+    if asleep {
+        ASLEEP_ACTIVITY
+    } else {
+        AWAKE_AT_HOME_ACTIVITY
+    }
+}
 /// Food and water each founder takes per 6 hours: ~2.4 kg of plant food
 /// (~2,000 kcal at the packs' energy density is not claimed; carbon is
 /// what is tracked) and 2.6 L of drinking water a day.
@@ -250,12 +267,20 @@ impl IslandLife {
         Ok(())
     }
 
-    fn founders(&self) -> Vec<(String, LabourBody)> {
+    /// Every living human, with the body the labour model costs work against
+    /// and whether they are asleep right now.
+    fn founders(&self) -> Vec<(String, LabourBody, bool)> {
         self.humans
             .registry
             .iter()
             .filter(|h| matches!(h.profile.status, mk_core::human::HumanStatus::Alive))
-            .map(|h| (h.agent_id().to_string(), LabourBody::from_human(h)))
+            .map(|h| {
+                (
+                    h.agent_id().to_string(),
+                    LabourBody::from_human(h),
+                    h.circadian.asleep,
+                )
+            })
             .collect()
     }
 
@@ -292,11 +317,22 @@ impl IslandLife {
         let founders = self.founders();
         let labour = self.labour.clone();
         let dt_physical = self.scenario.cadences.weather_ocean_seconds;
+        let asleep_met = labour
+            .met(ASLEEP_ACTIVITY)
+            .map_err(IslandLifeError::Labour)?;
+        let awake_met = labour
+            .met(AWAKE_AT_HOME_ACTIVITY)
+            .map_err(IslandLifeError::Labour)?;
         self.audited(|life, ledger| {
             life.energy.step(dt_physical as f64, solar_kw, ledger);
-            for (id, body) in &founders {
+            for (id, body, asleep) in &founders {
+                let met = if home_activity(*asleep) == ASLEEP_ACTIVITY {
+                    asleep_met
+                } else {
+                    awake_met
+                };
                 let kcal = labour
-                    .energy_kcal(body, HOME_MET, dt_physical as f64)
+                    .energy_kcal(body, met, dt_physical as f64)
                     .unwrap_or(0.0);
                 let _ = life.materials.respire(id, kcal, ledger);
             }
@@ -310,7 +346,7 @@ impl IslandLife {
         let founders = self.founders();
         let area = self.domain.cell_area_m2(DomainLevel::Medium);
         self.audited(|life, ledger| {
-            for (id, _) in &founders {
+            for (id, _, _) in &founders {
                 match life.materials.gather_biotic(
                     Material::PlantFood,
                     FOOD_KG_PER_MEAL,
@@ -454,5 +490,33 @@ mod erased {
         fn value(&self) -> serde_json::Value {
             serde_json::to_value(self).expect("state serialises")
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_sleeping_human_at_home_is_costed_as_sleeping() {
+        assert_eq!(home_activity(true), ASLEEP_ACTIVITY);
+        assert_eq!(home_activity(false), AWAKE_AT_HOME_ACTIVITY);
+    }
+
+    #[test]
+    fn both_home_activities_are_named_in_the_reference_packs() {
+        // A typo here would not fail to compile; it would fail the tick at
+        // runtime, so the names are checked against the pack itself.
+        let table = LabourTable::load_default().expect("the labour packs load");
+        let asleep = table
+            .met(ASLEEP_ACTIVITY)
+            .expect("sleeping is in the packs");
+        let awake = table
+            .met(AWAKE_AT_HOME_ACTIVITY)
+            .expect("sitting quietly is in the packs");
+        assert!(
+            asleep < awake,
+            "sleeping ({asleep}) should cost less than sitting quietly ({awake})"
+        );
     }
 }
