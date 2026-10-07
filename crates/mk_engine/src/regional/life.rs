@@ -51,16 +51,6 @@ use crate::topology::GridTopology;
 const ASLEEP_ACTIVITY: &str = "sleeping";
 const AWAKE_AT_HOME_ACTIVITY: &str = "sitting_quietly";
 
-/// Which of the two a human at home is doing, from the circadian clock's
-/// own sleep state.
-fn home_activity(asleep: bool) -> &'static str {
-    if asleep {
-        ASLEEP_ACTIVITY
-    } else {
-        AWAKE_AT_HOME_ACTIVITY
-    }
-}
-/// Drinking water each founder takes per 6 hours: 2.6 L a day.
 const WATER_KG_PER_DRINK: f64 = 0.65;
 /// Share of the body's water loss that is excretion to the soil.
 const EXCRETION_TO_SOIL_FRACTION: f64 = 0.6;
@@ -546,12 +536,6 @@ mod erased {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn a_sleeping_human_at_home_is_costed_as_sleeping() {
-        assert_eq!(home_activity(true), ASLEEP_ACTIVITY);
-        assert_eq!(home_activity(false), AWAKE_AT_HOME_ACTIVITY);
-    }
 
     #[test]
     fn both_home_activities_are_named_in_the_reference_packs() {
