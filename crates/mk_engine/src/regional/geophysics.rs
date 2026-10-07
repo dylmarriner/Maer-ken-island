@@ -18,7 +18,7 @@ use super::deposits::{generate_primary_deposits, MineralDeposit};
 use super::geology::{generate_lithology, place_basement, Basement, Lithology};
 use super::shape::{label_components, measure_shape};
 use super::tectonics::{regional_plates, step_regional_tectonics, RegionalPlate};
-use super::terrain::{raw_elevation, terrain_key, GeologicalSetting, Volcano};
+use super::terrain::{fbm, raw_elevation, terrain_key, GeologicalSetting, Volcano};
 use super::volcanism::step_regional_volcanism;
 use crate::tectonics::TectonicsState;
 use crate::volcanism::{VolcanismState, INITIAL_DEGASSED_FRACTION};
@@ -26,6 +26,16 @@ use crate::volcanism::{VolcanismState, INITIAL_DEGASSED_FRACTION};
 /// Depth (m) below sea level forced on edge-buffer cells: they stay open
 /// ocean whatever the terrain.
 const EDGE_BAND_MIN_DEPTH_M: f64 = 50.0;
+/// Width (fraction of the smaller domain side) inside the ocean buffer over
+/// which a ceiling holds the ground below sea level, so coasts end
+/// naturally rather than against the buffer's straight edge.
+const EDGE_TAPER_FRACTION: f64 = 0.15;
+/// The ceiling relative to the fitted sea level (m): this deep at the
+/// buffer's inner edge, rising quadratically to [`EDGE_CEILING_TOP_M`]
+/// across the taper. A ceiling, not a subtraction: seafloor below it keeps
+/// its depth.
+const EDGE_CEILING_FLOOR_M: f64 = -300.0;
+const EDGE_CEILING_TOP_M: f64 = 9_000.0;
 /// Depth (m) of land cut off from the main island and submerged: shoals.
 const SUBMERGED_SATELLITE_DEPTH_M: f64 = 2.0;
 /// Bisection steps of the sea-level fit (the bracket starts at the full
@@ -108,17 +118,38 @@ pub fn primary_land_component(elevation_m: &Grid2<f64>) -> Grid2<bool> {
     Grid2::from_data(&elevation_m.spec(), mask)
 }
 
-/// Raw terrain minus `level`, with the edge band pushed under the sea.
-fn relative(raw: &[f64], band: &[bool], level: f64) -> Vec<f64> {
+/// Raw terrain minus `level`, under the edge ceiling, with the edge band
+/// pushed under the sea.
+fn relative(raw: &[f64], band: &[bool], ceiling: &[f64], level: f64) -> Vec<f64> {
     raw.iter()
         .zip(band)
-        .map(|(&e, &b)| {
-            let rel = e - level;
+        .zip(ceiling)
+        .map(|((&e, &b), &cap)| {
+            let rel = (e - level).min(cap);
             if b {
                 rel.min(-EDGE_BAND_MIN_DEPTH_M)
             } else {
                 rel
             }
+        })
+        .collect()
+}
+
+/// The edge ceiling of every medium cell, relative to sea level. The
+/// distance to the edge is perturbed by up to ±25% of the taper width so a
+/// range running toward the edge ends raggedly, not along a straight line.
+fn edge_ceiling(domain: &IslandDomain, key: u64) -> Vec<f64> {
+    let medium = DomainLevel::Medium;
+    let p = domain.profile();
+    let taper_m = EDGE_TAPER_FRACTION * p.width_m.min(p.height_m);
+    (0..domain.rows(medium))
+        .flat_map(|r| (0..domain.cols(medium)).map(move |c| (r, c)))
+        .map(|(r, c)| {
+            let (x, y) = domain.cell_center_m(medium, r, c);
+            let edge = x.min(y).min(p.width_m - x).min(p.height_m - y)
+                + 0.25 * taper_m * fbm(key ^ 0xED6E, x, y, 0.5 * taper_m, 4);
+            let t = ((edge - p.minimum_ocean_buffer_m) / taper_m).clamp(0.0, 1.0);
+            EDGE_CEILING_FLOOR_M + (EDGE_CEILING_TOP_M - EDGE_CEILING_FLOOR_M) * t * t
         })
         .collect()
 }
@@ -142,6 +173,7 @@ pub fn fit_sea_level_to_target(
     target_land_area_m2: f64,
     tolerance_fraction: f64,
     _minimum_ocean_buffer_m: f64,
+    edge_key: u64,
 ) -> Result<(Grid2<f64>, f64), RegionalGeophysicsError> {
     // The buffer width itself comes from the domain's profile, which the
     // domain has already validated; the parameter mirrors the plan's
@@ -154,12 +186,13 @@ pub fn fit_sea_level_to_target(
         .map(|(r, c)| domain.is_edge_buffer_cell(level_grid, r, c))
         .collect();
     let raw = raw_elevation_m.data();
+    let ceiling = edge_ceiling(domain, edge_key);
     let (lo_target, hi_target) = (
         target_land_area_m2 * (1.0 - tolerance_fraction),
         target_land_area_m2 * (1.0 + tolerance_fraction),
     );
     let area_at = |level: f64| {
-        primary_area_cells(&relative(raw, &band, level), rows, cols) as f64 * cell_area
+        primary_area_cells(&relative(raw, &band, &ceiling, level), rows, cols) as f64 * cell_area
     };
 
     let (mut lo, mut hi) = raw
@@ -195,7 +228,10 @@ pub fn fit_sea_level_to_target(
         });
     };
 
-    let rel = Grid2::from_data(&raw_elevation_m.spec(), relative(raw, &band, level));
+    let rel = Grid2::from_data(
+        &raw_elevation_m.spec(),
+        relative(raw, &band, &ceiling, level),
+    );
     let primary = primary_land_component(&rel);
     let fitted: Vec<f64> = rel
         .data()
@@ -262,6 +298,7 @@ pub fn generate_regional_geophysics(
         p.target_land_area_m2,
         p.land_area_tolerance_fraction,
         p.minimum_ocean_buffer_m,
+        key,
     )?;
     let spec = elevation_m.spec();
     let land_mask = Grid2::from_data(&spec, elevation_m.data().iter().map(|&e| e > 0.0).collect());

@@ -1,0 +1,137 @@
+{
+  "deposits": {
+    "BandedIronFormation": {
+      "count": 2,
+      "grade_unit": "% Fe",
+      "ore_tonnage_t": 203954158.80314448
+    },
+    "BuildingStone": {
+      "count": 1099,
+      "grade_unit": "% usable stone",
+      "ore_tonnage_t": 88792735954.62851
+    },
+    "Coal": {
+      "count": 0,
+      "grade_unit": "% fixed carbon",
+      "ore_tonnage_t": 0.0
+    },
+    "EpithermalGoldSilver": {
+      "count": 19,
+      "grade_unit": "g/t Au",
+      "ore_tonnage_t": 58115514.946141936
+    },
+    "Evaporite": {
+      "count": 0,
+      "grade_unit": "% NaCl",
+      "ore_tonnage_t": 0.0
+    },
+    "Kimberlite": {
+      "count": 19,
+      "grade_unit": "ct/100 t",
+      "ore_tonnage_t": 1464606742.3509734
+    },
+    "MetamorphicGems": {
+      "count": 20,
+      "grade_unit": "kg/t gem rough",
+      "ore_tonnage_t": 1685647.4933829212
+    },
+    "OrogenicGold": {
+      "count": 111,
+      "grade_unit": "g/t Au",
+      "ore_tonnage_t": 52774167.41373713
+    },
+    "Pegmatite": {
+      "count": 1,
+      "grade_unit": "% Li2O",
+      "ore_tonnage_t": 158705.49275276548
+    },
+    "Petroleum": {
+      "count": 3,
+      "grade_unit": "% porosity",
+      "ore_tonnage_t": 111510593.81271625
+    },
+    "Phosphate": {
+      "count": 1,
+      "grade_unit": "% P2O5",
+      "ore_tonnage_t": 354649504.1121162
+    },
+    "PorphyryCopper": {
+      "count": 2,
+      "grade_unit": "% Cu",
+      "ore_tonnage_t": 95872798.43833108
+    },
+    "SedimentHostedLeadZinc": {
+      "count": 0,
+      "grade_unit": "% Zn",
+      "ore_tonnage_t": 0.0
+    },
+    "Skarn": {
+      "count": 14,
+      "grade_unit": "% Fe",
+      "ore_tonnage_t": 244800428.29512793
+    },
+    "TinTungsten": {
+      "count": 1,
+      "grade_unit": "% Sn",
+      "ore_tonnage_t": 3064655.1726067173
+    },
+    "Ultramafic": {
+      "count": 1,
+      "grade_unit": "% Ni",
+      "ore_tonnage_t": 1211118.9328429785
+    },
+    "Uranium": {
+      "count": 2,
+      "grade_unit": "% U3O8",
+      "ore_tonnage_t": 569862.713617189
+    },
+    "VolcanicSilicaGems": {
+      "count": 32,
+      "grade_unit": "kg/t gem material",
+      "ore_tonnage_t": 63749918.64606511
+    },
+    "VolcanicSulfur": {
+      "count": 109,
+      "grade_unit": "% S",
+      "ore_tonnage_t": 170675401.65745375
+    },
+    "VolcanogenicMassiveSulfide": {
+      "count": 90,
+      "grade_unit": "% Cu",
+      "ore_tonnage_t": 684454964.2995138
+    }
+  },
+  "gems": [
+    "agate",
+    "amethyst",
+    "diamond",
+    "emerald",
+    "garnet",
+    "obsidian",
+    "opal",
+    "quartz crystal",
+    "ruby",
+    "sapphire",
+    "topaz",
+    "tourmaline"
+  ],
+  "has_diamonds": true,
+  "has_gold": true,
+  "land_area_km2": 264464.0,
+  "land_components": 1,
+  "max_elevation_m": 3984.2151170262186,
+  "min_elevation_m": -6215.375582560901,
+  "plate_count": 5,
+  "sea_level_offset_m": -765.4045736728988,
+  "seed": "3184701bbcebf2462768d517e54f0520b0036042d6511e8a5247d23a5392131e",
+  "shape": {
+    "area_m2": 264464000000.0,
+    "compactness": 0.17494810862517166,
+    "convexity": 0.4971557691078552,
+    "major_bays": 3,
+    "major_headlands": 3,
+    "perimeter_m": 4358465.246320464
+  },
+  "shape_unmet": [],
+  "volcano_count": 173
+}

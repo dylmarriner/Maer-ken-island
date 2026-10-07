@@ -17,7 +17,9 @@
 //!   rifts; a back-arc rift subsides (the Taupō Volcanic Zone graben).
 //! - **Texture:** domain-warped multi-octave noise gives headlands, bays,
 //!   inlets and secondary ranges; a box smoothing stands in for erosion;
-//!   ridged noise scaled by uplift adds valleys to the mountains.
+//!   ridged noise scaled by uplift adds valleys to the mountains. (The
+//!   edge taper that keeps coasts off the ocean buffer is applied relative
+//!   to the fitted sea level, in `geophysics::fit_sea_level_to_target`.)
 //!
 //! Every random value hashes the terrain key with lattice or cell indices
 //! (SplitMix64), so terrain is a pure function of its inputs and
@@ -77,12 +79,6 @@ const RIDGE_TEXTURE_M: f64 = 700.0;
 /// every landform length by √(target / reference), so it has the same
 /// shape vocabulary at a smaller size.
 const REFERENCE_LAND_AREA_M2: f64 = 268_000.0e6;
-/// Width (fraction of the smaller domain side) inside the ocean buffer over
-/// which terrain is drawn down toward the abyss, so coasts end naturally
-/// instead of against the buffer's straight edge.
-const EDGE_TAPER_FRACTION: f64 = 0.15;
-/// Depth (m) the taper reaches at the buffer's inner edge.
-const EDGE_TAPER_DEPTH_M: f64 = 4_000.0;
 
 /// SplitMix64 finaliser.
 fn mix(mut z: u64) -> u64 {
@@ -435,7 +431,6 @@ pub fn raw_elevation(
         }
     }
 
-    let profile = domain.profile();
     let medium = DomainLevel::Medium;
     let (mr, mc) = (domain.rows(medium), domain.cols(medium));
     let cells: Vec<(usize, usize)> = (0..mr).flat_map(|r| (0..mc).map(move |c| (r, c))).collect();
@@ -500,17 +495,8 @@ pub fn raw_elevation(
         let (_, mountain) = uplift_of(x, y);
         RIDGE_TEXTURE_M * mountain * (ridged(ridge_key, x, y, 60_000.0 * scale, 5) - 0.5)
     });
-    // Draw the terrain down toward the ocean buffer.
-    let taper_m = EDGE_TAPER_FRACTION * profile.width_m.min(profile.height_m);
-    let buffer_m = profile.minimum_ocean_buffer_m;
-    let taper: Vec<f64> = par_map_cells(&cells, |r, c| {
-        let (x, y) = domain.cell_center_m(medium, r, c);
-        let edge = x.min(y).min(profile.width_m - x).min(profile.height_m - y);
-        let t = ((edge - buffer_m) / taper_m).clamp(0.0, 1.0);
-        EDGE_TAPER_DEPTH_M * (1.0 - t).powi(2)
-    });
-    for ((e, t), d) in elevation.iter_mut().zip(&texture).zip(&taper) {
-        *e += t - d;
+    for (e, t) in elevation.iter_mut().zip(&texture) {
+        *e += t;
     }
 
     // Volcanic cones on top.

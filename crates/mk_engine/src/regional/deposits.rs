@@ -484,6 +484,9 @@ pub fn allowed_hosts(kind: DepositKind) -> &'static [Lithology] {
 /// continental shelf edge. Deeper ore is beyond any reach the island's
 /// people will have; only seafloor deposit types form there.
 const SHELF_EDGE_M: f64 = -200.0;
+/// Deepest water (m) over which petroleum is generated: shelf and upper
+/// slope, the reach of jack-up and platform rigs (~500 m).
+const PETROLEUM_MAX_WATER_DEPTH_M: f64 = -500.0;
 
 fn permits_site(kind: DepositKind, s: &Site, scale: f64) -> bool {
     use DepositKind as K;
@@ -515,7 +518,11 @@ fn permits_site(kind: DepositKind, s: &Site, scale: f64) -> bool {
         K::VolcanicSilicaGems => matches!(s.rock, Rhyolite | ArcAndesite | OceanicBasalt),
         K::VolcanicSulfur => s.near_volcano_km <= 8.0,
         K::Coal => s.rock == CoalMeasures,
-        K::Petroleum => matches!(s.rock, Mudstone | Sandstone) && s.elevation_m < 100.0,
+        K::Petroleum => {
+            // Shelf and upper slope only: within reach of shallow-water rigs.
+            matches!(s.rock, Mudstone | Sandstone)
+                && (PETROLEUM_MAX_WATER_DEPTH_M..100.0).contains(&s.elevation_m)
+        }
         K::Evaporite => s.rock == Evaporite,
         K::Phosphate => {
             matches!(s.rock, Limestone | Mudstone) && (-300.0..50.0).contains(&s.elevation_m)

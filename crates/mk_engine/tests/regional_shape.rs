@@ -54,13 +54,22 @@ fn a_four_to_one_ellipse_fails_on_convexity() {
 
 #[test]
 fn an_indented_coast_passes() {
-    // Six lobes and six bays: r(θ) = R (0.62 + 0.38 cos 6θ), roughened.
-    let star = mask(|x, y| {
+    // A roughened body with six peninsulas thinner than it (headlands are
+    // protrusions narrower than the island's own body), with a bay
+    // between each pair.
+    let fingered = mask(|x, y| {
         let theta = y.atan2(x);
-        let r = 160.0 * (0.62 + 0.38 * (6.0 * theta).cos()) + 4.0 * (23.0 * theta).sin();
-        x.hypot(y) < r
+        let r = x.hypot(y);
+        let body = r < 80.0 + 4.0 * (23.0 * theta).sin();
+        let finger = (0..6).any(|k| {
+            let a = k as f64 * std::f64::consts::FRAC_PI_3;
+            let along = x * a.cos() + y * a.sin();
+            let across = -x * a.sin() + y * a.cos();
+            along > 0.0 && along < 170.0 && across.abs() < 12.0
+        });
+        body || finger
     });
-    let m = measure_shape(&star, CELL_M, COARSE_M);
+    let m = measure_shape(&fingered, CELL_M, COARSE_M);
     let reasons = ShapeRequirements::default().unmet(&m);
     assert!(reasons.is_empty(), "{reasons:?} {m:?}");
     assert!(m.major_bays >= 6 && m.major_headlands >= 3, "{m:?}");

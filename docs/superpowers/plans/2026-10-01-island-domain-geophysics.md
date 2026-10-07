@@ -258,11 +258,13 @@ Gallery tuning (2026-10-07): the first 24-seed gallery passed 2 islands, almost 
 **Interfaces:**
 - Consumes all Phase-1 public interfaces; produces no new runtime API.
 
-- [ ] **Step 1:** Set the owner-chosen seed in the fixture (profile `version` stays `1`) and in the geophysics test constant.
-- [ ] **Step 2:** Add an acceptance test that loads the fixture, bootstraps geophysics twice and asserts identical serialized results, area/buffer/connectivity/shape constraints, finite tectonic/volcanic state, and the deposit list the owner saw in the gallery.
-- [ ] **Step 3:** Run `cargo test -p mk_engine --test island_phase1_acceptance -- --nocapture`; expect PASS.
-- [ ] **Step 4:** Generate the chosen island's full preview into `docs/previews/phase1/`.
-- [ ] **Step 5:** Update `UPSTREAM.md` with `mk_island`, the volcanism geometry extraction and regional tectonic/terrain divergences.
-- [ ] **Step 6:** Run `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings` and the fast test tier; expect 0 failures.
-- [ ] **Step 7:** Commit `test(island): lock regional geophysics acceptance`.
+- [x] **Step 1:** Set the owner-chosen seed in the fixture (profile `version` stays `1`) and in the geophysics test constant.
+- [x] **Step 2:** Add an acceptance test that loads the fixture, bootstraps geophysics twice and asserts identical serialized results, area/buffer/connectivity/shape constraints, finite tectonic/volcanic state, and the deposit list the owner saw in the gallery.
+- [x] **Step 3:** Run `cargo test -p mk_engine --test island_phase1_acceptance -- --nocapture`; expect PASS.
+- [x] **Step 4:** Generate the chosen island's full preview into `docs/previews/phase1/`.
+- [x] **Step 5:** Update `UPSTREAM.md` with `mk_island`, the volcanism geometry extraction and regional tectonic/terrain divergences.
+- [x] **Step 6:** Run `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings` and the fast test tier; expect 0 failures.
+- [x] **Step 7:** Commit `test(island): lock regional geophysics acceptance`.
 - [ ] **Step 8 (Gate 1 review):** The owner looks at `docs/previews/phase1/elevation.png` before Phase 2 starts. A landmass that is wrong in kind (shape, relief, coast) is fixed here, not after climate is built on it.
+
+Implementation notes: owner's provisional island = gallery candidate 1, seed `3184701b…92131e` (L-shaped), pinned in `fixtures/island/default_profile.json` and `FULL_SEED`. The edge taper moved out of `terrain::raw_elevation` into `geophysics::fit_sea_level_to_target` as a ceiling relative to sea level whose edge distance is noise-ragged, so seafloor below it keeps its depth; the small-island seed was re-searched and is now `[9u8; 32]`. Petroleum forms only under water ≤ 500 m. The `regional_shape` indented-coast fixture is now a body with six thin peninsulas, because since Task 6 a headland is a protrusion thinner than the island's body.

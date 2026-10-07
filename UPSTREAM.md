@@ -47,6 +47,15 @@ Human biology changes made here to pass `crates/mk_engine/tests/human_realism.rs
 4. `mk_engine::humans::reproduction::GESTATION_YEARS` — 268 days from conception (Jukic et al. 2013) instead of 280 (40 weeks counts from the last menstrual period, not conception).
 5. `mk_engine::humans::lifecycle` — the Gompertz constants are `pub` so the realism suite can check them.
 
+## Phase 1 divergences (2026-10-07)
+
+Phase 1 adds the regional island domain and its geophysics. Almost all of it is new code; only item 2 changes imported code, and that change is a refactor that keeps behaviour the same.
+
+1. `crates/mk_island` (new) — the regional domain contract: `IslandProfile` (version, size, target land area, ocean buffer, shape requirements, basement, optional seed), `IslandDomain` (flat metre grids at coarse/medium/fine levels; row 0 is south, col 0 is west, and edges never wrap), regional boundaries and `ShapeMetrics`. It depends only on `mk_core`; `mk_engine` depends on it (`mk_engine → mk_island → mk_core`). `mk_engine` also gains `rayon` for deterministic multi-core cell maps (`regional::par`).
+2. `mk_engine::volcanism` — `step_volcanism` now delegates to `step_volcanism_on` over a `VolcanismGeometry` trait (cell height/width and neighbours). `SphericalVolcanismGeometry` gives the same cell sizes and `rem_euclid` longitude wrapping as before, so the global path is unchanged and the upstream volcanism tests pass unmodified. Suitable for upstreaming as a pure refactor.
+3. `mk_engine::regional` (new) — island-scale geophysics built on the imported models without changing them: tectonics (`regional_plates`, `step_regional_tectonics` on a flat, non-wrapping domain), seismicity from regional fault stress, volcanism through the item-2 geometry, terrain (a continental plateau, forearc and main range, trench and outer rise, arc and rift volcanoes, domain-warped noise, a stand-in for erosion), sea-level fitting to the target land area, with an edge ceiling relative to sea level that keeps coasts off the ocean buffer, then lithology and primary mineral deposits. Upstream has no rock-type map and places resources by biome. Here deposits form only where their geology allows, and petroleum only under water no deeper than 500 m.
+4. `apps/island_preview` (new) — renders the geophysics maps and a seed gallery to PNG/JSON.
+
 ## Drift check (2026-10-02)
 
 Upstream `dylmarriner/Maer-Ken` default-branch HEAD is `7c05f0dcf254387ffd7322dbb525fe4807228602`, equal to the pin: no upstream commits since the extraction, so upstream has not fixed the Phase 0 defects either. Re-check immediately before Phase 1.

@@ -14,11 +14,15 @@ use mk_engine::tectonics::BoundaryType;
 use mk_engine::volcanism::VolcanismGeometry;
 use mk_island::{DomainLevel, IslandDomain, IslandProfile};
 
-/// Provisional passing seeds, found by a deterministic search over
-/// `[0u8; 32]`, `[1u8; 32]`, …; Task 7 replaces the full-island seed with
-/// the owner's choice.
-const FULL_SEED: [u8; 32] = [0u8; 32];
-const SMALL_SEED: [u8; 32] = [7u8; 32];
+/// The owner's island (gallery candidate 1, `fixtures/island/default_profile.json`).
+const FULL_SEED: [u8; 32] = [
+    0x31, 0x84, 0x70, 0x1b, 0xbc, 0xeb, 0xf2, 0x46, 0x27, 0x68, 0xd5, 0x17, 0xe5, 0x4f, 0x05, 0x20,
+    0xb0, 0x03, 0x60, 0x42, 0xd6, 0x51, 0x1e, 0x8a, 0x52, 0x47, 0xd2, 0x3a, 0x53, 0x92, 0x13, 0x1e,
+];
+/// The first passing small-island seed in a deterministic search over
+/// `[0u8; 32]`, `[1u8; 32]`, … (re-searched after the edge taper moved
+/// into the sea-level fit).
+const SMALL_SEED: [u8; 32] = [9u8; 32];
 /// A small-island seed whose outline fails the shape requirements.
 const SMALL_FAILING_SEED: [u8; 32] = [1u8; 32];
 
