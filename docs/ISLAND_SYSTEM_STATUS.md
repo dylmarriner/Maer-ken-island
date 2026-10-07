@@ -15,8 +15,8 @@ fidelity limits. The project is **not complete**: see "Not done".
 | Grid topology for human/organism movement, births and perception (Phase 3 Task 6) | Done; planetary results bit-identical | `topology.rs`, `tests/topology_hash_baseline.rs` |
 | Founders' estate laid out in metres (Phase 3 Task 5) | Done | `regional/estate_layout.rs`, `tests/island_estate_layout.rs` |
 | Canonical founders on the island: observation, bedrooms, computer rule (Phase 3 Task 8) | Done except Task-3-dependent hooks | `regional/humans.rs`, `humans/observation.rs`, `tests/island_human_runtime.rs` |
-| Physical materials: gather, hunt, burn, calcine, eat, respire, drink, build through the flux ledger (Phase 3 Task 3) | Model done; not yet driving the economy | `regional/materials.rs`, `tests/island_material_flows.rs` |
-| Timed, energy-costed work: tasks, BMR x MET, walking, load limits (Phase 3 Task 3b) | Model done; not yet driving the economy | `regional/labour.rs`, `tests/island_labour.rs` |
+| Physical materials: gather, hunt, burn, calcine, eat, respire, drink, build through the flux ledger (Phase 3 Task 3) | Model done and audited inside the island tick; a fixed home routine drives it, not the action each human's own mind selects (D10) | `regional/materials.rs`, `regional/life.rs`, `tests/island_material_flows.rs`, `tests/island_life_acceptance.rs` |
+| Timed, energy-costed work: tasks, BMR x MET, walking, load limits (Phase 3 Task 3b) | Model done. Energy is wired: the island tick costs resting metabolism at the body's BMR times the MET of sleeping or sitting, from the circadian clock, and `humans/lifecycle.rs` charges walking, mining and building their Compendium METs. Durations are not: every action still takes one tick, and the actions with no pack row cost the baseline (D9, D22) | `regional/labour.rs`, `regional/life.rs`, `humans/lifecycle.rs`, `tests/island_labour.rs`, `tests/human_realism.rs` |
 | Estate fuel and electricity (Phase 3 Task 4b) | Done | `regional/energy.rs`, `tests/island_energy.rs` |
 | Individual trees and stands on the estate patch (Phase 3 Task 7) | Done | `regional/local_vegetation.rs`, `tests/island_local_vegetation.rs` |
 | Island scenario and estate placement (Phase 3 Task 4) | Done | `mk_island/src/scenario.rs`, `regional/property.rs`, `fixtures/island/default_scenario.json` |
@@ -38,6 +38,10 @@ The combined island (without persistence, the scheduler, a larger population, th
     cargo clippy --workspace --all-targets -- -D warnings
     cargo test --workspace --release
     cargo test --workspace --release -- --ignored slow_
+
+`cargo test --workspace` in debug builds a large target directory (tens of GB with debug info and
+incremental compilation on). On a machine with a small disk, `CARGO_INCREMENTAL=0` and
+`CARGO_PROFILE_DEV_DEBUG=0` keep it to a fraction of that.
 
 The last full-workspace run was at the end of Phase 1 (1,026 tests passing). Later phases were
 verified per module and by their own acceptance tests.
