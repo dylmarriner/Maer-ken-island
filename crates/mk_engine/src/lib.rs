@@ -48,6 +48,7 @@ pub mod runtime;
 pub mod sim;
 pub mod tectonics;
 pub mod tides;
+pub mod topology;
 pub mod transparent_ui;
 pub mod validation;
 pub mod verification;
