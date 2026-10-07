@@ -20,6 +20,7 @@ fidelity limits. The project is **not complete**: see "Not done".
 | Estate fuel and electricity (Phase 3 Task 4b) | Done | `regional/energy.rs`, `tests/island_energy.rs` |
 | Individual trees and stands on the estate patch (Phase 3 Task 7) | Done | `regional/local_vegetation.rs`, `tests/island_local_vegetation.rs` |
 | Island scenario and estate placement (Phase 3 Task 4) | Done | `mk_island/src/scenario.rs`, `regional/property.rs`, `fixtures/island/default_scenario.json` |
+| Complete island snapshot: save, restore, tamper and canon rejection (Phase 4 Task 3) | Done. A full island — a dozen 1,152,000-cell grids, 200,000 stems, the founders and the RNG streams — writes atomically to one deflated, digest-prefixed file and restores to the same state digest, then runs on identically. The domain, grid topology and labour table are derived again on load rather than trusted from the file | `io/island_snapshot.rs`, `regional/life.rs`, `tests/island_snapshot.rs` |
 | Web dashboard: overview, roster with a readable per-person record, Human Creator, JSON API (`island serve`) | Done for the human-only bootstrap; the Phase 5 desktop app is separate | `apps/island/src/serve/`, `apps/island/static/` |
 
 ## Measured (release build, development machine)
@@ -29,6 +30,7 @@ fidelity limits. The project is **not complete**: see "Not done".
 | Island physics, one simulated year | 22 s, 213 MB peak | `benchmarks/phase2_physical.md` |
 | Human runtime, 5,000 people | 23 us/human-step, 153 MB peak | `benchmarks/humans_population.md` |
 | **Combined island, one simulated week** (physics, ecology, estate, 200,000 trees, 2 founders, energy, materials) | 49 s, **307 MB peak** | `benchmarks/island_week.md` |
+| Complete island snapshot, one day in | **44 MB** on disk (338 MB before deflate) | `tests/island_snapshot.rs::slow_a_full_island_survives_a_trip_through_a_file` |
 
 The combined island (without persistence, the scheduler, a larger population, the refinery/town and the app) is measured above; those remain unmeasured until Phases 4, 4b and 5.
 
@@ -48,22 +50,23 @@ verified per module and by their own acceptance tests.
 
 ## Known fidelity limits
 
-Every known departure from reality is in `docs/island/DEVIATIONS.md` (D1-D31). The largest open
+Every known departure from reality is in `docs/island/DEVIATIONS.md` (D1-D33). The largest open
 ones: no sea/land breezes (D3); storm structure is parametric (D4); river channels have no
 in-channel storage (D28); the regional tick audits tidal heat only (D29); biomass residence times
-are round estimates (D30); production ignores soil nutrients (D31); humans do work instantly and
-at no energy cost until Phase 3 Task 3b (D9, D22); materials and fuel are not physical until
-Phase 3 Tasks 3 and 4b (D10, D13).
+are round estimates (D30); production ignores soil nutrients (D31); every human action still takes exactly one
+tick whatever it is (D9); the actions with no Compendium row cost the resting baseline (D22);
+who harvests and when is the routine's choice rather than each person's (D10); machine use off
+the estate's electrical system is still free (D13).
 
 ## Not done
 
 - Phase 3 Task 1b (island-scale species) and Tasks 2 and 9 (and the economy/lifecycle wiring of Tasks 3 and 3b): materials and resources, physical
   materials, time and energy of actions, acceptance.
-- Phase 4: persistence, replay and external commands. Tasks 1 and 2 (world composition, the
-  cadence scheduler) are done. Task 3, the island snapshot, needs `Serialize`/`Deserialize` on
-  five state types that do not have them yet — physical, ecology, the placed estate, the
-  200,000-tree vegetation patch and the material ledger — plus canon re-derivation and tamper
-  rejection on load; it is not a small change.
+- Phase 4: persistence, replay and external commands. Tasks 1, 2 and 3 (world composition, the
+  cadence scheduler, the island snapshot) are done. Still to come: Task 3b (a folder per human on
+  a sync cadence), Task 4 (external commands and deterministic replay), Task 5 (the headless
+  runner and Phase-4 acceptance) and Task 6 (the dashboard and Human Creator on the live island,
+  which is what joins the web dashboard above to the simulated world).
 - Phase 4b: energy, industry, town, economy.
 - Phase 5: the desktop app (`island-ui`, Bevy) replacing the human-only bootstrap, performance
   work, pruning, final benchmarks. The `island serve` web dashboard covers the human-only

@@ -2,6 +2,7 @@ pub mod encryption;
 pub mod events;
 pub mod global_events;
 pub mod human_storage;
+pub mod island_snapshot;
 pub mod snapshot;
 
 pub use events::{print_universe_summary, EntityType, EventDatabase, EventType, UniverseEvent};
@@ -15,4 +16,5 @@ pub use human_storage::{
     HumanStorage, HumanStorageError, LanguageStorage, LifecycleStorage, PersonalityStorage,
     SocialStorage, TechnologyStorage,
 };
+pub use island_snapshot::{load_island_snapshot, save_island_snapshot, IslandSnapshotError};
 pub use snapshot::{load_snapshot, save_snapshot, SnapshotError};

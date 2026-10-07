@@ -15,13 +15,16 @@
 //! `MaterialCarbon`, `HumanCarbon` and `MaterialWater` must equal the change
 //! in those stocks, or the step fails.
 
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use mk_core::canon::CanonLocked;
 use mk_core::flux::{FluxKind, Ledger, Reservoir};
 use mk_core::rng::RngRegistry;
-use mk_island::{DomainLevel, IslandDomain, IslandScenario};
+use mk_island::{
+    DomainLevel, IslandDomain, IslandDomainError, IslandScenario, IslandScenarioError,
+};
 
 use super::ecology::{RegionalEcologyError, RegionalEcologyState};
 use super::energy::{solar_output_kw, EstateEnergy};
@@ -65,6 +68,15 @@ pub enum IslandLifeError {
     Labour(LabourError),
     /// A household step's carbon, oxygen or water stocks did not close.
     Audit(String),
+    /// A snapshot written by a format this build does not know. Guessing at
+    /// an unknown layout would quietly restore the wrong island.
+    SnapshotVersion(u32),
+    /// A snapshot's scenario profile no longer describes a valid domain.
+    Domain(IslandDomainError),
+    /// A snapshot's scenario is not one this build can run: a format version
+    /// it does not know, or cadences and estate settings outside their
+    /// bounds.
+    Scenario(IslandScenarioError),
 }
 
 impl std::fmt::Display for IslandLifeError {
@@ -76,10 +88,41 @@ impl std::fmt::Display for IslandLifeError {
 impl std::error::Error for IslandLifeError {}
 
 /// Shortfalls the households met: nothing to harvest, a dry cell.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Shortfalls {
     pub food: u64,
     pub water: u64,
+}
+
+/// The snapshot format. A snapshot written by another version is refused
+/// rather than guessed at.
+pub const ISLAND_SNAPSHOT_VERSION: u32 = 1;
+
+/// An island's whole persisted state. See [`IslandLife::snapshot`] for what
+/// is deliberately absent.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IslandLifeSnapshot {
+    pub version: u32,
+    pub scenario: IslandScenario,
+    pub physical: RegionalPhysicalState,
+    pub ecology: RegionalEcologyState,
+    pub placed: PlacedEstate,
+    pub vegetation: LocalVegetationPatch,
+    pub humans: HumanSystem,
+    pub positions: HumanEstatePositions,
+    pub energy: EstateEnergy,
+    pub materials: MaterialLedger,
+    pub economy: ResourceEconomyState,
+    pub scheduler: IslandScheduler,
+    pub rng: RngRegistry,
+    pub sim_time_s: u64,
+    pub tick: u64,
+    pub audits_closed: u64,
+    pub shortfalls: Shortfalls,
+    pub respired_since_meal: BTreeMap<String, f64>,
+    pub sleep_seconds: BTreeMap<String, (f64, f64)>,
+    pub food_cell: (usize, usize),
+    pub water_cell: Option<(usize, usize)>,
 }
 
 pub struct IslandLife {
@@ -227,6 +270,96 @@ impl IslandLife {
             labour: LabourTable::load_default().map_err(IslandLifeError::Labour)?,
             food_cell,
             water_cell,
+            topology,
+        })
+    }
+
+    /// Everything an island carries that cannot be derived again.
+    ///
+    /// What is left out is left out deliberately: the canon is supplied by
+    /// whoever loads the snapshot, the domain follows from the scenario's
+    /// profile, the grid topology follows from the domain, and the labour
+    /// table is read from the reference packs. Storing those would let a
+    /// snapshot disagree with the canon it is loaded against, which is the
+    /// one thing a saved world must not be able to do.
+    ///
+    /// This clones the state, which on a full island is a few hundred MB
+    /// held twice for as long as the save takes. A borrowing twin of
+    /// `IslandLifeSnapshot` would avoid it, at the cost of two field lists
+    /// that have to stay in step — and a field missing from the writing half
+    /// would silently write an incomplete island. The copy is the safer
+    /// price until a measurement says otherwise.
+    pub fn snapshot(&self) -> IslandLifeSnapshot {
+        IslandLifeSnapshot {
+            version: ISLAND_SNAPSHOT_VERSION,
+            scenario: self.scenario.clone(),
+            physical: self.physical.clone(),
+            ecology: self.ecology.clone(),
+            placed: self.placed.clone(),
+            vegetation: self.vegetation.clone(),
+            humans: self.humans.clone(),
+            positions: self.positions.clone(),
+            energy: self.energy.clone(),
+            materials: self.materials.clone(),
+            economy: self.economy.clone(),
+            scheduler: self.scheduler.clone(),
+            rng: self.rng.clone(),
+            sim_time_s: self.sim_time_s,
+            tick: self.tick,
+            audits_closed: self.audits_closed,
+            shortfalls: self.shortfalls,
+            respired_since_meal: self.respired_since_meal.clone(),
+            sleep_seconds: self.sleep_seconds.clone(),
+            food_cell: self.food_cell,
+            water_cell: self.water_cell,
+        }
+    }
+
+    /// Rebuild an island from a snapshot and the canon it must agree with.
+    ///
+    /// The derived parts are rebuilt here rather than trusted from the file,
+    /// so a snapshot cannot smuggle in a domain or a topology that does not
+    /// follow from its own scenario.
+    pub fn restore(
+        canon: Arc<CanonLocked>,
+        snapshot: IslandLifeSnapshot,
+    ) -> Result<Self, IslandLifeError> {
+        if snapshot.version != ISLAND_SNAPSHOT_VERSION {
+            return Err(IslandLifeError::SnapshotVersion(snapshot.version));
+        }
+        // The scenario came out of a file, so it is checked exactly as one
+        // read from disk would be before anything is built from it.
+        snapshot
+            .scenario
+            .validate()
+            .map_err(IslandLifeError::Scenario)?;
+        let domain = IslandDomain::from_profile(snapshot.scenario.profile.clone())
+            .map_err(IslandLifeError::Domain)?;
+        let topology = GridTopology::regional(&domain, DomainLevel::Medium);
+        Ok(Self {
+            canon,
+            domain,
+            scenario: snapshot.scenario,
+            physical: snapshot.physical,
+            ecology: snapshot.ecology,
+            placed: snapshot.placed,
+            vegetation: snapshot.vegetation,
+            humans: snapshot.humans,
+            positions: snapshot.positions,
+            energy: snapshot.energy,
+            materials: snapshot.materials,
+            economy: snapshot.economy,
+            scheduler: snapshot.scheduler,
+            rng: snapshot.rng,
+            sim_time_s: snapshot.sim_time_s,
+            tick: snapshot.tick,
+            audits_closed: snapshot.audits_closed,
+            shortfalls: snapshot.shortfalls,
+            respired_since_meal: snapshot.respired_since_meal,
+            sleep_seconds: snapshot.sleep_seconds,
+            labour: LabourTable::load_default().map_err(IslandLifeError::Labour)?,
+            food_cell: snapshot.food_cell,
+            water_cell: snapshot.water_cell,
             topology,
         })
     }
@@ -536,6 +669,14 @@ impl IslandLife {
         h.update(canonical(&self.respired_since_meal).as_bytes());
         h.update(canonical(&self.sleep_seconds).as_bytes());
         h.update(&self.sim_time_s.to_le_bytes());
+        // Deliberately absent, and each for a reason that must stay true:
+        // the placed estate is only ever read after bootstrap, the food and
+        // water cells are chosen once, `RngRegistry` carries nothing but its
+        // seed, and the audit and shortfall counts record what happened
+        // rather than deciding what happens next. Anything here that starts
+        // changing during a run belongs in the digest, and
+        // `the_digest_notices_state_that_only_matters_later` is where that
+        // gets caught.
         *h.finalize().as_bytes()
     }
 }

@@ -14,7 +14,18 @@ The toolchain is pinned in `rust-toolchain.toml` (Rust 1.97.0 with `rustfmt` and
 
 Current members:
 
-- **Slow:** `phase4_phase5_integration::slow_test_phase4_long_horizon_evolution` (~35 s in debug) and `human_scaling::slow_a_crowded_cell_costs_at_most_three_times_a_spread_population`.
+- **Slow:** nine tests, found with `grep -rn 'fn slow_' --include=*.rs`:
+  `island_life_acceptance::slow_a_week_on_the_island_matches_the_reference_packs` (one simulated
+  week, and the canonical week digest),
+  `island_snapshot::slow_a_full_island_survives_a_trip_through_a_file` (the full island — 200,000
+  stems and a dozen 1,152,000-cell grids — written to a file and run on from it),
+  `island_scheduler::slow_a_day_in_one_step_equals_1440_minute_steps`,
+  `regional_physical_coupling::slow_a_year_of_island_weather_matches_the_reference_packs`,
+  `regional_seismicity::slow_ten_thousand_years_of_seismicity_on_the_full_island`,
+  `human_population_memory::slow_the_human_runtime_stays_small_and_roughly_linear_to_five_thousand_people`,
+  `human_population_memory::slow_formal_predictive_processing_costs_this_share_of_a_human_step`,
+  `human_scaling::slow_a_crowded_cell_costs_at_most_three_times_a_spread_population` and
+  `phase4_phase5_integration::slow_test_phase4_long_horizon_evolution` (~35 s in debug).
 - **Deep:** `benchmark_verification::deep_test_verification_horizon_1kyr_benchmark` (a 1,000-year whole-planet run: >12 min in debug and still unfinished after 1 h 45 min in release, so it cannot fit the nightly 120-minute budget; moved here from the slow tier, not removed), the eight 100-kyr tests in `phase6_verification.rs` (`deep_test_*`, tens of millions of daily ticks) and `phase7_artifacts_emit::deep_emit_phase7_artifacts_writes_files_and_canon_digest_matches_core` (emits a Kyr100 artifact, >5 min in debug).
 
 ## Checking the dashboard by hand

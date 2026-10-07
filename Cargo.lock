@@ -2998,6 +2998,7 @@ dependencies = [
  "bincode",
  "blake3",
  "chrono",
+ "flate2",
  "mk_core",
  "mk_interventions",
  "mk_island",

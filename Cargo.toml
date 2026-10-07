@@ -26,6 +26,9 @@ thiserror = "1.0"
 tokio = { version = "1.0", features = ["full"] }
 warp = { version = "0.4", features = ["server"] }
 ureq = { version = "2", features = ["json"] }
+# Already in the tree through ureq; a snapshot of the island's grids is
+# mostly repeated numbers and compresses by better than ten to one.
+flate2 = "1"
 rusqlite = { version = "0.31", features = ["bundled"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }

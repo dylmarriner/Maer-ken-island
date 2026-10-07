@@ -83,6 +83,20 @@ Phase 1 adds the regional island domain and its geophysics. Almost all of it is 
 23. `mk_engine::regional::ecology` island corrections (D32) and `island_preview life` — **a fidelity fix found by reviewing the preview:** upstream `classify_biome` labels ground under 283 K and 1 mm/day an ice sheet; on the island that was 34,000 of 66,000 land cells at 270-280 K (-3 to +7 °C). The island keeps `IceSheet` only below 260 K (upstream's own hard limit) and otherwise calls cold dry ground tundra (< 278 K) or shrubland; and a cell is `River` only when the river's width (Leopold & Maddock, 3 Q^0.5 m) fills half of it (previously every 1 m³/s stream made a 2 km-wide River cell, 10% of land with no vegetation). The estate moved as a result (best site now medium cell (474, 544) on the wet west coast, 200,000 trees). `island_preview life` writes `biomes.png`, `resources.png` (Phase 1 deposits and water; the full catalogue needs Task 2), `estate_plan.png` (8 px/m: footprints, spaces, doors, items, founders) and `estate_trees.png`; the default is committed under `docs/previews/phase3/`.
 24. `mk_engine::regional::boundary` — `sample_regional_boundaries_with_background` (`provisional: false`) takes ocean and atmosphere edges from the background's bands; the Phase 1 sampler is kept for geophysics and now shares its loop.
 
+## Phase 4 divergences (2026-10-07)
+
+25. `mk_engine::io::island_snapshot` (new) — `save_island_snapshot`/`load_island_snapshot` write and
+    read a whole island as `magic ‖ blake3(rest) ‖ canon digest ‖ deflated JSON`, atomically
+    (temp file, fsync, rename, fsync the directory). The canon is supplied by the caller and
+    checked against the file's digest rather than read from it, and `IslandLife::restore`
+    validates the snapshot's scenario as if it had come off disk and then derives the domain,
+    grid topology and labour table again instead of trusting the file. `mk_engine` gains
+    `flate2` for this (already in the tree through `ureq`): a full island is a dozen grids of
+    1,152,000 cells and comes to 338 MB written plainly. Island-only: upstream's own
+    `io::snapshot` for `WorldState` is untouched, and the new serde derives are all on island
+    types (`regional::{physical, ecology, property, local_vegetation, estate_layout, materials}`),
+    not on imported ones.
+
 ## Drift check (2026-10-02)
 
 Upstream `dylmarriner/Maer-Ken` default-branch HEAD is `7c05f0dcf254387ffd7322dbb525fe4807228602`, equal to the pin: no upstream commits since the extraction, so upstream has not fixed the Phase 0 defects either. Re-check immediately before Phase 1.

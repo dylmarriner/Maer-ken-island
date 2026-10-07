@@ -103,14 +103,29 @@ A realistic island starts with mature soils, rivers and forests, which take cent
 - Test: `crates/mk_engine/tests/island_snapshot.rs`
 
 **Interfaces:**
-- Produces: `save_island_snapshot(state: &IslandWorldState, path: &Path) -> Result<(), IslandSnapshotError>` and `load_island_snapshot(path: &Path) -> Result<IslandWorldState, IslandSnapshotError>`.
+- Produces: `save_island_snapshot(life: &IslandLife, path: &Path) -> Result<(), IslandSnapshotError>` and `load_island_snapshot(canon: Arc<CanonLocked>, path: &Path) -> Result<IslandLife, IslandSnapshotError>`. `IslandLife` is the composition Task 1 delivered under that name; the canon is supplied by the caller rather than read from the file, so a snapshot cannot bring its own physics.
 - Error variants: digest mismatch, incompatible profile/scenario version, canon mismatch/invalid canon, serialization, filesystem.
 
-- [ ] **Step 1:** Write tests for round-trip equality of `state_hash` (including estate layout, patch trees, estate positions, zonal background and pending commands), tamper rejection, truncation rejection, incompatible fixture profile version and invalid canon.
-- [ ] **Step 2:** Run `cargo test -p mk_engine --test island_snapshot`; expect FAIL.
-- [ ] **Step 3:** Implement atomic (write temp, fsync, rename) digest-prefixed JSON save/load; re-derive canon-derived values on load; validate scenario/profile compatibility before returning state.
-- [ ] **Step 4:** Re-run; expect PASS.
-- [ ] **Step 5:** Commit `feat(io): persist complete island world`.
+- [x] **Step 1:** Write tests for round-trip equality of `state_hash` (including estate layout, patch trees, estate positions, zonal background and pending commands), tamper rejection, truncation rejection, incompatible fixture profile version and invalid canon.
+- [ ] **Step 2:** Run `cargo test -p mk_engine --test island_snapshot`; expect FAIL. Not done as written: the tests and the module were written together, so there was never a run of this file against a missing implementation.
+- [x] **Step 3:** Implement atomic (write temp, fsync, rename) digest-prefixed JSON save/load; re-derive canon-derived values on load; validate scenario/profile compatibility before returning state.
+- [x] **Step 4:** Re-run; expect PASS.
+- [x] **Step 5:** Commit `feat(io): persist complete island world`.
+
+**Built (2026-10-07):** the file is `magic ‖ blake3(rest) ‖ canon digest ‖ deflated JSON`, written
+to a temporary file beside the target, fsynced and renamed, with the directory entry fsynced after.
+Written plainly the full island came to 338 MB — a dozen grids of 1,152,000 cells, mostly decimal
+expansions of numbers close to their neighbours — so the state is deflated, which brings the same
+island to 44 MB, and the digest covers the compressed bytes that are actually on the disk. `IslandLife::restore` validates the scenario as
+if it had been read from disk, then derives the domain, grid topology and labour table again
+instead of trusting the file. The round-trip tests assert the state digest both immediately and
+after simulating the same hours on both sides, which is what catches state left out of the
+snapshot.
+
+Two things Step 1 names are not covered because they do not exist yet: there are no pending
+commands until Task 4, and the zonal background is part of the physical state the round trip
+already compares through the digest rather than a separate field to assert on.
+
 
 ### Task 3b: Per-human folders
 

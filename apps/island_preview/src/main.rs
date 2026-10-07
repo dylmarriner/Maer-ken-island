@@ -4,7 +4,7 @@
 //! island_preview geophysics --profile <path> [--seed <64 hex>] --out <dir>
 //! island_preview gallery --profile <path> --seeds <n> --out <dir>
 //! island_preview physical --profile <path> [--seed <64 hex>] --days <n> --out <dir>
-//! island_preview life --scenario <path> --out <dir>
+//! island_preview life --scenario <path> [--days <n>] [--from <file>] [--save <file>] --out <dir>
 //! ```
 
 use std::path::PathBuf;
@@ -19,7 +19,15 @@ const USAGE: &str = "usage:
   island_preview geophysics --profile <path> [--seed <64 hex chars>] --out <dir>
   island_preview gallery --profile <path> --seeds <n> --out <dir>
   island_preview physical --profile <path> [--seed <64 hex chars>] --days <n> --out <dir>
-  island_preview life --scenario <path> --out <dir>";
+  island_preview life --scenario <path> [--days <n>] [--from <file>] [--save <file>] --out <dir>
+
+`life` renders the island: biomes, resources, the estate plan and its trees.
+  --days <n>     simulate n days before rendering (default 0, just bootstrapped)
+  --from <file>  start from a saved island instead of bootstrapping it
+  --save <file>  write the island to a file afterwards, to be read with --from
+
+A saved island only loads against the canon it was written under, which is the
+one the scenario names.";
 
 fn flag(args: &[String], name: &str) -> Option<String> {
     args.windows(2).find(|w| w[0] == name).map(|w| w[1].clone())
@@ -53,7 +61,39 @@ fn run(args: Vec<String>) -> Result<(), String> {
         let out = PathBuf::from(flag(&args, "--out").ok_or(USAGE)?);
         let scenario = mk_island::IslandScenario::load(&PathBuf::from(&scenario_path))
             .map_err(|e| e.to_string())?;
-        let life = island_preview::bootstrap_life(scenario).map_err(|e| e.to_string())?;
+        let days: u64 = match flag(&args, "--days") {
+            Some(n) => n
+                .parse()
+                .map_err(|_| format!("--days {n:?} is not a number"))?,
+            None => 0,
+        };
+        let canon = std::sync::Arc::new(island_preview::island_canon());
+        let mut life = match flag(&args, "--from") {
+            Some(path) => {
+                let path = PathBuf::from(path);
+                let life = mk_engine::io::load_island_snapshot(canon, &path)
+                    .map_err(|e| format!("cannot read {}: {e}", path.display()))?;
+                println!(
+                    "read {} ({:.1} days in)",
+                    path.display(),
+                    life.sim_time_s as f64 / 86_400.0
+                );
+                life
+            }
+            None => mk_engine::regional::life::IslandLife::bootstrap(scenario, canon)
+                .map_err(|e| e.to_string())?,
+        };
+        if days > 0 {
+            life.advance(days * 86_400).map_err(|e| e.to_string())?;
+            println!("simulated {days} day(s)");
+        }
+        if let Some(path) = flag(&args, "--save") {
+            let path = PathBuf::from(path);
+            mk_engine::io::save_island_snapshot(&life, &path)
+                .map_err(|e| format!("cannot write {}: {e}", path.display()))?;
+            let size = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+            println!("wrote {} ({} MB)", path.display(), size / 1_048_576);
+        }
         return write_all(&out, &island_preview::life::render_life(&life));
     }
     let profile_path = flag(&args, "--profile").ok_or(USAGE)?;
