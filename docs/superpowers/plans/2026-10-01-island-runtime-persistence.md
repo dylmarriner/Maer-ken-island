@@ -45,11 +45,14 @@
 - State owns `tick`, `sim_time_seconds`, canon/derived, scenario, seed/`RngRegistry`/`HashChain`, `IslandDomain`, `GridTopology` (regional, Medium), `FaultSystem` and recent earthquakes, `RegionalPhysicalState` (including boundaries, zonal background, insolation, synoptic systems), `RegionalEcologyState`, `PropertySystem`, `EstateLayout`, `EstateEnergy`, `LocalVegetationPatch`, `HumanSystem`, `HumanEstatePositions`, active labour tasks, `ResourceEconomyState`, audit/chronicle, scheduler state and the pending command queue.
 - Produces: `IslandWorldState::state_hash() -> Result<[u8; 32], IslandWorldError>` (canonical form above).
 
-- [ ] **Step 1:** Write a bootstrap test asserting the acceptance criteria for island/domain, physical state, ecology, property, layout, patch vegetation and founders from a single constructor, and that `state_hash` is identical across two separate processes (spawn the test binary twice via `std::process::Command` and compare).
-- [ ] **Step 2:** Run `cargo test -p mk_engine --test island_world_bootstrap`; expect FAIL.
-- [ ] **Step 3:** Implement the constructor in the spec bootstrap order.
-- [ ] **Step 4:** Re-run; expect PASS.
-- [ ] **Step 5:** Commit `feat(engine): compose regional island world`.
+- [x] **Step 1:** Write a bootstrap test asserting the acceptance criteria for island/domain, physical state, ecology, property, layout, patch vegetation and founders from a single constructor, and that `state_hash` is identical across two separate processes (spawn the test binary twice via `std::process::Command` and compare).
+- [x] **Step 2:** Run `cargo test -p mk_engine --test island_world_bootstrap`; expect FAIL.
+- [x] **Step 3:** Implement the constructor in the spec bootstrap order.
+- [x] **Step 4:** Re-run; expect PASS.
+- [x] **Step 5:** Commit `feat(engine): compose regional island world`.
+
+Implementation notes: `regional/world.rs` `IslandWorldState` wraps `IslandLife` (which already composes physics, ecology, estate, layout, patch vegetation, humans, energy, materials, economy). **Not yet in the state, added by the tasks that need them:** the fault system and recent earthquakes, the `HashChain`, active labour tasks, the audit/chronicle, scheduler state and the command queue (Tasks 2-4). The cross-process test spawns its own test binary twice and compares hashes with the in-process one.
+
 
 ### Task 2: Cadence-aware deterministic scheduler
 

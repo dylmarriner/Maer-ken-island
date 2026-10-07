@@ -30,4 +30,5 @@ pub mod terrain;
 pub mod tides;
 pub mod volcanism;
 pub mod weather;
+pub mod world;
 pub mod zonal;
