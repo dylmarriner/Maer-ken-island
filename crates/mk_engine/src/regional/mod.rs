@@ -6,6 +6,7 @@ pub mod boundary;
 pub mod deposits;
 pub mod geology;
 pub mod geophysics;
+pub mod levels;
 pub mod par;
 pub mod seismicity;
 pub mod shape;
