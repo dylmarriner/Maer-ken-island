@@ -18,11 +18,11 @@ Cadences: humans 60 s, physics hourly, ecology and households 6-hourly.
 |---|---|
 | Simulated span | 7 days (10,080 human steps, 168 physics steps, 28 ecology steps) |
 | Wall clock, including bootstrap | 49 s |
-| Peak resident memory | 307 MB (314,484 kB), re-measured after the biome fix (D32) |
+| Peak resident memory | 308 MB (315,436 kB), re-measured with scheduler, snapshot and commands |
 | Stock audits (material carbon, body carbon, water) | 196, all closed |
 | Founders | both alive, both in the estate |
 | Food and water shortfalls | 0 |
-| State digest, two separate processes | identical (`bf836cb8...6e3f`) |
+| State digest, two separate processes | identical (`c0ce6600...cf41`), re-pinned after the command state joined the digest |
 
 Not in this number: Phases 4, 4b and 5 (persistence, replay, the app, a larger population, the
 refinery and town). The population is two humans; `benchmarks/humans_population.md` measures the

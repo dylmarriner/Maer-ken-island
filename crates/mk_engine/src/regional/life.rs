@@ -23,6 +23,10 @@ use mk_core::rng::RngRegistry;
 use mk_island::{DomainLevel, IslandDomain, IslandScenario, LocalPatchSpec};
 use serde::{Deserialize, Serialize};
 
+use super::commands::{
+    as_control, validate, CommandError, CommandState, ControlCommand, IslandCommand,
+    IslandCreateHumanRequest, IslandReplayEntry, QueuedCommandId,
+};
 use super::ecology::{RegionalEcologyError, RegionalEcologyState};
 use super::energy::{solar_output_kw, EstateEnergy};
 use super::estate_layout::{EstateLayout, Space};
@@ -100,6 +104,7 @@ pub struct IslandLifeSnapshot {
     pub audits_closed: u64,
     pub shortfalls: Shortfalls,
     pub scheduler: IslandScheduler,
+    pub commands: CommandState,
     pub food_cell: (usize, usize),
     pub water_cell: Option<(usize, usize)>,
 }
@@ -122,6 +127,7 @@ pub struct IslandLife {
     pub audits_closed: u64,
     pub shortfalls: Shortfalls,
     pub scheduler: IslandScheduler,
+    pub commands: CommandState,
     labour: LabourTable,
     rng: RngRegistry,
     food_cell: (usize, usize),
@@ -236,6 +242,7 @@ impl IslandLife {
             audits_closed: 0,
             shortfalls: Shortfalls::default(),
             scheduler: IslandScheduler::new(scenario_cadences),
+            commands: CommandState::default(),
             labour: LabourTable::load_default().map_err(IslandLifeError::Labour)?,
             food_cell,
             water_cell,
@@ -263,6 +270,7 @@ impl IslandLife {
             audits_closed: self.audits_closed,
             shortfalls: self.shortfalls,
             scheduler: self.scheduler.clone(),
+            commands: self.commands.clone(),
             food_cell: self.food_cell,
             water_cell: self.water_cell,
         }
@@ -303,6 +311,7 @@ impl IslandLife {
             audits_closed: snap.audits_closed,
             shortfalls: snap.shortfalls,
             scheduler: snap.scheduler,
+            commands: snap.commands,
             labour: LabourTable::load_default().map_err(IslandLifeError::Labour)?,
             food_cell: snap.food_cell,
             water_cell: snap.water_cell,
@@ -445,45 +454,188 @@ impl IslandLife {
         })
     }
 
-    /// Advance by `seconds` of simulated time in human substeps; a
-    /// remainder shorter than a substep is carried to the next call.
-    pub fn advance(&mut self, seconds: u64) -> Result<(), IslandLifeError> {
-        let steps = self.scheduler.take_substeps(seconds);
-        let human_s = self.scenario.cadences.human_seconds;
-        for _ in 0..steps {
-            self.sim_time_s += human_s;
-            self.tick += 1;
-            {
-                let energy = self.energy.clone();
-                let ctx = RegionalHumanContext {
-                    property: &self.placed.property,
-                    layout: &self.placed.layout,
-                    physical: &self.physical,
-                    ecology: &self.ecology,
-                    energy: &energy,
-                    domain: &self.domain,
-                    solar_kw: 0.0,
-                };
-                step_regional_humans(
-                    &mut self.humans,
-                    &mut self.positions,
-                    &mut self.economy,
-                    &ctx,
-                    &self.topology,
-                    self.tick,
-                    human_s,
-                    &self.rng,
-                );
+    /// Queue an external command for the next human substep; it applies at
+    /// that substep's start, in `(tick, sequence)` order.
+    pub fn queue_command(
+        &mut self,
+        command: IslandCommand,
+    ) -> Result<QueuedCommandId, CommandError> {
+        validate(&command)?;
+        if let IslandCommand::CreateHuman(r) = &command {
+            let queued = self.commands.pending.iter().any(
+                |e| matches!(&e.command, IslandCommand::CreateHuman(q) if q.agent_id == r.agent_id),
+            );
+            if queued || self.humans.registry.get_human(&r.agent_id).is_some() {
+                return Err(CommandError::DuplicateHuman(r.agent_id.clone()));
             }
-            let due = self.scheduler.due(self.sim_time_s);
-            if due.weather_ocean {
-                self.hourly()?;
-            }
-            if due.hydrology_ecology_resource {
-                self.six_hourly()?;
-            }
-            self.scheduler.record(due);
         }
+        let sequence = self.commands.next_sequence;
+        self.commands.next_sequence += 1;
+        self.commands.pending.push(IslandReplayEntry {
+            tick: self.tick + 1,
+            sequence,
+            command,
+        });
+        Ok(QueuedCommandId(sequence))
+    }
+
+    /// Queue a logged command at its recorded tick and sequence (replay).
+    pub fn queue_recorded(&mut self, entry: IslandReplayEntry) {
+        self.commands.next_sequence = self.commands.next_sequence.max(entry.sequence + 1);
+        self.commands.pending.push(entry);
+    }
+
+    fn apply_control(&mut self, c: ControlCommand) {
+        match c {
+            ControlCommand::Pause => self.commands.paused = true,
+            ControlCommand::Resume => {
+                self.commands.paused = false;
+                self.commands.step_credit = 0;
+            }
+            ControlCommand::Step(n) => self.commands.step_credit += n,
+            ControlCommand::Snapshot => self.commands.snapshots_requested += 1,
+            ControlCommand::SetSpeed(speed) => self.commands.speed = speed,
+        }
+    }
+
+    fn create_human(&mut self, r: &IslandCreateHumanRequest) {
+        use mk_core::human::astrology::GeoCoordinates;
+        /// 2000-01-01T00:00:00Z: the island calendar's epoch.
+        const EPOCH_S: i64 = 946_684_800;
+        if self.humans.registry.get_human(&r.agent_id).is_some() {
+            return;
+        }
+        let birth_s = EPOCH_S + self.sim_time_s as i64 - (r.age_years * 365.25 * 86_400.0) as i64;
+        let Some(birth) = chrono::DateTime::from_timestamp(birth_s, 0) else {
+            return;
+        };
+        let yard = self.placed.layout.yard;
+        let at = (0.5 * (yard.x0 + yard.x1), 0.5 * (yard.y0 + yard.y1));
+        let (lat, lon) = self.domain.lat_lon_at_m(at.0, at.1);
+        let built = crate::humans::spawn::build_spawned_human(
+            &self.rng,
+            self.tick,
+            r.agent_id.clone(),
+            r.sex,
+            birth,
+            GeoCoordinates {
+                latitude: lat.to_degrees(),
+                longitude: lon.to_degrees(),
+            },
+            r.age_years,
+            None,
+        );
+        if let Ok(mut human) = built {
+            let size = self.domain.cell_size_m(DomainLevel::Medium);
+            human.set_runtime_position(crate::humans::GridPosition::new(
+                (at.1 / size).floor() as i32,
+                (at.0 / size).floor() as i32,
+            ));
+            self.materials
+                .register_human(&r.agent_id, human.body.weight_kg);
+            self.humans.registry.add_human_no_storage(human);
+            self.positions.0.insert(
+                r.agent_id.clone(),
+                super::humans::EstatePosition {
+                    space: Space::Outdoors,
+                    position_m: at,
+                },
+            );
+        }
+    }
+
+    /// Apply every queued command due by `tick`, in `(tick, sequence)`
+    /// order, logging each.
+    fn apply_commands(&mut self, tick: u64) {
+        let mut due: Vec<IslandReplayEntry> = Vec::new();
+        self.commands.pending.retain(|e| {
+            if e.tick <= tick {
+                due.push(e.clone());
+                false
+            } else {
+                true
+            }
+        });
+        due.sort_by_key(|e| (e.tick, e.sequence));
+        for entry in due {
+            match &entry.command {
+                IslandCommand::Control(c) => self.apply_control(*c),
+                IslandCommand::Intervention(a) => {
+                    if let Some(c) = as_control(a) {
+                        self.apply_control(c);
+                    }
+                }
+                IslandCommand::CreateHuman(r) => self.create_human(r),
+            }
+            self.commands.log.push(entry);
+        }
+    }
+
+    /// Advance by `seconds` of simulated time in human substeps; a
+    /// remainder shorter than a substep is carried to the next call. While
+    /// paused no time passes (only `Step` credits run); queued commands
+    /// apply at the start of the substep they are due for.
+    pub fn advance(&mut self, seconds: u64) -> Result<(), IslandLifeError> {
+        let mut remaining = if self.commands.paused {
+            0
+        } else {
+            self.scheduler.take_substeps(seconds)
+        };
+        loop {
+            if !self.commands.paused && remaining == 0 {
+                break;
+            }
+            self.apply_commands(self.tick + 1);
+            if self.commands.paused {
+                if self.commands.step_credit == 0 {
+                    break;
+                }
+                self.commands.step_credit -= 1;
+            } else if remaining > 0 {
+                remaining -= 1;
+            } else {
+                break;
+            }
+            self.substep()?;
+        }
+        Ok(())
+    }
+
+    /// One human substep and whatever fires at its end.
+    fn substep(&mut self) -> Result<(), IslandLifeError> {
+        let human_s = self.scenario.cadences.human_seconds;
+        self.sim_time_s += human_s;
+        self.tick += 1;
+        {
+            let energy = self.energy.clone();
+            let ctx = RegionalHumanContext {
+                property: &self.placed.property,
+                layout: &self.placed.layout,
+                physical: &self.physical,
+                ecology: &self.ecology,
+                energy: &energy,
+                domain: &self.domain,
+                solar_kw: 0.0,
+            };
+            step_regional_humans(
+                &mut self.humans,
+                &mut self.positions,
+                &mut self.economy,
+                &ctx,
+                &self.topology,
+                self.tick,
+                human_s,
+                &self.rng,
+            );
+        }
+        let due = self.scheduler.due(self.sim_time_s);
+        if due.weather_ocean {
+            self.hourly()?;
+        }
+        if due.hydrology_ecology_resource {
+            self.six_hourly()?;
+        }
+        self.scheduler.record(due);
         Ok(())
     }
 
@@ -536,6 +688,7 @@ impl IslandLife {
         h.update(canonical(&self.economy).as_bytes());
         h.update(format!("{:?}", self.materials).as_bytes());
         h.update(canonical(&self.scheduler).as_bytes());
+        h.update(canonical(&self.commands).as_bytes());
         h.update(&self.sim_time_s.to_le_bytes());
         *h.finalize().as_bytes()
     }

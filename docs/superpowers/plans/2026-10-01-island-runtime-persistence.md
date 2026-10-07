@@ -73,7 +73,7 @@ Implementation notes: `regional/world.rs` `IslandWorldState` wraps `IslandLife` 
 - [x] **Step 5:** Re-run; expect PASS. Slow tier for the 1,440-step comparison if it exceeds ~30 s debug.
 - [x] **Step 6:** Commit `feat(engine): schedule island subsystems`.
 
-Implementation notes: `regional/scheduler.rs` (`IslandScheduler`, `SchedulerCounters`, `SchedulerAccumulators`, `Due`); `IslandLife::advance` now takes its cadences from the scenario and dispatches by the simulated clock (firings depend only on the clock, so slicing time differently cannot change them). A remainder shorter than a substep is carried (3,701 s = 61 whole minutes + 41 s waiting). Verified: 1 h as one step equals 60 one-minute steps; two 3,701 s steps equal one 7,402 s step; a full day in one step equals 1,440 steps (slow tier). Geophysics and human-store firings are counted but their work is Task 2b/3b; the command queue (Task 4) is not yet applied at the head of a substep. The scheduler state is in the state digest, so the week digest was re-pinned (`bf836cb8…6e3f`).
+Implementation notes: `regional/scheduler.rs` (`IslandScheduler`, `SchedulerCounters`, `SchedulerAccumulators`, `Due`); `IslandLife::advance` now takes its cadences from the scenario and dispatches by the simulated clock (firings depend only on the clock, so slicing time differently cannot change them). A remainder shorter than a substep is carried (3,701 s = 61 whole minutes + 41 s waiting). Verified: 1 h as one step equals 60 one-minute steps; two 3,701 s steps equal one 7,402 s step; a full day in one step equals 1,440 steps (slow tier). Geophysics and human-store firings are counted but their work is Task 2b/3b; the command queue is applied at the head of each substep (Task 4). The scheduler state is in the state digest, so the week digest was re-pinned (`bf836cb8…6e3f`, later `c0ce6600…cf41` when Task 4 added command state).
 
 
 ### Task 2b: Deep-time spin-up
@@ -112,7 +112,7 @@ A realistic island starts with mature soils, rivers and forests, which take cent
 - [x] **Step 4:** Re-run; expect PASS.
 - [x] **Step 5:** Commit `feat(io): persist complete island world`.
 
-Implementation notes: `io/island_snapshot.rs`: magic + format version + blake3 payload digest + JSON envelope (scenario, canon, recorded state digest, `IslandLifeSnapshot`); atomic write (temp, fsync, rename); load validates magic, version, digest, scenario/profile version, canon finiteness and digest, then rebuilds the domain, topology, labour table, RNG registry and the terrain-derived caches (drainage network, coarse elevation, geothermal, diurnal surface) and requires the restored state to hash to the recorded digest. Tests: round trip equality, **a restored island runs on identically across an hour boundary** (the completeness proof), tamper, truncation, bad magic, unsupported format, incompatible scenario and profile versions, invalid and non-finite canon. 336 MB / 0.9 s save / 1.2 s load (`benchmarks/island_snapshot.md`). **Not yet in the snapshot** because they do not exist yet: the pending command queue (Task 4), the fault system and chronicle. JSON, not bincode: upstream human state embeds `serde_json::Value`.
+Implementation notes: `io/island_snapshot.rs`: magic + format version + blake3 payload digest + JSON envelope (scenario, canon, recorded state digest, `IslandLifeSnapshot`); atomic write (temp, fsync, rename); load validates magic, version, digest, scenario/profile version, canon finiteness and digest, then rebuilds the domain, topology, labour table, RNG registry and the terrain-derived caches (drainage network, coarse elevation, geothermal, diurnal surface) and requires the restored state to hash to the recorded digest. Tests: round trip equality, **a restored island runs on identically across an hour boundary** (the completeness proof), tamper, truncation, bad magic, unsupported format, incompatible scenario and profile versions, invalid and non-finite canon. 336 MB / 0.9 s save / 1.2 s load (`benchmarks/island_snapshot.md`). The pending command queue and log are in the snapshot (Task 4). **Not yet in the snapshot** because they do not exist yet: the fault system and chronicle. JSON, not bincode: upstream human state embeds `serde_json::Value`.
 
 
 ### Task 3b: Per-human folders
@@ -148,11 +148,12 @@ Implementation notes: `io/island_snapshot.rs`: magic + format version + blake3 p
 - Produces: `IslandReplayLog { scenario_digest, entries: Vec<IslandReplayEntry { tick, sequence, command }> }`, appended for every applied command, and `replay_island(canon: Arc<CanonLocked>, scenario: IslandScenario, log: &IslandReplayLog, until_tick: Tick) -> Result<IslandWorldState, IslandReplayError>`.
 - Interventions are applied through the upstream executor's logic adapted to `IslandWorldState`; actions with no island meaning (planetary climate edits, orbit changes) return `CommandError::NotSupportedOnIsland` and are listed in `UPSTREAM.md`.
 
-- [ ] **Step 1:** Write a log with interventions and controls at repeated ticks and assert stable `(tick, sequence)` order.
-- [ ] **Step 2:** Run uninterrupted execution and replay from the same seed and log; assert identical final `state_hash`.
-- [ ] **Step 3:** Save halfway, load, continue replay; assert the same final hash.
-- [ ] **Step 4:** Run `cargo test -p mk_engine --test island_replay`; expect FAIL before implementation, PASS after.
-- [ ] **Step 5:** Commit `feat(engine): replay deterministic island commands`.
+- [x] **Step 1:** Write a log with interventions and controls at repeated ticks and assert stable `(tick, sequence)` order.
+- [x] **Step 2:** Run uninterrupted execution and replay from the same seed and log; assert identical final `state_hash`.
+- [x] **Step 3:** Save halfway, load, continue replay; assert the same final hash.
+- [x] **Step 4:** Run `cargo test -p mk_engine --test island_replay`; expect FAIL before implementation, PASS after.
+- [x] **Step 5:** Commit `feat(engine): replay deterministic island commands`.
+Implementation notes: `regional/commands.rs` (command types, `validate`, `CommandState`), `regional/replay.rs` (`replay_island`, `IslandWorldState::{queue, replay_log}`). A command queued at tick *t* takes tick *t*+1 and a sequence number and applies at the start of that substep in `(tick, sequence)` order; every applied command is logged; the queue, log, pause/step/speed state are in the state digest and the snapshot, so save/load mid-run is exact. `Pause` stops time (queued time is not banked), `Step(n)` runs *n* substeps while paused, `CreateHuman` builds the person at the yard. **Interventions other than Pause/Resume/Step are refused at queue time with `NotSupportedOnIsland`** (planetary climate edits, orbit changes, branching); no silent no-ops. Replay stops early only if the log leaves the run paused. Tests: `island_replay.rs` (ordering and refusals; uninterrupted vs replayed hash; save halfway, load, continue, same hash). The week digest was re-pinned (`c0ce6600…cf41`), identical across two processes; 49 s, 315 MB.
 
 ### Task 5: Phase-4 acceptance and headless runner
 
