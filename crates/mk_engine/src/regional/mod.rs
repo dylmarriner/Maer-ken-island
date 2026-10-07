@@ -5,6 +5,7 @@
 pub mod boundary;
 pub mod climate;
 pub mod deposits;
+pub mod ecology;
 pub mod edge;
 pub mod geology;
 pub mod geophysics;

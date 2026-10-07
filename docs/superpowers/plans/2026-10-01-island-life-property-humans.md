@@ -61,6 +61,9 @@ Two representation levels exist:
 - [ ] **Step 4:** Run `cargo test -p mk_engine --test regional_ecology` and `cargo test -p mk_engine --lib -- biosphere:: organisms::vegetation`; expect PASS.
 - [ ] **Step 5:** Commit `feat(engine): seed island ecology`.
 
+Implementation notes (part 1a, done): `regional/ecology.rs` runs upstream's pure `classify_biome` and `miami_npp_kgc_m2_yr` on the medium grid instead of refactoring `update_primary_production`/`habitat_cells` (no upstream code changes were needed for the field layer). Mean NPP on the owner's island is 0.48 kgC/m²/yr in the lowland and 0.15 on the heights. Rivers (discharge >= 1 m³/s) are `River`; lakes are `CoastalWaters`. **Part 1b is open:** seeding species populations at island scale (upstream's are planetary totals, so `BiosphereSystem` needs island-scaled initial populations and a producer-carbon total for `renormalise_to_total`), plus the `biosphere::`/`organisms::vegetation` regression run of Step 4. Steps 1-2 are done for the field layer; Step 3 is replaced by the pure-function reuse; Steps 4-5 close with part 1b.
+
+
 ### Task 2: Complete resource nodes and material catalogue
 
 Upstream has 9 node kinds (`resource_economy.rs:13-23`) placed by biome, maps only 12 of the 25 biome `ResourceKind`s to nodes (`node_kind_for_resource`, `:639-654` — `Gem`, `Salt`, `Sulfur`, `Herbs`, `Fish`, `Shellfish`, `Meat`, `Hide`, `Bone`, `Wax`, `Feather` and `Water` are dropped), and lumps ores into `MetalOre`/`Minerals`. This task makes every resource and material in the world gatherable from a real source: geological deposits from Phase 1 Task 5, river and beach deposits from Phase-2 hydrology, plants from cell biomass, animals and fish from species populations, and water from the hydrology stores.
