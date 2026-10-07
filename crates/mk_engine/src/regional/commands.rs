@@ -34,12 +34,74 @@ pub enum ControlCommand {
     SetSpeed(SimSpeed),
 }
 
-/// A new human arriving at the estate.
+/// Authored identity for an arrival, as the Foundry spawns upstream: the
+/// same fields and the same validation (`mk_interventions`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AuthoredAppearance {
+    pub height_cm: f64,
+    pub build: String,
+    pub hair_color: String,
+    pub eye_color: String,
+    pub skin_tone: String,
+    /// RFC 3339 birth instant; default: computed from the age.
+    #[serde(default)]
+    pub birth_timestamp: Option<String>,
+    /// Birthplace in degrees; default: where the person arrives
+    /// (`birthplace_here`). A person may be born off the island.
+    #[serde(default)]
+    pub birth_latitude: Option<f64>,
+    #[serde(default)]
+    pub birth_longitude: Option<f64>,
+}
+
+/// Where an arrival appears. Default: the estate yard.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum CreateLocation {
+    /// A named estate space ("Kitchen"), at its centre.
+    EstateSpace { label: String },
+    /// A point in the estate patch (metres from the island's SW corner).
+    EstatePoint { position_m: (f64, f64) },
+    /// The centre of a medium-grid land cell.
+    IslandCell { row: usize, col: usize },
+}
+
+/// A new human arriving on the island.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct IslandCreateHumanRequest {
     pub agent_id: String,
     pub sex: BiologicalSex,
     pub age_years: f64,
+    #[serde(default)]
+    pub appearance: Option<AuthoredAppearance>,
+    #[serde(default)]
+    pub location: Option<CreateLocation>,
+}
+
+impl IslandCreateHumanRequest {
+    /// The upstream spawn profile for this request, with `birth_timestamp`
+    /// and the birthplace filled from the given defaults when not authored.
+    pub fn spawn_profile(
+        &self,
+        default_birth: &str,
+        default_birthplace: (f64, f64),
+    ) -> Option<mk_interventions::HumanSpawnProfile> {
+        let a = self.appearance.as_ref()?;
+        Some(mk_interventions::HumanSpawnProfile {
+            name: self.agent_id.trim().to_string(),
+            birth_timestamp: a
+                .birth_timestamp
+                .clone()
+                .unwrap_or_else(|| default_birth.into()),
+            birth_latitude: a.birth_latitude.unwrap_or(default_birthplace.0),
+            birth_longitude: a.birth_longitude.unwrap_or(default_birthplace.1),
+            age_years: self.age_years,
+            height_cm: a.height_cm,
+            build: a.build.clone(),
+            hair_color: a.hair_color.clone(),
+            eye_color: a.eye_color.clone(),
+            skin_tone: a.skin_tone.clone(),
+        })
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -120,6 +182,17 @@ pub fn validate(command: &IslandCommand) -> Result<(), CommandError> {
                 return Err(CommandError::InvalidRequest(
                     "a name and an age of 0-120 years".into(),
                 ));
+            }
+            if let Some(profile) = r.spawn_profile("2000-01-01T00:00:00Z", (0.0, 0.0)) {
+                let checked =
+                    mk_interventions::validate_intervention(&InterventionAction::SpawnHuman {
+                        template_id: "female".into(),
+                        location: mk_interventions::Location::new(0.0, 0.0),
+                        profile: Some(profile),
+                    });
+                if !checked.valid {
+                    return Err(CommandError::InvalidRequest(checked.errors.join("; ")));
+                }
             }
             Ok(())
         }

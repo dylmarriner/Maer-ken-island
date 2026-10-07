@@ -33,6 +33,31 @@ pub struct IslandProjection {
     pub shortfalls: (u64, u64),
     pub snapshots_saved: u64,
     pub last_error: Option<String>,
+    pub vegetation: Value,
+    pub economy: Value,
+    /// The last commands applied, newest last.
+    pub timeline: Vec<Value>,
+}
+
+/// The estate layout: fixed for a run, so built once (the location picker).
+pub fn estate_view(world: &IslandWorldState) -> Value {
+    let layout = &world.life.placed.layout;
+    let rect = |r: &mk_engine::regional::estate_layout::Rect| json!([r.x0, r.y0, r.x1, r.y1]);
+    json!({
+        "patch": {
+            "origin_m": [layout.patch.origin_x_m, layout.patch.origin_y_m],
+            "size_m": [layout.patch.width_m, layout.patch.height_m],
+            "cell_size_m": layout.patch.cell_size_m,
+        },
+        "location_medium_cell": [world.life.placed.location.0, world.life.placed.location.1],
+        "yard": rect(&layout.yard),
+        "buildings": layout.buildings.iter().map(|b| json!({
+            "building_id": b.building_id, "kind": format!("{:?}", b.kind), "rect_m": rect(&b.rect_m),
+        })).collect::<Vec<_>>(),
+        "spaces": layout.spaces.iter().map(|s| json!({
+            "id": s.id.0, "label": s.label, "kind": format!("{:?}", s.kind), "rect_m": rect(&s.rect_m),
+        })).collect::<Vec<_>>(),
+    })
 }
 
 impl IslandProjection {
@@ -71,6 +96,28 @@ impl IslandProjection {
             shortfalls: (life.shortfalls.food, life.shortfalls.water),
             snapshots_saved: saved,
             last_error: error.clone(),
+            vegetation: json!({
+                "trees": life.vegetation.trees.len(),
+                "tree_biomass_kgc": life.vegetation.trees.iter().map(|t| t.biomass_kgc).sum::<f64>(),
+            }),
+            economy: json!({
+                "food_shortfalls": life.shortfalls.food,
+                "water_shortfalls": life.shortfalls.water,
+                "fuel_stores": life.energy.fuel_stores.len(),
+                "generators": life.energy.generators.len(),
+                "solar_arrays": life.energy.solar.len(),
+                "batteries": life.energy.batteries.len(),
+                "vehicles": life.energy.vehicles.len(),
+            }),
+            timeline: life
+                .commands
+                .log
+                .iter()
+                .rev()
+                .take(50)
+                .rev()
+                .map(|e| json!({ "tick": e.tick, "sequence": e.sequence, "command": format!("{:?}", e.command).chars().take(120).collect::<String>() }))
+                .collect(),
         }
     }
 
@@ -103,6 +150,7 @@ enum Request {
 pub struct SimHandle {
     tx: Sender<Request>,
     projection: Arc<RwLock<Arc<IslandProjection>>>,
+    estate: Arc<Value>,
 }
 
 #[derive(Debug)]
@@ -140,6 +188,10 @@ impl SimHandle {
             .map_err(|_| SimError::Unavailable)
     }
 
+    pub fn estate(&self) -> Arc<Value> {
+        self.estate.clone()
+    }
+
     pub fn stop(&self) {
         let _ = self.tx.send(Request::Stop);
     }
@@ -154,6 +206,7 @@ pub fn spawn(mut world: IslandWorldState, snapshot_path: Option<PathBuf>) -> Sim
         &world, &pacer, 0, &None,
     ))));
     let (tx, rx) = channel::<Request>();
+    let estate = Arc::new(estate_view(&world));
     let shared = projection.clone();
     std::thread::Builder::new()
         .name("island-sim".into())
@@ -223,5 +276,9 @@ pub fn spawn(mut world: IslandWorldState, snapshot_path: Option<PathBuf>) -> Sim
             }
         })
         .expect("spawn the island sim thread");
-    SimHandle { tx, projection }
+    SimHandle {
+        tx,
+        projection,
+        estate,
+    }
 }

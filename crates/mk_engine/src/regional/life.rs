@@ -24,8 +24,8 @@ use mk_island::{DomainLevel, IslandDomain, IslandScenario, LocalPatchSpec};
 use serde::{Deserialize, Serialize};
 
 use super::commands::{
-    as_control, validate, CommandError, CommandState, ControlCommand, IslandCommand,
-    IslandCreateHumanRequest, IslandReplayEntry, QueuedCommandId,
+    as_control, validate, CommandError, CommandState, ControlCommand, CreateLocation,
+    IslandCommand, IslandCreateHumanRequest, IslandReplayEntry, QueuedCommandId,
 };
 use super::ecology::{RegionalEcologyError, RegionalEcologyState};
 use super::energy::{solar_output_kw, EstateEnergy};
@@ -466,6 +466,7 @@ impl IslandLife {
     ) -> Result<QueuedCommandId, CommandError> {
         validate(&command)?;
         if let IslandCommand::CreateHuman(r) = &command {
+            self.resolve_location(r.location.as_ref())?;
             let queued = self.commands.pending.iter().any(
                 |e| matches!(&e.command, IslandCommand::CreateHuman(q) if q.agent_id == r.agent_id),
             );
@@ -502,6 +503,52 @@ impl IslandLife {
         }
     }
 
+    /// Where an arrival appears, in metres from the island's SW corner.
+    /// Refused if the place does not exist or is not land.
+    fn resolve_location(&self, at: Option<&CreateLocation>) -> Result<(f64, f64), CommandError> {
+        let layout = &self.placed.layout;
+        let bad = |why: String| Err(CommandError::InvalidRequest(why));
+        match at {
+            None => {
+                let yard = layout.yard;
+                Ok((0.5 * (yard.x0 + yard.x1), 0.5 * (yard.y0 + yard.y1)))
+            }
+            Some(CreateLocation::EstateSpace { label }) => {
+                match layout
+                    .spaces
+                    .iter()
+                    .find(|s| s.label.eq_ignore_ascii_case(label.trim()))
+                {
+                    Some(s) => Ok((
+                        0.5 * (s.rect_m.x0 + s.rect_m.x1),
+                        0.5 * (s.rect_m.y0 + s.rect_m.y1),
+                    )),
+                    None => bad(format!("the estate has no space named {label:?}")),
+                }
+            }
+            Some(CreateLocation::EstatePoint { position_m }) => {
+                let p = &layout.patch;
+                let inside = (p.origin_x_m..p.origin_x_m + p.width_m).contains(&position_m.0)
+                    && (p.origin_y_m..p.origin_y_m + p.height_m).contains(&position_m.1);
+                if inside {
+                    Ok(*position_m)
+                } else {
+                    bad("that point is outside the estate".into())
+                }
+            }
+            Some(CreateLocation::IslandCell { row, col }) => {
+                let level = DomainLevel::Medium;
+                if *row >= self.domain.rows(level) || *col >= self.domain.cols(level) {
+                    return bad(format!("cell ({row}, {col}) is off the map"));
+                }
+                if *self.physical.geophysics.elevation_m.get(*row, *col) <= 0.0 {
+                    return bad(format!("cell ({row}, {col}) is not land"));
+                }
+                Ok(self.domain.cell_center_m(level, *row, *col))
+            }
+        }
+    }
+
     fn create_human(&mut self, r: &IslandCreateHumanRequest) {
         use mk_core::human::astrology::GeoCoordinates;
         /// 2000-01-01T00:00:00Z: the island calendar's epoch.
@@ -509,13 +556,25 @@ impl IslandLife {
         if self.humans.registry.get_human(&r.agent_id).is_some() {
             return;
         }
+        let Ok(at) = self.resolve_location(r.location.as_ref()) else {
+            return;
+        };
         let birth_s = EPOCH_S + self.sim_time_s as i64 - (r.age_years * 365.25 * 86_400.0) as i64;
         let Some(birth) = chrono::DateTime::from_timestamp(birth_s, 0) else {
             return;
         };
-        let yard = self.placed.layout.yard;
-        let at = (0.5 * (yard.x0 + yard.x1), 0.5 * (yard.y0 + yard.y1));
         let (lat, lon) = self.domain.lat_lon_at_m(at.0, at.1);
+        let here = (lat.to_degrees(), lon.to_degrees());
+        let profile = r.spawn_profile(&birth.to_rfc3339(), here);
+        // An authored birth instant and birthplace win over the defaults.
+        let (birth, birthplace) = match &profile {
+            Some(p) => (
+                chrono::DateTime::parse_from_rfc3339(&p.birth_timestamp)
+                    .map_or(birth, |t| t.with_timezone(&chrono::Utc)),
+                (p.birth_latitude, p.birth_longitude),
+            ),
+            None => (birth, here),
+        };
         let built = crate::humans::spawn::build_spawned_human(
             &self.rng,
             self.tick,
@@ -523,18 +582,16 @@ impl IslandLife {
             r.sex,
             birth,
             GeoCoordinates {
-                latitude: lat.to_degrees(),
-                longitude: lon.to_degrees(),
+                latitude: birthplace.0,
+                longitude: birthplace.1,
             },
             r.age_years,
-            None,
+            profile.as_ref(),
         );
         if let Ok(mut human) = built {
             let size = self.domain.cell_size_m(DomainLevel::Medium);
-            human.set_runtime_position(crate::humans::GridPosition::new(
-                (at.1 / size).floor() as i32,
-                (at.0 / size).floor() as i32,
-            ));
+            let cell = ((at.1 / size).floor() as i32, (at.0 / size).floor() as i32);
+            human.set_runtime_position(crate::humans::GridPosition::new(cell.0, cell.1));
             self.materials
                 .register_human(&r.agent_id, human.body.weight_kg);
             // Added first, folder second: a failed write is counted and the
@@ -544,13 +601,30 @@ impl IslandLife {
                     store.record(vec![e]);
                 }
             }
-            self.positions.0.insert(
-                r.agent_id.clone(),
-                super::humans::EstatePosition {
-                    space: Space::Outdoors,
-                    position_m: at,
-                },
-            );
+            let event = serde_json::json!({
+                "kind": "created",
+                "tick": self.tick,
+                "authored": r.appearance.is_some(),
+                "position_m": [at.0, at.1],
+            });
+            if let Err(e) = self.humans.registry.record_event(&r.agent_id, &event) {
+                if let Some(store) = self.store.as_mut() {
+                    store.record(vec![e]);
+                }
+            }
+            // Inside the estate patch the person has a metric position.
+            let p = &self.placed.layout.patch;
+            let in_patch = (p.origin_x_m..p.origin_x_m + p.width_m).contains(&at.0)
+                && (p.origin_y_m..p.origin_y_m + p.height_m).contains(&at.1);
+            if in_patch {
+                self.positions.0.insert(
+                    r.agent_id.clone(),
+                    super::humans::EstatePosition {
+                        space: self.placed.layout.space_at(at),
+                        position_m: at,
+                    },
+                );
+            }
         }
     }
 

@@ -77,6 +77,8 @@ fn founders_and_arrivals_get_folders_and_a_fresh_run_gets_a_new_run_id() {
         agent_id: "Visitor-1".into(),
         sex: BiologicalSex::Female,
         age_years: 30.0,
+        appearance: None,
+        location: None,
     }))
     .unwrap();
     w.step(60).unwrap();

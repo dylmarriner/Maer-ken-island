@@ -63,6 +63,8 @@ fn a_populated_island_runs_within_memory_and_time_budgets() {
                 BiologicalSex::Male
             },
             age_years: 18.0 + (i % 40) as f64,
+            appearance: None,
+            location: None,
         }))
         .unwrap();
     }

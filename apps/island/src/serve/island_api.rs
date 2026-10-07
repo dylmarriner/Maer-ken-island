@@ -118,6 +118,31 @@ pub fn routes(
             })
         });
 
+    let views = {
+        let view =
+            |name: &'static str, sim: SimHandle, pick: fn(&SimHandle) -> serde_json::Value| {
+                warp::path!("api" / String)
+                    .and(warp::get())
+                    .and(warp::any().map(move || sim.clone()))
+                    .and_then(move |path: String, sim: SimHandle| async move {
+                        if path != name {
+                            return Err(warp::reject::not_found());
+                        }
+                        Ok(json(StatusCode::OK, &pick(&sim)))
+                    })
+            };
+        view("estate", sim.clone(), |s| (*s.estate()).clone())
+            .or(view("vegetation", sim.clone(), |s| {
+                s.projection().vegetation.clone()
+            }))
+            .or(view("economy", sim.clone(), |s| {
+                s.projection().economy.clone()
+            }))
+            .or(view("timeline", sim.clone(), |s| {
+                serde_json::json!(s.projection().timeline)
+            }))
+    };
+
     let create = warp::path!("api" / "humans")
         .and(warp::post())
         .and(with(sim.clone()))
@@ -154,7 +179,13 @@ pub fn routes(
         .and(warp::get())
         .map(|| warp::reply::with_header(PAGE, "content-type", "text/html; charset=utf-8"));
 
-    status.or(one).or(roster).or(create).or(control).or(page)
+    status
+        .or(one)
+        .or(roster)
+        .or(views)
+        .or(create)
+        .or(control)
+        .or(page)
 }
 
 /// Serve until Ctrl-C.
@@ -297,6 +328,70 @@ mod tests {
             .reply(&filter)
             .await;
         assert_eq!(bad_speed.status(), 422);
+
+        // The estate view feeds the location picker; read views need no token.
+        let (code, estate) = get(&filter, "/api/estate").await;
+        assert_eq!(code, 200);
+        let spaces = estate["spaces"].as_array().unwrap();
+        assert!(spaces.iter().any(|s| s["label"] == "Kitchen"), "{estate}");
+        for view in ["/api/vegetation", "/api/economy", "/api/timeline"] {
+            assert_eq!(get(&filter, view).await.0, 200, "{view}");
+        }
+        assert_eq!(get(&filter, "/api/nonsense").await.0, 404);
+
+        // An authored person placed in the kitchen; a bad height is a 422.
+        let authored = |name: &str, height: f64| {
+            serde_json::json!({
+                "agent_id": name, "sex": "Male", "age_years": 44.0,
+                "appearance": { "height_cm": height, "build": "Heavy", "hair_color": "Gray",
+                                "eye_color": "Green", "skin_tone": "Dark" },
+                "location": { "EstateSpace": { "label": "Kitchen" } }
+            })
+        };
+        let bad = warp::test::request()
+            .method("POST")
+            .path("/api/humans")
+            .header("authorization", "Bearer s3cret")
+            .json(&authored("Cook", 5.0))
+            .reply(&filter)
+            .await;
+        assert_eq!(bad.status(), 422);
+        assert!(String::from_utf8_lossy(bad.body()).contains("height"));
+        let good = warp::test::request()
+            .method("POST")
+            .path("/api/humans")
+            .header("authorization", "Bearer s3cret")
+            .json(&authored("Cook", 182.0))
+            .reply(&filter)
+            .await;
+        assert_eq!(good.status(), 202, "{:?}", good.body());
+        let started = Instant::now();
+        loop {
+            let (_, roster) = get(&filter, "/api/humans").await;
+            if let Some(cook) = roster
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|h| h["agent_id"] == "Cook")
+            {
+                assert!(
+                    cook["space"].as_str().unwrap().starts_with("Inside"),
+                    "{cook}"
+                );
+                break;
+            }
+            assert!(
+                started.elapsed() < Duration::from_secs(60),
+                "Cook never appeared"
+            );
+            tokio::time::sleep(Duration::from_millis(200)).await;
+        }
+        let (_, timeline) = get(&filter, "/api/timeline").await;
+        assert!(timeline
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|e| e["command"].as_str().unwrap().contains("Cook")));
         handle.stop();
     }
 

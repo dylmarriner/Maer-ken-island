@@ -17,7 +17,14 @@ button,input,select{font:inherit;padding:.3rem .5rem;margin:.15rem}pre{overflow:
 <section><b>Add a person</b><div>
 <input id="name" placeholder="name (agent id)"><select id="sex"><option>Female</option><option>Male</option></select>
 <input id="age" type="number" value="30" min="0" max="120" style="width:5rem">
-<input id="token" placeholder="control token (if set)" type="password">
+<select id="where"><option value="">the yard</option></select></div>
+<div><label><input id="authored" type="checkbox"> choose appearance</label>
+<input id="height" type="number" value="170" min="50" max="260" style="width:5rem" title="height cm">
+<select id="build"><option>Slim</option><option selected>Average</option><option>Athletic</option><option>Heavy</option></select>
+<select id="hair"><option>Black</option><option selected>Brown</option><option>Blonde</option><option>Red</option><option>Gray</option><option>White</option></select>
+<select id="eyes"><option selected>Brown</option><option>Blue</option><option>Green</option><option>Hazel</option><option>Gray</option><option>Amber</option></select>
+<select id="skin"><option>Fair</option><option>Light</option><option selected>Medium</option><option>Olive</option><option>Dark</option></select></div>
+<div><input id="token" placeholder="control token (if set)" type="password">
 <button id="add">Add</button></div><div id="msg"></div></section>
 <script>
 const $=id=>document.getElementById(id);
@@ -26,7 +33,11 @@ async function post(path,body){const r=await fetch(path,{method:"POST",headers:h
  const j=await r.json().catch(()=>({}));const m=$("msg");m.textContent=r.status+" "+JSON.stringify(j);m.className=r.ok?"":"bad";}
 document.querySelectorAll("button[data-c]").forEach(b=>b.onclick=()=>post("/api/control",JSON.parse(b.dataset.c)));
 $("speed").onchange=e=>{const v=e.target.value;post("/api/control",{SetSpeed:/^\d+$/.test(v)?{Times:+v}:v})};
-$("add").onclick=()=>post("/api/humans",{agent_id:$("name").value,sex:$("sex").value,age_years:+$("age").value});
+$("add").onclick=()=>{const b={agent_id:$("name").value,sex:$("sex").value,age_years:+$("age").value};
+ if($("authored").checked)b.appearance={height_cm:+$("height").value,build:$("build").value,hair_color:$("hair").value,eye_color:$("eyes").value,skin_tone:$("skin").value};
+ if($("where").value)b.location={EstateSpace:{label:$("where").value}};
+ post("/api/humans",b)};
+fetch("/api/estate").then(r=>r.json()).then(e=>{for(const sp of e.spaces){const o=document.createElement("option");o.value=sp.label;o.textContent=sp.label;$("where").appendChild(o)}}).catch(()=>{});
 async function tick(){try{const s=await (await fetch("/api/status")).json();
  $("clock").textContent="day "+s.simulated_days.toFixed(2)+" (tick "+s.tick+")"+(s.paused?" - paused":"")+" - speed "+s.speed+", achieved "+s.achieved_speed.toFixed(0)+"x";
  $("behind").textContent=s.behind?"the machine cannot keep up with the requested speed":"";

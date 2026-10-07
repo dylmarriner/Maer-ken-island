@@ -45,6 +45,8 @@ fn newcomer(name: &str) -> IslandCommand {
         agent_id: name.into(),
         sex: BiologicalSex::Female,
         age_years: 28.0,
+        appearance: None,
+        location: None,
     })
 }
 
