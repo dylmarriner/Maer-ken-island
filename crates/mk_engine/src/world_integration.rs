@@ -2109,53 +2109,33 @@ impl WorldState {
             let resource_abundance =
                 crate::perception::caloric_access(biosphere_state, grid_spec.nlon, r, c);
 
-            crate::humans::AgentWorldObservation {
-                tick,
-                ambient_temperature_c: temp,
-                hydration_access: crate::perception::hydration_access(
-                    hydrology_state,
-                    precipitation,
+            let shelter = crate::humans::observation::biome_shelter_quality(biome)
+                .max(built_shelter[r * nlon + c]);
+            crate::humans::observation::build_observation(
+                &crate::humans::observation::ObservationFacts {
+                    tick,
+                    ambient_temperature_c: temp,
+                    hydration_access: crate::perception::hydration_access(
+                        hydrology_state,
+                        precipitation,
+                        biome,
+                        r,
+                        c,
+                    ),
+                    resource_abundance,
+                    shelter_quality: shelter,
+                    social_density: occupancy.social_density(*position, true),
+                    daylight_fraction: crate::perception::daylight_fraction(insolation_state, r, c),
                     biome,
-                    r,
-                    c,
-                ),
-                caloric_access: resource_abundance.clamp(0.0, 1.0),
-                shelter_quality: biome
-                    .map(|b| {
-                        let props = mk_core::biomes::biome_properties(b);
-                        props.canopy_cover * 0.6 + 0.2
-                    })
-                    .unwrap_or(0.5)
-                    .max(built_shelter[r * nlon + c]),
-                social_density: occupancy.social_density(*position, true),
-                hazard_index: biome
-                    .map(|b| {
-                        let props = mk_core::biomes::biome_properties(b);
-                        props.roughness * 0.5 + (1.0 - props.traversability) * 0.5
-                    })
-                    .unwrap_or(0.1),
-                daylight_fraction: crate::perception::daylight_fraction(insolation_state, r, c),
-                biome_type: biome,
-                resource_abundance,
-                computer_access: if properties.iter().any(|property| {
-                    property.location == Some((r, c))
-                        && property.buildings.iter().any(|building| {
-                            matches!(
-                                building.kind,
-                                crate::organisms::property::PropertyBuildingKind::ComputerRoom
+                    computer_access: properties.iter().any(|property| {
+                        property.location == Some((r, c))
+                            && crate::humans::observation::property_grants_computer(
+                                property, agent_id,
                             )
-                        })
-                        && property
-                            .network_accounts
-                            .iter()
-                            .any(|account| account.agent_id == agent_id)
-                }) {
-                    1.0
-                } else {
-                    0.0
+                    }),
+                    computer_bridge_available,
                 },
-                computer_bridge_available,
-            }
+            )
         };
 
         self.humans_state.step(

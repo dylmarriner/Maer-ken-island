@@ -30,6 +30,7 @@ pub mod memory;
 pub mod mesoscale_brain;
 pub mod needs;
 pub mod neurochemistry;
+pub mod observation;
 pub mod pathology;
 pub mod physical_capacity;
 pub mod population_dynamics;
