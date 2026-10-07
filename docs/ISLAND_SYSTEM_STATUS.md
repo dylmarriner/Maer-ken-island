@@ -20,6 +20,7 @@ fidelity limits. The project is **not complete**: see "Not done".
 | Estate fuel and electricity (Phase 3 Task 4b) | Done | `regional/energy.rs`, `tests/island_energy.rs` |
 | Individual trees and stands on the estate patch (Phase 3 Task 7) | Done | `regional/local_vegetation.rs`, `tests/island_local_vegetation.rs` |
 | Island scenario and estate placement (Phase 3 Task 4) | Done | `mk_island/src/scenario.rs`, `regional/property.rs`, `fixtures/island/default_scenario.json` |
+| Web dashboard: overview, roster with a readable per-person record, Human Creator, JSON API (`island serve`) | Done for the human-only bootstrap; the Phase 5 desktop app is separate | `apps/island/src/serve/`, `apps/island/static/` |
 
 ## Measured (release build, development machine)
 
@@ -56,7 +57,8 @@ Phase 3 Tasks 3 and 4b (D10, D13).
   materials, time and energy of actions, acceptance.
 - Phase 4: runtime scheduling, persistence, replay.
 - Phase 4b: energy, industry, town, economy.
-- Phase 5: app and UI replacing the human-only bootstrap, performance work, pruning, final
-  benchmarks.
+- Phase 5: the desktop app (`island-ui`, Bevy) replacing the human-only bootstrap, performance
+  work, pruning, final benchmarks. The `island serve` web dashboard covers the human-only
+  bootstrap in the meantime; it has no world, no clock and no map.
 - Owner reviews: Gate 1 (island) and Gate 2 (weather previews).
 - Upstream pull requests for every divergence in `UPSTREAM.md`.

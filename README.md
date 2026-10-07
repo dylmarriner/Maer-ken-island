@@ -15,6 +15,7 @@ It defines the locked scope (a uniquely shaped, New-Zealand-sized island on an E
 - `crates/mk_core/src/human/` — canonical identity, genetics, temperament, neurocognition, personality, drives, hormones, attachment, schema and profile types.
 - `crates/mk_engine/src/humans/` — live runtime systems for body, needs, cognition, emotion, memory, consciousness, reproduction, lifecycle, social behaviour and brain-state models.
 - `apps/island_humans/` — the island-facing population bootstrap and CLI.
+- `apps/island/` — the dashboard: the overview, the roster, the Human Creator and the JSON behind them.
 - `fixtures/human/` — canonical Gem-D / Gem-K human fixtures.
 - `assets/humans/` — the founder GLB models.
 - `tools/blender/generate_human_model.py` — the Maer-Ken human model generator.
@@ -37,8 +38,25 @@ cargo run -p island_humans -- create "Hine Moana" female 1992-11-03T10:15:00+13:
 
 ### The dashboard (`island serve`)
 
-- **People** (`/`): the roster, and everything stored about whoever you pick.
-- **Create a human** (`/creator`): name, sex, birth date and place, age and appearance. Each new person gets a folder immediately.
+Three pages, served from the binary with nothing to install beside it:
+
+- **Overview** (`/`): how many people there are, how old they are, where their
+  records live, who was added lately, and what does and does not work yet.
+- **People** (`/people`): the roster, searchable and sortable, and everything
+  stored about whoever you pick — who they are, what their body is doing, how
+  they feel, how they think — with the complete record underneath to copy or
+  download. `/people?human=<agent-id>` opens straight to one person.
+- **Create a human** (`/creator`): name, sex, birth date and place, age and
+  appearance. Each new person gets a folder immediately.
+
+The JSON behind the pages is public too: `/api/status`, `/api/health` (also
+`/healthz`), `/api/humans`, `/api/humans/<agent-id>`, `/api/activity` and
+`/api/creator/options`. `POST /api/humans` is the only write.
+
+Every response carries a strict content security policy and the usual
+hardening headers; the pages load no third-party script, style or font. One
+line per request is printed to stdout — set `ISLAND_ACCESS_LOG=off` to stop
+that.
 
 `island serve [--data-dir DIR] [--bind ADDR:PORT] [--seed HEX64]`. Reading never needs a token. Creating people is allowed:
 

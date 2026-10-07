@@ -17,6 +17,24 @@ Current members:
 - **Slow:** `phase4_phase5_integration::slow_test_phase4_long_horizon_evolution` (~35 s in debug) and `human_scaling::slow_a_crowded_cell_costs_at_most_three_times_a_spread_population`.
 - **Deep:** `benchmark_verification::deep_test_verification_horizon_1kyr_benchmark` (a 1,000-year whole-planet run: >12 min in debug and still unfinished after 1 h 45 min in release, so it cannot fit the nightly 120-minute budget; moved here from the slow tier, not removed), the eight 100-kyr tests in `phase6_verification.rs` (`deep_test_*`, tens of millions of daily ticks) and `phase7_artifacts_emit::deep_emit_phase7_artifacts_writes_files_and_canon_digest_matches_core` (emits a Kyr100 artifact, >5 min in debug).
 
+## Checking the dashboard by hand
+
+`cargo test -p island` covers the pages, the API, the hardening headers and the
+per-person sections, and `apps/island/tests/serve.rs` drives a real listener on
+a real port. What no test can judge is whether the pages are worth looking at,
+so before changing them, run the thing and read it:
+
+    cargo run -p island -- serve --data-dir /tmp/island-check
+
+Then open the overview, the roster and the creator; create someone; and check
+the three things a browser decides rather than a test:
+
+- the browser console stays empty (the content security policy allows nothing
+  from outside the server, so a stray inline style or external script shows up
+  here),
+- nothing scrolls sideways at a phone width of 390 px,
+- the dark theme is legible (switch the OS or browser to dark and reload).
+
 ## Build profiles
 
 `Cargo.toml` compiles `mk_core` and `mk_engine` at `opt-level = 2` in the dev profile, and sets the `bench` profile (used by `cargo test --release`) to `lto = false, codegen-units = 16` so test binaries link quickly.

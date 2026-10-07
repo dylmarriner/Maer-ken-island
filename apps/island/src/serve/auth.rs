@@ -41,11 +41,21 @@ impl ControlAuth {
         }
     }
 
+    /// A stable word for the mode, for API clients and tests. `describe` is
+    /// the sentence a person reads; this is what code branches on.
+    pub fn mode(&self) -> &'static str {
+        match self {
+            ControlAuth::BearerToken(_) => "token",
+            ControlAuth::LoopbackOnly => "loopback",
+            ControlAuth::Disabled => "disabled",
+        }
+    }
+
     pub fn describe(&self) -> &'static str {
         match self {
-            ControlAuth::BearerToken(_) => "bearer token required",
-            ControlAuth::LoopbackOnly => "loopback only (no token set)",
-            ControlAuth::Disabled => "writes disabled (no token set on a non-loopback bind)",
+            ControlAuth::BearerToken(_) => "the control token is required",
+            ControlAuth::LoopbackOnly => "anyone on this machine can create people",
+            ControlAuth::Disabled => "creating people is off: set a control token first",
         }
     }
 }
@@ -84,6 +94,24 @@ mod tests {
             ControlAuth::resolve(Some("  ".into()), LAN),
             ControlAuth::Disabled
         );
+    }
+
+    #[test]
+    fn each_mode_has_a_word_and_a_sentence() {
+        for auth in [
+            ControlAuth::resolve(Some("t".into()), LAN),
+            ControlAuth::resolve(None, LOOPBACK),
+            ControlAuth::resolve(None, LAN),
+        ] {
+            assert!(!auth.mode().is_empty());
+            assert!(auth.describe().len() > 10, "{:?}", auth.describe());
+            assert!(
+                !auth.describe().contains('_'),
+                "{:?} reads like a variable name",
+                auth.describe()
+            );
+        }
+        assert_eq!(ControlAuth::resolve(None, LOOPBACK).mode(), "loopback");
     }
 
     #[test]

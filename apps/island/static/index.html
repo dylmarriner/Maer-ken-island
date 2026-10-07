@@ -3,26 +3,88 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Island People</title>
+<title>Overview · Maer-Ken Island</title>
+<meta name="description" content="The island's population, where it is stored, and what is running.">
 <link rel="stylesheet" href="/static/style.css">
+<link rel="icon" href="data:,">
 </head>
 <body>
-<header>
-  <h1>Maer-Ken Island</h1>
-  <nav><a href="/" aria-current="page">People</a><a href="/creator">Create a human</a></nav>
+<a class="skip-link" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="inner">
+    <a class="brand" href="/"><span class="mark" aria-hidden="true">◈</span> Maer-Ken Island <span class="sub">dashboard</span></a>
+    <nav class="site-nav" aria-label="Main">
+      <a href="/" aria-current="page">Overview</a>
+      <a href="/people">People</a>
+      <a href="/creator">Create a human</a>
+    </nav>
+  </div>
 </header>
-<main>
-  <p class="banner" id="banner">Time is not running yet. People are created and stored, but nobody ages, eats or acts until the island world exists (Phase 4).</p>
-  <p class="status" id="status">Loading…</p>
-  <div class="layout">
-    <section class="panel" aria-label="Roster">
-      <ul class="roster" id="roster"></ul>
+
+<main id="main">
+  <div class="intro">
+    <p class="eyebrow">Overview</p>
+    <h1>The island, before the clock starts</h1>
+    <p class="lead">Everyone here has a full canonical record — body, temperament, needs, attention, the lot — kept in their own encrypted folder on disk. What they do not have yet is time. Nothing is stepped until the island world arrives, so these people are waiting rather than living.</p>
+  </div>
+
+  <p class="banner is-error" id="offline" hidden>
+    <strong>The dashboard cannot reach the island server.</strong>
+    <span id="offline-detail">Check that <code>island serve</code> is still running, then reload.</span>
+  </p>
+
+  <section class="stats" id="stats" aria-label="Population at a glance">
+    <div class="stat"><div class="label">People</div><div class="value"><span class="skeleton half"></span></div><div class="note">Counting…</div></div>
+    <div class="stat"><div class="label">Alive</div><div class="value"><span class="skeleton half"></span></div><div class="note">&nbsp;</div></div>
+    <div class="stat"><div class="label">Median age</div><div class="value"><span class="skeleton half"></span></div><div class="note">&nbsp;</div></div>
+    <div class="stat"><div class="label">Creating people</div><div class="value"><span class="skeleton half"></span></div><div class="note">&nbsp;</div></div>
+  </section>
+
+  <div class="columns">
+    <section class="panel">
+      <h2>Recently added</h2>
+      <p class="panel-note">Newest first, read back from the creation log. Replaying that log against the same seed rebuilds exactly these people.</p>
+      <div id="activity">
+        <p class="loading"><span class="skeleton wide"></span><span class="skeleton"></span><span class="skeleton half"></span></p>
+      </div>
+      <div class="quick-links">
+        <a class="button primary" href="/people">Browse everyone</a>
+        <a class="button secondary" href="/creator">Create a human</a>
+      </div>
     </section>
-    <section class="panel" aria-label="Details" id="detail">
-      <p class="hint">Pick someone from the roster.</p>
+
+    <section class="panel">
+      <h2>Where things stand</h2>
+      <p class="panel-note">What this dashboard can honestly claim today.</p>
+      <ul>
+        <li><strong>Creating people works.</strong> Every request goes through the same spawn and validation path the engine uses, so a dashboard human and an engine human are the same thing.</li>
+        <li><strong>Storage works.</strong> Each person gets a folder with their profile, traits, cognition, social, development, reproduction, memories, state, relationships and events.</li>
+        <li><strong>Creation is reproducible.</strong> The seed plus the ordered creation log produces the same people again.</li>
+        <li><strong>Time is not running.</strong> Nobody ages, eats, sleeps or acts yet; the live readings on a person are the values they were built with.</li>
+      </ul>
+      <h3>Where the data lives</h3>
+      <dl class="facts">
+        <dt>Data directory</dt>
+        <dd id="data-dir">reading…</dd>
+        <dt>Seed</dt>
+        <dd id="seed">reading…</dd>
+      </dl>
+      <p class="banner">
+        <strong>Back up the storage key.</strong>
+        Human files are encrypted with <code>island-data/humans/.secret_storage_key</code>, written on first run. Lose it and every record becomes unreadable. Back it up with the data, or set <code>MK_STORAGE_KEY</code> yourself.
+      </p>
     </section>
   </div>
 </main>
-<script src="/static/dashboard.js"></script>
+
+<footer class="site-footer">
+  <div class="inner">
+    <p>Maer-Ken Island dashboard <span id="version"></span></p>
+    <p class="spacer"></p>
+    <p id="footer-writes">Reading is open to anyone who can reach this page.</p>
+  </div>
+</footer>
+
+<script type="module" src="/static/overview.js"></script>
 </body>
 </html>
