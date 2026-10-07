@@ -121,15 +121,15 @@ impl HydrologyState {
 }
 
 /// Soil field capacity (mm of water the root zone holds).
-const FIELD_CAPACITY_MM: f64 = 300.0;
+pub(crate) const FIELD_CAPACITY_MM: f64 = 300.0;
 /// Soil moisture fraction above which evaporation is not moisture-limited.
-const UNLIMITED_EVAPORATION_MOISTURE: f64 = 0.7;
+pub(crate) const UNLIMITED_EVAPORATION_MOISTURE: f64 = 0.7;
 /// Fraction of soil storage lost to deep drainage (groundwater recharge)
 /// per day.
-const DEEP_DRAINAGE_PER_DAY: f64 = 0.002;
+pub(crate) const DEEP_DRAINAGE_PER_DAY: f64 = 0.002;
 /// Rate (per day) at which standing water drains off a cell on flat
 /// ground; steeper slopes drain faster.
-const SURFACE_DRAINAGE_PER_DAY: f64 = 0.3;
+pub(crate) const SURFACE_DRAINAGE_PER_DAY: f64 = 0.3;
 const R_DRY_AIR: f64 = 287.05;
 const EVAPORATION_TRANSFER_COEFFICIENT: f64 = 1.2e-3;
 const MIN_EVAPORATION_WIND_M_S: f64 = 1.0;
@@ -138,7 +138,7 @@ const SECONDS_PER_DAY: f64 = 86_400.0;
 /// Horton infiltration capacity (mm/day) of soil at `soil_moisture` on
 /// ground of `slope`: high when dry, falling toward the saturated rate as
 /// the soil wets, and reduced on slopes where water runs off first.
-fn infiltration_capacity(soil_moisture: f64, slope: f64) -> f64 {
+pub(crate) fn infiltration_capacity(soil_moisture: f64, slope: f64) -> f64 {
     let wetness = soil_moisture.clamp(0.0, 1.0);
     let horton =
         HORTON_FC_MM_DAY + (HORTON_F0_MM_DAY - HORTON_FC_MM_DAY) * (-HORTON_K_DAY * wetness).exp();
@@ -148,7 +148,12 @@ fn infiltration_capacity(soil_moisture: f64, slope: f64) -> f64 {
 
 /// Potential evaporation (mm/day) from a wet land surface: the bulk
 /// aerodynamic formula with land-surface relative humidity.
-fn potential_evaporation(temperature_k: f64, wind_m_s: f64, rh: f64, pressure_pa: f64) -> f64 {
+pub(crate) fn potential_evaporation(
+    temperature_k: f64,
+    wind_m_s: f64,
+    rh: f64,
+    pressure_pa: f64,
+) -> f64 {
     if temperature_k <= 0.0 {
         return 0.0;
     }

@@ -156,11 +156,13 @@ Implementation notes: `step_ocean` and `step_tides` were split like `step_climat
 - Produces: non-wrapping `regional_downhill_neighbour(topography: &Grid2<f64>, row: usize, col: usize) -> Option<(usize, usize)>`.
 - Slope distance is `domain.cell_size_m(Medium)` (not upstream's hard-coded 50,000 m); humidity latitude is `domain.latitude_rad_for_row(Medium, row)`.
 
-- [ ] **Step 1:** Write tests for a west-edge slope proving no east-edge wrap, rain-to-river-to-ocean mass conservation (including `aggregate_medium_to_coarse` of runoff into the coarse ocean), pit/lake accumulation, coastline movement and zero-time no-op.
-- [ ] **Step 2:** Run `cargo test -p mk_engine --test regional_hydrology`; expect FAIL.
-- [ ] **Step 3:** Port upstream bucket/routing equations with flat area `domain.cell_area_m2(DomainLevel::Medium)`, treating outflow to sea or a domain edge as `HydrologyBudget::surface_to_ocean_kg`.
-- [ ] **Step 4:** Run `cargo test -p mk_engine --test regional_hydrology` and `cargo test -p mk_engine --lib hydrology::`; expect PASS.
-- [ ] **Step 5:** Commit `feat(engine): route island hydrology regionally`.
+- [x] **Step 1:** Write tests for a west-edge slope proving no east-edge wrap, rain-to-river-to-ocean mass conservation (including `aggregate_medium_to_coarse` of runoff into the coarse ocean), pit/lake accumulation, coastline movement and zero-time no-op.
+- [x] **Step 2:** Run `cargo test -p mk_engine --test regional_hydrology`; expect FAIL.
+- [x] **Step 3:** Port upstream bucket/routing equations with flat area `domain.cell_area_m2(DomainLevel::Medium)`, treating outflow to sea or a domain edge as `HydrologyBudget::surface_to_ocean_kg`.
+- [x] **Step 4:** Run `cargo test -p mk_engine --test regional_hydrology` and `cargo test -p mk_engine --lib hydrology::`; expect PASS.
+- [x] **Step 5:** Commit `feat(engine): route island hydrology regionally`.
+
+Implementation notes: upstream's one-cell-per-step routing cannot make real rivers on 2 km cells, so this is a port, not a wrapper: a `FlowNetwork` (priority-flood fill, steepest-descent receivers on the filled surface) is built once per terrain and each cell's hillslope runoff is delivered down the channel within the step. Lakes (filled depressions deeper than 0.5 m) hold water to their spill level; `bootstrap_regional_hydrology` starts them full. `step_regional_hydrology_on` takes a prebuilt network and the **coarse** weather/climate (sampled at each land cell with `levels::sample_coarse_at_medium`), so no medium weather copies are built (the plan's `weather_medium`/`climate_medium` would be ~3 grids of 1.15 M cells); `step_regional_hydrology` builds the network itself, for one-off use. `routed_outflow_mm` stays empty (no water in transit), so every step's budget closes exactly. D28 records the channel simplifications.
 
 ### Task 6: Coupled regional physical tick
 

@@ -8,6 +8,7 @@ pub mod deposits;
 pub mod edge;
 pub mod geology;
 pub mod geophysics;
+pub mod hydrology;
 pub mod levels;
 pub mod ocean;
 pub mod par;

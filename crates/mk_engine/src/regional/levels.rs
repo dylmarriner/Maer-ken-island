@@ -41,6 +41,35 @@ pub fn resample_coarse_to_medium(coarse: &Grid2<f64>, domain: &IslandDomain) -> 
     Grid2::from_data(&domain.storage_spec(medium), data)
 }
 
+/// The value at medium cell `(row, col)`'s centre of a coarse field given
+/// as `get(coarse_row, coarse_col)`, bilinear exactly as
+/// [`resample_coarse_to_medium`] — without building the medium grid. The
+/// land-only medium processes use this: they read ~70,000 cells, not
+/// 1.15 million.
+pub fn sample_coarse_at_medium(
+    get: impl Fn(usize, usize) -> f64,
+    domain: &IslandDomain,
+    row: usize,
+    col: usize,
+) -> f64 {
+    let size = domain.cell_size_m(DomainLevel::Coarse);
+    let (rows, cols) = (
+        domain.rows(DomainLevel::Coarse),
+        domain.cols(DomainLevel::Coarse),
+    );
+    let (x, y) = domain.cell_center_m(DomainLevel::Medium, row, col);
+    let axis = |centre_m: f64, n: usize| {
+        let v = (centre_m / size - 0.5).clamp(0.0, (n - 1) as f64);
+        let i = (v.floor() as usize).min(n - 1);
+        (i, (i + 1).min(n - 1), v - i as f64)
+    };
+    let (r0, r1, fr) = axis(y, rows);
+    let (c0, c1, fc) = axis(x, cols);
+    let lo = get(r0, c0) * (1.0 - fc) + get(r0, c1) * fc;
+    let hi = get(r1, c0) * (1.0 - fc) + get(r1, c1) * fc;
+    lo * (1.0 - fr) + hi * fr
+}
+
 /// A medium field on the coarse grid as the mean over each coarse cell's
 /// medium cells. Flat equal areas make `Σ coarse·coarse_area` equal
 /// `Σ medium·medium_area` exactly (to rounding).
@@ -79,6 +108,23 @@ mod tests {
         .into_iter()
         .map(|p| IslandDomain::from_profile(p).unwrap())
         .collect()
+    }
+
+    #[test]
+    fn point_sampling_matches_the_resampled_grid() {
+        let d = &domains()[0];
+        let c = DomainLevel::Coarse;
+        let coarse = Grid2::from_data(
+            &d.storage_spec(c),
+            (0..d.rows(c) * d.cols(c))
+                .map(|i| ((i * 7919) % 97) as f64)
+                .collect(),
+        );
+        let medium = resample_coarse_to_medium(&coarse, d);
+        for (r, col) in [(0, 0), (13, 77), (100, 150), (191, 239)] {
+            let got = sample_coarse_at_medium(|a, b| *coarse.get(a, b), d, r, col);
+            assert!((got - medium.get(r, col)).abs() < 1e-12);
+        }
     }
 
     #[test]
