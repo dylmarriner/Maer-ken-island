@@ -4,6 +4,7 @@
 use super::auth::ControlAuth;
 use super::pages;
 use super::read;
+use super::sim::SimHandle;
 use super::view;
 use island_humans::{CreateHumanError, CreateHumanRequest, IslandHumanPopulation};
 use std::sync::{Arc, Mutex};
@@ -243,6 +244,37 @@ pub fn routes(
     population: SharedPopulation,
     auth: ControlAuth,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = std::convert::Infallible> + Clone {
+    routes_with_world(population, auth, None)
+}
+
+/// The routes, with a running island behind `/api/world` when there is one.
+///
+/// `island serve` without `--scenario` serves the stored population alone,
+/// exactly as it did before there was a world to serve: the endpoint then
+/// says so rather than inventing a world or disappearing.
+pub fn routes_with_world(
+    population: SharedPopulation,
+    auth: ControlAuth,
+    world: Option<SimHandle>,
+) -> impl Filter<Extract = (impl warp::Reply,), Error = std::convert::Infallible> + Clone {
+    let get_world = warp::path!("api" / "world")
+        .and(read())
+        .and(with(world.clone()))
+        .map(|world: Option<SimHandle>| match world {
+            Some(handle) => json(
+                StatusCode::OK,
+                &serde_json::to_value(handle.projection()).unwrap_or_default(),
+            ),
+            // Not an error: this dashboard is simply not running one.
+            None => json(
+                StatusCode::OK,
+                &serde_json::json!({
+                    "running": false,
+                    "reason": "No island is running. Start the server with --scenario to simulate one."
+                }),
+            ),
+        });
+
     let get_status = warp::path!("api" / "status")
         .and(read())
         .and(with(population.clone()))
@@ -357,11 +389,12 @@ pub fn routes(
             }
             json(
                 StatusCode::NOT_FOUND,
-                &serde_json::json!({ "errors": ["No such endpoint. The dashboard serves /api/status, /api/health, /api/humans, /api/humans/<agent-id>, /api/activity and /api/creator/options."] }),
+                &serde_json::json!({ "errors": ["No such endpoint. The dashboard serves /api/status, /api/world, /api/health, /api/humans, /api/humans/<agent-id>, /api/activity and /api/creator/options."] }),
             )
         });
 
     let api = get_status
+        .or(get_world)
         .or(get_health)
         .or(get_options)
         .or(get_activity)
@@ -394,8 +427,18 @@ pub async fn run(
     auth: ControlAuth,
     bind: std::net::SocketAddr,
 ) -> std::io::Result<()> {
+    run_with_world(population, auth, bind, None).await
+}
+
+/// Serve, with a running island behind `/api/world` when there is one.
+pub async fn run_with_world(
+    population: SharedPopulation,
+    auth: ControlAuth,
+    bind: std::net::SocketAddr,
+    world: Option<SimHandle>,
+) -> std::io::Result<()> {
     let listener = tokio::net::TcpListener::bind(bind).await?;
-    warp::serve(routes(population, auth))
+    warp::serve(routes_with_world(population, auth, world))
         .incoming(listener)
         .graceful(async {
             let _ = tokio::signal::ctrl_c().await;

@@ -255,3 +255,39 @@ Phase 0b built the dashboard, the Creator page, `CreateHumanRequest`, `create_hu
 - [ ] **Step 4:** Implement the sim thread, projection, command path and location picker; switch `serve` from the human-only population to `IslandWorldState`.
 - [ ] **Step 5:** Re-run; expect PASS. Manually create a human in the Kitchen from the browser and confirm their folder, detail view and estate position.
 - [ ] **Step 6:** Commit `feat(island): dashboard and human creator on the live island`.
+
+**Partly built (2026-10-07) — the read half.** The island now runs behind the dashboard:
+`island serve --scenario <path> | --snapshot <path> [--speed real|max|<n>]` starts
+`IslandLife` on its own thread (`serve/sim.rs`), which publishes an `IslandProjection`
+(`serve/projection.rs`) behind an `RwLock` after every step. `GET /api/world` reads only that,
+so a request can never hold up a step and no page can catch the island half-stepped. The
+overview page shows the island's clock on its own 36-hour day, the founders with where they are
+and their body carbon, the estate's power, the patch, and whether the books closed; it refreshes
+every two seconds.
+
+Pacing works as the interfaces above require, and `how_fast_it_runs_does_not_change_what_happens`
+pins it: at any speed the thread's island is the island a plain `advance` reaches. Wall-clock time
+never enters simulation state.
+
+Two things running it taught, neither of which a test of mine would have caught:
+
+- The achieved-speed readout claimed **20,000x while the island was advancing at 2,160x**. It
+  timed `advance` only, and averaged over a count of steps — but one step in sixty also hashes
+  the island and costs hundreds of times more, so a step-count window usually fell between two of
+  them. It now times the whole loop over a five-second wall-clock window.
+- A step is **1.4 ms** and a digest is **932 ms** (`slow_what_a_step_and_a_digest_cost`), so
+  publishing the digest every step made the island hundreds of times slower than it needed to be.
+  The projection now carries a digest with the tick it was taken at, refreshed hourly, and the
+  page says "as of tick N" rather than implying it is live.
+
+The page's own copy was wrong once the clock started — it said "The island, before the clock
+starts" and "Time is not running" — so the overview now swaps both when a world is running and
+keeps the old wording when there is none. Checked in Chromium at 390 px against both: no console
+errors, no failed requests, no sideways scroll.
+
+**Still to build, and the reason this task is not ticked:** the write half. There is no
+`IslandCommand`, no command queue, no `POST /api/humans` against the world (creating a person
+still stores them without placing them in the world, which the page now says outright), no
+`/api/properties`, `/api/estate`, `/api/vegetation`, `/api/economy` or `/api/timeline` as separate
+endpoints, no `--import-0b`, no location picker, and no `POST /api/control`. Task 4's command log
+is a prerequisite for the replay half of it.

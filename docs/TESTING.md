@@ -37,6 +37,16 @@ so before changing them, run the thing and read it:
 
     cargo run -p island -- serve --data-dir /tmp/island-check
 
+To check it with a world behind it — the clock, the founders, the estate's
+power — give it a scenario and a speed worth watching:
+
+    cargo run -p island -- serve --data-dir /tmp/island-check \
+      --scenario fixtures/island/default_scenario.json --speed 20000
+
+The island takes about half a minute to bootstrap before the first step, and
+hashes itself once more at startup, so give it a minute before judging
+whether the clock is moving.
+
 Then open the overview, the roster and the creator; create someone; and check
 the three things a browser decides rather than a test:
 
@@ -44,7 +54,11 @@ the three things a browser decides rather than a test:
   from outside the server, so a stray inline style or external script shows up
   here),
 - nothing scrolls sideways at a phone width of 390 px,
-- the dark theme is legible (switch the OS or browser to dark and reload).
+- the dark theme is legible (switch the OS or browser to dark and reload),
+- and, with a world, that the page's own claims are still true of it. The
+  overview says "Time is not running" when there is no world and "Time is
+  running" when there is; a page that contradicts the panel below it is a
+  worse bug than a layout one, and only reading it catches that.
 
 ## Build profiles
 

@@ -13,6 +13,7 @@ use std::sync::{Arc, Mutex};
 
 const USAGE: &str = "\
 island serve   [--data-dir ./island-data] [--seed <64 hex>] [--bind 127.0.0.1:8080]
+               [--scenario <path> | --snapshot <path>] [--speed real|max|<n>]
 island run     (--scenario <path> | --snapshot <path>) [--steps <n>] [--dt <seconds>]
                [--save <path>] [--save-root <dir>]
 island inspect --snapshot <path> [--scenario <path>]
@@ -23,6 +24,12 @@ serve    the dashboard: the overview at /, the roster at /people and the Human
   --seed HEX       64 hex characters; the same seed and the same creations
                    rebuild the same people (default all zeroes)
   --bind ADDR      address and port to listen on (default 127.0.0.1:8080)
+  --scenario PATH  also simulate the island, served at /api/world
+  --snapshot PATH  simulate it from a saved island instead
+  --speed SPEED    real (one simulated second per real second, the default),
+                   max, or a multiplier like 60. Speed changes how often a
+                   step runs, never its size, so the island is the same at
+                   any speed.
 
 run      the simulated island, headless, printing its canonical state digest.
          Two runs of one scenario and seed print the same digest.
@@ -145,9 +152,46 @@ fn main() {
                 seed = bytes.try_into().unwrap_or_else(|_| usage());
             }
             "--bind" => bind = value.parse().unwrap_or_else(|_| usage()),
+            // Read again below, where the world is opened; named here so
+            // they are accepted rather than falling through to the usage
+            // message as unknown flags.
+            "--scenario" | "--snapshot" | "--speed" => {}
             _ => usage(),
         }
     }
+
+    // The world, when one was asked for. It starts before the listener so a
+    // failure to bootstrap is a clean exit rather than a server that serves
+    // an island it never managed to build.
+    let world = match (flag(rest, "--scenario"), flag(rest, "--snapshot")) {
+        (Some(_), Some(_)) => {
+            eprintln!("--scenario starts a new island and --snapshot carries one on; pick one.\n");
+            usage()
+        }
+        (None, None) => None,
+        (scenario, snapshot) => {
+            let speed = match flag(rest, "--speed") {
+                None => serve::sim::SimSpeed::RealTime,
+                Some(text) => text.parse().unwrap_or_else(|e: String| {
+                    eprintln!("{e}\n");
+                    usage()
+                }),
+            };
+            let life = headless::open_world(
+                scenario.map(PathBuf::from).as_deref(),
+                snapshot.map(PathBuf::from).as_deref(),
+            )
+            .unwrap_or_else(|e| {
+                eprintln!("{e}");
+                std::process::exit(1);
+            });
+            println!(
+                "Simulating the island at {}. Its state is at /api/world.",
+                speed.describe()
+            );
+            Some(serve::sim::spawn(life, speed))
+        }
+    };
 
     let (population, warnings) = match island_humans::IslandHumanPopulation::open(&data_dir, seed) {
         Ok(opened) => opened,
@@ -180,10 +224,11 @@ fn main() {
     println!("Press Ctrl-C to stop. Set ISLAND_ACCESS_LOG=off to silence the request log.");
 
     let runtime = tokio::runtime::Runtime::new().expect("tokio runtime");
-    if let Err(err) = runtime.block_on(serve::server::run(
+    if let Err(err) = runtime.block_on(serve::server::run_with_world(
         Arc::new(Mutex::new(population)),
         auth,
         bind,
+        world,
     )) {
         eprintln!("could not serve on {bind}: {err}");
         std::process::exit(1);

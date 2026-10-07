@@ -63,7 +63,7 @@ pub struct RunArgs {
 /// allows. Pacing against wall-clock time belongs to the server, where
 /// somebody is watching.
 pub fn run(args: RunArgs) -> Result<(), String> {
-    let mut life = open(&args.scenario, &args.snapshot)?;
+    let mut life = open_world(args.scenario.as_deref(), args.snapshot.as_deref())?;
 
     if let Some(root) = &args.save_root {
         let id = life
@@ -158,7 +158,10 @@ fn elapsed(life: &IslandLife) -> String {
 }
 
 /// Start from a scenario or carry on from a snapshot, but not both.
-fn open(scenario: &Option<PathBuf>, snapshot: &Option<PathBuf>) -> Result<IslandLife, String> {
+///
+/// Shared with `island serve --scenario`, so the dashboard's island and the
+/// headless one are opened by exactly the same rules.
+pub fn open_world(scenario: Option<&Path>, snapshot: Option<&Path>) -> Result<IslandLife, String> {
     match (scenario, snapshot) {
         (Some(_), Some(_)) => {
             Err("--scenario starts a new island and --snapshot carries one on; pick one".into())
