@@ -26,6 +26,7 @@ use mk_core::biomes::BiomeType;
 use mk_core::flux::{FluxEntry, FluxKind, Ledger, Reservoir};
 use mk_core::grid::{Grid2, GridSpec};
 use mk_island::{DomainLevel, EstatePatchConfig, IslandDomain, LocalPatchSpec};
+use serde::{Deserialize, Serialize};
 
 use super::ecology::RegionalEcologyState;
 use super::estate_layout::{EstateLayout, Rect};
@@ -69,7 +70,7 @@ impl std::fmt::Display for LocalVegetationError {
 
 impl std::error::Error for LocalVegetationError {}
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TreeInstance {
     pub id: u64,
     pub kind: PlantKind,
@@ -81,7 +82,7 @@ pub struct TreeInstance {
     pub alive: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct StandCover {
     pub biome: BiomeType,
     /// Carbon in the 5 m cell (kgC).
@@ -98,7 +99,7 @@ pub struct WoodYield {
     pub carbon_kgc: f64,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LocalVegetationPatch {
     pub trees: Vec<TreeInstance>,
     pub stands: Grid2<StandCover>,

@@ -106,11 +106,14 @@ A realistic island starts with mature soils, rivers and forests, which take cent
 - Produces: `save_island_snapshot(state: &IslandWorldState, path: &Path) -> Result<(), IslandSnapshotError>` and `load_island_snapshot(path: &Path) -> Result<IslandWorldState, IslandSnapshotError>`.
 - Error variants: digest mismatch, incompatible profile/scenario version, canon mismatch/invalid canon, serialization, filesystem.
 
-- [ ] **Step 1:** Write tests for round-trip equality of `state_hash` (including estate layout, patch trees, estate positions, zonal background and pending commands), tamper rejection, truncation rejection, incompatible fixture profile version and invalid canon.
-- [ ] **Step 2:** Run `cargo test -p mk_engine --test island_snapshot`; expect FAIL.
-- [ ] **Step 3:** Implement atomic (write temp, fsync, rename) digest-prefixed JSON save/load; re-derive canon-derived values on load; validate scenario/profile compatibility before returning state.
-- [ ] **Step 4:** Re-run; expect PASS.
-- [ ] **Step 5:** Commit `feat(io): persist complete island world`.
+- [x] **Step 1:** Write tests for round-trip equality of `state_hash` (including estate layout, patch trees, estate positions, zonal background and pending commands), tamper rejection, truncation rejection, incompatible fixture profile version and invalid canon.
+- [x] **Step 2:** Run `cargo test -p mk_engine --test island_snapshot`; expect FAIL.
+- [x] **Step 3:** Implement atomic (write temp, fsync, rename) digest-prefixed JSON save/load; re-derive canon-derived values on load; validate scenario/profile compatibility before returning state.
+- [x] **Step 4:** Re-run; expect PASS.
+- [x] **Step 5:** Commit `feat(io): persist complete island world`.
+
+Implementation notes: `io/island_snapshot.rs`: magic + format version + blake3 payload digest + JSON envelope (scenario, canon, recorded state digest, `IslandLifeSnapshot`); atomic write (temp, fsync, rename); load validates magic, version, digest, scenario/profile version, canon finiteness and digest, then rebuilds the domain, topology, labour table, RNG registry and the terrain-derived caches (drainage network, coarse elevation, geothermal, diurnal surface) and requires the restored state to hash to the recorded digest. Tests: round trip equality, **a restored island runs on identically across an hour boundary** (the completeness proof), tamper, truncation, bad magic, unsupported format, incompatible scenario and profile versions, invalid and non-finite canon. 336 MB / 0.9 s save / 1.2 s load (`benchmarks/island_snapshot.md`). **Not yet in the snapshot** because they do not exist yet: the pending command queue (Task 4), the fault system and chronicle. JSON, not bincode: upstream human state embeds `serde_json::Value`.
+
 
 ### Task 3b: Per-human folders
 

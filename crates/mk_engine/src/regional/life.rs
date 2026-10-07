@@ -20,11 +20,12 @@ use std::sync::Arc;
 use mk_core::canon::CanonLocked;
 use mk_core::flux::{FluxKind, Ledger, Reservoir};
 use mk_core::rng::RngRegistry;
-use mk_island::{DomainLevel, IslandDomain, IslandScenario};
+use mk_island::{DomainLevel, IslandDomain, IslandScenario, LocalPatchSpec};
+use serde::{Deserialize, Serialize};
 
 use super::ecology::{RegionalEcologyError, RegionalEcologyState};
 use super::energy::{solar_output_kw, EstateEnergy};
-use super::estate_layout::Space;
+use super::estate_layout::{EstateLayout, Space};
 use super::humans::{
     bootstrap_regional_humans, step_regional_humans, HumanEstatePositions, RegionalHumanContext,
     RegionalHumanError,
@@ -33,10 +34,11 @@ use super::hydrology::discharge_m3_s;
 use super::labour::{LabourBody, LabourError, LabourTable};
 use super::local_vegetation::{seed_local_vegetation, LocalVegetationError, LocalVegetationPatch};
 use super::materials::{Material, MaterialError, MaterialLedger};
-use super::physical::{RegionalPhysicalError, RegionalPhysicalState};
+use super::physical::{PhysicalSnapshot, RegionalPhysicalError, RegionalPhysicalState};
 use super::property::{place_regional_estate, PlaceEstateError, PlacedEstate};
 use super::scheduler::IslandScheduler;
 use crate::humans::HumanSystem;
+use crate::organisms::property::PropertySystem;
 use crate::resource_economy::ResourceEconomyState;
 use crate::topology::GridTopology;
 
@@ -71,10 +73,35 @@ impl std::fmt::Display for IslandLifeError {
 impl std::error::Error for IslandLifeError {}
 
 /// Shortfalls the households met: nothing to harvest, a dry cell.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Shortfalls {
     pub food: u64,
     pub water: u64,
+}
+
+/// Everything about the island that is not re-derived from the scenario and
+/// the terrain.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IslandLifeSnapshot {
+    pub physical: PhysicalSnapshot,
+    pub ecology: RegionalEcologyState,
+    pub location: (usize, usize),
+    pub patch: LocalPatchSpec,
+    pub property: PropertySystem,
+    pub layout: EstateLayout,
+    pub vegetation: LocalVegetationPatch,
+    pub humans: HumanSystem,
+    pub positions: HumanEstatePositions,
+    pub energy: EstateEnergy,
+    pub materials: MaterialLedger,
+    pub economy: ResourceEconomyState,
+    pub sim_time_s: u64,
+    pub tick: u64,
+    pub audits_closed: u64,
+    pub shortfalls: Shortfalls,
+    pub scheduler: IslandScheduler,
+    pub food_cell: (usize, usize),
+    pub water_cell: Option<(usize, usize)>,
 }
 
 pub struct IslandLife {
@@ -213,6 +240,74 @@ impl IslandLife {
             food_cell,
             water_cell,
             topology,
+        })
+    }
+
+    /// The state to save.
+    pub fn to_snapshot(&self) -> IslandLifeSnapshot {
+        IslandLifeSnapshot {
+            physical: self.physical.to_snapshot(),
+            ecology: self.ecology.clone(),
+            location: self.placed.location,
+            patch: self.placed.patch.clone(),
+            property: self.placed.property.clone(),
+            layout: self.placed.layout.clone(),
+            vegetation: self.vegetation.clone(),
+            humans: self.humans.clone(),
+            positions: self.positions.clone(),
+            energy: self.energy.clone(),
+            materials: self.materials.clone(),
+            economy: self.economy.clone(),
+            sim_time_s: self.sim_time_s,
+            tick: self.tick,
+            audits_closed: self.audits_closed,
+            shortfalls: self.shortfalls,
+            scheduler: self.scheduler.clone(),
+            food_cell: self.food_cell,
+            water_cell: self.water_cell,
+        }
+    }
+
+    /// Rebuild the island from a scenario, its canon and a snapshot,
+    /// re-deriving the domain, topology, labour table, random registry and
+    /// the terrain-derived caches.
+    pub fn from_snapshot(
+        scenario: IslandScenario,
+        canon: Arc<CanonLocked>,
+        snap: IslandLifeSnapshot,
+    ) -> Result<Self, IslandLifeError> {
+        let domain =
+            IslandDomain::from_profile(scenario.profile.clone()).expect("a validated scenario");
+        let physical = RegionalPhysicalState::from_snapshot(snap.physical, &domain);
+        let topology = GridTopology::regional(&domain, DomainLevel::Medium);
+        Ok(Self {
+            rng: RngRegistry::new(scenario.seed),
+            canon,
+            domain,
+            physical,
+            ecology: snap.ecology,
+            placed: PlacedEstate {
+                location: snap.location,
+                patch: snap.patch,
+                property: snap.property,
+                layout: snap.layout,
+            },
+            vegetation: snap.vegetation,
+            humans: snap.humans,
+            positions: snap.positions,
+            energy: snap.energy,
+            materials: snap.materials,
+            economy: snap.economy,
+            sim_time_s: snap.sim_time_s,
+            tick: snap.tick,
+            audits_closed: snap.audits_closed,
+            shortfalls: snap.shortfalls,
+            scheduler: snap.scheduler,
+            labour: LabourTable::load_default().map_err(IslandLifeError::Labour)?,
+            food_cell: snap.food_cell,
+            water_cell: snap.water_cell,
+            topology,
+            scenario,
         })
     }
 

@@ -68,7 +68,7 @@ impl std::fmt::Display for EstateLayoutError {
 impl std::error::Error for EstateLayoutError {}
 
 /// An axis-aligned rectangle in domain metres, half-open: `x0 <= x < x1`.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Rect {
     pub x0: f64,
     pub y0: f64,
@@ -127,14 +127,14 @@ pub enum Space {
     Inside(SpaceId),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SpaceKind {
     Room,
     Zone,
     WholeBuilding,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BuildingFootprint {
     pub building_id: u64,
     pub kind: PropertyBuildingKind,
@@ -142,7 +142,7 @@ pub struct BuildingFootprint {
     pub rotation_deg: f64,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SpaceLayout {
     pub id: SpaceId,
     /// The upstream building the space belongs to. The computer room is
@@ -153,14 +153,14 @@ pub struct SpaceLayout {
     pub rect_m: Rect,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Door {
     pub a: Space,
     pub b: Space,
     pub position_m: (f64, f64),
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ItemPlacement {
     pub property_id: u64,
     pub item_id: u64,
@@ -168,7 +168,7 @@ pub struct ItemPlacement {
     pub position_m: (f64, f64),
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EstateLayout {
     pub property_id: u64,
     pub patch: LocalPatchSpec,

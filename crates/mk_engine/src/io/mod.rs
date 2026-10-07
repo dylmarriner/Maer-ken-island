@@ -2,6 +2,7 @@ pub mod encryption;
 pub mod events;
 pub mod global_events;
 pub mod human_storage;
+pub mod island_snapshot;
 pub mod snapshot;
 
 pub use events::{print_universe_summary, EntityType, EventDatabase, EventType, UniverseEvent};

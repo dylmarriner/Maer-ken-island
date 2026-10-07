@@ -20,6 +20,7 @@ use mk_core::flux::Ledger;
 use mk_core::grid::Grid2;
 use mk_core::time::Tick;
 use mk_island::{DomainLevel, IslandDomain, RegionalBoundaryState};
+use serde::{Deserialize, Serialize};
 
 use super::boundary::{sample_regional_boundaries, sample_regional_boundaries_with_background};
 use super::climate::{
@@ -109,6 +110,27 @@ pub struct RegionalPhysicalState {
     diurnal_surface: DiurnalSurface,
     network: FlowNetwork,
     /// Fresh water the last step carried into the coarse ocean (kg).
+    pub river_water_to_ocean_kg: f64,
+}
+
+/// The prognostic state of the physical world: everything that cannot be
+/// re-derived from the terrain. The coarse elevation, geothermal field,
+/// diurnal surface and drainage network are rebuilt on restore.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PhysicalSnapshot {
+    pub geophysics: RegionalGeophysics,
+    pub zonal_background: ZonalBackgroundState,
+    pub boundaries: RegionalBoundaryState,
+    pub insolation: InsolationField,
+    pub climate: ClimateState,
+    pub diurnal_offset_k: Grid2<f64>,
+    pub synoptic: SynopticState,
+    pub weather: WeatherState,
+    pub hydrology: HydrologyState,
+    pub ocean: OceanState,
+    pub tides: TidalState,
+    pub climatology: Climatology,
+    pub sim_time_seconds: f64,
     pub river_water_to_ocean_kg: f64,
 }
 
@@ -439,6 +461,60 @@ impl RegionalPhysicalState {
             return Err(RegionalPhysicalError::NonFinite("water budget"));
         }
         Ok(())
+    }
+
+    /// The state to save.
+    pub fn to_snapshot(&self) -> PhysicalSnapshot {
+        PhysicalSnapshot {
+            geophysics: self.geophysics.clone(),
+            zonal_background: self.zonal_background.clone(),
+            boundaries: self.boundaries.clone(),
+            insolation: self.insolation.clone(),
+            climate: self.climate.clone(),
+            diurnal_offset_k: self.diurnal_offset_k.clone(),
+            synoptic: self.synoptic.clone(),
+            weather: self.weather.clone(),
+            hydrology: self.hydrology.clone(),
+            ocean: self.ocean.clone(),
+            tides: self.tides.clone(),
+            climatology: self.climatology.clone(),
+            sim_time_seconds: self.sim_time_seconds,
+            river_water_to_ocean_kg: self.river_water_to_ocean_kg,
+        }
+    }
+
+    /// Rebuild a physical state from a snapshot, re-deriving what the
+    /// terrain determines.
+    pub fn from_snapshot(snapshot: PhysicalSnapshot, domain: &IslandDomain) -> Self {
+        let coarse = DomainLevel::Coarse;
+        let spec = domain.storage_spec(coarse);
+        let elevation_coarse_m =
+            aggregate_medium_to_coarse(&snapshot.geophysics.elevation_m, domain);
+        let geothermal_coarse_w_m2 = snapshot.geophysics.volcanism.heat_flux_w_m2(&spec);
+        let diurnal_surface =
+            DiurnalSurface::from_elevation(&elevation_coarse_m, domain.cell_size_m(coarse));
+        let network = FlowNetwork::build(&snapshot.geophysics.elevation_m);
+        Self {
+            geophysics: snapshot.geophysics,
+            zonal_background: snapshot.zonal_background,
+            boundaries: snapshot.boundaries,
+            insolation: snapshot.insolation,
+            climate: snapshot.climate,
+            diurnal_offset_k: snapshot.diurnal_offset_k,
+            synoptic: snapshot.synoptic,
+            weather: snapshot.weather,
+            hydrology: snapshot.hydrology,
+            ocean: snapshot.ocean,
+            tides: snapshot.tides,
+            climatology: snapshot.climatology,
+            ledger: Ledger::new(),
+            sim_time_seconds: snapshot.sim_time_seconds,
+            elevation_coarse_m,
+            geothermal_coarse_w_m2,
+            diurnal_surface,
+            network,
+            river_water_to_ocean_kg: snapshot.river_water_to_ocean_kg,
+        }
     }
 
     /// Peak-to-peak temperature range (K) of the coming local day at every
