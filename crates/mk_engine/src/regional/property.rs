@@ -15,6 +15,7 @@
 use mk_core::biomes::BiomeType;
 use mk_core::canon::CanonLocked;
 use mk_island::{DomainLevel, EstatePatchConfig, IslandDomain, LocalPatchSpec};
+use serde::{Deserialize, Serialize};
 
 use super::ecology::{cell_climate, RegionalEcologyState};
 use super::estate_layout::{layout_estate, EstateLayout, EstateLayoutError};
@@ -237,7 +238,7 @@ pub fn choose_regional_estate_location(
 }
 
 /// The founders' estate placed and laid out.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlacedEstate {
     pub location: (usize, usize),
     pub patch: LocalPatchSpec,

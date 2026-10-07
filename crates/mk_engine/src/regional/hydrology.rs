@@ -22,6 +22,7 @@
 //! bilinear interpolation (`levels::sample_coarse_at_medium`); no medium
 //! copies are built.
 
+use serde::{Deserialize, Serialize};
 use std::cmp::{Ordering, Reverse};
 use std::collections::BinaryHeap;
 
@@ -49,7 +50,7 @@ const FILL_EPSILON_M: f64 = 1.0e-4;
 pub const RIVER_MIN_DISCHARGE_M3_S: f64 = 1.0;
 
 /// Where a land cell's channel water goes.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Receiver {
     /// Another land cell (flat index).
     Cell(u32),
@@ -63,7 +64,7 @@ pub enum Receiver {
 
 /// The drainage network of one terrain: built once per terrain, reused
 /// every step.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FlowNetwork {
     rows: usize,
     cols: usize,

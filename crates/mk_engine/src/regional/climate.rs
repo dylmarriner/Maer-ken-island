@@ -20,6 +20,7 @@
 use mk_core::canon::CanonLocked;
 use mk_core::grid::Grid2;
 use mk_island::{AtmosphereBoundaryForcing, DomainLevel, Edge, IslandDomain, OceanBoundaryForcing};
+use serde::{Deserialize, Serialize};
 
 use super::edge::relax_to_edges;
 use super::zonal::ZonalBackgroundState;
@@ -215,7 +216,7 @@ pub fn distance_to_sea_m(elevation_m: &Grid2<f64>, cell_m: f64) -> Vec<f64> {
 }
 
 /// Static surface description the diurnal cycle needs per coarse cell.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DiurnalSurface {
     /// Peak-to-peak range of the 24 h cycle (K) before the day-length
     /// scaling, with clear skies.

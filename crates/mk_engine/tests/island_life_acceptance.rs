@@ -20,7 +20,7 @@ const DAY: u64 = 86_400;
 /// scenario (`fixtures/island/default_scenario.json`), identical across
 /// processes. Changing any Phase 1-3 behaviour changes it: update it
 /// deliberately, in the commit that changes the behaviour.
-const WEEK_DIGEST: &str = "57ae72503c0bb5bb51b538289747fc58fe71d55c021fa612e04e71b9a963a4ab";
+const WEEK_DIGEST: &str = "e796f9f9a851bd98c1ffbae6a427c3b5dc258dcc38ae79d70e85359299cc5d2a";
 
 fn repo(path: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -222,4 +222,35 @@ fn slow_a_week_on_the_island_matches_the_reference_packs() {
         "{drunk_per_founder_day} L/day"
     );
     assert_eq!(w.shortfalls.water, 0, "the founders found water every time");
+}
+
+/// The digest covers the state that decides what happens next.
+///
+/// Two islands that differ only in a pending meal balance, or in how much
+/// of the current hour a founder has slept, will diverge at the next meal
+/// and the next respiration charge. A digest that called them identical
+/// would make replay and snapshot verification quietly wrong.
+#[test]
+fn the_digest_notices_state_that_only_matters_later() {
+    let mut a = life();
+    let mut b = life();
+    assert_eq!(hex(a.state_digest()), hex(b.state_digest()), "same start");
+
+    // Far enough for the founders to have respired and eaten at least once.
+    a.advance(7 * 3_600).unwrap();
+    b.advance(7 * 3_600).unwrap();
+    assert_eq!(
+        hex(a.state_digest()),
+        hex(b.state_digest()),
+        "the same island stepped the same way has to hash the same"
+    );
+
+    // One more hour on only one of them: the pending balances and the
+    // sleep accounting now differ, and the digest has to say so.
+    a.advance(3_600).unwrap();
+    assert_ne!(
+        hex(a.state_digest()),
+        hex(b.state_digest()),
+        "an extra hour left the digest unchanged"
+    );
 }

@@ -112,6 +112,11 @@ pub struct IslandLife {
     /// Carbon each founder has respired since their last meal (kg), which is
     /// what the next meal has to put back.
     respired_since_meal: BTreeMap<String, f64>,
+    /// Seconds each founder has spent asleep and awake since their
+    /// respiration was last charged. The sleep state can turn over at any
+    /// human substep, so sampling it once an hour would charge a whole hour
+    /// at whichever state happened to be current at the end of it.
+    sleep_seconds: BTreeMap<String, (f64, f64)>,
     pub scheduler: IslandScheduler,
     labour: LabourTable,
     rng: RngRegistry,
@@ -227,6 +232,7 @@ impl IslandLife {
             audits_closed: 0,
             shortfalls: Shortfalls::default(),
             respired_since_meal: BTreeMap::new(),
+            sleep_seconds: BTreeMap::new(),
             scheduler: IslandScheduler::new(scenario_cadences),
             labour: LabourTable::load_default().map_err(IslandLifeError::Labour)?,
             food_cell,
@@ -327,15 +333,15 @@ impl IslandLife {
             .map_err(IslandLifeError::Labour)?;
         self.audited(|life, ledger| {
             life.energy.step(dt_physical as f64, solar_kw, ledger);
-            for (id, body, asleep) in &founders {
-                let met = if home_activity(*asleep) == ASLEEP_ACTIVITY {
-                    asleep_met
-                } else {
-                    awake_met
-                };
+            for (id, body, _) in &founders {
+                // Every second is charged at the MET of the state it was
+                // actually spent in, not at whichever state the clock
+                // happened to be in when this hour's accounting ran.
+                let (asleep_s, awake_s) = life.sleep_seconds.remove(id).unwrap_or((0.0, 0.0));
                 let kcal = labour
-                    .energy_kcal(body, met, dt_physical as f64)
-                    .unwrap_or(0.0);
+                    .energy_kcal(body, asleep_met, asleep_s)
+                    .unwrap_or(0.0)
+                    + labour.energy_kcal(body, awake_met, awake_s).unwrap_or(0.0);
                 if let Ok(kgc) = life.materials.respire(id, kcal, ledger) {
                     *life.respired_since_meal.entry(id.clone()).or_insert(0.0) += kgc;
                 }
@@ -447,6 +453,14 @@ impl IslandLife {
                     &self.rng,
                 );
             }
+            for (id, _, asleep) in self.founders() {
+                let spent = self.sleep_seconds.entry(id).or_insert((0.0, 0.0));
+                if asleep {
+                    spent.0 += human_s as f64;
+                } else {
+                    spent.1 += human_s as f64;
+                }
+            }
             let due = self.scheduler.due(self.sim_time_s);
             if due.weather_ocean {
                 self.hourly()?;
@@ -508,6 +522,11 @@ impl IslandLife {
         h.update(canonical(&self.economy).as_bytes());
         h.update(format!("{:?}", self.materials).as_bytes());
         h.update(canonical(&self.scheduler).as_bytes());
+        // Both of these decide what happens next — the size of the next meal
+        // and the cost of the next hour — so a digest without them would call
+        // two states identical and then watch them diverge.
+        h.update(canonical(&self.respired_since_meal).as_bytes());
+        h.update(canonical(&self.sleep_seconds).as_bytes());
         h.update(&self.sim_time_s.to_le_bytes());
         *h.finalize().as_bytes()
     }
