@@ -347,40 +347,53 @@ impl IslandLife {
         let area = self.domain.cell_area_m2(DomainLevel::Medium);
         self.audited(|life, ledger| {
             for (id, _, _) in &founders {
-                match life.materials.gather_biotic(
-                    Material::PlantFood,
-                    FOOD_KG_PER_MEAL,
-                    &mut life.ecology,
-                    life.food_cell,
-                    area,
-                    ledger,
-                ) {
-                    Ok(kg) => {
-                        let _ = life.materials.eat(id, Material::PlantFood, kg, ledger);
+                // A fixed home routine, deliberately, not each human's own
+                // chosen action — see D10, and the measurement in it. Gating
+                // the harvest on `economy_action` was tried and reverted: the
+                // founders then chose to look for food too rarely to cover
+                // what they burn, and lost a tenth of their body carbon in a
+                // week. Matching harvest to expenditure is the open economy
+                // work, not a condition on this loop.
+                {
+                    match life.materials.gather_biotic(
+                        Material::PlantFood,
+                        FOOD_KG_PER_MEAL,
+                        &mut life.ecology,
+                        life.food_cell,
+                        area,
+                        ledger,
+                    ) {
+                        Ok(kg) => {
+                            let _ = life.materials.eat(id, Material::PlantFood, kg, ledger);
+                        }
+                        Err(_) => life.shortfalls.food += 1,
                     }
-                    Err(MaterialError::NothingToHarvest) => life.shortfalls.food += 1,
-                    Err(_) => life.shortfalls.food += 1,
                 }
-                let drawn = life
-                    .water_cell
-                    .ok_or(MaterialError::DryCell)
-                    .and_then(|cell| {
-                        life.materials.gather_water(
-                            WATER_KG_PER_DRINK,
-                            &mut life.physical.hydrology,
-                            cell,
-                            area,
-                            ledger,
-                        )
-                    });
-                match drawn {
-                    Ok(kg) => {
-                        let _ = life.materials.drink(id, kg);
-                        let _ =
-                            life.materials
-                                .lose_water(id, kg, EXCRETION_TO_SOIL_FRACTION, ledger);
+                {
+                    let drawn = life
+                        .water_cell
+                        .ok_or(MaterialError::DryCell)
+                        .and_then(|cell| {
+                            life.materials.gather_water(
+                                WATER_KG_PER_DRINK,
+                                &mut life.physical.hydrology,
+                                cell,
+                                area,
+                                ledger,
+                            )
+                        });
+                    match drawn {
+                        Ok(kg) => {
+                            let _ = life.materials.drink(id, kg);
+                            let _ = life.materials.lose_water(
+                                id,
+                                kg,
+                                EXCRETION_TO_SOIL_FRACTION,
+                                ledger,
+                            );
+                        }
+                        Err(_) => life.shortfalls.water += 1,
                     }
-                    Err(_) => life.shortfalls.water += 1,
                 }
             }
         })

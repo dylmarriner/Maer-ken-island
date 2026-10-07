@@ -597,6 +597,14 @@ impl MaterialLedger {
     }
 
     /// A body enters the ledger with its own carbon (18% of its mass).
+    /// The carbon in one human's body (kg), or `None` if they were never
+    /// registered. Eating adds to it and respiring draws it down, so it is
+    /// the physical answer to whether someone is actually being fed — which
+    /// the needs model, running separately, cannot give.
+    pub fn body_carbon_kg(&self, id: &str) -> Option<f64> {
+        self.bodies.get(id).map(|body| body.carbon_kg)
+    }
+
     pub fn register_human(&mut self, id: &str, weight_kg: f64) {
         self.bodies.entry(id.to_string()).or_insert(Body {
             carbon_kg: weight_kg * BODY_CARBON_PER_KG,

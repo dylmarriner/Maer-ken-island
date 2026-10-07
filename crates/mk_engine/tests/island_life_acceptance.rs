@@ -129,6 +129,26 @@ fn slow_a_week_on_the_island_matches_the_reference_packs() {
             HumanStatus::Alive
         ));
         assert!(w.in_estate(id), "{id} left the estate");
+        // Alive is the needs model's answer; this is the ledger's. Harvesting
+        // follows each human's own chosen action, so a week in which nobody
+        // ever chose to look for food would still leave them "alive" here
+        // while their body carbon drained away. It must not have.
+        let carbon = w
+            .materials
+            .body_carbon_kg(id)
+            .unwrap_or_else(|| panic!("{id} has no body in the ledger"));
+        let expected = w.humans.registry.get_human(id).unwrap().body.weight_kg
+            * mk_engine::regional::materials::WHOLE_BODY_CARBON_FRACTION;
+        println!("{id}: body carbon {carbon:.1} kg of an expected {expected:.1} kg");
+        // Two-sided: under-eating wastes them away, over-eating would mean
+        // the routine is feeding them more than they burn. Measured over this
+        // week: Gem-D ends at 1.05x and Gem-K at 1.10x, so the routine runs
+        // slightly rich (D10).
+        assert!(
+            (0.9 * expected..=1.2 * expected).contains(&carbon),
+            "{id} holds {carbon:.1} kg of carbon against an expected {expected:.1}: the routine \
+             and what they burn have come apart"
+        );
     }
 
     // NPP by biome against the ecology pack (g C / m2 / yr).
