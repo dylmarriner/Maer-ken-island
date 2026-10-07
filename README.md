@@ -46,9 +46,46 @@ cargo run -p island_humans -- create "Hine Moana" female 1992-11-03T10:15:00+13:
 - without a token on a loopback bind (the default `127.0.0.1:8080`): from this machine.
 - without a token on any other bind: never. Set a token before using `--bind 0.0.0.0:…`.
 
-**Time is not running yet.** People are created and stored, but nobody ages, eats or acts until the island world exists (Phase 4).
+That is the older, human-only dashboard (`--data-dir`): people are created and stored, but time does not pass there. The live island below is where time runs.
 
 **Back up your storage key.** Human files are encrypted with `island-data/humans/.secret_storage_key`, generated on first run, or with `MK_STORAGE_KEY` if set. Lose the key and every human file becomes unreadable. Back it up with the data, or set `MK_STORAGE_KEY` yourself.
+
+## The live island
+
+The whole island (climate, weather, ocean, rivers, ecology, the estate, 200,000 trees, energy, materials and the people on it) runs as one deterministic world.
+
+```bash
+# Run it headless: 1,000 one-minute steps, save a snapshot, write a replay log
+cargo run --release -p island -- run --scenario fixtures/island/default_scenario.json \
+    --steps 1000 --dt 60 --save run.snap --log run.log.json --save-root island-data
+cargo run --release -p island -- inspect --snapshot run.snap            # summary and state hash
+cargo run --release -p island -- replay --scenario fixtures/island/default_scenario.json --log run.log.json
+cargo run --release -p island -- run --load run.snap --steps 1000       # continue a saved run
+
+# Serve it live (real time by default; see the speed control on the page)
+cargo run --release -p island -- serve --scenario fixtures/island/default_scenario.json \
+    --save-root island-data --snapshot-out run.snap
+```
+
+Every command prints a `state hash`: the same scenario, seed and commands always give the same hash, in any process, at any speed, and a saved run continues to exactly the hash an uninterrupted run reaches. `--save-root` keeps a folder for every person under `<dir>/<run id>/humans/` (the run id is printed; each run gets a new one). `--import-0b <data-dir>` brings in people created with the older dashboard. `island_preview world --snapshot run.snap --out dir` renders a saved run as images.
+
+The live page (`/`) shows the clock, lets you pause, step and change speed, lists the people, and adds a person (optionally choosing appearance and where they appear, e.g. the Kitchen). The API is `GET /api/status|humans|humans/{id}|estate|properties|vegetation|economy|timeline` and, behind the same write rules as above, `POST /api/humans` and `POST /api/control` (both answer `202`: the change applies at the next tick).
+
+### What it needs
+
+Measured on a 16 GB development machine, release build (`benchmarks/`):
+
+| | Memory (peak) | Speed |
+|---|---|---|
+| Two founders, one simulated week | about 310 MB | 49 s |
+| Two founders, one simulated year | about 400 MB | about 32 min |
+| 1,000 people | about 600 MB | 115 ms per simulated minute |
+| 5,000 people | about 1.0 GB | 0.5 s per simulated minute |
+| Snapshot file, two people / 5,000 people | 0.34 GB / 0.92 GB | save 1-30 s, load 1-10 s |
+
+An 8 GB machine is comfortable for the founders and for thousands of people. Compiling is the heavy part: `rustc` can use 4 GB or more, so on a small or busy machine build with `cargo build -j 1`, and keep large files out of `/tmp` where it is RAM-backed.
+
+Limits worth knowing (full list in [`docs/ISLAND_SYSTEM_STATUS.md`](docs/ISLAND_SYSTEM_STATUS.md)): people work and eat through a simplified household model, not yet through timed, energy-costed tasks; children grow along WHO curves but still act like adults; there is no refinery, town or deep-time spin-up yet; populated runs have been measured for hours, not for generations.
 
 ## Source authority
 
