@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>People · Maer-Ken Island</title>
+<meta name="description" content="Everyone on the island, and everything stored about them.">
+<link rel="stylesheet" href="/static/style.css">
+<link rel="icon" href="data:,">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="inner">
+    <a class="brand" href="/"><span class="mark" aria-hidden="true">◈</span> Maer-Ken Island <span class="sub">dashboard</span></a>
+    <nav class="site-nav" aria-label="Main">
+      <a href="/">Overview</a>
+      <a href="/people" aria-current="page">People</a>
+      <a href="/creator">Create a human</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+  <div class="intro">
+    <p class="eyebrow">People</p>
+    <h1>Everyone on the island</h1>
+    <p class="lead">Pick someone to see what is stored about them: who they are, what their body is doing, how they feel and how they think. The readings below are the values they were created with — nothing has stepped them yet.</p>
+  </div>
+
+  <p class="banner is-error" id="offline" hidden>
+    <strong>The dashboard cannot reach the island server.</strong>
+    <span id="offline-detail">Check that <code>island serve</code> is still running, then reload.</span>
+  </p>
+
+  <div class="people-layout">
+    <section class="panel" aria-labelledby="roster-heading">
+      <h2 id="roster-heading">Roster</h2>
+      <p class="panel-note" id="status">Loading the roster…</p>
+      <div class="roster-tools">
+        <label class="visually-hidden" for="search">Search people by name or id</label>
+        <input class="search" id="search" type="search" placeholder="Search by name or id" autocomplete="off" spellcheck="false">
+        <div class="row">
+          <label class="visually-hidden" for="sort">Sort the roster</label>
+          <select id="sort">
+            <option value="name">Sort: name</option>
+            <option value="age-desc">Sort: oldest first</option>
+            <option value="age-asc">Sort: youngest first</option>
+            <option value="id">Sort: id</option>
+          </select>
+        </div>
+      </div>
+      <ul class="roster" id="roster" aria-label="People on the island"></ul>
+      <p class="roster-count" id="roster-count"></p>
+    </section>
+
+    <section class="panel" aria-labelledby="detail-heading" id="detail">
+      <h2 id="detail-heading" class="visually-hidden">Selected person</h2>
+      <p class="hint">Pick someone from the roster to read their record.</p>
+    </section>
+  </div>
+</main>
+
+<footer class="site-footer">
+  <div class="inner">
+    <p>Maer-Ken Island dashboard <span id="version"></span></p>
+    <p class="spacer"></p>
+    <p id="footer-writes">Reading is open to anyone who can reach this page.</p>
+  </div>
+</footer>
+
+<script type="module" src="/static/people.js"></script>
+</body>
+</html>

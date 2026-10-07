@@ -2618,8 +2618,10 @@ dependencies = [
 name = "island"
 version = "0.1.0"
 dependencies = [
+ "bytes",
  "hex",
  "island_humans",
+ "mk_core",
  "mk_engine",
  "mk_interventions",
  "serde",

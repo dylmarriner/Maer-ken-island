@@ -3,12 +3,25 @@
 
 use super::auth::ControlAuth;
 use super::pages;
+use super::view;
 use island_humans::{CreateHumanError, CreateHumanRequest, IslandHumanPopulation};
 use std::sync::{Arc, Mutex};
 use warp::http::StatusCode;
 use warp::Filter;
 
 pub type SharedPopulation = Arc<Mutex<IslandHumanPopulation>>;
+
+/// The build this binary came from, shown in the footer and `/api/status` so
+/// a bug report can say which one it was.
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// How many creations the activity feed returns when the caller does not say.
+const ACTIVITY_DEFAULT: usize = 20;
+const ACTIVITY_MAX: usize = 200;
+
+/// The largest create request worth reading. One human is a few hundred bytes
+/// of JSON; anything near this is a mistake or an attack.
+const MAX_CREATE_BODY: u64 = 16 * 1024;
 
 /// Option lists offered by the Creator page, from upstream's foundry panel
 /// (`apps/mk_studio/src/ui/foundry_panel.rs`). The server accepts any
@@ -26,30 +39,130 @@ fn json(
     warp::reply::with_status(warp::reply::json(body), status)
 }
 
+/// Take the population lock, surviving a poisoned mutex. A panic in one
+/// request must not turn every later request into a 500: the population is
+/// only ever read or appended to, so the state behind a poisoned lock is
+/// still the state the panicking request found.
+fn locked(population: &SharedPopulation) -> std::sync::MutexGuard<'_, IslandHumanPopulation> {
+    population
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
 fn with<T: Clone + Send>(
     value: T,
 ) -> impl Filter<Extract = (T,), Error = std::convert::Infallible> + Clone {
     warp::any().map(move || value.clone())
 }
 
+/// What the dashboard says about itself: how many people there are, where
+/// they are kept, and who is allowed to add more.
 pub fn status(population: &IslandHumanPopulation, auth: &ControlAuth) -> serde_json::Value {
+    let summaries = population.summaries();
+    let count = |status: &str| {
+        summaries
+            .iter()
+            .filter(|human| human.status == status)
+            .count()
+    };
+    let by_sex = |sex: &str| summaries.iter().filter(|h| h.biological_sex == sex).count();
+    let mut ages: Vec<f64> = summaries
+        .iter()
+        .map(|human| human.age_years)
+        .filter(|age| age.is_finite())
+        .collect();
+    ages.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let median = match ages.len() {
+        0 => None,
+        n if n % 2 == 1 => Some(ages[n / 2]),
+        n => Some((ages[n / 2 - 1] + ages[n / 2]) / 2.0),
+    };
+
     serde_json::json!({
+        "version": VERSION,
         "population": population.len(),
+        "alive": count("alive"),
+        "dead": count("dead"),
+        "dormant": count("dormant"),
+        "female": by_sex("female"),
+        "male": by_sex("male"),
+        "youngest_years": ages.first().copied(),
+        "oldest_years": ages.last().copied(),
+        "median_age_years": median,
         "data_dir": population.data_dir().map(|d| d.display().to_string()),
         "seed_hex": hex::encode(population.seed()),
         "time_running": false,
         "writes": auth.describe(),
+        "writes_mode": auth.mode(),
         "notes": ["Humans are created and stored but time does not pass yet; they are not stepped until the island world exists (Phase 4)."],
+    })
+}
+
+/// A liveness check for whatever is watching this process. It touches the
+/// population lock, so it fails if the dashboard has wedged rather than only
+/// reporting that the port is open.
+pub fn health(population: &IslandHumanPopulation) -> serde_json::Value {
+    serde_json::json!({
+        "status": "ok",
+        "version": VERSION,
+        "population": population.len(),
+        "storage": if population.data_dir().is_some() { "on disk" } else { "in memory" },
     })
 }
 
 pub fn detail(population: &IslandHumanPopulation, agent_id: &str) -> Option<serde_json::Value> {
     let human = population.get(agent_id)?;
+    let summary = population.summary(agent_id)?;
+    let folder = population
+        .folder_of(agent_id)
+        .map(|f| f.display().to_string());
     Some(serde_json::json!({
-        "summary": population.summary(agent_id),
-        "folder": population.folder_of(agent_id).map(|f| f.display().to_string()),
+        "summary": summary,
+        "folder": folder,
+        "sections": view::sections(human, &summary, folder.as_deref()),
         "human": serde_json::to_value(human).unwrap_or(serde_json::Value::Null),
     }))
+}
+
+/// The creation log, newest first: who has been added to the island and by
+/// which door (the dashboard, the CLI, a test).
+pub fn activity(population: &IslandHumanPopulation, limit: usize) -> serde_json::Value {
+    let limit = limit.clamp(1, ACTIVITY_MAX);
+    let Some(dir) = population.data_dir() else {
+        return serde_json::json!({
+            "creations": [],
+            "total": 0,
+            "stored": false,
+            "note": "This population is held in memory, so there is no creation log to read.",
+        });
+    };
+    match island_humans::read_creations(dir) {
+        Ok(records) => {
+            let total = records.len();
+            let creations: Vec<serde_json::Value> = records
+                .iter()
+                .rev()
+                .take(limit)
+                .map(|record| {
+                    serde_json::json!({
+                        "counter": record.counter,
+                        "agent_id": record.agent_id,
+                        "name": record.request.name.trim(),
+                        "by": record.by,
+                        "biological_sex": record.request.biological_sex,
+                        "age_years": record.request.age_years,
+                    })
+                })
+                .collect();
+            serde_json::json!({ "creations": creations, "total": total, "stored": true })
+        }
+        Err(err) => serde_json::json!({
+            "creations": [],
+            "total": 0,
+            "stored": true,
+            "error": format!("The creation log could not be read: {err}"),
+        }),
+    }
 }
 
 pub fn options() -> serde_json::Value {
@@ -73,7 +186,14 @@ pub fn create(
     if !auth.permits(authorization) {
         return (
             StatusCode::UNAUTHORIZED,
-            serde_json::json!({ "errors": ["unauthorised"], "writes": auth.describe() }),
+            serde_json::json!({
+                "errors": [match auth.mode() {
+                    "token" => "That control token was not accepted.",
+                    _ => "This dashboard is not allowed to create people.",
+                }],
+                "writes": auth.describe(),
+                "writes_mode": auth.mode(),
+            }),
         );
     }
     match population.create_human(request, "dashboard") {
@@ -88,24 +208,65 @@ pub fn create(
     }
 }
 
+#[derive(Debug, serde::Deserialize)]
+struct ActivityQuery {
+    limit: Option<usize>,
+}
+
+/// Headers every response carries. The pages load nothing from anywhere but
+/// this server, so the policy can say exactly that: no third-party script,
+/// style, image or connection, no framing, and no form posting its own way
+/// out if a script fails to load.
+const CONTENT_SECURITY_POLICY: &str = "default-src 'self'; script-src 'self'; style-src 'self'; \
+     img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'; \
+     frame-ancestors 'none'";
+
+/// One line per request on stdout, the way a server log reads. Set
+/// `ISLAND_ACCESS_LOG=off` to keep the terminal quiet.
+fn access_log() -> warp::log::Log<impl Fn(warp::log::Info<'_>) + Copy> {
+    warp::log::custom(|info| {
+        if std::env::var("ISLAND_ACCESS_LOG").is_ok_and(|value| value.eq_ignore_ascii_case("off")) {
+            return;
+        }
+        println!(
+            "{} {} {} {:.1}ms",
+            info.method(),
+            info.path(),
+            info.status().as_u16(),
+            info.elapsed().as_secs_f64() * 1000.0
+        );
+    })
+}
+
 pub fn routes(
     population: SharedPopulation,
     auth: ControlAuth,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
+) -> impl Filter<Extract = (impl warp::Reply,), Error = std::convert::Infallible> + Clone {
     let get_status = warp::path!("api" / "status")
         .and(warp::get())
         .and(with(population.clone()))
         .and(with(auth.clone()))
         .map(|population: SharedPopulation, auth: ControlAuth| {
-            let population = population.lock().expect("population lock poisoned");
+            let population = locked(&population);
             json(StatusCode::OK, &status(&population, &auth))
+        });
+
+    let get_health = warp::path("healthz")
+        .or(warp::path!("api" / "health"))
+        .unify()
+        .and(warp::path::end())
+        .and(warp::get())
+        .and(with(population.clone()))
+        .map(|population: SharedPopulation| {
+            let population = locked(&population);
+            json(StatusCode::OK, &health(&population))
         });
 
     let list = warp::path!("api" / "humans")
         .and(warp::get())
         .and(with(population.clone()))
         .map(|population: SharedPopulation| {
-            let population = population.lock().expect("population lock poisoned");
+            let population = locked(&population);
             json(
                 StatusCode::OK,
                 &serde_json::to_value(population.summaries()).unwrap_or_default(),
@@ -116,45 +277,114 @@ pub fn routes(
         .and(warp::get())
         .and(with(population.clone()))
         .map(|agent_id: String, population: SharedPopulation| {
-            let population = population.lock().expect("population lock poisoned");
+            let population = locked(&population);
             match detail(&population, &agent_id) {
                 Some(body) => json(StatusCode::OK, &body),
                 None => json(
                     StatusCode::NOT_FOUND,
-                    &serde_json::json!({ "errors": ["no such human"] }),
+                    &serde_json::json!({ "errors": ["Nobody on the island has that id."] }),
                 ),
             }
+        });
+
+    let get_activity = warp::path!("api" / "activity")
+        .and(warp::get())
+        .and(warp::query::<ActivityQuery>())
+        .and(with(population.clone()))
+        .map(|query: ActivityQuery, population: SharedPopulation| {
+            let population = locked(&population);
+            json(
+                StatusCode::OK,
+                &activity(&population, query.limit.unwrap_or(ACTIVITY_DEFAULT)),
+            )
         });
 
     let get_options = warp::path!("api" / "creator" / "options")
         .and(warp::get())
         .map(|| json(StatusCode::OK, &options()));
 
+    // The body is read as bytes and parsed here rather than by
+    // `warp::body::json`, so a malformed request gets a 400 that says what was
+    // wrong instead of a bare rejection falling through to the 404 below.
     let post = warp::path!("api" / "humans")
         .and(warp::post())
         .and(warp::header::optional::<String>("authorization"))
-        .and(warp::body::content_length_limit(16 * 1024))
-        .and(warp::body::json::<CreateHumanRequest>())
+        .and(warp::body::content_length_limit(MAX_CREATE_BODY))
+        .and(warp::body::bytes())
         .and(with(population))
         .and(with(auth))
         .map(
             |authorization: Option<String>,
-             request: CreateHumanRequest,
+             body: bytes::Bytes,
              population: SharedPopulation,
              auth: ControlAuth| {
-                let mut population = population.lock().expect("population lock poisoned");
+                let request: CreateHumanRequest = match serde_json::from_slice(&body) {
+                    Ok(request) => request,
+                    Err(err) => {
+                        return json(
+                            StatusCode::BAD_REQUEST,
+                            &serde_json::json!({ "errors": [format!(
+                                "That request body is not the JSON this endpoint expects: {err}."
+                            )] }),
+                        )
+                    }
+                };
+                let mut population = locked(&population);
                 let (code, body) =
                     create(&mut population, &auth, authorization.as_deref(), request);
                 json(code, &body)
             },
         );
 
-    get_status
+    // Anything under /api that matched no route is a client error worth
+    // returning as JSON, so a script never has to parse an HTML page to find
+    // out it asked for the wrong thing. Everything else gets the page.
+    let unknown_api = warp::path("api")
+        .and(warp::path::tail())
+        .and(warp::method())
+        .map(|tail: warp::path::Tail, method: warp::http::Method| {
+            // A create request only reaches here when its body was refused
+            // before anything read it, which means it was too big.
+            if method == warp::http::Method::POST && tail.as_str() == "humans" {
+                return json(
+                    StatusCode::PAYLOAD_TOO_LARGE,
+                    &serde_json::json!({ "errors": [format!(
+                        "That request body is larger than {} KB, which is far more than one person takes.",
+                        MAX_CREATE_BODY / 1024
+                    )] }),
+                );
+            }
+            json(
+                StatusCode::NOT_FOUND,
+                &serde_json::json!({ "errors": ["No such endpoint. The dashboard serves /api/status, /api/health, /api/humans, /api/humans/<agent-id>, /api/activity and /api/creator/options."] }),
+            )
+        });
+
+    let api = get_status
+        .or(get_health)
         .or(get_options)
+        .or(get_activity)
         .or(one)
         .or(list)
         .or(post)
-        .or(pages::routes())
+        .or(unknown_api);
+
+    api.or(pages::routes())
+        .with(warp::reply::with::header(
+            "content-security-policy",
+            CONTENT_SECURITY_POLICY,
+        ))
+        .with(warp::reply::with::header(
+            "x-content-type-options",
+            "nosniff",
+        ))
+        .with(warp::reply::with::header("x-frame-options", "DENY"))
+        .with(warp::reply::with::header("referrer-policy", "no-referrer"))
+        .with(warp::reply::with::header(
+            "permissions-policy",
+            "geolocation=(), camera=(), microphone=()",
+        ))
+        .with(access_log())
 }
 
 /// Serve until Ctrl-C, following upstream `mk serve`'s pattern.
@@ -197,24 +427,110 @@ mod tests {
         })
     }
 
+    async fn get(
+        filter: &(impl Filter<Extract = (impl warp::Reply + 'static,), Error = std::convert::Infallible>
+              + Clone
+              + 'static),
+        path: &str,
+    ) -> (StatusCode, serde_json::Value) {
+        let response = warp::test::request().path(path).reply(filter).await;
+        let status = response.status();
+        let body = serde_json::from_slice(response.body()).unwrap_or(serde_json::Value::Null);
+        (status, body)
+    }
+
     #[tokio::test]
     async fn reads_work_without_a_token() {
         let (_tmp, population) = stored();
         let filter = routes(population, ControlAuth::resolve(Some("t".into()), LOOPBACK));
         for path in [
             "/api/status",
+            "/api/health",
+            "/healthz",
             "/api/humans",
             "/api/humans/Gem-D",
+            "/api/activity",
             "/api/creator/options",
         ] {
-            let response = warp::test::request().path(path).reply(&filter).await;
-            assert_eq!(response.status(), 200, "{path}");
+            let (status, _) = get(&filter, path).await;
+            assert_eq!(status, 200, "{path}");
         }
-        let missing = warp::test::request()
-            .path("/api/humans/nobody")
-            .reply(&filter)
-            .await;
-        assert_eq!(missing.status(), 404);
+        let (missing, body) = get(&filter, "/api/humans/nobody").await;
+        assert_eq!(missing, 404);
+        assert!(body["errors"][0].as_str().unwrap().ends_with('.'), "{body}");
+    }
+
+    #[tokio::test]
+    async fn status_counts_the_population_and_names_the_build() {
+        let (_tmp, population) = stored();
+        let filter = routes(population, ControlAuth::resolve(None, LOOPBACK));
+        let (_, status) = get(&filter, "/api/status").await;
+        assert_eq!(status["population"], 2);
+        assert_eq!(status["alive"], 2);
+        assert_eq!(status["dead"], 0);
+        assert_eq!(status["version"], VERSION);
+        assert_eq!(status["writes_mode"], "loopback");
+        assert_eq!(status["time_running"], false);
+        assert!(status["median_age_years"].as_f64().unwrap() > 0.0);
+        assert!(status["seed_hex"].as_str().unwrap().len() == 64);
+    }
+
+    #[tokio::test]
+    async fn a_person_comes_back_in_readable_sections() {
+        let (_tmp, population) = stored();
+        let filter = routes(population, ControlAuth::resolve(None, LOOPBACK));
+        let (_, person) = get(&filter, "/api/humans/Gem-D").await;
+        let sections = person["sections"].as_array().unwrap();
+        assert!(sections.len() >= 9, "{} sections", sections.len());
+        assert_eq!(sections[0]["id"], "identity");
+        assert!(
+            !person["human"].is_null(),
+            "the whole record is still there"
+        );
+        let labels: Vec<&str> = sections[0]["fields"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|field| field["label"].as_str().unwrap())
+            .collect();
+        assert!(labels.contains(&"Name"), "{labels:?}");
+    }
+
+    #[tokio::test]
+    async fn the_activity_feed_lists_creations_newest_first() {
+        let (_tmp, population) = stored();
+        let filter = routes(population, ControlAuth::resolve(None, LOOPBACK));
+        for name in ["Hine Moana", "Tane Rapu"] {
+            let mut request = body();
+            request["name"] = serde_json::json!(name);
+            let created = warp::test::request()
+                .method("POST")
+                .path("/api/humans")
+                .json(&request)
+                .reply(&filter)
+                .await;
+            assert_eq!(created.status(), 201);
+        }
+        let (_, feed) = get(&filter, "/api/activity").await;
+        assert_eq!(feed["total"], 2);
+        assert_eq!(feed["stored"], true);
+        assert_eq!(feed["creations"][0]["name"], "Tane Rapu");
+        assert_eq!(feed["creations"][0]["by"], "dashboard");
+        assert_eq!(feed["creations"][1]["name"], "Hine Moana");
+
+        let (_, one) = get(&filter, "/api/activity?limit=1").await;
+        assert_eq!(one["creations"].as_array().unwrap().len(), 1);
+        assert_eq!(one["total"], 2, "the total still counts everyone");
+    }
+
+    #[tokio::test]
+    async fn an_in_memory_population_says_why_it_has_no_log() {
+        let population = Arc::new(Mutex::new(IslandHumanPopulation::with_founders()));
+        let filter = routes(population, ControlAuth::resolve(None, LOOPBACK));
+        let (status, feed) = get(&filter, "/api/activity").await;
+        assert_eq!(status, 200);
+        assert_eq!(feed["stored"], false);
+        assert!(feed["note"].as_str().unwrap().contains("in memory"));
     }
 
     #[tokio::test]
@@ -243,11 +559,7 @@ mod tests {
         assert_eq!(created["summary"]["agent_id"], "hine-moana");
         assert!(tmp.path().join("humans/hine-moana/profile").is_dir());
 
-        let roster = warp::test::request()
-            .path("/api/humans")
-            .reply(&filter)
-            .await;
-        let roster: serde_json::Value = serde_json::from_slice(roster.body()).unwrap();
+        let (_, roster) = get(&filter, "/api/humans").await;
         assert!(roster
             .as_array()
             .unwrap()
@@ -277,6 +589,9 @@ mod tests {
             .reply(&lan)
             .await;
         assert_eq!(refused.status(), 401);
+        let refused: serde_json::Value = serde_json::from_slice(refused.body()).unwrap();
+        assert_eq!(refused["writes_mode"], "disabled");
+        assert!(refused["errors"][0].as_str().unwrap().ends_with('.'));
     }
 
     #[tokio::test]
@@ -297,6 +612,90 @@ mod tests {
             errors["errors"][0].as_str().unwrap().contains("height"),
             "{errors}"
         );
+    }
+
+    #[tokio::test]
+    async fn a_body_that_is_not_the_expected_json_gets_a_reason() {
+        let (_tmp, population) = stored();
+        let filter = routes(population, ControlAuth::resolve(None, LOOPBACK));
+        for (body, expected) in [
+            ("not json at all", StatusCode::BAD_REQUEST),
+            ("{\"name\": \"Half A Person\"}", StatusCode::BAD_REQUEST),
+        ] {
+            let response = warp::test::request()
+                .method("POST")
+                .path("/api/humans")
+                .header("content-type", "application/json")
+                .body(body)
+                .reply(&filter)
+                .await;
+            assert_eq!(response.status(), expected, "{body}");
+            let answer: serde_json::Value = serde_json::from_slice(response.body()).unwrap();
+            assert!(
+                answer["errors"][0].as_str().unwrap().contains("JSON"),
+                "{answer}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn an_oversized_body_is_refused_by_size_not_by_confusion() {
+        let (_tmp, population) = stored();
+        let filter = routes(population, ControlAuth::resolve(None, LOOPBACK));
+        let huge = "x".repeat((MAX_CREATE_BODY as usize) + 1);
+        let response = warp::test::request()
+            .method("POST")
+            .path("/api/humans")
+            .header("content-type", "application/json")
+            .body(huge)
+            .reply(&filter)
+            .await;
+        assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
+        let answer: serde_json::Value = serde_json::from_slice(response.body()).unwrap();
+        assert!(answer["errors"][0]
+            .as_str()
+            .unwrap()
+            .contains("larger than"));
+    }
+
+    #[tokio::test]
+    async fn an_unknown_api_path_answers_in_json() {
+        let (_tmp, population) = stored();
+        let filter = routes(population, ControlAuth::resolve(None, LOOPBACK));
+        let response = warp::test::request()
+            .path("/api/nothing-here")
+            .reply(&filter)
+            .await;
+        assert_eq!(response.status(), 404);
+        assert!(response.headers()["content-type"]
+            .to_str()
+            .unwrap()
+            .starts_with("application/json"));
+        let body: serde_json::Value = serde_json::from_slice(response.body()).unwrap();
+        assert!(body["errors"][0].as_str().unwrap().contains("/api/status"));
+    }
+
+    #[tokio::test]
+    async fn every_response_carries_the_hardening_headers() {
+        let (_tmp, population) = stored();
+        let filter = routes(population, ControlAuth::resolve(None, LOOPBACK));
+        for path in [
+            "/",
+            "/people",
+            "/creator",
+            "/api/status",
+            "/static/style.css",
+        ] {
+            let response = warp::test::request().path(path).reply(&filter).await;
+            assert_eq!(response.status(), 200, "{path}");
+            let headers = response.headers();
+            assert_eq!(headers["x-content-type-options"], "nosniff", "{path}");
+            assert_eq!(headers["x-frame-options"], "DENY", "{path}");
+            assert_eq!(headers["referrer-policy"], "no-referrer", "{path}");
+            let csp = headers["content-security-policy"].to_str().unwrap();
+            assert!(csp.contains("default-src 'self'"), "{path}: {csp}");
+            assert!(csp.contains("frame-ancestors 'none'"), "{path}: {csp}");
+        }
     }
 
     #[tokio::test]

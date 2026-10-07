@@ -1,40 +1,61 @@
-// Human Creator page. Server messages and echoed values are inserted with
-// textContent, never as HTML.
+// The Human Creator: the form, what the server will accept, and what it says
+// back. Every message from the server is shown as text, never as markup.
 "use strict";
+
+import {
+  clearOffline,
+  el,
+  fillChrome,
+  getJson,
+  postJson,
+  reportOffline,
+} from "/static/app.js";
 
 const TOKEN_KEY = "island-control-token";
 const form = document.getElementById("creator");
 const resultEl = document.getElementById("result");
 const submitEl = document.getElementById("submit");
+const submitHintEl = document.getElementById("submit-hint");
+const writesEl = document.getElementById("writes");
+const tokenFieldset = document.getElementById("token-fieldset");
 
-function el(tag, text, attrs) {
-  const node = document.createElement(tag);
-  if (text !== undefined && text !== null) node.textContent = String(text);
-  if (attrs) for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
-  return node;
+function fill(select, values, chosen) {
+  select.replaceChildren(...values.map((value) => el("option", value, { value })));
+  if (chosen && values.includes(chosen)) select.value = chosen;
 }
 
-function fill(select, values) {
-  select.replaceChildren(...values.map((v) => el("option", v, { value: v })));
-}
-
-function showErrors(messages) {
+function showErrors(heading, messages) {
+  const wrap = el("div");
+  wrap.append(el("p", heading, { class: "errors" }));
   const list = el("ul", null, { class: "errors" });
-  list.append(...messages.map((m) => el("li", m)));
-  resultEl.replaceChildren(list);
+  list.append(...messages.map((text) => el("li", text)));
+  wrap.append(list);
+  resultEl.replaceChildren(wrap);
 }
 
 function storedToken() {
-  try { return sessionStorage.getItem(TOKEN_KEY) || ""; } catch (_) { return ""; }
+  try {
+    return sessionStorage.getItem(TOKEN_KEY) || "";
+  } catch (_) {
+    return "";
+  }
 }
 
 function rememberToken(token) {
-  try { token ? sessionStorage.setItem(TOKEN_KEY, token) : sessionStorage.removeItem(TOKEN_KEY); } catch (_) {}
+  try {
+    if (token) sessionStorage.setItem(TOKEN_KEY, token);
+    else sessionStorage.removeItem(TOKEN_KEY);
+  } catch (_) {
+    // A browser with storage switched off still works; the token just has to
+    // be typed again next time.
+  }
 }
 
-// Age follows the birth date unless the person edits it themselves.
+// Age follows the birth date until someone types an age themselves.
 let ageEdited = false;
-form.age_years.addEventListener("input", () => { ageEdited = true; });
+form.age_years.addEventListener("input", () => {
+  ageEdited = true;
+});
 form.birth_local.addEventListener("change", () => {
   if (ageEdited || !form.birth_local.value) return;
   const born = new Date(form.birth_local.value);
@@ -42,29 +63,59 @@ form.birth_local.addEventListener("change", () => {
   if (Number.isFinite(age) && age >= 0) form.age_years.value = age.toFixed(1);
 });
 
+function describeWrites(status) {
+  switch (status.writes_mode) {
+    case "token":
+      return "This server was started with a control token. Enter it below to create people.";
+    case "loopback":
+      return "This server is bound to this machine, so anyone sitting at it can create people. No token needed.";
+    default:
+      return "Creating people is switched off: this server is reachable from the network but has no control token. Restart it with ISLAND_CONTROL_TOKEN set, or bind it to 127.0.0.1.";
+  }
+}
+
+function lockForm(reason) {
+  for (const field of form.elements) field.disabled = true;
+  submitHintEl.textContent = reason;
+}
+
 async function setup() {
   form.token.value = storedToken();
   try {
     const [options, status] = await Promise.all([
-      fetch("/api/creator/options").then((r) => r.json()),
-      fetch("/api/status").then((r) => r.json()),
+      getJson("/api/creator/options"),
+      getJson("/api/status"),
     ]);
+    clearOffline();
     fill(form.biological_sex, options.biological_sex);
-    fill(form.build, options.build);
-    fill(form.hair_color, options.hair_color);
-    fill(form.eye_color, options.eye_color);
-    fill(form.skin_tone, options.skin_tone);
-    form.build.value = "Average";
+    fill(form.build, options.build, "Average");
+    fill(form.hair_color, options.hair_color, "Brown");
+    fill(form.eye_color, options.eye_color, "Brown");
+    fill(form.skin_tone, options.skin_tone, "Medium");
     form.age_years.max = options.max_age_years;
     form.height_cm.min = options.height_cm[0];
     form.height_cm.max = options.height_cm[1];
-    document.getElementById("writes").textContent = "Writes: " + status.writes +
-      ". New people get their own folder" + (status.data_dir ? " under " + status.data_dir + "/humans." : ".");
-  } catch (err) {
-    showErrors(["Could not reach the island server: " + err.message]);
+    document.getElementById("height-range").textContent =
+      `Anywhere from ${options.height_cm[0]} to ${options.height_cm[1]} cm.`;
+
+    writesEl.textContent = describeWrites(status);
+    writesEl.classList.toggle("is-error", status.writes_mode === "disabled");
+    tokenFieldset.hidden = status.writes_mode !== "token";
+    if (status.writes_mode === "disabled") {
+      lockForm("Creating people is off on this server, so the form is read-only.");
+    } else if (status.data_dir) {
+      submitHintEl.textContent = `They are written to ${status.data_dir}/humans the moment you do.`;
+    }
+    fillChrome(status);
+  } catch (error) {
+    reportOffline(error);
+    writesEl.textContent = "The server did not answer, so the form cannot be filled in yet.";
+    writesEl.classList.add("is-error");
+    lockForm("Reload once the island server is running again.");
   }
 }
 
+/** The request body, built from the form exactly as the API expects it. */
 function request() {
   const offset = form.birth_offset.value.trim();
   const local = form.birth_local.value;
@@ -85,36 +136,93 @@ function request() {
   };
 }
 
+/** What the page can catch before troubling the server. */
+function localProblems(body) {
+  const problems = [];
+  if (!body.name) problems.push("They need a name.");
+  if (!body.birth_timestamp) problems.push("They need a date and time of birth.");
+  if (!/^[+-]\d\d:\d\d$/.test(form.birth_offset.value.trim())) {
+    problems.push("The UTC offset should look like +13:00 or -05:30.");
+  }
+  if (!Number.isFinite(body.age_years)) problems.push("Their age should be a number of years.");
+  if (!Number.isFinite(body.height_cm)) problems.push("Their height should be a number in centimetres.");
+  return problems;
+}
+
+function showCreated(created) {
+  const box = el("div", null, { class: "created" });
+  const name = created.summary.name || created.summary.agent_id;
+  box.append(el("h3", `${name} exists.`));
+  box.append(
+    el(
+      "p",
+      created.folder
+        ? `Their record is written to ${created.folder}, and they are on the roster now.`
+        : "They are on the roster now. This population is held in memory, so nothing was written to disk.",
+    ),
+  );
+  const links = el("div", null, { class: "quick-links" });
+  links.append(
+    el("a", `Open ${name}`, {
+      class: "button primary",
+      href: "/people?human=" + encodeURIComponent(created.summary.agent_id),
+    }),
+  );
+  box.append(links);
+  resultEl.replaceChildren(box);
+  if (created.storage_error) {
+    resultEl.append(
+      el(
+        "p",
+        `They exist, but their folder could not be written: ${created.storage_error}`,
+        { class: "errors" },
+      ),
+    );
+  }
+}
+
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
-  const token = form.token.value.trim();
+  const body = request();
+  const problems = localProblems(body);
+  if (problems.length) {
+    showErrors("This person cannot be created yet:", problems);
+    form.name.focus();
+    return;
+  }
+  const token = tokenFieldset.hidden ? "" : form.token.value.trim();
   rememberToken(token);
-  const headers = { "content-type": "application/json" };
-  if (token) headers.authorization = "Bearer " + token;
   submitEl.disabled = true;
-  resultEl.replaceChildren(el("p", "Creating…", { class: "hint" }));
+  submitEl.textContent = "Creating…";
+  resultEl.replaceChildren(el("p", `Building ${body.name}…`, { class: "hint" }));
   try {
-    const response = await fetch("/api/humans", { method: "POST", headers, body: JSON.stringify(request()) });
-    const body = await response.json().catch(() => ({}));
-    if (response.status === 201) {
-      const id = body.summary.agent_id;
-      const done = el("p", null, { class: "ok" });
-      const link = el("a", body.summary.name || id, { href: "/?human=" + encodeURIComponent(id) });
-      done.append("Created ", link, body.folder ? " — folder " + body.folder : "");
-      resultEl.replaceChildren(done);
-      if (body.storage_error) {
-        resultEl.append(el("p", "Warning: they exist, but their folder could not be written: " + body.storage_error, { class: "errors" }));
-      }
+    const { status, body: answer } = await postJson("/api/humans", body, token);
+    if (status === 201) {
+      showCreated(answer);
       form.name.value = "";
-    } else if (response.status === 401) {
-      showErrors(["Not allowed to create (" + (body.writes || "unauthorised") + "). Enter the control token."]);
+      form.name.focus();
+    } else if (status === 401) {
+      const reasons =
+        answer.errors && answer.errors.length
+          ? [...answer.errors]
+          : ["This dashboard is not allowed to create people."];
+      if (answer.writes) reasons.push(`On this server, ${answer.writes}.`);
+      showErrors("Nobody was created:", reasons);
     } else {
-      showErrors(body.errors && body.errors.length ? body.errors : ["Server said " + response.status]);
+      showErrors(
+        "The server would not accept that:",
+        answer.errors && answer.errors.length
+          ? answer.errors
+          : [`It answered ${status} without saying why.`],
+      );
     }
-  } catch (err) {
-    showErrors(["Request failed: " + err.message]);
+  } catch (error) {
+    showErrors("Nothing was created:", [
+      `The request did not get through: ${error.message}`,
+    ]);
   } finally {
     submitEl.disabled = false;
+    submitEl.textContent = "Create this person";
   }
 });
 
