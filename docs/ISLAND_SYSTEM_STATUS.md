@@ -53,11 +53,20 @@ are pessimistic.
     cargo test --workspace --release
     cargo test --workspace --release -- --ignored slow_
 
-`cargo clippy --workspace --all-targets -- -D warnings` is clean as of the last commit. The last
-full-workspace test run predates Phase 4; since then each module was verified by its own tests and
-the planetary hash guard (`tests/topology_hash_baseline.rs`) after every engine change. The memory
-tests need several GB: on a small machine build with `-j 1`, and keep `/tmp` (often RAM-backed)
-clear of large files.
+Last full run (2026-10-08, commit `56de476`, release build, `--test-threads 2`, one build job):
+
+| Check | Result |
+|---|---|
+| `cargo fmt --all -- --check` | clean |
+| `cargo clippy --workspace --all-targets -- -D warnings` | clean (run on the tree just before the last docs-only commits) |
+| `cargo test --workspace --release --no-fail-fast` | **1,152 passed, 0 failed**, 19 ignored |
+| `cargo test --workspace --release -- --ignored slow_` | **7 passed, 0 failed**: human runtime to 5,000 people, crowded cell, island week, day-in-one-step equals 1,440 steps, long-horizon evolution, island year of weather, ten thousand years of seismicity |
+
+That run also caught a real failure the per-module runs had missed (a deviation-register row edited
+in the wrong place); it was fixed in `56de476`. Ignored tests that are not `slow_`-named (the
+population scale test, the year of drinking-water physics) are run by hand, see `benchmarks/`.
+The memory-heavy tests need several GB: on a small machine build with `-j 1`, run with
+`--test-threads 2`, and keep `/tmp` (often RAM-backed) clear of large files.
 
 ## Known fidelity limits
 
