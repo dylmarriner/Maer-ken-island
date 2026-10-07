@@ -16,6 +16,7 @@ pub mod hydrology;
 pub mod labour;
 pub mod levels;
 pub mod local_vegetation;
+pub mod materials;
 pub mod ocean;
 pub mod par;
 pub mod physical;

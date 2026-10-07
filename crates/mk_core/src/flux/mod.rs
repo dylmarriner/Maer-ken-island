@@ -457,6 +457,17 @@ pub enum Reservoir {
 
     /// Standing land water and the runoff routed between cells.
     SurfaceWater,
+
+    // Materials and bodies (Phase 3 Task 3). Declared last so every earlier
+    // variant's index, and any serialized ledger, is unchanged.
+    /// Carbon in gathered, crafted and built materials (wood, charcoal,
+    /// coal, limestone, food, structures): carbon taken out of living
+    /// biomass or the crust and not yet returned to the air or the soil.
+    MaterialCarbon,
+    /// Water held in gathered materials and in human bodies.
+    MaterialWater,
+    /// Carbon held in human bodies: eaten food in, respiration out.
+    HumanCarbon,
 }
 
 impl Reservoir {
@@ -541,6 +552,10 @@ impl Reservoir {
             CrustPhosphorus,
             // Surface water
             SurfaceWater,
+            // Materials and bodies
+            MaterialCarbon,
+            MaterialWater,
+            HumanCarbon,
         ][..]
     }
 
@@ -583,6 +598,9 @@ impl Reservoir {
             Reservoir::DetritusPhosphorus => "DetritusPhosphorus",
             Reservoir::CrustPhosphorus => "CrustPhosphorus",
             Reservoir::SurfaceWater => "SurfaceWater",
+            Reservoir::MaterialCarbon => "MaterialCarbon",
+            Reservoir::MaterialWater => "MaterialWater",
+            Reservoir::HumanCarbon => "HumanCarbon",
         }
     }
 }
@@ -1214,12 +1232,15 @@ mod tests {
             DetritusPhosphorus => 29,
             CrustPhosphorus => 30,
             SurfaceWater => 31,
+            MaterialCarbon => 32,
+            MaterialWater => 33,
+            HumanCarbon => 34,
         }
     }
 
     #[test]
     fn reservoir_all() {
-        const VARIANTS: usize = 32;
+        const VARIANTS: usize = 35;
         let all = Reservoir::all();
 
         // Every variant appears in `all()` exactly once.
@@ -1242,6 +1263,17 @@ mod tests {
         assert!(all.contains(&Reservoir::BiomassPhosphorus));
         assert!(all.contains(&Reservoir::OperatorIntervention));
         assert!(all.contains(&Reservoir::SurfaceWater));
+        assert!(all.contains(&Reservoir::MaterialCarbon));
+        assert!(all.contains(&Reservoir::MaterialWater));
+        assert!(all.contains(&Reservoir::HumanCarbon));
+        // Materials and bodies are interior reservoirs, not boundaries.
+        for r in [
+            Reservoir::MaterialCarbon,
+            Reservoir::MaterialWater,
+            Reservoir::HumanCarbon,
+        ] {
+            assert!(!r.is_boundary());
+        }
     }
 
     #[test]

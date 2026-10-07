@@ -14,6 +14,7 @@ fidelity limits. The project is **not complete**: see "Not done".
 | Grid topology for human/organism movement, births and perception (Phase 3 Task 6) | Done; planetary results bit-identical | `topology.rs`, `tests/topology_hash_baseline.rs` |
 | Founders' estate laid out in metres (Phase 3 Task 5) | Done | `regional/estate_layout.rs`, `tests/island_estate_layout.rs` |
 | Canonical founders on the island: observation, bedrooms, computer rule (Phase 3 Task 8) | Done except Task-3-dependent hooks | `regional/humans.rs`, `humans/observation.rs`, `tests/island_human_runtime.rs` |
+| Physical materials: gather, hunt, burn, calcine, eat, respire, drink, build through the flux ledger (Phase 3 Task 3) | Model done; not yet driving the economy | `regional/materials.rs`, `tests/island_material_flows.rs` |
 | Timed, energy-costed work: tasks, BMR x MET, walking, load limits (Phase 3 Task 3b) | Model done; not yet driving the economy | `regional/labour.rs`, `tests/island_labour.rs` |
 | Estate fuel and electricity (Phase 3 Task 4b) | Done | `regional/energy.rs`, `tests/island_energy.rs` |
 | Individual trees and stands on the estate patch (Phase 3 Task 7) | Done | `regional/local_vegetation.rs`, `tests/island_local_vegetation.rs` |
@@ -49,7 +50,7 @@ Phase 3 Tasks 3 and 4b (D10, D13).
 
 ## Not done
 
-- Phase 3 Task 1b (island-scale species) and Tasks 2, 3, 9 (and Task 3b's economy/lifecycle wiring): materials and resources, physical
+- Phase 3 Task 1b (island-scale species) and Tasks 2 and 9 (and the economy/lifecycle wiring of Tasks 3 and 3b): materials and resources, physical
   materials, time and energy of actions, acceptance.
 - Phase 4: runtime scheduling, persistence, replay.
 - Phase 4b: energy, industry, town, economy.
