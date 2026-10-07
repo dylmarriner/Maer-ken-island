@@ -44,7 +44,7 @@ use crate::biosphere::miami_npp_kgc_m2_yr;
 use crate::organisms::vegetation::VegetationSystem;
 
 /// Carbon fraction of dry matter, as upstream's `update_primary_production`.
-const CARBON_FRACTION_OF_DRY_MASS: f64 = 0.475;
+pub const CARBON_FRACTION_OF_DRY_MASS: f64 = 0.475;
 /// Days in the Earth year the Miami model's annual rain is per.
 const EARTH_YEAR_DAYS: f64 = 365.25;
 /// Annual-mean temperature (K) below which cold ground is permanent ice:

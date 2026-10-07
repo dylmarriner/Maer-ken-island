@@ -155,7 +155,7 @@ const CONTINENTALITY_M: f64 = 100_000.0;
 /// Rain rate (mm/day) at which skies count as overcast.
 const OVERCAST_RAIN_MM_DAY: f64 = 5.0;
 /// Overcast reduction of the land range: the midpoint of 25-50%.
-const OVERCAST_DTR_REDUCTION: f64 = 0.375;
+pub const OVERCAST_DTR_REDUCTION: f64 = 0.375;
 /// Extra nocturnal cooling in a valley floor: a cold-air pool fills a
 /// basin 500 m below its surroundings (Geiger et al. 2009).
 const VALLEY_DEPTH_M: f64 = 500.0;
