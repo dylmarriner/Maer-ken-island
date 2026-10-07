@@ -15,6 +15,7 @@ It defines the locked scope (a uniquely shaped, New-Zealand-sized island on an E
 - `crates/mk_core/src/human/` — canonical identity, genetics, temperament, neurocognition, personality, drives, hormones, attachment, schema and profile types.
 - `crates/mk_engine/src/humans/` — live runtime systems for body, needs, cognition, emotion, memory, consciousness, reproduction, lifecycle, social behaviour and brain-state models.
 - `apps/island_humans/` — the island-facing population bootstrap and CLI.
+- `apps/island/` — the dashboard: the overview, the roster, the Human Creator and the JSON behind them.
 - `fixtures/human/` — canonical Gem-D / Gem-K human fixtures.
 - `assets/humans/` — the founder GLB models.
 - `tools/blender/generate_human_model.py` — the Maer-Ken human model generator.

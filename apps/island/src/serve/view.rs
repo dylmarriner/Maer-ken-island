@@ -90,12 +90,12 @@ fn sex_word(sex: BiologicalSex) -> &'static str {
     }
 }
 
-fn generation_word(generation: Generation) -> &'static str {
+fn generation_word(generation: Generation) -> String {
     match generation {
-        Generation::First => "First — born before the island",
-        Generation::Second => "Second — the first islanders",
-        Generation::Third => "Third",
-        Generation::Later(_) => "Later",
+        Generation::First => "First — born before the island".to_string(),
+        Generation::Second => "Second — the first islanders".to_string(),
+        Generation::Third => "Third".to_string(),
+        Generation::Later(n) => format!("Generation {n}"),
     }
 }
 
