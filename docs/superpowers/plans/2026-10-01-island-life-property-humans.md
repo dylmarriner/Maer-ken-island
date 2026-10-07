@@ -159,9 +159,12 @@ Upstream actions have no duration or energy cost: one decision gathers, crafts o
 - Actions become `ActiveTask { spec, progress_s }` carried across human ticks; output is delivered as work progresses; walking to the node takes real time at the reference walking speed, slowed by slope and load.
 - Energy: each human's expenditure per tick is `BMR (Mifflin–St Jeor from their body) × MET of the current activity`; it draws down glucose/energy reserves in upstream needs, so heavy labour makes humans hungry and tired at realistic rates; carried load is limited by body mass and fitness.
 
-- [ ] **Step 1:** Write tests: felling a tree takes the reference duration for the tool used; a day of heavy labour expends energy within the reference range for an adult of the founder's body; panning a placer yields grams per day within the reference range for its grade; walking 10 km on flat ground takes ~2 h; carrying above the load limit is refused.
-- [ ] **Step 2:** Run `cargo test -p mk_engine --test island_labour`; expect FAIL; implement; re-run; expect PASS.
-- [ ] **Step 3:** Record in `UPSTREAM.md` and offer upstream. Commit `feat(engine): timed, energy-costed human work`.
+- [x] **Step 1:** Write tests: felling a tree takes the reference duration for the tool used; a day of heavy labour expends energy within the reference range for an adult of the founder's body; panning a placer yields grams per day within the reference range for its grade; walking 10 km on flat ground takes ~2 h; carrying above the load limit is refused.
+- [x] **Step 2:** Run `cargo test -p mk_engine --test island_labour`; expect FAIL; implement; re-run; expect PASS.
+- [x] **Step 3:** Record in `UPSTREAM.md` and offer upstream. Commit `feat(engine): timed, energy-costed human work`.
+
+Implementation notes: the labour model is a new module driven entirely by the reference packs (every duration, rate, recovery fraction, MET and BMR term is read, not hard-coded; tests check results against the packs' own ranges). The upstream hook is one field, `EffortFocus::activity`, defaulting to the baseline, so planetary behaviour is bit-identical. **Open, deliberately:** the plan's `resource_economy.rs` change (actions as timed tasks) and lifecycle mapping each `ActionKind` to a MET would change planetary human behaviour and the realism calibration, so they are left for Task 9's integration and an upstream decision (Phase 0c rule: human biology changes go upstream first). A day of heavy labour comes to 2.1 x BMR for the founder's body, inside the pack's 2.0-2.4; an invented 4 h of hard felling plus 4 h walking gave 2.42 and was rejected as an unrealistic duty cycle, not fitted to.
+
 
 ### Task 4: Island scenario and canonical estate placement
 

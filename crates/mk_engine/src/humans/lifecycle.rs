@@ -307,17 +307,20 @@ pub fn step_lifecycle(
             food: 1.5,
             water: 1.0,
             shelter: 1.0,
+            activity: 1.0,
         },
         super::ActionKind::SeekWater => super::needs::EffortFocus {
             food: 1.0,
             water: 1.5,
             shelter: 1.0,
+            activity: 1.0,
         },
         super::ActionKind::SeekShelter | super::ActionKind::Rest | super::ActionKind::Build => {
             super::needs::EffortFocus {
                 food: 1.0,
                 water: 1.0,
                 shelter: 1.5,
+                activity: 1.0,
             }
         }
         _ => super::needs::EffortFocus::none(),

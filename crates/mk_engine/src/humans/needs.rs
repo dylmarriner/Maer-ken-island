@@ -78,6 +78,14 @@ pub struct EffortFocus {
     pub food: f64,
     pub water: f64,
     pub shelter: f64,
+    /// Energy expenditure of the current activity as a multiple of the
+    /// activity level the drain rates are calibrated for (light daily
+    /// activity, ~1.5 MET). 1.0, or the zero a `Default` leaves, means
+    /// the baseline and changes nothing; heavy labour scales the glucose
+    /// drain and, through breathing and sweat, the water loss (see
+    /// `regional::labour::effort_for_met`).
+    #[serde(default)]
+    pub activity: f64,
 }
 
 impl EffortFocus {
@@ -88,9 +96,17 @@ impl EffortFocus {
             food: 1.0,
             water: 1.0,
             shelter: 1.0,
+            activity: 1.0,
         }
     }
 }
+
+/// Highest activity multiple the needs model accepts (~12 MET on a 1.5 MET
+/// baseline).
+pub const MAX_ACTIVITY_MULTIPLE: f64 = 8.0;
+/// Extra water loss per unit of activity above the baseline: breathing and
+/// sweat rise with metabolic rate, by roughly half as much.
+const WATER_LOSS_PER_EXTRA_ACTIVITY: f64 = 0.5;
 
 /// Runtime metabolic/survival snapshot for a human.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -230,9 +246,13 @@ impl NeedsSnapshot {
             .clamp(0.25, 4.0)
             / (self.glucose_atp_conversion / GLUCOSE_ATP_CONVERSION_BASELINE).clamp(0.25, 4.0);
 
-        let glucose_drain =
-            (self.hunger_sensitivity / HUNGER_SENSITIVITY_BASELINE) * metabolic_demand * dt
-                / GLYCOGEN_DAYS;
+        // Work above the baseline activity burns proportionally more.
+        let activity = effort.activity.clamp(1.0, MAX_ACTIVITY_MULTIPLE);
+        let glucose_drain = (self.hunger_sensitivity / HUNGER_SENSITIVITY_BASELINE)
+            * metabolic_demand
+            * activity
+            * dt
+            / GLYCOGEN_DAYS;
         let glucose_gain = observation.caloric_access
             * MAX_EATING_DAYS_PER_DAY
             * capacity
@@ -258,7 +278,9 @@ impl NeedsSnapshot {
         let glucose = glucose.clamp(0.0, 1.0);
 
         let heat = (observation.ambient_temperature_c - SWEATING_ONSET_C).max(0.0);
-        let water_loss_per_day = HYDRATION_LOSS_PER_DAY * (1.0 + SWEAT_LOSS_PER_C * heat);
+        let water_loss_per_day = HYDRATION_LOSS_PER_DAY
+            * (1.0 + SWEAT_LOSS_PER_C * heat)
+            * (1.0 + WATER_LOSS_PER_EXTRA_ACTIVITY * (activity - 1.0));
         let thirst_drain =
             (self.thirst_sensitivity / THIRST_SENSITIVITY_BASELINE) * water_loss_per_day * dt;
         let hydration_gain = observation.hydration_access
@@ -408,6 +430,7 @@ mod tests {
             food: 1.5,
             water: 1.0,
             shelter: 1.0,
+            activity: 1.0,
         };
 
         // Hourly steps: over longer ones both humans would fill their
