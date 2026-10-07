@@ -3,8 +3,10 @@
 //! Two runs of the same scenario are two different histories, and the people
 //! in them are different people who happen to share a name. Writing both into
 //! one folder tree would let the second quietly overwrite the first, so each
-//! run gets its own directory under the save root and a counter in
-//! `runs.json` makes sure a fresh run never lands on an earlier run's id.
+//! run gets its own directory under the save root: a counter in `runs.json`
+//! keeps a later run off an earlier one's id, and creating the directory —
+//! one atomic operation that fails if it already exists — is what settles it
+//! when two runs start at the same moment and read the same counter.
 //!
 //! The store is not part of the island's state. It records what happened; it
 //! never decides what happens next. Enabling it, disabling it, or having
@@ -13,6 +15,7 @@
 //! it to keep records would not be worth the records.
 
 use std::collections::BTreeSet;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use crate::io::human_storage::{HumanStorage, HumanStorageError};
@@ -150,14 +153,80 @@ impl HumanStore {
     }
 }
 
+/// The run id for a scenario, seed and run number.
+///
+/// Derived rather than random or timestamped, so the same scenario and seed
+/// give the same sequence of run ids and a run can be named again later.
+fn run_id_for(scenario_digest: &[u8; 32], seed: &[u8; 32], counter: u64) -> RunId {
+    let mut hasher = blake3::Hasher::new();
+    hasher.update(scenario_digest);
+    hasher.update(seed);
+    hasher.update(&counter.to_le_bytes());
+    RunId(
+        hasher
+            .finalize()
+            .to_hex()
+            .chars()
+            .take(RUN_ID_LEN)
+            .collect::<String>(),
+    )
+}
+
+/// Read the run counter, treating an absent file as a fresh save root.
+fn read_runs(runs_path: &Path) -> Result<Runs, HumanStoreError> {
+    match std::fs::read(runs_path) {
+        Ok(bytes) => serde_json::from_slice(&bytes)
+            .map_err(|e| HumanStoreError::Runs(runs_path.into(), e.to_string())),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Runs::default()),
+        Err(e) => Err(HumanStoreError::Io(runs_path.into(), e)),
+    }
+}
+
+/// Replace the run counter whole or not at all.
+///
+/// `fs::write` truncates in place, so a crash part-way through would leave
+/// half a JSON document — and every later run would then fail to parse it,
+/// making one torn write the permanent end of new runs under this save root.
+/// The snapshot path already writes this way; the counter that decides where
+/// a snapshot's people go deserves the same.
+fn write_runs(runs_path: &Path, runs: &Runs) -> Result<(), HumanStoreError> {
+    let text = serde_json::to_vec_pretty(runs)
+        .map_err(|e| HumanStoreError::Runs(runs_path.into(), e.to_string()))?;
+    let temp = runs_path.with_extension(format!("tmp-{}", std::process::id()));
+    let write = (|| -> std::io::Result<()> {
+        let mut file = std::fs::File::create(&temp)?;
+        file.write_all(&text)?;
+        file.sync_all()?;
+        std::fs::rename(&temp, runs_path)
+    })();
+    if let Err(e) = write {
+        std::fs::remove_file(&temp).ok();
+        return Err(HumanStoreError::Io(runs_path.into(), e));
+    }
+    Ok(())
+}
+
+/// How many ids to try before giving up on finding an unclaimed run.
+///
+/// Only a concurrent `open_run` under the same save root makes an attempt
+/// fail, so reaching the end of this means something is wrong that trying
+/// harder will not fix.
+const RUN_CLAIM_ATTEMPTS: u64 = 64;
+
 /// Claim the next run under `save_root` and open a store for it.
 ///
 /// The id is `blake3(scenario digest ‖ seed ‖ counter)`, so it is stable for
 /// a given scenario, seed and run number rather than a timestamp or a random
-/// value that would make two otherwise identical runs unreproducible. The
-/// counter is what keeps a second run of the same scenario off the first
-/// one's folders, and it is written back before any human is, so a crash
-/// mid-run burns an id rather than reusing one.
+/// value that would make two otherwise identical runs unreproducible.
+///
+/// The run is claimed by creating its directory with `create_dir`, which
+/// fails if it already exists — that, not the counter, is what makes the
+/// claim exclusive. The counter is a read-modify-write on a shared file and
+/// cannot be exclusive by itself: two processes starting at once would read
+/// the same `next` and derive the same id. Creating the directory is a
+/// single atomic operation, so exactly one of them wins it and the loser
+/// takes the following number. The counter's job is to stop a *later* run
+/// reusing an earlier one's id, which it still does.
 pub fn open_run(
     save_root: &Path,
     scenario_digest: &[u8; 32],
@@ -165,49 +234,50 @@ pub fn open_run(
 ) -> Result<(HumanStore, HumanStorage), HumanStoreError> {
     std::fs::create_dir_all(save_root).map_err(|e| HumanStoreError::Io(save_root.into(), e))?;
     let runs_path = save_root.join(RUNS_FILE);
+    let start = read_runs(&runs_path)?.next;
 
-    let mut runs: Runs = match std::fs::read(&runs_path) {
-        Ok(bytes) => serde_json::from_slice(&bytes)
-            .map_err(|e| HumanStoreError::Runs(runs_path.clone(), e.to_string()))?,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Runs::default(),
-        Err(e) => return Err(HumanStoreError::Io(runs_path, e)),
-    };
+    for counter in start..start + RUN_CLAIM_ATTEMPTS {
+        let run_id = run_id_for(scenario_digest, seed, counter);
+        let root = save_root.join(run_id.as_str());
+        match std::fs::create_dir(&root) {
+            Ok(()) => {}
+            // Somebody else holds this one: theirs, and we take the next.
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(HumanStoreError::Io(root, e)),
+        }
 
-    let counter = runs.next;
-    let mut hasher = blake3::Hasher::new();
-    hasher.update(scenario_digest);
-    hasher.update(seed);
-    hasher.update(&counter.to_le_bytes());
-    let run_id = RunId(
-        hasher
-            .finalize()
-            .to_hex()
-            .chars()
-            .take(RUN_ID_LEN)
-            .collect::<String>(),
-    );
+        // The run is ours now, so the counter is brought up to match.
+        // Re-read rather than reuse what we started from: a concurrent run
+        // may have moved it on, and the id list should hold both.
+        let mut runs = read_runs(&runs_path)?;
+        runs.next = runs.next.max(counter + 1);
+        runs.ids.push(run_id.clone());
+        write_runs(&runs_path, &runs)?;
 
-    runs.next = counter + 1;
-    runs.ids.push(run_id.clone());
-    let text = serde_json::to_vec_pretty(&runs)
-        .map_err(|e| HumanStoreError::Runs(runs_path.clone(), e.to_string()))?;
-    std::fs::write(&runs_path, text).map_err(|e| HumanStoreError::Io(runs_path, e))?;
+        let humans_dir = root.join("humans");
+        std::fs::create_dir_all(&humans_dir)
+            .map_err(|e| HumanStoreError::Io(humans_dir.clone(), e))?;
+        // `try_new` rather than `new`: a missing storage key must refuse,
+        // not quietly write people's records in plaintext.
+        let storage = HumanStorage::try_new(&humans_dir).map_err(HumanStoreError::Storage)?;
 
-    let root = save_root.join(run_id.as_str());
-    let humans_dir = root.join("humans");
-    std::fs::create_dir_all(&humans_dir).map_err(|e| HumanStoreError::Io(humans_dir.clone(), e))?;
-    // `try_new` rather than `new`: a missing storage key must refuse, not
-    // quietly write people's records in plaintext.
-    let storage = HumanStorage::try_new(&humans_dir).map_err(HumanStoreError::Storage)?;
+        return Ok((
+            HumanStore {
+                run_id,
+                root,
+                living: BTreeSet::new(),
+                failed_writes: 0,
+                last_error: None,
+            },
+            storage,
+        ));
+    }
 
-    Ok((
-        HumanStore {
-            run_id,
-            root,
-            living: BTreeSet::new(),
-            failed_writes: 0,
-            last_error: None,
-        },
-        storage,
+    Err(HumanStoreError::Runs(
+        runs_path,
+        format!(
+            "every run from {start} to {} is already claimed",
+            start + RUN_CLAIM_ATTEMPTS
+        ),
     ))
 }

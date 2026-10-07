@@ -265,3 +265,43 @@ fn a_death_is_written_at_once_rather_than_at_the_next_cadence() {
         "the dead are being rewritten every step"
     );
 }
+
+#[test]
+fn somebody_added_after_the_store_is_open_gets_a_folder_at_once() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut life = island();
+    let run = life.enable_human_store(dir.path()).unwrap();
+    let humans = dir.path().join(run.as_str()).join("humans");
+
+    // Every path that brings a new person into the world — the founders,
+    // `deliver_due_births`, the dashboard's creator — arrives through
+    // `HumanRegistry::add_human`, which writes the folder as it inserts.
+    // This pins that branch directly rather than waiting out a pregnancy:
+    // a birth in a stepped run is this call, reached from the inside.
+    let newcomer = life
+        .humans
+        .registry
+        .get_human("Gem-D")
+        .expect("a founder to copy")
+        .clone();
+    let mut newcomer = newcomer;
+    newcomer.profile.agent_id = "Gem-N".to_string();
+
+    life.humans
+        .registry
+        .add_human(newcomer)
+        .expect("the newcomer is added and their folder written");
+
+    assert!(
+        humans.join("Gem-N").is_dir(),
+        "a human added while the store was open got no folder"
+    );
+    assert!(
+        humans
+            .join("Gem-N")
+            .join("profile")
+            .join("identity.enc.json")
+            .is_file(),
+        "the folder was created but nothing was written into it"
+    );
+}

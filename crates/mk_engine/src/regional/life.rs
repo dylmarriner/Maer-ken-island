@@ -389,16 +389,20 @@ impl IslandLife {
     pub fn enable_human_store(&mut self, save_root: &Path) -> Result<RunId, HumanStoreError> {
         let (mut store, storage) =
             open_run(save_root, &self.scenario_digest(), &self.scenario.seed)?;
+        // Storage first, and only then the policy that depends on it. The
+        // other order leaves a state nobody can see: if `set_storage` fails,
+        // `auto_sync` is already off and `human_store` is still `None`, so
+        // the island runs with nothing syncing it and no counter to say so.
+        self.humans
+            .registry
+            .set_storage(storage)
+            .map_err(HumanStoreError::Storage)?;
         // Upstream rewrites every human's files on every step. At a
         // 60-second human step that is 1,440 full rewrites per simulated
         // day, so the island syncs on `human_store_seconds` instead — and
         // immediately when somebody dies, which is the one moment a stale
         // file would be a lie rather than a lag.
         self.humans.set_auto_sync(false);
-        self.humans
-            .registry
-            .set_storage(storage)
-            .map_err(HumanStoreError::Storage)?;
         for human in self.humans.registry.iter() {
             if matches!(human.profile.status, mk_core::human::HumanStatus::Alive) {
                 store.note_status(human.agent_id(), true, &mut Vec::new());
