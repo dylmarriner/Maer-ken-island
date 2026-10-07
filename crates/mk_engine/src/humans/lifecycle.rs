@@ -966,10 +966,10 @@ pub fn deliver_birth(
     mother: &HumanBeing,
     pregnancy: super::reproduction::Pregnancy,
     tick: mk_core::time::Tick,
-    grid_spec: &mk_core::grid::GridSpec,
+    topology: &crate::topology::GridTopology,
 ) -> HumanBeing {
     let mut child = *pregnancy.embryo;
-    let (latitude, longitude) = super::grid_position_to_birthplace(mother.position, grid_spec);
+    let (latitude, longitude) = super::grid_position_to_birthplace(mother.position, topology);
     let coordinates = mk_core::human::astrology::GeoCoordinates {
         latitude,
         longitude,
@@ -1023,7 +1023,7 @@ pub fn deliver_birth(
 pub fn deliver_due_births(
     registry: &mut HumanRegistry,
     tick: mk_core::time::Tick,
-    grid_spec: &mk_core::grid::GridSpec,
+    topology: &crate::topology::GridTopology,
 ) -> Vec<HumanStorageError> {
     let mut births = Vec::new();
     for mother in registry.get_all_humans_mut() {
@@ -1032,7 +1032,7 @@ pub fn deliver_due_births(
         }
         if let Some(pregnancy) = mother.reproduction.take_due_pregnancy() {
             let father_id = pregnancy.father_id.clone();
-            let child = deliver_birth(mother, pregnancy, tick, grid_spec);
+            let child = deliver_birth(mother, pregnancy, tick, topology);
             births.push((child, mother.agent_id().to_string(), father_id));
         }
     }
@@ -1494,8 +1494,11 @@ mod tests {
         );
     }
 
-    fn grid() -> mk_core::grid::GridSpec {
-        mk_core::grid::GridSpec::new(18, 36)
+    fn grid() -> crate::topology::GridTopology {
+        crate::topology::GridTopology::planetary(
+            &mk_core::grid::GridSpec::new(18, 36),
+            mk_core::grid::CANON_PLANET_RADIUS_M,
+        )
     }
 
     /// A fertile adult: reproductive state stepped once at age 25 so its

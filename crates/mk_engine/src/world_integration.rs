@@ -1978,7 +1978,14 @@ impl WorldState {
                 self.tick,
             )
         };
-        let crossing = crate::humans::cell_crossing_probability(here, dt_years, &self.grid_spec);
+        let crossing = crate::humans::cell_crossing_probability(
+            here,
+            dt_years,
+            &crate::topology::GridTopology::planetary(
+                &self.grid_spec,
+                mk_core::grid::CANON_PLANET_RADIUS_M,
+            ),
+        );
         if self.rng.gen_f64_01(key(0)) >= crossing {
             return None;
         }

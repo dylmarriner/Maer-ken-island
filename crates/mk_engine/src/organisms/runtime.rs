@@ -219,6 +219,25 @@ impl OrganismSystem {
         species: &[Species],
         rng: &RngRegistry,
     ) {
+        let topology = crate::topology::GridTopology::planetary(
+            &mk_core::grid::GridSpec::new(terrain.nlat(), terrain.nlon()),
+            mk_core::grid::CANON_PLANET_RADIUS_M,
+        );
+        self.step_on(tick, dt_years, terrain, &topology, species, rng);
+    }
+
+    /// [`step`](Self::step) on any [`GridTopology`](crate::topology::GridTopology):
+    /// on the island nothing wraps east/west and a being at the edge has
+    /// no neighbour beyond it.
+    pub fn step_on(
+        &mut self,
+        tick: u64,
+        dt_years: f64,
+        terrain: &OrganismTerrain<'_>,
+        topology: &crate::topology::GridTopology,
+        species: &[Species],
+        rng: &RngRegistry,
+    ) {
         let (nlat, nlon) = (terrain.nlat() as i32, terrain.nlon() as i32);
         if nlat == 0 || nlon == 0 {
             return;
@@ -249,7 +268,7 @@ impl OrganismSystem {
                 continue;
             }
             let row = being.position.row.clamp(0, nlat - 1) as usize;
-            let col = being.position.col.rem_euclid(nlon) as usize;
+            let col = topology.resolve_col(being.position.col);
             let over_water = terrain.is_ocean(row, col);
             let energy = if being.movement == MovementClass::Flying && over_water {
                 f64::from(being.energy) - FLIGHT_ENERGY_COST_PER_DAY * dt_days
@@ -268,7 +287,6 @@ impl OrganismSystem {
             .iter()
             .map(|sp| (sp.species_id, sp.representative_genome.body_mass_kg()))
             .collect();
-        let grid = mk_core::grid::GridSpec::new(nlat as usize, nlon as usize);
         for being in &mut self.beings {
             if being.lifecycle != LifecycleState::Alive || being.movement == MovementClass::Sessile
             {
@@ -282,7 +300,7 @@ impl OrganismSystem {
                 mass,
                 being.position.row.clamp(0, nlat - 1) as usize,
                 dt_days,
-                &grid,
+                topology,
             );
             let roll = rng.gen_f64_01(RngKey::new(
                 SubsystemId::Biosphere,
@@ -295,12 +313,15 @@ impl OrganismSystem {
             }
             let here = (
                 being.position.row.clamp(0, nlat - 1),
-                being.position.col.rem_euclid(nlon),
+                topology.resolve_col(being.position.col) as i32,
             );
             let candidates = [(0, 0), (1, 0), (-1, 0), (0, 1), (0, -1)]
                 .into_iter()
-                .map(|(dr, dc)| (here.0 + dr, (here.1 + dc).rem_euclid(nlon)))
-                .filter(|&(row, _)| (0..nlat).contains(&row))
+                .filter_map(|(dr, dc)| {
+                    topology
+                        .neighbour(here.0 as usize, here.1 as usize, dr, dc)
+                        .map(|(row, col)| (row as i32, col as i32))
+                })
                 .filter(|&(row, col)| {
                     being
                         .movement
@@ -442,11 +463,9 @@ fn cell_crossing_probability(
     mass_kg: f64,
     row: usize,
     dt_days: f64,
-    grid: &mk_core::grid::GridSpec,
+    topology: &crate::topology::GridTopology,
 ) -> f64 {
-    let width_km = grid
-        .cell_area_at_row_m2(row, mk_core::grid::CANON_PLANET_RADIUS_M)
-        .map_or(0.0, |area| area.sqrt() / 1000.0);
+    let width_km = topology.cell_width_m(row) / 1000.0;
     if width_km <= 0.0 {
         return 1.0;
     }
@@ -491,6 +510,11 @@ fn movement_class(category: &SpeciesCategory) -> MovementClass {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The planetary topology of a test grid.
+    fn topo(spec: &mk_core::grid::GridSpec) -> crate::topology::GridTopology {
+        crate::topology::GridTopology::planetary(spec, mk_core::grid::CANON_PLANET_RADIUS_M)
+    }
     use crate::biosphere::genetics::Genome;
     use mk_core::rng::RngRegistry;
 
@@ -616,9 +640,11 @@ mod tests {
     fn beings_cross_a_continental_cell_at_their_own_pace() {
         let grid = mk_core::grid::GridSpec::new(32, 64);
         let day = 1.0;
-        let mouse = cell_crossing_probability(MovementClass::Terrestrial, 0.02, 16, day, &grid);
-        let bison = cell_crossing_probability(MovementClass::Terrestrial, 1000.0, 16, day, &grid);
-        let bird = cell_crossing_probability(MovementClass::Flying, 0.02, 16, day, &grid);
+        let mouse =
+            cell_crossing_probability(MovementClass::Terrestrial, 0.02, 16, day, &topo(&grid));
+        let bison =
+            cell_crossing_probability(MovementClass::Terrestrial, 1000.0, 16, day, &topo(&grid));
+        let bird = cell_crossing_probability(MovementClass::Flying, 0.02, 16, day, &topo(&grid));
         // A day's travel covers a small share of a ~1,900 km cell.
         assert!(
             mouse < bison && bison < bird && bird < 0.05,
@@ -626,11 +652,11 @@ mod tests {
         );
         // Rooted beings never cross; long steps saturate at certainty.
         assert_eq!(
-            cell_crossing_probability(MovementClass::Sessile, 10.0, 16, 365.0, &grid),
+            cell_crossing_probability(MovementClass::Sessile, 10.0, 16, 365.0, &topo(&grid)),
             0.0
         );
         assert_eq!(
-            cell_crossing_probability(MovementClass::Flying, 1.0, 16, 365.0, &grid),
+            cell_crossing_probability(MovementClass::Flying, 1.0, 16, 365.0, &topo(&grid)),
             1.0
         );
     }

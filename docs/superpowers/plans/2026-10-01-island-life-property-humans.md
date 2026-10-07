@@ -243,11 +243,14 @@ Upstream property has vehicles, power tools and computers but no fuel or power. 
 - `GridTopology::regional(domain: &IslandDomain, level: DomainLevel)` uses flat cells, no wrap, `domain.latitude_rad_for_row`/`longitude_rad_for_col`; `cell_for_lat_lon` returns `None` outside the domain.
 - Every listed function takes `&GridTopology` where it took `&GridSpec`. A child born on the island gets a birthplace from `topology.lat_lon` of the mother's cell.
 
-- [ ] **Step 1:** Run `cargo test -p mk_engine --lib -- humans:: perception:: organisms::` and `cargo test -p mk_engine --test humans_world_integration`; record results and the `state_hash` of a 10-step default `WorldState`.
-- [ ] **Step 2:** Write topology tests: planetary area/neighbours/lat-lon equal the current functions for every row of a 32 × 64 grid; regional west-edge cells have no east-edge neighbours; regional `lat_lon` ↔ `cell_for_lat_lon` round-trips.
-- [ ] **Step 3:** Introduce `GridTopology` and thread it through the listed functions; `WorldState` passes `GridTopology::planetary`.
-- [ ] **Step 4:** Re-run Step 1; expect identical results and identical 10-step hash.
-- [ ] **Step 5:** Record in `UPSTREAM.md` as a geometry-only divergence suitable for upstreaming. Commit `refactor(engine): grid topology for human and organism movement`.
+- [x] **Step 1:** Run `cargo test -p mk_engine --lib -- humans:: perception:: organisms::` and `cargo test -p mk_engine --test humans_world_integration`; record results and the `state_hash` of a 10-step default `WorldState`.
+- [x] **Step 2:** Write topology tests: planetary area/neighbours/lat-lon equal the current functions for every row of a 32 × 64 grid; regional west-edge cells have no east-edge neighbours; regional `lat_lon` ↔ `cell_for_lat_lon` round-trips.
+- [x] **Step 3:** Introduce `GridTopology` and thread it through the listed functions; `WorldState` passes `GridTopology::planetary`.
+- [x] **Step 4:** Re-run Step 1; expect identical results and identical 10-step hash.
+- [x] **Step 5:** Record in `UPSTREAM.md` as a geometry-only divergence suitable for upstreaming. Commit `refactor(engine): grid topology for human and organism movement`.
+
+Implementation notes: baseline before the refactor was 309 humans/perception/organisms lib tests, 7 `humans_world_integration` tests and the 10-step `WorldState` hash `c771907a…6e73` (pinned in `tests/topology_hash_baseline.rs`); after, 312 lib tests (3 new), 7, and the identical hash. To keep every existing caller, the cores are `step_on`/`new_on`/`..._on` and the old names wrap them with the planetary topology. A birthplace outside the island leaves a human unplaced (the caller must place them). Deviation from the plan's file list: `world_integration.rs` needed only the `cell_crossing_probability` call updated (it keeps calling the planetary wrappers).
+
 
 ### Task 7: Dense vegetation in the estate patch
 

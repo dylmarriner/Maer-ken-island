@@ -239,7 +239,7 @@ impl AutonomousMind {
     pub fn apply_movement(
         &self,
         position: &mut crate::agents::GridPosition,
-        grid_spec: &mk_core::grid::GridSpec,
+        topology: &crate::topology::GridTopology,
         human_id: u64,
         tick: u64,
         rng_registry: &RngRegistry,
@@ -258,9 +258,10 @@ impl AutonomousMind {
         ));
         let direction = rng.gen_i64_range(0, 7);
         let (row_delta, col_delta) = NEIGHBOUR_OFFSETS[direction as usize];
-        position.row = (position.row + row_delta).clamp(0, grid_spec.nlat.saturating_sub(1) as i32);
-        // Longitude wraps around the planet; latitude stops at the poles.
-        position.col = (position.col + col_delta).rem_euclid(grid_spec.nlon.max(1) as i32);
+        // Longitude wraps around the planet and stops at an island's edge;
+        // latitude stops at the poles and at the edge.
+        position.row = topology.clamp_row(position.row + row_delta) as i32;
+        position.col = topology.resolve_col(position.col + col_delta) as i32;
     }
 
     /// Directed search for the resource a `SeekFood`/`SeekWater`/
@@ -276,7 +277,7 @@ impl AutonomousMind {
         &self,
         here: &AgentWorldObservation,
         position: crate::agents::GridPosition,
-        grid_spec: &mk_core::grid::GridSpec,
+        topology: &crate::topology::GridTopology,
         human_id: u64,
         tick: u64,
         rng_registry: &RngRegistry,
@@ -295,8 +296,8 @@ impl AutonomousMind {
         let neighbours: Vec<crate::agents::GridPosition> = NEIGHBOUR_OFFSETS
             .iter()
             .map(|(row_delta, col_delta)| crate::agents::GridPosition {
-                row: (position.row + row_delta).clamp(0, grid_spec.nlat.saturating_sub(1) as i32),
-                col: (position.col + col_delta).rem_euclid(grid_spec.nlon.max(1) as i32),
+                row: topology.clamp_row(position.row + row_delta) as i32,
+                col: topology.resolve_col(position.col + col_delta) as i32,
             })
             .filter(|candidate| *candidate != position)
             .collect();
@@ -962,7 +963,10 @@ mod tests {
             ..AutonomousMind::default()
         };
         let registry = RngRegistry::new([3; 32]);
-        let grid = mk_core::grid::GridSpec::new(2, 2);
+        let grid = crate::topology::GridTopology::planetary(
+            &mk_core::grid::GridSpec::new(2, 2),
+            mk_core::grid::CANON_PLANET_RADIUS_M,
+        );
         let mut first = crate::agents::GridPosition::new(0, 0);
         let mut second = first;
         mind.apply_movement(&mut first, &grid, 42, 7, &registry);

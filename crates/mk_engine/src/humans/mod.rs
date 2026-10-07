@@ -609,6 +609,35 @@ impl HumanSystem {
         observation_for: impl Fn(&GridPosition, &str) -> AgentWorldObservation,
         computer_bridge: Option<&dyn computer_bridge::ComputerBridge>,
     ) {
+        self.step_on(
+            dt_years,
+            tick,
+            rng_registry,
+            &crate::topology::GridTopology::planetary(
+                grid_spec,
+                mk_core::grid::CANON_PLANET_RADIUS_M,
+            ),
+            resource_economy,
+            elevation_grid,
+            observation_for,
+            computer_bridge,
+        );
+    }
+
+    /// [`step`](Self::step) on any [`GridTopology`](crate::topology::GridTopology):
+    /// the island's is flat and bounded, the planet's is spherical and wraps.
+    #[allow(clippy::too_many_arguments)]
+    pub fn step_on(
+        &mut self,
+        dt_years: f64,
+        tick: u64,
+        rng_registry: &mk_core::rng::RngRegistry,
+        topology: &crate::topology::GridTopology,
+        resource_economy: &mut crate::resource_economy::ResourceEconomyState,
+        elevation_grid: &mk_core::grid::Grid2<f64>,
+        observation_for: impl Fn(&GridPosition, &str) -> AgentWorldObservation,
+        computer_bridge: Option<&dyn computer_bridge::ComputerBridge>,
+    ) {
         let mut newly_dead: Vec<(String, u32, String)> = Vec::new();
         let mut transfer_requests = Vec::new();
         let mut harm_requests = Vec::new();
@@ -626,7 +655,7 @@ impl HumanSystem {
             .map(|(index, human)| (index, human.position))
             .collect();
         for (index, human) in self.registry.get_all_humans_mut().iter_mut().enumerate() {
-            human.seed_runtime_position_from_birthplace(grid_spec);
+            human.seed_runtime_position_from_birthplace_on(topology);
             let was_alive = matches!(human.profile.status, HumanStatus::Alive);
             if !was_alive {
                 // The dead neither decide nor move.
@@ -659,7 +688,7 @@ impl HumanSystem {
             // adjacent cell) means going to someone first: what this human
             // actually does, and learns from, is approaching them.
             if human.economy_action.kind == ActionKind::Intimacy
-                && !someone_within_reach(human.position, index, &living_positions, grid_spec)
+                && !someone_within_reach(human.position, index, &living_positions, topology)
             {
                 human.economy_action.kind = ActionKind::SocialApproach;
                 human.autonomous_mind.last_action.kind = ActionKind::SocialApproach;
@@ -673,11 +702,11 @@ impl HumanSystem {
                 human.profile.human_id.0 as u32,
                 CELL_CROSSING_EPOCH,
                 tick,
-            )) < cell_crossing_probability(human.position, dt_years, grid_spec);
+            )) < cell_crossing_probability(human.position, dt_years, topology);
             if crosses_cell {
                 human.autonomous_mind.apply_movement(
                     &mut human.position,
-                    grid_spec,
+                    topology,
                     human.profile.human_id.0,
                     tick,
                     rng_registry,
@@ -689,7 +718,7 @@ impl HumanSystem {
                         position_before_movement,
                         index,
                         &living_positions,
-                        grid_spec,
+                        topology,
                     ) {
                         human.position = next;
                     }
@@ -697,7 +726,7 @@ impl HumanSystem {
                 if let Some(next) = human.autonomous_mind.directed_seek_step(
                     &observation,
                     human.position,
-                    grid_spec,
+                    topology,
                     human.profile.human_id.0,
                     tick,
                     rng_registry,
@@ -711,7 +740,7 @@ impl HumanSystem {
                 {
                     if let Some(next) = human
                         .home
-                        .and_then(|home| step_toward(position_before_movement, home, grid_spec))
+                        .and_then(|home| step_toward(position_before_movement, home, topology))
                     {
                         human.position = next;
                     }
@@ -1000,7 +1029,7 @@ impl HumanSystem {
                 conception,
             );
         }
-        for e in deliver_due_births(&mut self.registry, tick, grid_spec) {
+        for e in deliver_due_births(&mut self.registry, tick, topology) {
             tracing::warn!(error = %e, "a newborn's folder could not be written; the child still exists");
         }
         self.step_dialogue(rng_registry, tick);
@@ -1069,14 +1098,10 @@ const CELL_CROSSING_EPOCH: u32 = 0x5741_4C4B;
 pub(crate) fn cell_crossing_probability(
     position: GridPosition,
     dt_years: f64,
-    grid_spec: &mk_core::grid::GridSpec,
+    topology: &crate::topology::GridTopology,
 ) -> f64 {
-    let row = position
-        .row
-        .clamp(0, grid_spec.nlat.saturating_sub(1) as i32) as usize;
-    let cell_width_km = grid_spec
-        .cell_area_at_row_m2(row, mk_core::grid::CANON_PLANET_RADIUS_M)
-        .map_or(0.0, |area| area.sqrt() / 1000.0);
+    let row = topology.clamp_row(position.row);
+    let cell_width_km = topology.cell_width_m(row) / 1000.0;
     if cell_width_km <= 0.0 {
         return 1.0;
     }
@@ -1092,24 +1117,16 @@ fn step_toward_nearest(
     from: GridPosition,
     own_index: usize,
     living: &[(usize, GridPosition)],
-    grid_spec: &mk_core::grid::GridSpec,
+    topology: &crate::topology::GridTopology,
 ) -> Option<GridPosition> {
-    let nlon = grid_spec.nlon.max(1) as i32;
-    let wrapped_dcol = |to: i32| {
-        let d = (to - from.col).rem_euclid(nlon);
-        if d > nlon / 2 {
-            d - nlon
-        } else {
-            d
-        }
-    };
+    let wrapped_dcol = |to: i32| topology.col_delta(from.col, to);
     let (d_row, d_col) = living
         .iter()
         .filter(|(index, _)| *index != own_index)
         .map(|(_, p)| (p.row - from.row, wrapped_dcol(p.col)))
         .filter(|(dr, dc)| dr.abs().max(dc.abs()) <= crate::perception::SOCIAL_RADIUS_CELLS)
         .min_by_key(|(dr, dc)| (dr.abs().max(dc.abs()), dr.abs() + dc.abs()))?;
-    step_by(from, d_row, d_col, grid_spec)
+    step_by(from, d_row, d_col, topology)
 }
 
 /// Whether another living human stands within intimacy/harm reach of
@@ -1119,12 +1136,10 @@ fn someone_within_reach(
     from: GridPosition,
     own_index: usize,
     living: &[(usize, GridPosition)],
-    grid_spec: &mk_core::grid::GridSpec,
+    topology: &crate::topology::GridTopology,
 ) -> bool {
-    let nlon = grid_spec.nlon.max(1) as i32;
     living.iter().any(|(index, p)| {
-        let d_col = (p.col - from.col).rem_euclid(nlon);
-        let d_col = d_col.min(nlon - d_col);
+        let d_col = topology.col_delta(from.col, p.col).abs();
         *index != own_index && (p.row - from.row).abs() + d_col <= 1
     })
 }
@@ -1134,29 +1149,24 @@ fn someone_within_reach(
 fn step_toward(
     from: GridPosition,
     to: GridPosition,
-    grid_spec: &mk_core::grid::GridSpec,
+    topology: &crate::topology::GridTopology,
 ) -> Option<GridPosition> {
-    let nlon = grid_spec.nlon.max(1) as i32;
-    let mut d_col = (to.col - from.col).rem_euclid(nlon);
-    if d_col > nlon / 2 {
-        d_col -= nlon;
-    }
-    step_by(from, to.row - from.row, d_col, grid_spec)
+    let d_col = topology.col_delta(from.col, to.col);
+    step_by(from, to.row - from.row, d_col, topology)
 }
 
 fn step_by(
     from: GridPosition,
     d_row: i32,
     d_col: i32,
-    grid_spec: &mk_core::grid::GridSpec,
+    topology: &crate::topology::GridTopology,
 ) -> Option<GridPosition> {
     if d_row == 0 && d_col == 0 {
         return None;
     }
-    let nlon = grid_spec.nlon.max(1) as i32;
     Some(GridPosition::new(
-        (from.row + d_row.signum()).clamp(0, grid_spec.nlat.saturating_sub(1) as i32),
-        (from.col + d_col.signum()).rem_euclid(nlon),
+        topology.clamp_row(from.row + d_row.signum()) as i32,
+        topology.resolve_col(from.col + d_col.signum()) as i32,
     ))
 }
 
@@ -1759,13 +1769,28 @@ impl HumanBeing {
     }
 
     pub fn seed_runtime_position_from_birthplace(&mut self, grid_spec: &mk_core::grid::GridSpec) {
+        self.seed_runtime_position_from_birthplace_on(&crate::topology::GridTopology::planetary(
+            grid_spec,
+            mk_core::grid::CANON_PLANET_RADIUS_M,
+        ));
+    }
+
+    /// As [`seed_runtime_position_from_birthplace`](Self::seed_runtime_position_from_birthplace)
+    /// on any topology. A birthplace the topology does not contain (off the
+    /// island) leaves the position unset so the caller must place the human.
+    pub fn seed_runtime_position_from_birthplace_on(
+        &mut self,
+        topology: &crate::topology::GridTopology,
+    ) {
         if self.position_initialized {
             return;
         }
 
         let coords = &self.profile.core_identity.birthplace.coordinates;
-        self.position = birthplace_to_grid_position(coords.latitude, coords.longitude, grid_spec);
-        self.position_initialized = true;
+        if let Some((row, col)) = topology.cell_for_lat_lon(coords.latitude, coords.longitude) {
+            self.position = GridPosition::new(row as i32, col as i32);
+            self.position_initialized = true;
+        }
     }
 
     pub fn agent_id(&self) -> &str {
@@ -1840,42 +1865,15 @@ fn default_action_success() -> bool {
     true
 }
 
-/// Inverse of [`birthplace_to_grid_position`]: the latitude/longitude (in
+/// Inverse of the birthplace lookup (`GridTopology::cell_for_lat_lon`): the latitude/longitude (in
 /// degrees) at the centre of `position`'s grid cell, in the same
 /// row-0-at-+90° convention, so a birthplace recorded here maps back to the
 /// same cell when the child later enters the world.
 pub(crate) fn grid_position_to_birthplace(
     position: GridPosition,
-    grid_spec: &mk_core::grid::GridSpec,
+    topology: &crate::topology::GridTopology,
 ) -> (f64, f64) {
-    let nlat = grid_spec.nlat.max(1) as f64;
-    let nlon = grid_spec.nlon.max(1) as f64;
-    let row = f64::from(position.row).clamp(0.0, nlat - 1.0);
-    let col = f64::from(position.col).clamp(0.0, nlon - 1.0);
-    let latitude = 90.0 - (row + 0.5) / nlat * 180.0;
-    let longitude = (col + 0.5) / nlon * 360.0 - 180.0;
-    (latitude.clamp(-90.0, 90.0), longitude.clamp(-180.0, 180.0))
-}
-
-fn birthplace_to_grid_position(
-    latitude_deg: f64,
-    longitude_deg: f64,
-    grid_spec: &mk_core::grid::GridSpec,
-) -> GridPosition {
-    let nlat = grid_spec.nlat.max(1) as f64;
-    let nlon = grid_spec.nlon.max(1) as f64;
-
-    let lat = latitude_deg.clamp(-90.0, 90.0);
-    let lon = (longitude_deg + 180.0).rem_euclid(360.0) - 180.0;
-
-    let row = (((90.0 - lat) / 180.0) * nlat)
-        .floor()
-        .clamp(0.0, nlat - 1.0) as i32;
-    let col = (((lon + 180.0) / 360.0) * nlon)
-        .floor()
-        .clamp(0.0, nlon - 1.0) as i32;
-
-    GridPosition::new(row, col)
+    topology.lat_lon(position.row, position.col)
 }
 
 /// Factory for creating different types of humans
@@ -1927,6 +1925,11 @@ fn merge_json(base: &mut Value, overlay: Value) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The planetary topology of a test grid.
+    fn topo(spec: &mk_core::grid::GridSpec) -> crate::topology::GridTopology {
+        crate::topology::GridTopology::planetary(spec, mk_core::grid::CANON_PLANET_RADIUS_M)
+    }
 
     #[test]
     fn test_human_being_creation() {
@@ -1982,12 +1985,12 @@ mod tests {
         let equator = GridPosition::new(16, 0);
         let day = 1.0 / 365.25;
         // ~1,900 km cells: a day's walk rarely leaves one, a season's does.
-        let daily = cell_crossing_probability(equator, day, &grid);
+        let daily = cell_crossing_probability(equator, day, &topo(&grid));
         assert!(daily > 0.005 && daily < 0.02, "{daily}");
-        assert_eq!(cell_crossing_probability(equator, 0.5, &grid), 1.0);
+        assert_eq!(cell_crossing_probability(equator, 0.5, &topo(&grid)), 1.0);
         // On a fine grid (~29 km cells) a day's walk usually leaves the cell.
         let fine = mk_core::grid::GridSpec::new(2048, 4096);
-        let fine_daily = cell_crossing_probability(GridPosition::new(1024, 0), day, &fine);
+        let fine_daily = cell_crossing_probability(GridPosition::new(1024, 0), day, &topo(&fine));
         assert!((0.6..0.75).contains(&fine_daily), "{fine_daily}");
     }
 
@@ -2058,15 +2061,15 @@ mod tests {
             me,
             0,
             &[(0, me), (1, GridPosition::new(4, 15))],
-            &grid
+            &topo(&grid)
         ));
         assert!(!someone_within_reach(
             me,
             0,
             &[(0, me), (1, GridPosition::new(5, 1))],
-            &grid
+            &topo(&grid)
         ));
-        assert!(!someone_within_reach(me, 0, &[(0, me)], &grid));
+        assert!(!someone_within_reach(me, 0, &[(0, me)], &topo(&grid)));
     }
 
     #[test]
@@ -2075,10 +2078,10 @@ mod tests {
         let here = GridPosition::new(2, 15);
         let home = GridPosition::new(4, 1);
         assert_eq!(
-            step_toward(here, home, &grid),
+            step_toward(here, home, &topo(&grid)),
             Some(GridPosition::new(3, 0))
         );
-        assert_eq!(step_toward(home, home, &grid), None);
+        assert_eq!(step_toward(home, home, &topo(&grid)), None);
     }
 
     #[test]
@@ -2091,14 +2094,14 @@ mod tests {
             (1, GridPosition::new(4, 14)),
             (2, GridPosition::new(0, 8)),
         ];
-        let step = step_toward_nearest(me, 0, &living, &grid).expect("someone is in sight");
+        let step = step_toward_nearest(me, 0, &living, &topo(&grid)).expect("someone is in sight");
         assert_eq!(step, GridPosition::new(4, 15), "longitude wraps");
         // Nobody within the social radius: no directed step.
         let alone = vec![(0, me), (2, GridPosition::new(0, 8))];
-        assert_eq!(step_toward_nearest(me, 0, &alone, &grid), None);
+        assert_eq!(step_toward_nearest(me, 0, &alone, &topo(&grid)), None);
         // Already together: stay.
         let together = vec![(0, me), (1, me)];
-        assert_eq!(step_toward_nearest(me, 0, &together, &grid), None);
+        assert_eq!(step_toward_nearest(me, 0, &together, &topo(&grid)), None);
     }
 
     #[test]

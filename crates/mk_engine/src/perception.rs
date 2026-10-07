@@ -117,11 +117,35 @@ pub struct Occupancy {
     nlat: usize,
     nlon: usize,
     counts: Vec<u32>,
+    /// Whether the neighbourhood wraps east/west (the planet) or stops at
+    /// the edge (the island).
+    wraps: bool,
 }
 
 impl Occupancy {
     pub fn new(grid_spec: &GridSpec, positions: impl IntoIterator<Item = GridPosition>) -> Self {
-        let (nlat, nlon) = (grid_spec.nlat, grid_spec.nlon);
+        Self::with_shape(grid_spec.nlat, grid_spec.nlon, true, positions)
+    }
+
+    /// As [`new`](Self::new) on any topology.
+    pub fn new_on(
+        topology: &crate::topology::GridTopology,
+        positions: impl IntoIterator<Item = GridPosition>,
+    ) -> Self {
+        Self::with_shape(
+            topology.rows,
+            topology.cols,
+            topology.wraps_east_west,
+            positions,
+        )
+    }
+
+    fn with_shape(
+        nlat: usize,
+        nlon: usize,
+        wraps: bool,
+        positions: impl IntoIterator<Item = GridPosition>,
+    ) -> Self {
         let mut counts = vec![0u32; nlat * nlon];
         if nlat > 0 && nlon > 0 {
             for position in positions {
@@ -129,7 +153,12 @@ impl Occupancy {
                 counts[row * nlon + col] += 1;
             }
         }
-        Self { nlat, nlon, counts }
+        Self {
+            nlat,
+            nlon,
+            counts,
+            wraps,
+        }
     }
 
     /// Perceived social density for an observer standing at `position`, who
@@ -148,9 +177,18 @@ impl Occupancy {
             if r < 0 || r >= self.nlat as i32 {
                 continue;
             }
-            for offset in 0..lon_span {
-                let c = (lon_start + offset).rem_euclid(self.nlon as i32) as usize;
-                neighbours += u64::from(self.counts[r as usize * self.nlon + c]);
+            if self.wraps {
+                for offset in 0..lon_span {
+                    let c = (lon_start + offset).rem_euclid(self.nlon as i32) as usize;
+                    neighbours += u64::from(self.counts[r as usize * self.nlon + c]);
+                }
+            } else {
+                // An island's edge is an edge: nobody is seen across it.
+                let first = (col as i32 - SOCIAL_RADIUS_CELLS).max(0) as usize;
+                let last = ((col as i32 + SOCIAL_RADIUS_CELLS) as usize).min(self.nlon - 1);
+                for c in first..=last {
+                    neighbours += u64::from(self.counts[r as usize * self.nlon + c]);
+                }
             }
         }
         if observer_counted {
@@ -203,6 +241,24 @@ pub fn caloric_access(
 mod tests {
     use super::*;
     use mk_core::grid::Grid2;
+
+    #[test]
+    fn an_island_edge_is_not_a_neighbour_across_the_wrap() {
+        let spec = GridSpec::new(20, 40);
+        let (west, east) = (GridPosition::new(5, 0), GridPosition::new(5, 39));
+        // On the planet the two ends of a row are neighbours...
+        let planet = Occupancy::new(&spec, [west, east]);
+        assert!(planet.social_density(west, true) > 0.0);
+        // ...on the island they are 39 cells apart.
+        let mut topology =
+            crate::topology::GridTopology::planetary(&spec, mk_core::grid::CANON_PLANET_RADIUS_M);
+        topology.wraps_east_west = false;
+        let island = Occupancy::new_on(&topology, [west, east]);
+        assert_eq!(island.social_density(west, true), 0.0);
+        // Neighbours on the same side still count.
+        let close = Occupancy::new_on(&topology, [west, GridPosition::new(5, 2)]);
+        assert!(close.social_density(west, true) > 0.0);
+    }
 
     #[test]
     fn caloric_access_follows_primary_production() {
