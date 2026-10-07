@@ -119,9 +119,11 @@ Upstream weather is diagnostic from climate; real mid-latitude weather is a sequ
 - Produces: `SynopticState { systems: Vec<SynopticSystem { kind: Cyclone | Anticyclone | Front, centre_m, velocity_m_s, central_pressure_pa, radius_m, age_s }> }` and `step_synoptic(state, background: &ZonalBackgroundState, boundaries, domain, canon, dt_seconds, rng) -> SynopticState`.
 - Physics: genesis rate from the Eady baroclinic growth rate (`0.31·f·|∂u/∂z|/N`, from the background's meridional temperature gradient and the canon's rotation rate); system scale from the Rossby deformation radius (`N·H/f`), which differs from Earth's because of the 36-hour day; systems enter at the upwind domain edge, move with the steering flow, deepen and decay with documented lifetimes. Weather (wind, cloud, rain) is the diagnostic upstream field modulated by the systems: fronts bring rain bands and wind shifts, lows bring storms, highs bring clear calm spells.
 
-- [ ] **Step 1:** Write tests: system frequency, size and lifetime fall within the reference climate pack's mid-latitude storm-track ranges after scaling by the planet's deformation radius and rotation rate; a front's passage produces a pressure trough, wind shift and rain band; long-run mean rainfall and wind still match Task 3's climatology within 5%; deterministic per seed.
-- [ ] **Step 2:** Run `cargo test -p mk_engine --test regional_synoptic`; expect FAIL; implement; re-run; expect PASS.
-- [ ] **Step 3:** Commit `feat(engine): travelling synoptic weather systems`.
+- [x] **Step 1:** Write tests: system frequency, size and lifetime fall within the reference climate pack's mid-latitude storm-track ranges after scaling by the planet's deformation radius and rotation rate; a front's passage produces a pressure trough, wind shift and rain band; long-run mean rainfall and wind still match Task 3's climatology within 5%; deterministic per seed.
+- [x] **Step 2:** Run `cargo test -p mk_engine --test regional_synoptic`; expect FAIL; implement; re-run; expect PASS.
+- [x] **Step 3:** Commit `feat(engine): travelling synoptic weather systems`.
+
+Implementation notes: the Eady rate reduces to `0.31 g |∂T/∂y| / (N T)` (f cancels), so the 36 h day sets system size (`L_d` is 1.5x Earth's) but not frequency. The canon's 19,113 km radius makes `∂T/∂y` ~3x weaker, so the rate at 41° S is 0.12/day against Earth's 0.5 and systems are rarer and slower (D27). Steering is surface wind plus thermal-wind shear over 3 km. A 60-day running normaliser divides out the mean rain ratio, so the long-run mean matches Task 3's climatology within 5%. `step_synoptic` is `SynopticState::step`; it does not take `boundaries` (edge forcing already reaches the weather through Task 3).
 
 ### Task 4: Regional ocean and tides
 

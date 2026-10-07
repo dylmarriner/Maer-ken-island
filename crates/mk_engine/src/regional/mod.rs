@@ -12,6 +12,7 @@ pub mod levels;
 pub mod par;
 pub mod seismicity;
 pub mod shape;
+pub mod synoptic;
 pub mod tectonics;
 pub mod terrain;
 pub mod volcanism;
