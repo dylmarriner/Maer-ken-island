@@ -459,11 +459,14 @@ fn action_costs_match_the_compendium_rows_they_came_from() {
     }
 
     // Walking has to cost more than the baseline the needs model is
-    // calibrated at, or none of this reaches the drain rates at all.
+    // calibrated at, or none of this reaches the drain rates at all. Read
+    // from the pack rather than from the constant above, so this stays a
+    // statement about the Compendium and not about our copy of it.
+    let walking = table.met("walking_4_8_kmh_level").expect("walking");
+    let baseline = mk_engine::regional::labour::BASELINE_MET;
     assert!(
-        WALKING_MET > mk_engine::regional::labour::BASELINE_MET,
-        "walking at {WALKING_MET} MET is below the {} MET baseline",
-        mk_engine::regional::labour::BASELINE_MET
+        walking > baseline,
+        "walking at {walking} MET is below the needs model's {baseline} MET baseline, so charging it would change nothing"
     );
 }
 
