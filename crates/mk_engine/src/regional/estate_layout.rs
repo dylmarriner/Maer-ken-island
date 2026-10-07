@@ -22,7 +22,7 @@ use std::collections::{BTreeMap, VecDeque};
 
 use mk_core::grid::Grid2;
 use mk_island::{DomainLevel, IslandDomain, LocalPatchSpec};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use super::hydrology::{discharge_m3_s, RIVER_MIN_DISCHARGE_M3_S};
 use super::physical::RegionalPhysicalState;
@@ -118,10 +118,10 @@ impl Rect {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct SpaceId(pub u32);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Space {
     Outdoors,
     Inside(SpaceId),

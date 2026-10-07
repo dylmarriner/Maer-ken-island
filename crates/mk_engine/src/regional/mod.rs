@@ -11,6 +11,7 @@ pub mod energy;
 pub mod estate_layout;
 pub mod geology;
 pub mod geophysics;
+pub mod humans;
 pub mod hydrology;
 pub mod levels;
 pub mod local_vegetation;

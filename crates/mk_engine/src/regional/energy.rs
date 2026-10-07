@@ -384,6 +384,17 @@ impl EstateEnergy {
         }
     }
 
+    /// Whether the estate can supply a load right now: charge in a battery,
+    /// fuel for a generator, or sun on the panels (`solar_kw`).
+    pub fn has_stored_supply(&self, solar_kw: f64) -> bool {
+        solar_kw > 0.0
+            || self.batteries.iter().any(|b| b.charge_kwh > 1e-9)
+            || self
+                .generators
+                .iter()
+                .any(|g| self.stored_litres(g.fuel) > 0.0 && g.rated_kw > 0.0)
+    }
+
     /// Whether a load is running: in use and fully served in the last step.
     pub fn has_power(&self, item_id: u64) -> bool {
         self.loads.iter().any(|l| l.item_id == item_id && l.in_use)

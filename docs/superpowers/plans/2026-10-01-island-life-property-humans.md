@@ -299,12 +299,15 @@ Implementation notes: `fell_tree` takes the ecology and a ledger instead of the 
 - Produces: `step_regional_humans(humans: &mut HumanSystem, positions: &mut HumanEstatePositions, economy: &mut ResourceEconomyState, property: &PropertySystem, layout: &EstateLayout, vegetation: &mut LocalVegetationPatch, physical: &RegionalPhysicalState, ecology: &RegionalEcologyState, topology: &GridTopology, tick: Tick, dt_seconds: u64, rng: &RngRegistry) -> Result<(), RegionalHumanError>` — calls upstream `HumanSystem::step` with the regional topology and `build_observation`; movement inside the patch follows `EstateLayout::route`.
 - Computer access (island divergence): `computer_access` is the upstream gate (ComputerRoom on the cell and a matching `NetworkAccount`, `world_integration.rs:2130-2146`) AND `positions[agent].space` is the House's computer room AND the computer has power (Task 4b). The network-account gate itself is unchanged.
 
-- [ ] **Step 1:** Run `cargo test -p mk_engine --test humans_world_integration` and record results; extract `build_observation`; re-run; expect identical results.
-- [ ] **Step 2:** Write tests: exactly Gem-D/Gem-K by default, each starting in their own bedroom; IDs/profiles match canonical constructors; a founder routed to the computer room (through the House) gains access, a founder in the Kitchen does not, and a non-account human in the computer room remains denied; a founder felling a patch tree adds wood and moves its carbon through Task 3's hooks; a founder eating from their supplies produces respired CO₂; a founder walking out of the patch loses their `HumanEstatePositions` entry and moves on medium cells without wrapping.
-- [ ] **Step 3:** Run `cargo test -p mk_engine --test island_human_runtime`; expect FAIL.
-- [ ] **Step 4:** Implement the adapter without changing human cognition/body modules.
-- [ ] **Step 5:** Run the test, `cargo test -p mk_core human`, and `cargo test -p mk_engine --lib humans::`; expect 0 failures.
-- [ ] **Step 6:** Record the observation extraction and room-level computer access in `UPSTREAM.md`. Commit `feat(engine): run canonical humans on island`.
+- [x] **Step 1:** Run `cargo test -p mk_engine --test humans_world_integration` and record results; extract `build_observation`; re-run; expect identical results.
+- [x] **Step 2:** Write tests: exactly Gem-D/Gem-K by default, each starting in their own bedroom; IDs/profiles match canonical constructors; a founder routed to the computer room (through the House) gains access, a founder in the Kitchen does not, and a non-account human in the computer room remains denied; a founder felling a patch tree adds wood and moves its carbon through Task 3's hooks; a founder eating from their supplies produces respired CO₂; a founder walking out of the patch loses their `HumanEstatePositions` entry and moves on medium cells without wrapping.
+- [x] **Step 3:** Run `cargo test -p mk_engine --test island_human_runtime`; expect FAIL.
+- [x] **Step 4:** Implement the adapter without changing human cognition/body modules.
+- [x] **Step 5:** Run the test, `cargo test -p mk_core human`, and `cargo test -p mk_engine --lib humans::`; expect 0 failures.
+- [x] **Step 6:** Record the observation extraction and room-level computer access in `UPSTREAM.md`. Commit `feat(engine): run canonical humans on island`.
+
+Implementation notes: the extraction is of the observation's pure formulas (`humans/observation.rs`) rather than the whole closure, because the planetary and island worlds read different data types; the planetary closure now calls them and the hash and tests are unchanged. `step_regional_humans` takes a `RegionalHumanContext` (property, layout, physical, ecology, energy, domain, solar kW) instead of the plan's long argument list, and has no `vegetation` argument: felling is `LocalVegetationPatch::fell_tree`, called by whoever drives the action. **Not done in this task, because they need Task 3:** the felling-adds-wood test and the eating-produces-CO₂ test; they move to Task 3/9. Four tests run on the owner's island: founders in their own bedrooms with canonical profiles, the computer rule (account + computer room + power), plausible observations and house shelter, and walking out of the patch with no wrap.
+
 
 ### Task 9: Phase-3 integrated life/property acceptance
 

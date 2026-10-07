@@ -13,6 +13,9 @@ fidelity limits. The project is **not complete**: see "Not done".
 | Island ecology fields: biomes, NPP, producer biomass (Phase 3 Task 1a) | Done | `regional/ecology.rs`, `tests/regional_ecology.rs` |
 | Grid topology for human/organism movement, births and perception (Phase 3 Task 6) | Done; planetary results bit-identical | `topology.rs`, `tests/topology_hash_baseline.rs` |
 | Founders' estate laid out in metres (Phase 3 Task 5) | Done | `regional/estate_layout.rs`, `tests/island_estate_layout.rs` |
+| Canonical founders on the island: observation, bedrooms, computer rule (Phase 3 Task 8) | Done except Task-3-dependent hooks | `regional/humans.rs`, `humans/observation.rs`, `tests/island_human_runtime.rs` |
+| Estate fuel and electricity (Phase 3 Task 4b) | Done | `regional/energy.rs`, `tests/island_energy.rs` |
+| Individual trees and stands on the estate patch (Phase 3 Task 7) | Done | `regional/local_vegetation.rs`, `tests/island_local_vegetation.rs` |
 | Island scenario and estate placement (Phase 3 Task 4) | Done | `mk_island/src/scenario.rs`, `regional/property.rs`, `fixtures/island/default_scenario.json` |
 
 ## Measured (release build, development machine)
@@ -45,9 +48,8 @@ Phase 3 Tasks 3 and 4b (D10, D13).
 
 ## Not done
 
-- Phase 3 Task 1b (island-scale species) and Tasks 2, 3, 3b, 4b, 7, 8, 9: materials and resources, physical
-  materials, time and energy of actions, fuel and electricity, dense estate vegetation, founders
-  on the island, acceptance.
+- Phase 3 Task 1b (island-scale species) and Tasks 2, 3, 3b, 9: materials and resources, physical
+  materials, time and energy of actions, acceptance.
 - Phase 4: runtime scheduling, persistence, replay.
 - Phase 4b: energy, industry, town, economy.
 - Phase 5: app and UI replacing the human-only bootstrap, performance work, pruning, final
