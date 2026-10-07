@@ -164,11 +164,11 @@ Implementation notes: `regional/commands.rs` (command types, `validate`, `Comman
 **Interfaces:**
 - CLI: `island run --scenario <path> --steps <n> --dt <seconds> [--save <path>] [--save-root <dir>]`, `island replay --scenario <path> --log <path> [--save <path>]`, `island inspect --snapshot <path>`; no UI dependency. `--save-root` enables per-human folders under `<save-root>/<run_id>/humans/` (default `./island-data`); the chosen `run_id` is printed.
 
-- [ ] **Step 1:** Add an acceptance test running the default scenario for 100 ticks at `--dt 60`, snapshotting, loading, continuing 100 ticks and matching an uninterrupted 200-tick hash. Slow tier if it exceeds ~30 s debug.
-- [ ] **Step 2:** Implement the headless CLI around `IslandWorldState`; default with no command prints a concise world summary and exits successfully.
-- [ ] **Step 3:** Run the fixed-seed CLI twice and compare printed final hash; require exact equality.
-- [ ] **Step 4:** Run fmt, clippy `-D warnings` and all Phase-4 tests; update `UPSTREAM.md`.
-- [ ] **Step 5:** Commit `feat(app): add deterministic island runner`.
+- [x] **Step 1:** Add an acceptance test running the default scenario for 100 ticks at `--dt 60`, snapshotting, loading, continuing 100 ticks and matching an uninterrupted 200-tick hash. Slow tier if it exceeds ~30 s debug.
+- [x] **Step 2:** Implement the headless CLI around `IslandWorldState`; default with no command prints a concise world summary and exits successfully.
+- [x] **Step 3:** Run the fixed-seed CLI twice and compare printed final hash; require exact equality.
+- [x] **Step 4:** Run fmt, clippy `-D warnings` and all Phase-4 tests; update `UPSTREAM.md`.
+- [x] **Step 5:** Commit `feat(app): add deterministic island runner`.
 - [ ] **Step 6:** Add `island_preview world --snapshot <path> --out <dir>` reusing the Phase 1–3 renderers on a loaded `IslandWorldState`, so any saved run can be inspected headlessly.
 
 ### Task 6: Dashboard and Human Creator on the live island

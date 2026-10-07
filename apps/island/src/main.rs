@@ -10,13 +10,26 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 fn usage() -> ! {
-    eprintln!("usage: island serve [--data-dir ./island-data] [--seed <64 hex chars>] [--bind 127.0.0.1:8080]");
+    eprintln!("{}", island_runner::RUNNER_USAGE);
     eprintln!("  writes need {TOKEN_ENV} as a bearer token if set; without it, only loopback binds accept writes");
     std::process::exit(2);
 }
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    if let Some(result) = island_runner::run_cli(&args) {
+        let command = args.first().map_or("", String::as_str);
+        match result {
+            Ok(text) => {
+                println!("{text}");
+                return;
+            }
+            Err(message) => {
+                eprintln!("island {command}: {message}");
+                std::process::exit(1);
+            }
+        }
+    }
     let Some((command, rest)) = args.split_first() else {
         usage()
     };

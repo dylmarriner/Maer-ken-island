@@ -2620,8 +2620,10 @@ version = "0.1.0"
 dependencies = [
  "hex",
  "island_humans",
+ "mk_core",
  "mk_engine",
  "mk_interventions",
+ "mk_island",
  "serde",
  "serde_json",
  "tempfile",
