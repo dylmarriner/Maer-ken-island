@@ -15,7 +15,7 @@ fidelity limits. The project is **not complete**: see "Not done".
 | Grid topology for human/organism movement, births and perception (Phase 3 Task 6) | Done; planetary results bit-identical | `topology.rs`, `tests/topology_hash_baseline.rs` |
 | Founders' estate laid out in metres (Phase 3 Task 5) | Done | `regional/estate_layout.rs`, `tests/island_estate_layout.rs` |
 | Canonical founders on the island: observation, bedrooms, computer rule (Phase 3 Task 8) | Done except Task-3-dependent hooks | `regional/humans.rs`, `humans/observation.rs`, `tests/island_human_runtime.rs` |
-| Physical materials: gather, hunt, burn, calcine, eat, respire, drink, build through the flux ledger (Phase 3 Task 3) | Model done and audited inside the island tick; a fixed home routine drives it, not the action each human's own mind selects (D10) | `regional/materials.rs`, `regional/life.rs`, `tests/island_material_flows.rs`, `tests/island_life_acceptance.rs` |
+| Physical materials: gather, hunt, burn, calcine, eat, respire, drink, build through the flux ledger (Phase 3 Task 3) | Model done and audited inside the island tick. A meal is the carbon its eater respired since the last one, so adults hold at 1.00x of their expected body carbon over a week. Who harvests and when is still the routine's choice, not each human's (D10) | `regional/materials.rs`, `regional/life.rs`, `tests/island_material_flows.rs`, `tests/island_life_acceptance.rs` |
 | Timed, energy-costed work: tasks, BMR x MET, walking, load limits (Phase 3 Task 3b) | Model done. Energy is wired: the island tick costs resting metabolism at the body's BMR times the MET of sleeping or sitting, from the circadian clock, and `humans/lifecycle.rs` charges walking, mining and building their Compendium METs. Durations are not: every action still takes one tick, and the actions with no pack row cost the baseline (D9, D22) | `regional/labour.rs`, `regional/life.rs`, `humans/lifecycle.rs`, `tests/island_labour.rs`, `tests/human_realism.rs` |
 | Estate fuel and electricity (Phase 3 Task 4b) | Done | `regional/energy.rs`, `tests/island_energy.rs` |
 | Individual trees and stands on the estate patch (Phase 3 Task 7) | Done | `regional/local_vegetation.rs`, `tests/island_local_vegetation.rs` |
@@ -59,7 +59,11 @@ Phase 3 Tasks 3 and 4b (D10, D13).
 
 - Phase 3 Task 1b (island-scale species) and Tasks 2 and 9 (and the economy/lifecycle wiring of Tasks 3 and 3b): materials and resources, physical
   materials, time and energy of actions, acceptance.
-- Phase 4: runtime scheduling, persistence, replay.
+- Phase 4: persistence, replay and external commands. Tasks 1 and 2 (world composition, the
+  cadence scheduler) are done. Task 3, the island snapshot, needs `Serialize`/`Deserialize` on
+  five state types that do not have them yet — physical, ecology, the placed estate, the
+  200,000-tree vegetation patch and the material ledger — plus canon re-derivation and tamper
+  rejection on load; it is not a small change.
 - Phase 4b: energy, industry, town, economy.
 - Phase 5: the desktop app (`island-ui`, Bevy) replacing the human-only bootstrap, performance
   work, pruning, final benchmarks. The `island serve` web dashboard covers the human-only
