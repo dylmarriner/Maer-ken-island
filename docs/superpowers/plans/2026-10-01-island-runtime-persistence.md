@@ -169,7 +169,7 @@ Implementation notes: `regional/commands.rs` (command types, `validate`, `Comman
 - [x] **Step 3:** Run the fixed-seed CLI twice and compare printed final hash; require exact equality.
 - [x] **Step 4:** Run fmt, clippy `-D warnings` and all Phase-4 tests; update `UPSTREAM.md`.
 - [x] **Step 5:** Commit `feat(app): add deterministic island runner`.
-- [ ] **Step 6:** Add `island_preview world --snapshot <path> --out <dir>` reusing the Phase 1–3 renderers on a loaded `IslandWorldState`, so any saved run can be inspected headlessly.
+- [x] **Step 6:** Add `island_preview world --snapshot <path> --out <dir>` reusing the Phase 1–3 renderers on a loaded `IslandWorldState`, so any saved run can be inspected headlessly.
 
 ### Task 6: Dashboard and Human Creator on the live island
 
