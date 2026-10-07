@@ -435,3 +435,86 @@ fn adult_mortality_follows_the_reference_life_table() {
     let (lo, hi) = range("mortality_rate_doubling_time");
     assert!(doubling >= lo && doubling <= hi, "{doubling}");
 }
+
+/// The metabolic equivalents `humans::lifecycle` charges for a chosen action
+/// are the packs' own numbers, not numbers that once came from the packs.
+/// A pack revision that moves a row should fail here rather than quietly
+/// change how hungry walking makes someone.
+#[test]
+fn action_costs_match_the_compendium_rows_they_came_from() {
+    use mk_engine::humans::lifecycle::{CARPENTRY_MET, HAND_MINING_MET, WALKING_MET};
+    use mk_engine::regional::labour::LabourTable;
+
+    let table = LabourTable::load_default().expect("the labour packs load");
+    for (constant, row, name) in [
+        (WALKING_MET, "walking_4_8_kmh_level", "walking"),
+        (HAND_MINING_MET, "hand_mining", "mining by hand"),
+        (CARPENTRY_MET, "carpentry_general", "carpentry"),
+    ] {
+        let packed = table.met(row).unwrap_or_else(|e| panic!("{row}: {e:?}"));
+        assert!(
+            (constant - packed).abs() < 1e-9,
+            "{name} is charged at {constant} MET but the pack's {row} is {packed}"
+        );
+    }
+
+    // Walking has to cost more than the baseline the needs model is
+    // calibrated at, or none of this reaches the drain rates at all.
+    assert!(
+        WALKING_MET > mk_engine::regional::labour::BASELINE_MET,
+        "walking at {WALKING_MET} MET is below the {} MET baseline",
+        mk_engine::regional::labour::BASELINE_MET
+    );
+}
+
+/// Walking somewhere now makes a person thirstier and hungrier than sitting
+/// still does. This is the behaviour the MET constants exist for; without
+/// it they would be decoration.
+#[test]
+fn walking_somewhere_costs_more_than_sitting_still() {
+    use mk_core::human::BiologicalSex;
+    use mk_core::rng::RngRegistry;
+    use mk_engine::humans::{lifecycle::step_lifecycle, ActionKind, HumanBeing};
+
+    let rng = RngRegistry::new([5u8; 32]);
+    // Half a day with nothing to eat or drink: long enough for the drain to
+    // separate them, short enough that neither has bottomed out, where a
+    // floor would hide the difference.
+    let world = observation(0.0, 0.0, 20.0);
+    let hour = 1.0 / (365.25 * 24.0);
+
+    let spend_the_morning = |action: ActionKind| {
+        let mut human = HumanBeing::new("walker".into(), BiologicalSex::Female);
+        human.development.age_years = 30.0;
+        for tick in 0..12u64 {
+            // The action is re-asserted each tick: the autonomous mind would
+            // otherwise choose its own, and this test is about the cost of a
+            // given action, not about which one a human picks.
+            human.economy_action.kind = action;
+            step_lifecycle(&mut human, hour, tick, &world, &rng, (0, 0));
+        }
+        human.needs
+    };
+
+    let walked = spend_the_morning(ActionKind::Move);
+    let sat = spend_the_morning(ActionKind::Idle);
+    assert!(
+        walked.glucose > 0.0 && sat.glucose > 0.0,
+        "both bottomed out, so this proves nothing: {} and {}",
+        walked.glucose,
+        sat.glucose
+    );
+
+    assert!(
+        walked.glucose < sat.glucose,
+        "walking left more glucose ({}) than sitting ({})",
+        walked.glucose,
+        sat.glucose
+    );
+    assert!(
+        walked.hydration < sat.hydration,
+        "walking left more water ({}) than sitting ({})",
+        walked.hydration,
+        sat.hydration
+    );
+}
