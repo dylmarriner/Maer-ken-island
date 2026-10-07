@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "seed": "3184701bbcebf2462768d517e54f0520b0036042d6511e8a5247d23a5392131e",
+  "canon_path": "fixtures/island/canon.json",
+  "profile": {
+    "version": 1,
+    "width_m": 2400000.0,
+    "height_m": 1920000.0,
+    "coarse_cell_m": 12000.0,
+    "medium_cell_m": 2000.0,
+    "reference_latitude_deg": -41.0,
+    "reference_longitude_deg": 174.0,
+    "planet_radius_m": 19113000.0,
+    "target_land_area_m2": 268000000000.0,
+    "land_area_tolerance_fraction": 0.05,
+    "minimum_ocean_buffer_m": 300000.0,
+    "coastal_band_m": 20000.0,
+    "shape": {
+      "max_compactness": 0.3,
+      "max_convexity": 0.8,
+      "min_major_headlands": 3,
+      "min_major_bays": 3
+    },
+    "geology": {
+      "ancient_basement": true,
+      "basement_age_ma": 2700.0,
+      "basement_area_fraction": 0.08
+    },
+    "seed": "3184701bbcebf2462768d517e54f0520b0036042d6511e8a5247d23a5392131e"
+  },
+  "cadences": {
+    "human_seconds": 60,
+    "weather_ocean_seconds": 3600,
+    "hydrology_ecology_resource_seconds": 21600,
+    "geophysics_seconds": 86400,
+    "human_store_seconds": 3600
+  },
+  "estate_patch": {
+    "extent_m": 4000.0,
+    "cell_size_m": 5.0,
+    "individual_tree_radius_m": 1000.0,
+    "tree_cap": 200000
+  },
+  "estate_energy": {
+    "generator_rated_kw": 10.0,
+    "diesel_litres": 2000.0,
+    "petrol_litres": 400.0,
+    "solar_rated_kw": 5.0,
+    "battery_kwh": 10.0
+  },
+  "founders_enabled": true,
+  "estate_enabled": true
+}

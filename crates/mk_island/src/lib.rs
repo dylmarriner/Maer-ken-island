@@ -5,6 +5,7 @@
 pub mod boundary;
 pub mod domain;
 pub mod profile;
+pub mod scenario;
 
 pub use boundary::{
     AstronomyForcing, AtmosphereBoundaryForcing, CrustKind, Edge, EdgeAtmosphereForcing,
@@ -17,4 +18,8 @@ pub use domain::{
 pub use profile::{
     GeologyProfile, IslandProfile, IslandProfileError, ShapeMetrics, ShapeRequirements,
     ISLAND_CANON_RADIUS_M, PROFILE_VERSION,
+};
+pub use scenario::{
+    EstateEnergyConfig, EstatePatchConfig, IslandCadenceProfile, IslandScenario,
+    IslandScenarioError, SCENARIO_VERSION,
 };
