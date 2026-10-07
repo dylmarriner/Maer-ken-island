@@ -50,6 +50,7 @@ function sorted(people, order) {
 function rosterButton(human) {
   const button = el("button", displayName(human), {
     type: "button",
+    role: "option",
     "aria-selected": String(human.agent_id === selected),
     "data-agent": human.agent_id,
   });
@@ -84,7 +85,7 @@ function drawRoster() {
   }
   rosterEl.replaceChildren(
     ...shown.map((human) => {
-      const item = el("li");
+      const item = el("li", null, { role: "presentation" });
       item.append(rosterButton(human));
       return item;
     }),

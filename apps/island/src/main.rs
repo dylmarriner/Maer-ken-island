@@ -4,9 +4,8 @@
 //! dashboard: an overview of the population, the roster with everything
 //! stored about each person, and the Human Creator.
 
-mod serve;
-
-use serve::auth::{ControlAuth, TOKEN_ENV};
+use island::serve;
+use island::serve::auth::{ControlAuth, TOKEN_ENV};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
