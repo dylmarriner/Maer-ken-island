@@ -7,6 +7,7 @@ pub mod climate;
 pub mod deposits;
 pub mod ecology;
 pub mod edge;
+pub mod estate_layout;
 pub mod geology;
 pub mod geophysics;
 pub mod hydrology;

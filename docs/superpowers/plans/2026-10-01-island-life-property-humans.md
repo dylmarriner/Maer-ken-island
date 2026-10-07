@@ -219,11 +219,14 @@ Upstream property has vehicles, power tools and computers but no fuel or power. 
 - Produces: `layout_estate(property: &StarterProperty, physical: &RegionalPhysicalState, domain: &IslandDomain, patch: &LocalPatchSpec, seed: [u8; 32]) -> Result<EstateLayout, EstateLayoutError>`, `EstateLayout::space_at(position_m) -> Space`, `EstateLayout::route(from: Space, to: Space) -> Option<Vec<Space>>`.
 - Patch terrain is the medium-cell elevation bilinearly interpolated plus bounded deterministic detail; it never changes the regional elevation.
 
-- [ ] **Step 1:** Write tests: every founders'-estate item placed exactly once in the space its label/building maps to; the computer room lies inside the House footprint and is reachable from `Outdoors` only through the House; there are five footprints; homestead items not placed; no footprint overlaps; footprints on dry land under the slope limit; every space routable from `Outdoors`; `space_at` round-trips each placement; identical bytes for identical inputs; a patch with no buildable site returns `EstateLayoutError::NoBuildableSite`.
-- [ ] **Step 2:** Run `cargo test -p mk_engine --test island_estate_layout`; expect FAIL.
-- [ ] **Step 3:** Implement deterministic site selection inside the patch, rectangle packing per building kind sized from its space/item count, space subdivision and door placement.
-- [ ] **Step 4:** Run the test and `cargo test -p mk_engine --lib organisms::property`; expect PASS.
-- [ ] **Step 5:** Commit `feat(engine): lay out the founders estate in metres`.
+- [x] **Step 1:** Write tests: every founders'-estate item placed exactly once in the space its label/building maps to; the computer room lies inside the House footprint and is reachable from `Outdoors` only through the House; there are five footprints; homestead items not placed; no footprint overlaps; footprints on dry land under the slope limit; every space routable from `Outdoors`; `space_at` round-trips each placement; identical bytes for identical inputs; a patch with no buildable site returns `EstateLayoutError::NoBuildableSite`.
+- [x] **Step 2:** Run `cargo test -p mk_engine --test island_estate_layout`; expect FAIL.
+- [x] **Step 3:** Implement deterministic site selection inside the patch, rectangle packing per building kind sized from its space/item count, space subdivision and door placement.
+- [x] **Step 4:** Run the test and `cargo test -p mk_engine --lib organisms::property`; expect PASS.
+- [x] **Step 5:** Commit `feat(engine): lay out the founders estate in metres`.
+
+Implementation notes: site selection scans every patch position against a 2-D prefix sum of unbuildable cells (O(1) per footprint), so a 640 k-cell patch costs milliseconds; a cell is buildable if >= 1 m above sea level, not in a lake or river (Phase-2 network and discharge) and no steeper than 2 m over 5 m. The Computer Room space keeps the upstream ComputerRoom building id while lying inside the House footprint. The plan's `regional/property.rs` change belongs with Task 4's placement. Tests run on the owner's island (first gentle lowland site the layout accepts) and cover item placement, the computer-room rule, routing, slope and ground, determinism, the sea-patch error and a House-less property.
+
 
 ### Task 6: Grid topology for the human and organism runtimes
 
