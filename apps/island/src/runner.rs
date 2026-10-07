@@ -18,7 +18,7 @@ pub const RUNNER_USAGE: &str = "usage:
   island run --scenario <path> [--canon <path>] [--steps <n>] [--dt <seconds>] [--load <snapshot>] [--save <snapshot>] [--log <path>] [--save-root <dir>]
   island replay --scenario <path> [--canon <path>] --log <path> [--save <snapshot>]
   island inspect --snapshot <path>
-  island serve --scenario <path> | --snapshot <path> [--canon <path>] [--bind 127.0.0.1:8080] [--save-root <dir>] [--snapshot-out <path>]
+  island serve --scenario <path> | --snapshot <path> [--canon <path>] [--import-0b <data-dir>] [--bind 127.0.0.1:8080] [--save-root <dir>] [--snapshot-out <path>]
   island serve [--data-dir ./island-data] [--seed <64 hex chars>] [--bind 127.0.0.1:8080]";
 
 const DEFAULT_CANON: &str = "fixtures/island/canon.json";
@@ -91,6 +91,58 @@ fn save(world: &mut IslandWorldState, args: &[String]) -> Result<(), String> {
         println!("saved {path}");
     }
     Ok(())
+}
+
+/// Replay a Phase 0b data directory's `creations.jsonl` as `CreateHuman`
+/// commands at tick 0 (queued; they apply at the first step). Returns how
+/// many were queued and a message for each record the island refused. A
+/// world that has already run is refused: the import is for a fresh island.
+pub fn import_0b(
+    world: &mut IslandWorldState,
+    data_dir: &Path,
+) -> Result<(usize, Vec<String>), String> {
+    use mk_core::human::BiologicalSex;
+    use mk_engine::regional::commands::{
+        AuthoredAppearance, IslandCommand, IslandCreateHumanRequest,
+    };
+    if world.tick() != 0 {
+        return Err("--import-0b needs a fresh island (tick 0)".into());
+    }
+    let records = island_humans::read_creations(data_dir)
+        .map_err(|e| format!("cannot read {}: {e}", data_dir.display()))?;
+    let (mut queued, mut refused) = (0, Vec::new());
+    for record in records {
+        let r = record.request;
+        let sex = match r.biological_sex.trim().to_ascii_lowercase().as_str() {
+            "male" => BiologicalSex::Male,
+            "female" => BiologicalSex::Female,
+            other => {
+                refused.push(format!("{}: unsupported sex {other:?}", record.agent_id));
+                continue;
+            }
+        };
+        let request = IslandCreateHumanRequest {
+            agent_id: record.agent_id.clone(),
+            sex,
+            age_years: r.age_years,
+            appearance: Some(AuthoredAppearance {
+                height_cm: r.height_cm,
+                build: r.build,
+                hair_color: r.hair_color,
+                eye_color: r.eye_color,
+                skin_tone: r.skin_tone,
+                birth_timestamp: Some(r.birth_timestamp),
+                birth_latitude: Some(r.birth_latitude),
+                birth_longitude: Some(r.birth_longitude),
+            }),
+            location: None,
+        };
+        match world.queue(IslandCommand::CreateHuman(request)) {
+            Ok(_) => queued += 1,
+            Err(e) => refused.push(format!("{}: {e}", record.agent_id)),
+        }
+    }
+    Ok((queued, refused))
 }
 
 /// Build the world a command works on: from a snapshot if `--load` is given,

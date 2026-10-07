@@ -73,7 +73,7 @@ Phase 3 Tasks 3 and 4b (D10, D13).
   household economy).
 - Phase 4 Task 2b (deep-time spin-up): blocked, not skipped. There is no soil, erosion or
   tectonics model to spin up, and ecology already starts at its equilibrium (plan, Task 2b).
-- Phase 4 Task 6, remainder: a map picker for island cells, `--import-0b`,
+- Phase 4 Task 6, remainder: a map picker for island cells,
   `agent_id` slugging from a display name, and a manual browser check.
 - Phase 4b: energy, industry, town, economy beyond the estate.
 - Phase 5: pruning, lifetime-scale runs (births, deaths and growth over decades), final

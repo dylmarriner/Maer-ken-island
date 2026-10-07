@@ -116,6 +116,20 @@ fn serve_island(rest: &[String]) {
             std::process::exit(1);
         }
     };
+    if let Some(dir) = flag("--import-0b") {
+        match island_runner::import_0b(&mut world, std::path::Path::new(&dir)) {
+            Ok((queued, refused)) => {
+                println!("imported {queued} people from {dir}");
+                for message in refused {
+                    eprintln!("warning: not imported: {message}");
+                }
+            }
+            Err(message) => {
+                eprintln!("island serve: {message}");
+                std::process::exit(1);
+            }
+        }
+    }
     if let Some(root) = flag("--save-root") {
         match world.enable_human_store(std::path::Path::new(&root)) {
             Ok(run) => println!("run {run}: human folders in {root}/{run}/humans"),
