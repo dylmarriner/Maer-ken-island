@@ -30,6 +30,7 @@
 //! booked. Species populations are not debited when biomass is gathered
 //! (the island's species are not seeded yet; Task 1b).
 
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 use mk_core::flux::{FluxEntry, FluxKind, Ledger, Reservoir};
@@ -49,7 +50,7 @@ pub enum Origin {
     Water,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Material {
     Wood,
     Charcoal,
@@ -239,20 +240,20 @@ impl AnimalPopulation {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 struct Body {
     carbon_kg: f64,
     water_kg: f64,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 struct Structure {
     material: Material,
     kg: f64,
 }
 
 /// Everything the economy holds as physical material.
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct MaterialLedger {
     stock: BTreeMap<Material, f64>,
     structures: BTreeMap<u64, Structure>,

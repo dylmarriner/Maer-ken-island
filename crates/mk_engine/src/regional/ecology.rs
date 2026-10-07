@@ -35,6 +35,7 @@
 use mk_core::biomes::{classify_biome, BiomeType};
 use mk_core::grid::Grid2;
 use mk_island::{DomainLevel, IslandDomain};
+use serde::{Deserialize, Serialize};
 
 use super::climate::LAPSE_RATE_K_PER_M;
 use super::hydrology::discharge_m3_s;
@@ -121,7 +122,7 @@ pub fn residence_years(biome: BiomeType) -> f64 {
 }
 
 /// The island's producers over the medium grid.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RegionalEcologyState {
     pub biome_grid: Grid2<BiomeType>,
     /// kgC m⁻² yr⁻¹, zero off land.
