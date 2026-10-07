@@ -15,6 +15,7 @@ pub mod humans;
 pub mod hydrology;
 pub mod labour;
 pub mod levels;
+pub mod life;
 pub mod local_vegetation;
 pub mod materials;
 pub mod ocean;

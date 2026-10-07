@@ -127,9 +127,12 @@ fn is_tree_biome(biome: BiomeType) -> bool {
     )
 }
 
-/// Tree height (m) from stem diameter (m): saturating, ~29 m at 1 m.
+/// Tree height (m) from stem diameter (m): Chave et al. (2014)'s
+/// height-diameter relation, `ln H = 0.893 + 0.76 ln D - 0.034 (ln D)²`
+/// with D in cm (`fixtures/reference/ecology`, `chave_height_diameter`).
 fn height_of(diameter_m: f64) -> f64 {
-    1.3 + 28.0 * (1.0 - (-diameter_m * 100.0 / 35.0).exp())
+    let ln_d = (diameter_m * 100.0).max(1.0).ln();
+    (0.893 + 0.76 * ln_d - 0.034 * ln_d * ln_d).exp()
 }
 
 /// Carbon (kgC) of a stem of `diameter_m` (Chave et al. 2014).
