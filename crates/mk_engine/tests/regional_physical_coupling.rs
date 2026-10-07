@@ -215,3 +215,159 @@ fn the_physical_state_allocates_no_planetary_grid() {
         "land cells {land}"
     );
 }
+
+/// One simulated year (360 local days of 36 h) of the owner's island,
+/// checked against the Phase-0c climate and hydrology reference packs.
+/// Each tolerance is stated where it is applied. Slow tier:
+/// `cargo test --release -- --ignored slow_`.
+#[test]
+#[ignore = "slow: one simulated year"]
+fn slow_a_year_of_island_weather_matches_the_reference_packs() {
+    use mk_engine::regional::climate::distance_to_sea_m;
+
+    let b = base();
+    let local_day = b.canon.rotation_period_s as u64;
+    let steps = (b.canon.orbital_period_s / b.canon.rotation_period_s).round() as u64;
+    let (rows, cols) = (b.domain.rows(C), b.domain.cols(C));
+    let n = rows * cols;
+    let elev = b.state.coarse_elevation_m().clone();
+    let interior = |r: usize, c: usize| r >= 40 && r < rows - 40 && c >= 40 && c < cols - 40;
+
+    let mut s = b.state.clone();
+    let (mut temp, mut rain, mut u, mut v) =
+        (vec![0.0; n], vec![0.0; n], vec![0.0; n], vec![0.0; n]);
+    let mut sst_by_day = Vec::new();
+    let (mut precip_kg, mut to_sea_kg, mut deep_kg) = (0.0, 0.0, 0.0);
+    for day in 1..=steps {
+        s.step(
+            &b.canon,
+            &b.domain,
+            b.seed,
+            (day * local_day) as f64,
+            day,
+            local_day,
+        )
+        .expect("step");
+        let (mut sst, mut count) = (0.0, 0.0);
+        for r in 0..rows {
+            for c in 0..cols {
+                let i = r * cols + c;
+                temp[i] += s.climate.surface_temperature.data()[i] / steps as f64;
+                rain[i] += s.weather.precipitation.data()[i] * (local_day as f64 / 86_400.0);
+                let w = s.weather.wind.get(r, c);
+                u[i] += w.u_east / steps as f64;
+                v[i] += w.v_north / steps as f64;
+                if *elev.get(r, c) < -200.0 && interior(r, c) {
+                    sst += s.climate.surface_temperature.get(r, c);
+                    count += 1.0;
+                }
+            }
+        }
+        sst_by_day.push(sst / count);
+        precip_kg += s.hydrology.budget.precipitation_kg;
+        to_sea_kg += s.hydrology.budget.surface_to_ocean_kg;
+        deep_kg += s.hydrology.budget.deep_drainage_kg;
+    }
+
+    // 1. Lapse rate: within each row, annual-mean land temperature falls
+    //    with elevation at 6.5 K/km (US Standard Atmosphere). Tolerance
+    //    +-1 K/km: 12 km cells average peaks, and the land's radiative
+    //    response is not exactly linear.
+    let (mut cov, mut var) = (0.0, 0.0);
+    for r in 0..rows {
+        let land: Vec<usize> = (0..cols).filter(|&c| *elev.get(r, c) > 0.0).collect();
+        if land.len() < 3 {
+            continue;
+        }
+        let (mh, mt) = (
+            land.iter().map(|&c| *elev.get(r, c)).sum::<f64>() / land.len() as f64,
+            land.iter().map(|&c| temp[r * cols + c]).sum::<f64>() / land.len() as f64,
+        );
+        for &c in &land {
+            cov += (elev.get(r, c) - mh) * (temp[r * cols + c] - mt);
+            var += (elev.get(r, c) - mh).powi(2);
+        }
+    }
+    let lapse_k_km = -1000.0 * cov / var;
+    println!("lapse rate {lapse_k_km:.2} K/km");
+    assert!((5.5..=7.5).contains(&lapse_k_km), "lapse {lapse_k_km}");
+
+    // 2. Diurnal range by surface (Dai 1999, Geiger 2009, Kawai & Wada
+    //    2007 in the climate pack, 24 h values). A 36 h day widens the
+    //    land range, so the land upper bounds are x1.5.
+    let range = s.diurnal_range_k(&b.domain, &b.canon);
+    let sea = distance_to_sea_m(&elev, b.domain.cell_size_m(C));
+    let mean_where = |pred: &dyn Fn(usize) -> bool| {
+        let (mut sum, mut k) = (0.0, 0.0);
+        for i in 0..n {
+            if pred(i) {
+                sum += range.data()[i];
+                k += 1.0;
+            }
+        }
+        (k > 0.0).then(|| sum / k)
+    };
+    let ocean_dtr = mean_where(&|i| elev.data()[i] <= 0.0).unwrap();
+    let coastal_dtr = mean_where(&|i| elev.data()[i] > 0.0 && sea[i] <= 24_000.0);
+    let inland_dtr = mean_where(&|i| elev.data()[i] > 0.0 && sea[i] >= 60_000.0);
+    println!("DTR ocean {ocean_dtr:.2}, coastal {coastal_dtr:?}, inland {inland_dtr:?} K");
+    assert!((0.1..=0.6).contains(&ocean_dtr), "ocean DTR {ocean_dtr}");
+    if let Some(c) = coastal_dtr {
+        assert!((3.0..=13.5).contains(&c), "coastal DTR {c}");
+    }
+    if let Some(i) = inland_dtr {
+        assert!((6.0..=22.0).contains(&i), "inland DTR {i}");
+    }
+
+    // 3. Windward/leeward rain over the ranges: the reference ratio for a
+    //    >2 km barrier is 3-8 (Southern Alps ~5), applied as is.
+    let mut wind_up = (0.0, 0.0, 0.0, 0.0);
+    for r in 1..rows - 1 {
+        for c in 1..cols - 1 {
+            let i = r * cols + c;
+            if *elev.get(r, c) < 300.0 {
+                continue;
+            }
+            let size = b.domain.cell_size_m(C);
+            let dx = (elev.get(r, c + 1) - elev.get(r, c - 1)) / (2.0 * size);
+            let dy = (elev.get(r + 1, c) - elev.get(r - 1, c)) / (2.0 * size);
+            let lift = u[i] * dx + v[i] * dy;
+            if lift > 0.0 {
+                wind_up.0 += rain[i];
+                wind_up.1 += 1.0;
+            } else if lift < 0.0 {
+                wind_up.2 += rain[i];
+                wind_up.3 += 1.0;
+            }
+        }
+    }
+    if wind_up.1 > 0.0 && wind_up.3 > 0.0 {
+        let ratio = (wind_up.0 / wind_up.1) / (wind_up.2 / wind_up.3);
+        println!(
+            "windward/leeward {ratio:.2} ({} / {} cells)",
+            wind_up.1, wind_up.3
+        );
+        assert!((3.0..=8.0).contains(&ratio), "windward/leeward {ratio}");
+    }
+
+    // 4. Open-ocean SST seasonal range at 40-45 degrees: 3-6 K observed
+    //    (Reynolds 2007), applied as is. (Its phase lags the solstice,
+    //    D25; its amplitude does not.)
+    let sst_range = sst_by_day.iter().cloned().fold(f64::MIN, f64::max)
+        - sst_by_day.iter().cloned().fold(f64::MAX, f64::min);
+    println!("SST seasonal range {sst_range:.2} K");
+    assert!((3.0..=6.0).contains(&sst_range), "SST range {sst_range}");
+
+    // 5. Runoff: of the rain on land, the share that reaches the sea or
+    //    recharges groundwater (Budyko, Fu omega 2.6) is 0.2-0.85 across
+    //    aridity 0.25-2 in the hydrology pack.
+    let runoff_ratio = (to_sea_kg + deep_kg) / precip_kg;
+    println!(
+        "runoff ratio {runoff_ratio:.2} (sea {:.2e} kg, deep {:.2e} kg, rain {:.2e} kg)",
+        to_sea_kg, deep_kg, precip_kg
+    );
+    assert!(
+        (0.2..=0.85).contains(&runoff_ratio),
+        "runoff ratio {runoff_ratio}"
+    );
+}
