@@ -108,8 +108,14 @@ function chip(text, kind) {
 const LONG_VALUE = 26;
 
 function reading(field) {
-  const long = String(field.value).length > LONG_VALUE;
-  const wrap = el("div", null, { class: long ? "reading is-long" : "reading" });
+  const value = String(field.value);
+  // A long value reads better under its label than squeezed beside it, and
+  // one with no spaces in it — a path, an id, a timestamp — reads better
+  // still in a monospaced face. A long sentence does not.
+  const classes = ["reading"];
+  if (value.length > LONG_VALUE) classes.push("is-long");
+  if (value.length > LONG_VALUE && !/\s/.test(value)) classes.push("is-code");
+  const wrap = el("div", null, { class: classes.join(" ") });
   const line = el("div", null, { class: "line" });
   line.append(el("span", field.label, { class: "name" }), el("span", field.value, { class: "amount" }));
   wrap.append(line);

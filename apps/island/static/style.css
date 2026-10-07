@@ -306,7 +306,8 @@ main {
 .reading .name { color: var(--ink-soft); font-size: 0.9rem; }
 .reading .amount { font-variant-numeric: tabular-nums; font-weight: 600; text-align: right; overflow-wrap: anywhere; }
 .reading.is-long .line { flex-direction: column; gap: 0.1rem; }
-.reading.is-long .amount { text-align: left; font-family: var(--mono); font-size: 0.85rem; }
+.reading.is-long .amount { text-align: left; }
+.reading.is-code .amount { font-family: var(--mono); font-size: 0.85rem; }
 .reading .detail { color: var(--muted); font-size: 0.78rem; margin: 0.1rem 0 0; }
 .reading .meter {
   display: block;
