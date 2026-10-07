@@ -13,6 +13,7 @@
 //! (160 × 200); hydrology is **medium** (960 × 1,200) over the land only.
 //! Nothing here allocates a planetary grid.
 
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 use mk_core::canon::CanonLocked;
@@ -78,7 +79,7 @@ impl From<RegionalGeophysicsError> for RegionalPhysicalError {
 }
 
 /// Everything the island's physical systems carry between steps.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RegionalPhysicalState {
     pub geophysics: RegionalGeophysics,
     pub zonal_background: ZonalBackgroundState,

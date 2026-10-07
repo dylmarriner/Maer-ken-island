@@ -302,28 +302,70 @@ pub fn step_lifecycle(
     // A human whose last action was actively seeking a resource converts
     // identical environmental access into more of that specific resource
     // than one who wasn't trying — see needs.rs::EffortFocus docs.
+    // What the chosen action costs the body, as a metabolic equivalent. Only
+    // actions the reference packs give a row for carry a cost: the rest keep
+    // the baseline they have always had, because inventing a MET for them
+    // would be inventing realism. `activity_met_check` keeps these numbers
+    // tied to the packs they came from.
+    //
+    // Sub-baseline activities (resting, sitting) are listed for honesty but
+    // change nothing: `regional::labour::effort_for_met` floors the multiple
+    // at 1.0, so the needs model never drains slower than its 1.5 MET
+    // calibration. Lowering that floor would move survival times the realism
+    // suite pins, so it is a separate, deliberate change.
+    let activity_met = match human.economy_action.kind {
+        // "walking_4_8_kmh_level": going somewhere on foot is what these are.
+        super::ActionKind::Move
+        | super::ActionKind::Explore
+        | super::ActionKind::SeekFood
+        | super::ActionKind::SeekWater
+        | super::ActionKind::SeekShelter => Some(WALKING_MET),
+        // "hand_mining".
+        super::ActionKind::Mine => Some(HAND_MINING_MET),
+        // "carpentry_general": building and crafting are both working timber
+        // and tools by hand, and the pack's row covers the activity rather
+        // than the product.
+        super::ActionKind::Build | super::ActionKind::Craft => Some(CARPENTRY_MET),
+        // Gathering wild food is walking and stooping, not the sustained
+        // cultivation "farming_manual" measures, so it is costed as the
+        // walking it mostly is. Leaving it at the baseline would be the
+        // stranger claim: a human pays to walk to the food and then picks it
+        // for free.
+        super::ActionKind::Gather => Some(WALKING_MET),
+        // Carrying, social approach, harm, intimacy, idling, resting and
+        // working at a computer have no row that fits them — the pack's
+        // "carrying_heavy_load" is a load this model does not track, and the
+        // rest are brief or sub-baseline — so they cost what they cost today.
+        _ => None,
+    };
+    let activity = activity_met.map_or(1.0, |met| {
+        (met / super::super::regional::labour::BASELINE_MET).max(1.0)
+    });
     let effort = match human.economy_action.kind {
         super::ActionKind::SeekFood | super::ActionKind::Gather => super::needs::EffortFocus {
             food: 1.5,
             water: 1.0,
             shelter: 1.0,
-            activity: 1.0,
+            activity,
         },
         super::ActionKind::SeekWater => super::needs::EffortFocus {
             food: 1.0,
             water: 1.5,
             shelter: 1.0,
-            activity: 1.0,
+            activity,
         },
         super::ActionKind::SeekShelter | super::ActionKind::Rest | super::ActionKind::Build => {
             super::needs::EffortFocus {
                 food: 1.0,
                 water: 1.0,
                 shelter: 1.5,
-                activity: 1.0,
+                activity,
             }
         }
-        _ => super::needs::EffortFocus::none(),
+        _ => super::needs::EffortFocus {
+            activity,
+            ..super::needs::EffortFocus::none()
+        },
     };
     // The body clock and sleep pressure run first: whether this human is
     // asleep this step decides what light reaches their eyes and whether
@@ -525,6 +567,16 @@ pub fn step_lifecycle(
         crate::io::global_events::log_human_died(tick, human.agent_id(), age, Some(reason));
     }
 }
+
+/// Metabolic equivalents of the actions the reference packs name, from
+/// `fixtures/reference/humans/physiology.json`'s `met_by_activity` table
+/// (Compendium of Physical Activities), each the middle of the pack's range
+/// exactly as `regional::labour::LabourTable::met` returns it.
+/// `crates/mk_engine/tests/human_realism.rs` checks them against the pack,
+/// so a pack revision cannot drift away from these silently.
+pub const WALKING_MET: f64 = 3.55;
+pub const HAND_MINING_MET: f64 = 6.75;
+pub const CARPENTRY_MET: f64 = 3.5;
 
 /// Gompertz baseline hazard (per year) extrapolated to age 0, and its
 /// exponential rate of increase with age: human adult mortality doubles

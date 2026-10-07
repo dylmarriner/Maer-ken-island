@@ -166,9 +166,40 @@ pub struct HumanSystem {
     /// history; that lives on each `HumanBeing` itself.
     #[serde(default)]
     conversation_log: VecDeque<dialogue::ConversationEvent>,
+    /// Whether every step rewrites every human's full-state files.
+    ///
+    /// Upstream does, and `true` keeps that behaviour for the planetary
+    /// world. The island turns it off and syncs on its own cadence instead:
+    /// at a 60-second human step, rewriting a whole population's folders
+    /// every step is most of the tick. Runtime policy rather than world
+    /// state, so it is never serialized and a loaded world starts from the
+    /// upstream default — with no storage attached that is a no-op, and the
+    /// island re-states its choice when it attaches one.
+    #[serde(skip, default = "sync_every_step_by_default")]
+    auto_sync: bool,
+}
+
+/// Upstream rewrites every human's files on every step; a world that does
+/// not say otherwise does the same.
+fn sync_every_step_by_default() -> bool {
+    true
 }
 
 impl HumanSystem {
+    /// Whether every step rewrites every human's full-state files.
+    ///
+    /// Turning it off does not turn storage off: births, deaths and events
+    /// are still written when they happen, and the caller takes on rewriting
+    /// the full state on a cadence of its own. The island does both.
+    pub fn set_auto_sync(&mut self, on: bool) {
+        self.auto_sync = on;
+    }
+
+    /// Whether this system rewrites every human's files on every step.
+    pub fn auto_sync(&self) -> bool {
+        self.auto_sync
+    }
+
     /// A pair bond ends when the partner dies (or is no longer tracked), so
     /// the widowed partner is free to bond again.
     fn end_bonds_with_the_dead(&mut self) {
@@ -227,6 +258,7 @@ impl HumanSystem {
         Self {
             registry: HumanRegistry::new(),
             conversation_log: VecDeque::new(),
+            auto_sync: true,
         }
     }
 
@@ -242,6 +274,7 @@ impl HumanSystem {
         let mut system = Self {
             registry: HumanRegistry::with_storage(storage)?,
             conversation_log: VecDeque::new(),
+            auto_sync: true,
         };
         let seed_errors = system.registry.seed_founders().err().unwrap_or_default();
         Ok((system, seed_errors))
@@ -1036,15 +1069,18 @@ impl HumanSystem {
         self.step_dialogue(rng_registry, tick);
 
         // Persist every living human's evolving state/experiences each tick
-        // (no-op when storage isn't configured for this registry). A failed
+        // (no-op when storage isn't configured for this registry, or when
+        // the owner of this system syncs on its own cadence). A failed
         // write never changes who exists or how the world evolves.
-        let sync_errors = self.registry.sync_to_storage();
-        if let Some(first) = sync_errors.first() {
-            tracing::warn!(
-                failed = sync_errors.len(),
-                error = %first,
-                "human storage sync failed"
-            );
+        if self.auto_sync {
+            let sync_errors = self.registry.sync_to_storage();
+            if let Some(first) = sync_errors.first() {
+                tracing::warn!(
+                    failed = sync_errors.len(),
+                    error = %first,
+                    "human storage sync failed"
+                );
+            }
         }
     }
 }

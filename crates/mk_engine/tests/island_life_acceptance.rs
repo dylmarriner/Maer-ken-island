@@ -20,7 +20,7 @@ const DAY: u64 = 86_400;
 /// scenario (`fixtures/island/default_scenario.json`), identical across
 /// processes. Changing any Phase 1-3 behaviour changes it: update it
 /// deliberately, in the commit that changes the behaviour.
-const WEEK_DIGEST: &str = "bf836cb8fb93c6ba90f352f8b51e57517a5f689372f6058702e166e34d0e6e3f";
+const WEEK_DIGEST: &str = "e796f9f9a851bd98c1ffbae6a427c3b5dc258dcc38ae79d70e85359299cc5d2a";
 
 fn repo(path: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -129,6 +129,27 @@ fn slow_a_week_on_the_island_matches_the_reference_packs() {
             HumanStatus::Alive
         ));
         assert!(w.in_estate(id), "{id} left the estate");
+        // Alive is the needs model's answer; this is the ledger's. Harvesting
+        // follows each human's own chosen action, so a week in which nobody
+        // ever chose to look for food would still leave them "alive" here
+        // while their body carbon drained away. It must not have.
+        let carbon = w
+            .materials
+            .body_carbon_kg(id)
+            .unwrap_or_else(|| panic!("{id} has no body in the ledger"));
+        let expected = w.humans.registry.get_human(id).unwrap().body.weight_kg
+            * mk_engine::regional::materials::WHOLE_BODY_CARBON_FRACTION;
+        println!("{id}: body carbon {carbon:.1} kg of an expected {expected:.1} kg");
+        // A meal replaces exactly the carbon its eater has burned since the
+        // last one, so an adult's body carbon should not move at all over a
+        // week. The band is tight on purpose: a fixed portion sat at 1.05x
+        // and 1.10x, and gating the harvest on chosen actions at 0.90x, and
+        // both would pass anything looser.
+        assert!(
+            (0.98 * expected..=1.02 * expected).contains(&carbon),
+            "{id} holds {carbon:.2} kg of carbon against an expected {expected:.2}: what they eat \
+             and what they burn have come apart"
+        );
     }
 
     // NPP by biome against the ecology pack (g C / m2 / yr).
@@ -201,4 +222,35 @@ fn slow_a_week_on_the_island_matches_the_reference_packs() {
         "{drunk_per_founder_day} L/day"
     );
     assert_eq!(w.shortfalls.water, 0, "the founders found water every time");
+}
+
+/// The digest covers the state that decides what happens next.
+///
+/// Two islands that differ only in a pending meal balance, or in how much
+/// of the current hour a founder has slept, will diverge at the next meal
+/// and the next respiration charge. A digest that called them identical
+/// would make replay and snapshot verification quietly wrong.
+#[test]
+fn the_digest_notices_state_that_only_matters_later() {
+    let mut a = life();
+    let mut b = life();
+    assert_eq!(hex(a.state_digest()), hex(b.state_digest()), "same start");
+
+    // Far enough for the founders to have respired and eaten at least once.
+    a.advance(7 * 3_600).unwrap();
+    b.advance(7 * 3_600).unwrap();
+    assert_eq!(
+        hex(a.state_digest()),
+        hex(b.state_digest()),
+        "the same island stepped the same way has to hash the same"
+    );
+
+    // One more hour on only one of them: the pending balances and the
+    // sleep accounting now differ, and the digest has to say so.
+    a.advance(3_600).unwrap();
+    assert_ne!(
+        hex(a.state_digest()),
+        hex(b.state_digest()),
+        "an extra hour left the digest unchanged"
+    );
 }

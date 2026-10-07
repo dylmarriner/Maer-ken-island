@@ -316,3 +316,61 @@ fn low_confidence_values_are_marked_with_a_note() {
         }
     }
 }
+
+/// Cloud cover damps the day-night temperature swing by as much as the
+/// observations say it does.
+///
+/// `cloud_reduction_of_dtr` sat in the climate pack with nothing checking it,
+/// even though the regional climate's overcast damping was clearly taken from
+/// it. This ties the two together, so moving either without the other fails.
+#[test]
+fn overcast_damping_of_the_diurnal_range_stays_inside_the_observed_band() {
+    use mk_engine::regional::climate::OVERCAST_DTR_REDUCTION;
+
+    let (lo, hi) = library()
+        .item(ReferenceDomain::Climate, "cloud_reduction_of_dtr")
+        .and_then(|item| item.range())
+        .expect("the climate pack records how much cloud damps the diurnal range");
+
+    assert!(
+        (lo..=hi).contains(&OVERCAST_DTR_REDUCTION),
+        "the model damps the diurnal range by {OVERCAST_DTR_REDUCTION} under overcast, outside \
+         the observed {lo}-{hi}"
+    );
+}
+
+/// Constants the model took from a pack row still match that row.
+///
+/// These numbers were copied into the engine once and then checked by
+/// nobody. A pack revision, or a stray edit to the constant, should fail
+/// here rather than drift quietly away from the source it cites.
+#[test]
+fn constants_taken_from_the_packs_still_agree_with_them() {
+    use mk_engine::regional::ecology::CARBON_FRACTION_OF_DRY_MASS;
+    use mk_engine::regional::seismicity::BATH_DELTA_M;
+
+    let library = library();
+    for (value, domain, key, what) in [
+        (
+            CARBON_FRACTION_OF_DRY_MASS,
+            ReferenceDomain::Ecology,
+            "carbon_fraction_of_dry_biomass",
+            "the carbon in dry plant matter",
+        ),
+        (
+            BATH_DELTA_M,
+            ReferenceDomain::Geology,
+            "bath_law_delta_m",
+            "Bath's law gap to the largest aftershock",
+        ),
+    ] {
+        let (lo, hi) = library
+            .item(domain, key)
+            .and_then(|item| item.range())
+            .unwrap_or_else(|| panic!("the packs record {key}"));
+        assert!(
+            (lo..=hi).contains(&value),
+            "{what}: the model uses {value}, outside the pack's {lo}-{hi}"
+        );
+    }
+}

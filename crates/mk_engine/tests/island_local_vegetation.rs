@@ -259,3 +259,38 @@ fn the_patch_follows_the_field_and_is_deterministic() {
     p.step(&e, 0);
     assert_eq!(p.trees, snapshot);
 }
+
+/// The patch and every tree in it survive a snapshot unchanged.
+///
+/// Phase 4 Task 3's largest state by far: the owner's estate carries about
+/// 200,000 individual stems, each with its own position, species, diameter
+/// and age. A round trip that lost or rounded any of them would change the
+/// island's carbon and its state digest.
+#[test]
+fn the_vegetation_patch_round_trips_through_a_snapshot() {
+    let b = base();
+    let patch = seed(b, &variant(b, BiomeType::TemperateForest, 9.0), 20_000);
+    let before = patch.trees.len();
+    assert!(before > 1_000, "only {before} trees to round trip");
+
+    let text = serde_json::to_string(&patch).expect("the patch serializes");
+    let back: mk_engine::regional::local_vegetation::LocalVegetationPatch =
+        serde_json::from_str(&text).expect("and comes back");
+
+    assert_eq!(
+        back.trees.len(),
+        before,
+        "trees were lost in the round trip"
+    );
+    assert_eq!(back.trees, patch.trees, "a tree changed in the round trip");
+    assert_eq!(
+        back.total_carbon_kgc(),
+        patch.total_carbon_kgc(),
+        "the patch's carbon changed in the round trip"
+    );
+    assert_eq!(
+        back.stands.data(),
+        patch.stands.data(),
+        "stand cover changed in the round trip"
+    );
+}

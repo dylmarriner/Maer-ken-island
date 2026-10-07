@@ -30,6 +30,7 @@
 //! booked. Species populations are not debited when biomass is gathered
 //! (the island's species are not seeded yet; Task 1b).
 
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 use mk_core::flux::{FluxEntry, FluxKind, Ledger, Reservoir};
@@ -49,7 +50,7 @@ pub enum Origin {
     Water,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Material {
     Wood,
     Charcoal,
@@ -239,20 +240,20 @@ impl AnimalPopulation {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 struct Body {
     carbon_kg: f64,
     water_kg: f64,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 struct Structure {
     material: Material,
     kg: f64,
 }
 
 /// Everything the economy holds as physical material.
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct MaterialLedger {
     stock: BTreeMap<Material, f64>,
     structures: BTreeMap<u64, Structure>,
@@ -597,6 +598,14 @@ impl MaterialLedger {
     }
 
     /// A body enters the ledger with its own carbon (18% of its mass).
+    /// The carbon in one human's body (kg), or `None` if they were never
+    /// registered. Eating adds to it and respiring draws it down, so it is
+    /// the physical answer to whether someone is actually being fed — which
+    /// the needs model, running separately, cannot give.
+    pub fn body_carbon_kg(&self, id: &str) -> Option<f64> {
+        self.bodies.get(id).map(|body| body.carbon_kg)
+    }
+
     pub fn register_human(&mut self, id: &str, weight_kg: f64) {
         self.bodies.entry(id.to_string()).or_insert(Body {
             carbon_kg: weight_kg * BODY_CARBON_PER_KG,

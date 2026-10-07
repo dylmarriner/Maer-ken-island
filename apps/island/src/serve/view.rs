@@ -327,7 +327,7 @@ pub fn sections(human: &HumanBeing, summary: &HumanSummary, folder: Option<&str>
                 } else {
                     "Awake"
                 },
-                "Their circadian clock decides this once time runs.",
+                "Their circadian clock decides this, and what their body burns follows it.",
             ),
         ],
     ));

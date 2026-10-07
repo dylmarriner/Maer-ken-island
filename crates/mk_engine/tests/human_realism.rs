@@ -435,3 +435,210 @@ fn adult_mortality_follows_the_reference_life_table() {
     let (lo, hi) = range("mortality_rate_doubling_time");
     assert!(doubling >= lo && doubling <= hi, "{doubling}");
 }
+
+/// The metabolic equivalents `humans::lifecycle` charges for a chosen action
+/// are the packs' own numbers, not numbers that once came from the packs.
+/// A pack revision that moves a row should fail here rather than quietly
+/// change how hungry walking makes someone.
+#[test]
+fn action_costs_match_the_compendium_rows_they_came_from() {
+    use mk_engine::humans::lifecycle::{CARPENTRY_MET, HAND_MINING_MET, WALKING_MET};
+    use mk_engine::regional::labour::LabourTable;
+
+    let table = LabourTable::load_default().expect("the labour packs load");
+    for (constant, row, name) in [
+        (WALKING_MET, "walking_4_8_kmh_level", "walking"),
+        (HAND_MINING_MET, "hand_mining", "mining by hand"),
+        (CARPENTRY_MET, "carpentry_general", "carpentry"),
+    ] {
+        let packed = table.met(row).unwrap_or_else(|e| panic!("{row}: {e:?}"));
+        assert!(
+            (constant - packed).abs() < 1e-9,
+            "{name} is charged at {constant} MET but the pack's {row} is {packed}"
+        );
+    }
+
+    // Walking has to cost more than the baseline the needs model is
+    // calibrated at, or none of this reaches the drain rates at all. Read
+    // from the pack rather than from the constant above, so this stays a
+    // statement about the Compendium and not about our copy of it.
+    let walking = table.met("walking_4_8_kmh_level").expect("walking");
+    let baseline = mk_engine::regional::labour::BASELINE_MET;
+    assert!(
+        walking > baseline,
+        "walking at {walking} MET is below the needs model's {baseline} MET baseline, so charging it would change nothing"
+    );
+}
+
+/// Walking somewhere now makes a person thirstier and hungrier than sitting
+/// still does. This is the behaviour the MET constants exist for; without
+/// it they would be decoration.
+#[test]
+fn walking_somewhere_costs_more_than_sitting_still() {
+    use mk_core::human::BiologicalSex;
+    use mk_core::rng::RngRegistry;
+    use mk_engine::humans::{lifecycle::step_lifecycle, ActionKind, HumanBeing};
+
+    let rng = RngRegistry::new([5u8; 32]);
+    // Half a day with nothing to eat or drink: long enough for the drain to
+    // separate them, short enough that neither has bottomed out, where a
+    // floor would hide the difference.
+    let world = observation(0.0, 0.0, 20.0);
+    let hour = 1.0 / (365.25 * 24.0);
+
+    let spend_the_morning = |action: ActionKind| {
+        let mut human = HumanBeing::new("walker".into(), BiologicalSex::Female);
+        human.development.age_years = 30.0;
+        for tick in 0..12u64 {
+            // The action is re-asserted each tick: the autonomous mind would
+            // otherwise choose its own, and this test is about the cost of a
+            // given action, not about which one a human picks.
+            human.economy_action.kind = action;
+            step_lifecycle(&mut human, hour, tick, &world, &rng, (0, 0));
+        }
+        human.needs
+    };
+
+    let walked = spend_the_morning(ActionKind::Move);
+    let sat = spend_the_morning(ActionKind::Idle);
+    assert!(
+        walked.glucose > 0.0 && sat.glucose > 0.0,
+        "both bottomed out, so this proves nothing: {} and {}",
+        walked.glucose,
+        sat.glucose
+    );
+
+    assert!(
+        walked.glucose < sat.glucose,
+        "walking left more glucose ({}) than sitting ({})",
+        walked.glucose,
+        sat.glucose
+    );
+    assert!(
+        walked.hydration < sat.hydration,
+        "walking left more water ({}) than sitting ({})",
+        walked.hydration,
+        sat.hydration
+    );
+}
+
+/// Nobody outlives the longest life anyone has actually lived.
+///
+/// `maximum_verified_lifespan` has sat in the life-history pack unchecked;
+/// this ties the runtime's hard biological ceiling to it.
+#[test]
+fn nobody_outlives_the_longest_verified_human_life() {
+    use mk_core::human::BiologicalSex;
+    use mk_core::rng::RngRegistry;
+    use mk_engine::humans::{lifecycle::step_lifecycle, HumanBeing};
+    use mk_engine::validation::ReferenceDomain;
+
+    let verified = reference()
+        .item(ReferenceDomain::Humans, "maximum_verified_lifespan")
+        .and_then(|i| i.point())
+        .expect("the pack records a longest verified life");
+
+    let rng = RngRegistry::new([9u8; 32]);
+    let world = observation(1.0, 1.0, 20.0);
+    let mut human = HumanBeing::new("methuselah".into(), BiologicalSex::Female);
+    // Fed, watered and sheltered, just past the record: only the ceiling
+    // itself can be what ends this.
+    human.development.age_years = verified + 0.5;
+    step_lifecycle(&mut human, HOUR_YEARS, 1, &world, &rng, (0, 0));
+
+    assert!(
+        matches!(human.profile.status, mk_core::human::HumanStatus::Dead),
+        "someone reached {:.2} years, past the verified record of {verified}",
+        human.development.age_years
+    );
+}
+
+/// A woman's fertility ends before menopause, not after it.
+///
+/// The pack's `menopause_age` was never checked against anything. The
+/// runtime models the end of fertility rather than menopause itself — about
+/// a decade earlier (te Velde & Pearson 2002, cited where the constants
+/// live) — so the honest check is the ordering: fertile well before the
+/// pack's earliest menopause, finished by its latest.
+#[test]
+fn fertility_ends_before_the_published_menopause_window_closes() {
+    use mk_core::human::BiologicalSex;
+    use mk_engine::humans::{lifecycle::reproductive_timeline, HumanBeing};
+    use mk_engine::validation::ReferenceDomain;
+
+    let (earliest, latest) = reference()
+        .item(ReferenceDomain::Humans, "menopause_age")
+        .and_then(|i| i.range())
+        .expect("the pack records a menopause window");
+
+    // Several women, because the age is drawn per individual.
+    for i in 0..32 {
+        let woman = HumanBeing::new(format!("woman-{i:02}"), BiologicalSex::Female);
+        let timeline = reproductive_timeline(&woman);
+        assert!(
+            timeline.fecundity(25.0) > 0.0,
+            "woman-{i:02} is infertile at 25"
+        );
+        assert_eq!(
+            timeline.fecundity(latest),
+            0.0,
+            "woman-{i:02} is still fertile at {latest}, the latest published menopause"
+        );
+    }
+
+    // And the end of fertility really does precede menopause rather than
+    // coinciding with it: the average woman is finished before the earliest
+    // published menopause age.
+    let finished_early = (0..32)
+        .filter(|i| {
+            let woman = HumanBeing::new(format!("woman-{i:02}"), BiologicalSex::Female);
+            reproductive_timeline(&woman).fecundity(earliest) == 0.0
+        })
+        .count();
+    assert!(
+        finished_early > 16,
+        "only {finished_early} of 32 women were infertile by {earliest}, so fertility is not \
+         ending the decade before menopause the constants claim"
+    );
+}
+
+/// Survival holds for a person whose chosen action is Rest, not only for
+/// one the test hands the baseline to directly.
+///
+/// The survival tests above all pass `EffortFocus::none()`, which is exactly
+/// the 1.5 MET the drain rates are calibrated at, so they cannot see what
+/// happens when a real activity level reaches the needs model. That left a
+/// blind spot: a human whose action is Rest goes through the full lifecycle,
+/// not through `NeedsSnapshot::step` directly. This walks one through it and
+/// holds them to the same published range. It does not test sleep itself —
+/// the circadian clock owns `asleep` and the action does not set it — which
+/// is why the name says resting.
+#[test]
+fn a_resting_adult_still_dies_of_thirst_within_the_published_range() {
+    use mk_core::human::BiologicalSex;
+    use mk_core::rng::RngRegistry;
+    use mk_engine::humans::{lifecycle::step_lifecycle, ActionKind, HumanBeing};
+
+    let (lo, hi) = range("survival_without_water");
+    let rng = RngRegistry::new([21u8; 32]);
+    // Fed and sheltered at a temperate 20 °C, with nothing to drink.
+    let world = observation(1.0, 0.0, 20.0);
+
+    let mut human = HumanBeing::new("resting".into(), BiologicalSex::Female);
+    human.development.age_years = 30.0;
+    let mut died_on_day = None;
+    for hour in 1..=(24 * 30) {
+        human.economy_action.kind = ActionKind::Rest;
+        step_lifecycle(&mut human, HOUR_YEARS, hour as u64, &world, &rng, (0, 0));
+        if human.needs.hydration <= 0.0 {
+            died_on_day = Some(hour as f64 / 24.0);
+            break;
+        }
+    }
+
+    let days = died_on_day.expect("a resting adult with no water runs dry within a month");
+    assert!(
+        days >= lo && days <= hi,
+        "a resting adult ran dry after {days} days, outside the published {lo}-{hi}"
+    );
+}

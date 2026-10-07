@@ -35,6 +35,7 @@
 use mk_core::biomes::{classify_biome, BiomeType};
 use mk_core::grid::Grid2;
 use mk_island::{DomainLevel, IslandDomain};
+use serde::{Deserialize, Serialize};
 
 use super::climate::LAPSE_RATE_K_PER_M;
 use super::hydrology::discharge_m3_s;
@@ -44,7 +45,7 @@ use crate::biosphere::miami_npp_kgc_m2_yr;
 use crate::organisms::vegetation::VegetationSystem;
 
 /// Carbon fraction of dry matter, as upstream's `update_primary_production`.
-const CARBON_FRACTION_OF_DRY_MASS: f64 = 0.475;
+pub const CARBON_FRACTION_OF_DRY_MASS: f64 = 0.475;
 /// Days in the Earth year the Miami model's annual rain is per.
 const EARTH_YEAR_DAYS: f64 = 365.25;
 /// Annual-mean temperature (K) below which cold ground is permanent ice:
@@ -121,7 +122,7 @@ pub fn residence_years(biome: BiomeType) -> f64 {
 }
 
 /// The island's producers over the medium grid.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RegionalEcologyState {
     pub biome_grid: Grid2<BiomeType>,
     /// kgC m⁻² yr⁻¹, zero off land.

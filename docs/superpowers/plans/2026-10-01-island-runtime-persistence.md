@@ -103,14 +103,29 @@ A realistic island starts with mature soils, rivers and forests, which take cent
 - Test: `crates/mk_engine/tests/island_snapshot.rs`
 
 **Interfaces:**
-- Produces: `save_island_snapshot(state: &IslandWorldState, path: &Path) -> Result<(), IslandSnapshotError>` and `load_island_snapshot(path: &Path) -> Result<IslandWorldState, IslandSnapshotError>`.
+- Produces: `save_island_snapshot(life: &IslandLife, path: &Path) -> Result<(), IslandSnapshotError>` and `load_island_snapshot(canon: Arc<CanonLocked>, path: &Path) -> Result<IslandLife, IslandSnapshotError>`. `IslandLife` is the composition Task 1 delivered under that name; the canon is supplied by the caller rather than read from the file, so a snapshot cannot bring its own physics.
 - Error variants: digest mismatch, incompatible profile/scenario version, canon mismatch/invalid canon, serialization, filesystem.
 
-- [ ] **Step 1:** Write tests for round-trip equality of `state_hash` (including estate layout, patch trees, estate positions, zonal background and pending commands), tamper rejection, truncation rejection, incompatible fixture profile version and invalid canon.
-- [ ] **Step 2:** Run `cargo test -p mk_engine --test island_snapshot`; expect FAIL.
-- [ ] **Step 3:** Implement atomic (write temp, fsync, rename) digest-prefixed JSON save/load; re-derive canon-derived values on load; validate scenario/profile compatibility before returning state.
-- [ ] **Step 4:** Re-run; expect PASS.
-- [ ] **Step 5:** Commit `feat(io): persist complete island world`.
+- [x] **Step 1:** Write tests for round-trip equality of `state_hash` (including estate layout, patch trees, estate positions, zonal background and pending commands), tamper rejection, truncation rejection, incompatible fixture profile version and invalid canon.
+- [ ] **Step 2:** Run `cargo test -p mk_engine --test island_snapshot`; expect FAIL. Not done as written: the tests and the module were written together, so there was never a run of this file against a missing implementation.
+- [x] **Step 3:** Implement atomic (write temp, fsync, rename) digest-prefixed JSON save/load; re-derive canon-derived values on load; validate scenario/profile compatibility before returning state.
+- [x] **Step 4:** Re-run; expect PASS.
+- [x] **Step 5:** Commit `feat(io): persist complete island world`.
+
+**Built (2026-10-07):** the file is `magic ‖ blake3(rest) ‖ canon digest ‖ deflated JSON`, written
+to a temporary file beside the target, fsynced and renamed, with the directory entry fsynced after.
+Written plainly the full island came to 338 MB — a dozen grids of 1,152,000 cells, mostly decimal
+expansions of numbers close to their neighbours — so the state is deflated, which brings the same
+island to 44 MB, and the digest covers the compressed bytes that are actually on the disk. `IslandLife::restore` validates the scenario as
+if it had been read from disk, then derives the domain, grid topology and labour table again
+instead of trusting the file. The round-trip tests assert the state digest both immediately and
+after simulating the same hours on both sides, which is what catches state left out of the
+snapshot.
+
+Two things Step 1 names are not covered because they do not exist yet: there are no pending
+commands until Task 4, and the zonal background is part of the physical state the round trip
+already compares through the digest rather than a separate field to assert on.
+
 
 ### Task 3b: Per-human folders
 
@@ -126,11 +141,34 @@ A realistic island starts with mature soils, rivers and forests, which take cent
 - Upstream `HumanSystem::step` calls `registry.sync_to_storage()` every call (`humans/mod.rs:880`). Add `HumanSystem::set_auto_sync(bool)` (default `true`, preserving upstream `WorldState` behaviour). The island sets it `false` and syncs on `human_store_seconds`, at every snapshot save, and immediately when a human dies. Event files (`events/`, memories, relationships) are still appended when they happen.
 - Storage errors (returned by the Phase-0 registry changes) are counted in the audit trail and shown by the CLI/dashboard, never discarded.
 
-- [ ] **Step 1:** Write tests: founders get folders on enable; a birth during a stepped run creates the child's folder in the same tick with a `born` event and parents' `reproduced` events; folders after a snapshot save match the snapshot's human state; a fresh run with the same seed under the same root uses a new `run_id` directory; with auto-sync off, full-state files are rewritten only on the store cadence; state hash is identical with the store enabled, disabled or failing.
-- [ ] **Step 2:** Run `cargo test -p mk_engine --test island_human_store`; expect FAIL.
-- [ ] **Step 3:** Implement on top of upstream `HumanStorage` (no second folder format).
-- [ ] **Step 4:** Re-run, plus `cargo test -p mk_engine --lib humans::`; expect PASS. Record per-sync cost for the Phase-5 benchmark.
-- [ ] **Step 5:** Record `set_auto_sync` in `UPSTREAM.md`. Commit `feat(island): keep a folder for every human`.
+- [x] **Step 1:** Write tests: founders get folders on enable; a birth during a stepped run creates the child's folder in the same tick with a `born` event and parents' `reproduced` events (covered as `somebody_added_after_the_store_is_open_gets_a_folder_at_once`, which pins `HumanRegistry::add_human`'s storage branch — the call every birth path reaches — rather than waiting out a pregnancy; the `born`/`reproduced` event files are *not* pinned, and nothing guards them yet); folders after a snapshot save match the snapshot's human state; a fresh run with the same seed under the same root uses a new `run_id` directory; with auto-sync off, full-state files are rewritten only on the store cadence; state hash is identical with the store enabled, disabled or failing.
+- [ ] **Step 2:** Run `cargo test -p mk_engine --test island_human_store`; expect FAIL. Not done as written, as in Task 3: the tests and the module were written together.
+- [x] **Step 3:** Implement on top of upstream `HumanStorage` (no second folder format).
+- [x] **Step 4:** Re-run, plus `cargo test -p mk_engine --lib humans::`; expect PASS. Record per-sync cost for the Phase-5 benchmark.
+- [x] **Step 5:** Record `set_auto_sync` in `UPSTREAM.md`. Commit `feat(island): keep a folder for every human`.
+
+**Built (2026-10-07):** `open_run` claims the next run under the save root — the counter in
+`runs.json` is written back *before* any human is, so a crash mid-run burns an id rather than
+reusing one — and the id is `blake3(scenario digest ‖ seed ‖ counter)[..12]`, stable for a given
+scenario, seed and run number rather than a timestamp. The store opens through
+`HumanStorage::try_new`, which refuses a missing storage key instead of writing people's records
+in plaintext.
+
+`IslandLife::enable_human_store` sets `auto_sync` false and syncs on `human_store_seconds` (the
+cadence and its counter already existed in the scheduler and were computed but never acted on),
+at every `save_island_snapshot` — which now takes `&mut` for that reason, so a checkpoint
+checkpoints everything — and immediately when somebody dies, which is the one moment a stale file
+would be a lie rather than a lag. Failed writes are counted on the store with their most recent
+reason and surfaced by the CLI, never discarded: a human whose folder will not write still exists.
+
+What the tests are actually for: `keeping_records_does_not_change_what_happens` and
+`the_island_runs_on_when_every_write_fails` both assert an identical state digest against an
+island with no store at all. A world that ran differently when asked to keep records would not be
+worth the records.
+
+`crates/mk_engine/src/regional/world.rs` is not modified: this repository's composition is
+`regional/life.rs` (`IslandLife`), which is where the store lives.
+
 
 ### Task 4: External commands and deterministic replay
 
