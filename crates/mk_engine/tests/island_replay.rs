@@ -176,3 +176,30 @@ fn saving_halfway_loading_and_continuing_gives_the_same_final_world() {
         replay_island(canon(), scenario(), &resumed.replay_log(), resumed.tick()).unwrap();
     assert_eq!(hex(&replayed), hex(&full));
 }
+
+#[test]
+fn a_control_applies_without_waiting_for_a_substep_and_replay_still_matches() {
+    let mut w = world();
+    w.step(60).unwrap();
+    w.queue(IslandCommand::Control(ControlCommand::Pause))
+        .unwrap();
+    w.step(0).unwrap(); // no time to run, yet the pause lands at once
+    assert!(
+        w.life.commands.paused,
+        "a pause must not wait for the next substep"
+    );
+    assert_eq!(w.tick(), 1);
+    w.queue(IslandCommand::Control(ControlCommand::Resume))
+        .unwrap();
+    w.step(0).unwrap();
+    assert!(!w.life.commands.paused);
+    w.step(60).unwrap();
+    assert_eq!(w.tick(), 2);
+    let log = w.replay_log();
+    let replayed = replay_island(canon(), scenario(), &log, w.tick()).unwrap();
+    assert_eq!(
+        hex(&replayed),
+        hex(&w),
+        "applying early is the same as at the next substep"
+    );
+}

@@ -18,6 +18,7 @@ pub const RUNNER_USAGE: &str = "usage:
   island run --scenario <path> [--canon <path>] [--steps <n>] [--dt <seconds>] [--load <snapshot>] [--save <snapshot>] [--log <path>] [--save-root <dir>]
   island replay --scenario <path> [--canon <path>] --log <path> [--save <snapshot>]
   island inspect --snapshot <path>
+  island serve --scenario <path> | --snapshot <path> [--canon <path>] [--bind 127.0.0.1:8080] [--save-root <dir>] [--snapshot-out <path>]
   island serve [--data-dir ./island-data] [--seed <64 hex chars>] [--bind 127.0.0.1:8080]";
 
 const DEFAULT_CANON: &str = "fixtures/island/canon.json";
@@ -92,16 +93,22 @@ fn save(world: &mut IslandWorldState, args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
+/// Build the world a command works on: from a snapshot if `--load` is given,
+/// otherwise from `--scenario` (and `--canon`).
+pub fn open_world(args: &[String], load_flag: &str) -> Result<IslandWorldState, String> {
+    match flag(args, load_flag) {
+        Some(path) => load_island_snapshot(Path::new(&path)).map_err(|e| e.to_string()),
+        None => IslandWorldState::new(canon(args)?, scenario(args)?).map_err(|e| e.to_string()),
+    }
+}
+
 fn run(args: &[String]) -> Result<String, String> {
     let steps = number(args, "--steps", 0)?;
     let dt = number(args, "--dt", 60)?;
     if dt == 0 {
         return Err("--dt must be at least 1".into());
     }
-    let mut world = match flag(args, "--load") {
-        Some(path) => load_island_snapshot(Path::new(&path)).map_err(|e| e.to_string())?,
-        None => IslandWorldState::new(canon(args)?, scenario(args)?).map_err(|e| e.to_string())?,
-    };
+    let mut world = open_world(args, "--load")?;
     if let Some(root) = flag(args, "--save-root") {
         let run_id = world
             .enable_human_store(Path::new(&root))

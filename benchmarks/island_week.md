@@ -29,3 +29,20 @@ refinery and town). The population is two humans; `benchmarks/humans_population.
 human runtime alone at 5,000.
 
 Human store (Task 3b), one simulated day, two humans: 18.2 s with folders vs 17.4 s without (25 syncs, about 30 ms each); peak 293 MB vs 287 MB; state hash identical.
+
+## One simulated year, two founders (`island run --steps 525600 --dt 60`)
+
+| Quantity | Result |
+|---|---|
+| Simulated span | 365 days (525,600 human steps) |
+| Wall clock | 32 min 47 s (about 16x real time while sharing the machine with builds) |
+| Peak resident memory | 713 MB (includes the final snapshot save, 357 MB file) |
+| Exit | success; snapshot saved and run log written |
+| Population | 2 founders at the start, **3 at the end**: a birth happened and the child is in the world |
+
+Run with the release binary built before the digest-streaming change, so its
+state hash (`dd7ee529...1f1d`) is not comparable with the pinned week digest.
+One run only: not re-run in a second process, and what the household economy
+did over the year (food and water shortfalls, the child's health) was not
+inspected beyond the population count. Memory over the year was not sampled
+over time, so growth cannot be separated from the snapshot save peak.

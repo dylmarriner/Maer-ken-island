@@ -591,6 +591,12 @@ impl IslandLife {
         } else {
             self.scheduler.take_substeps(seconds)
         };
+        if remaining == 0 && !self.commands.paused {
+            // No substep runs now, but a command (a pause, a speed change)
+            // must not wait for one: nothing happens between substeps, so
+            // applying it here is the same as at the start of the next.
+            self.apply_commands(self.tick + 1);
+        }
         loop {
             if !self.commands.paused && remaining == 0 {
                 break;

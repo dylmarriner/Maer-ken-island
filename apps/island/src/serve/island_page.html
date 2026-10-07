@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Maer-Ken Island</title>
+<style>
+body{font:15px/1.4 system-ui,sans-serif;margin:1rem auto;max-width:56rem;padding:0 1rem;color:#1b2a2f;background:#f6f8f7}
+h1{font-size:1.3rem}section{background:#fff;border:1px solid #d5ddda;border-radius:6px;padding:.8rem 1rem;margin:.8rem 0}
+button,input,select{font:inherit;padding:.3rem .5rem;margin:.15rem}pre{overflow:auto;max-height:18rem}
+.warn{color:#9a5b00}.bad{color:#a11}
+</style></head><body>
+<h1>Maer-Ken Island</h1>
+<section><b>Clock</b> <span id="clock">loading</span> <span id="behind" class="warn"></span>
+<div><button data-c='"Pause"'>Pause</button><button data-c='"Resume"'>Resume</button>
+<button data-c='{"Step":1}'>Step 1</button><button data-c='{"Step":60}'>Step 60</button>
+<select id="speed"><option>RealTime</option><option value="10">10x</option><option value="60">60x</option>
+<option value="360">360x</option><option value="1440">1,440x</option><option>AsFastAsPossible</option></select></div></section>
+<section><b>People</b> <span id="pop"></span><pre id="roster"></pre></section>
+<section><b>Add a person</b><div>
+<input id="name" placeholder="name (agent id)"><select id="sex"><option>Female</option><option>Male</option></select>
+<input id="age" type="number" value="30" min="0" max="120" style="width:5rem">
+<input id="token" placeholder="control token (if set)" type="password">
+<button id="add">Add</button></div><div id="msg"></div></section>
+<script>
+const $=id=>document.getElementById(id);
+function headers(){const h={"content-type":"application/json"};const t=$("token").value;if(t)h.authorization="Bearer "+t;return h}
+async function post(path,body){const r=await fetch(path,{method:"POST",headers:headers(),body:JSON.stringify(body)});
+ const j=await r.json().catch(()=>({}));const m=$("msg");m.textContent=r.status+" "+JSON.stringify(j);m.className=r.ok?"":"bad";}
+document.querySelectorAll("button[data-c]").forEach(b=>b.onclick=()=>post("/api/control",JSON.parse(b.dataset.c)));
+$("speed").onchange=e=>{const v=e.target.value;post("/api/control",{SetSpeed:/^\d+$/.test(v)?{Times:+v}:v})};
+$("add").onclick=()=>post("/api/humans",{agent_id:$("name").value,sex:$("sex").value,age_years:+$("age").value});
+async function tick(){try{const s=await (await fetch("/api/status")).json();
+ $("clock").textContent="day "+s.simulated_days.toFixed(2)+" (tick "+s.tick+")"+(s.paused?" - paused":"")+" - speed "+s.speed+", achieved "+s.achieved_speed.toFixed(0)+"x";
+ $("behind").textContent=s.behind?"the machine cannot keep up with the requested speed":"";
+ $("pop").textContent=s.population;
+ const r=await (await fetch("/api/humans")).json();
+ $("roster").textContent=r.slice(0,200).map(h=>h.agent_id+"  "+(h.space||"")+"  "+(h.position_m?h.position_m.map(x=>x.toFixed(1)).join(", "):"")).join("\n")+(r.length>200?"\n... "+(r.length-200)+" more":"");
+ }catch(e){$("clock").textContent="not reachable"}}
+tick();setInterval(tick,2000);
+</script></body></html>

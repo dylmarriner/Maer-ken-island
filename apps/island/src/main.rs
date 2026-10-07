@@ -36,6 +36,10 @@ fn main() {
     if command != "serve" {
         usage();
     }
+    if rest.iter().any(|a| a == "--scenario" || a == "--snapshot") {
+        serve_island(rest);
+        return;
+    }
     let mut data_dir = PathBuf::from("island-data");
     let mut seed = island_humans::DEFAULT_SEED;
     let mut bind: std::net::SocketAddr = "127.0.0.1:8080".parse().expect("valid default");
@@ -80,6 +84,56 @@ fn main() {
         auth,
         bind,
     )) {
+        eprintln!("could not serve on {bind}: {err}");
+        std::process::exit(1);
+    }
+}
+
+/// `island serve --scenario|--snapshot ...`: the live island.
+fn serve_island(rest: &[String]) {
+    let flag = |name: &str| rest.windows(2).find(|w| w[0] == name).map(|w| w[1].clone());
+    let bind: std::net::SocketAddr = flag("--bind")
+        .unwrap_or_else(|| "127.0.0.1:8080".into())
+        .parse()
+        .unwrap_or_else(|_| usage());
+    // `--snapshot` is the file to resume from, as `island run --load`.
+    let mut world = match island_runner::open_world(
+        &rest
+            .iter()
+            .map(|a| {
+                if a == "--snapshot" {
+                    "--load".to_string()
+                } else {
+                    a.clone()
+                }
+            })
+            .collect::<Vec<_>>(),
+        "--load",
+    ) {
+        Ok(world) => world,
+        Err(message) => {
+            eprintln!("island serve: {message}");
+            std::process::exit(1);
+        }
+    };
+    if let Some(root) = flag("--save-root") {
+        match world.enable_human_store(std::path::Path::new(&root)) {
+            Ok(run) => println!("run {run}: human folders in {root}/{run}/humans"),
+            Err(e) => {
+                eprintln!("island serve: cannot open the human store: {e}");
+                std::process::exit(1);
+            }
+        }
+    }
+    let auth = ControlAuth::resolve(std::env::var(TOKEN_ENV).ok(), bind.ip());
+    println!(
+        "Maer-Ken Island (live): http://{bind}/  ({} people, writes: {})",
+        world.life.humans.registry.iter().count(),
+        auth.describe()
+    );
+    let sim = serve::island_sim::spawn(world, flag("--snapshot-out").map(PathBuf::from));
+    let runtime = tokio::runtime::Runtime::new().expect("tokio runtime");
+    if let Err(err) = runtime.block_on(serve::island_api::run(sim, auth, bind)) {
         eprintln!("could not serve on {bind}: {err}");
         std::process::exit(1);
     }
