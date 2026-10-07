@@ -203,9 +203,12 @@ Upstream property has vehicles, power tools and computers but no fuel or power. 
 - Burning fuel books CO₂ and O₂ through Task 3 (`MaterialCarbon → AtmosCO2`). There is no refinery: fuel is finite until a later phase adds a production route (e.g. biodiesel), which is recorded in the deviation register.
 - Default `EstateEnergyConfig` (owner to confirm): one 10 kW diesel generator, 2,000 L diesel and 400 L petrol in storage, a 5 kW rooftop solar array and a 10 kWh battery. Phase 4b adds the river micro-hydro plant as the estate's main supply (the generator becomes backup) and a fuel depot supplied by the island refinery.
 
-- [ ] **Step 1:** Write tests: a computer runs on solar at midday and on battery at night until the battery is empty, then on the generator; the generator consumes fuel at its rated efficiency and stops when fuel runs out; a vehicle driven 100 km uses its reference fuel; with no power, computer access is denied even in the computer room; fuel burned raises atmospheric CO₂ by the stoichiometric amount.
-- [ ] **Step 2:** Run `cargo test -p mk_engine --test island_energy`; expect FAIL; implement; re-run; expect PASS.
-- [ ] **Step 3:** Commit `feat(island): fuel and electricity for the estate`.
+- [x] **Step 1:** Write tests: a computer runs on solar at midday and on battery at night until the battery is empty, then on the generator; the generator consumes fuel at its rated efficiency and stops when fuel runs out; a vehicle driven 100 km uses its reference fuel; with no power, computer access is denied even in the computer room; fuel burned raises atmospheric CO₂ by the stoichiometric amount.
+- [x] **Step 2:** Run `cargo test -p mk_engine --test island_energy`; expect FAIL; implement; re-run; expect PASS.
+- [x] **Step 3:** Commit `feat(island): fuel and electricity for the estate`.
+
+Implementation notes: vehicles start at a quarter tank (a full tank each would empty the 2,000 L diesel store into the tractors and leave the generator none). Battery losses are 5% each way; the generator does not recharge the battery. Tank sizes and engine ratings are rounded manufacturer figures; consumption comes from the labour reference pack (a test pins the reference midpoints inside the pack's ranges). Burning is booked as `CrustCarbon -> AtmosCO2` (kg C) and `AtmosO2 -> AtmosCO2` (kg O₂ bound), following `conservation.rs`; the tests check fuel + O₂ = CO₂ + H₂O per litre. The plan's `MaterialCarbon -> AtmosCO2` entry is Task 3's; until then the carbon comes from the crust, as fossil fuel is.
+
 
 ### Task 5: Metric estate layout and navigation
 
