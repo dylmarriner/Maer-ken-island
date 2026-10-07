@@ -1,6 +1,6 @@
 # Island system status
 
-Updated 2026-10-07. This records what is implemented, measured and verified, and the known
+Updated 2026-10-08. This records what is implemented, measured and verified, and the known
 fidelity limits. The project is **not complete**: see "Not done".
 
 ## Implemented
@@ -20,6 +20,10 @@ fidelity limits. The project is **not complete**: see "Not done".
 | Estate fuel and electricity (Phase 3 Task 4b) | Done | `regional/energy.rs`, `tests/island_energy.rs` |
 | Individual trees and stands on the estate patch (Phase 3 Task 7) | Done | `regional/local_vegetation.rs`, `tests/island_local_vegetation.rs` |
 | Island scenario and estate placement (Phase 3 Task 4) | Done | `mk_island/src/scenario.rs`, `regional/property.rs`, `fixtures/island/default_scenario.json` |
+| World composition, scheduler, snapshot, commands and replay (Phase 4 Tasks 1-4) | Done | `regional/{world,scheduler,commands,replay}.rs`, `io/island_snapshot.rs`, `tests/island_{world_bootstrap,scheduler,snapshot,replay}.rs` |
+| Per-human folders through upstream storage, written in rotating shards (Phase 4 Task 3b) | Done | `regional/store.rs`, `tests/island_human_store.rs` |
+| Headless runner and run inspection (Phase 4 Task 5) | Done except nothing pending | `apps/island/src/runner.rs`, `tests/island_runtime_acceptance.rs`, `apps/island/tests/runner_cli.rs` |
+| Live island server, pacing, creator with authored people and locations (Phase 4 Task 6) | Nearly done; see "Not done" | `apps/island/src/serve/island_{sim,api}.rs`, `regional/pacing.rs`, `tests/island_{pacing,create_human}.rs` |
 
 ## Measured (release build, development machine)
 
@@ -29,7 +33,15 @@ fidelity limits. The project is **not complete**: see "Not done".
 | Human runtime, 5,000 people | 23 us/human-step, 153 MB peak | `benchmarks/humans_population.md` |
 | **Combined island, one simulated week** (physics, ecology, estate, 200,000 trees, 2 founders, energy, materials) | 49 s, **307 MB peak** | `benchmarks/island_week.md` |
 
-The combined island (without persistence, the scheduler, a larger population, the refinery/town and the app) is measured above; those remain unmeasured until Phases 4, 4b and 5.
+| Island with 1,002 / 5,002 people (360 / 120 minute-steps) | 594 MB / 1,017 MB peak; 115 / 511 ms per step | `benchmarks/island_population.md` |
+| Snapshot of 5,002 people | 923 MB file, 30 s save, 10 s load, 1.7 GB peak (was OOM-killed at 3.6 GB before the streaming fix) | `benchmarks/island_population.md` |
+| Two founders, one simulated year | about 33 min wall clock, 713 MB peak including the final snapshot; a birth occurred | `benchmarks/island_week.md` |
+
+Limits of this evidence: populated runs are short (six hours or less) and add no births, deaths or
+growth; the year run has only the founders and its household outcomes were not inspected in
+detail; the refinery and town (Phase 4b) are not built. The development machine is shared and
+often under heavy memory pressure, so peak memory is the reliable column and wall-clock figures
+are pessimistic.
 
 ## Verification commands
 
@@ -38,8 +50,11 @@ The combined island (without persistence, the scheduler, a larger population, th
     cargo test --workspace --release
     cargo test --workspace --release -- --ignored slow_
 
-The last full-workspace run was at the end of Phase 1 (1,026 tests passing). Later phases were
-verified per module and by their own acceptance tests.
+`cargo clippy --workspace --all-targets -- -D warnings` is clean as of the last commit. The last
+full-workspace test run predates Phase 4; since then each module was verified by its own tests and
+the planetary hash guard (`tests/topology_hash_baseline.rs`) after every engine change. The memory
+tests need several GB: on a small machine build with `-j 1`, and keep `/tmp` (often RAM-backed)
+clear of large files.
 
 ## Known fidelity limits
 
@@ -52,11 +67,16 @@ Phase 3 Tasks 3 and 4b (D10, D13).
 
 ## Not done
 
-- Phase 3 Task 1b (island-scale species) and Tasks 2 and 9 (and the economy/lifecycle wiring of Tasks 3 and 3b): materials and resources, physical
-  materials, time and energy of actions, acceptance.
-- Phase 4: runtime scheduling, persistence, replay.
-- Phase 4b: energy, industry, town, economy.
-- Phase 5: app and UI replacing the human-only bootstrap, performance work, pruning, final
-  benchmarks.
-- Owner reviews: Gate 1 (island) and Gate 2 (weather previews).
+- Phase 3 Task 1b (island-scale species) and Task 2 (the full resource and material catalogue),
+  and the economy/lifecycle wiring of Tasks 3 and 3b (so people do timed, energy-costed work
+  through the materials model; today the models exist and are tested but do not drive the
+  household economy).
+- Phase 4 Task 2b (deep-time spin-up): blocked, not skipped. There is no soil, erosion or
+  tectonics model to spin up, and ecology already starts at its equilibrium (plan, Task 2b).
+- Phase 4 Task 6, remainder: `/api/properties`, a map picker for island cells, `--import-0b`,
+  `agent_id` slugging from a display name, and a manual browser check.
+- Phase 4b: energy, industry, town, economy beyond the estate.
+- Phase 5: pruning, lifetime-scale runs (births, deaths and growth over decades), final
+  benchmarks, README.
+- Owner reviews: Gate 1 (island), Gate 2 (weather previews), Gate 3 (integrated life).
 - Upstream pull requests for every divergence in `UPSTREAM.md`.
