@@ -27,3 +27,5 @@ Cadences: humans 60 s, physics hourly, ecology and households 6-hourly.
 Not in this number: Phases 4, 4b and 5 (persistence, replay, the app, a larger population, the
 refinery and town). The population is two humans; `benchmarks/humans_population.md` measures the
 human runtime alone at 5,000.
+
+Human store (Task 3b), one simulated day, two humans: 18.2 s with folders vs 17.4 s without (25 syncs, about 30 ms each); peak 293 MB vs 287 MB; state hash identical.

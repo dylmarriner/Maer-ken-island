@@ -128,6 +128,8 @@ pub struct IslandLife {
     pub shortfalls: Shortfalls,
     pub scheduler: IslandScheduler,
     pub commands: CommandState,
+    /// Per-human folders for this run (runtime-only; not hashed or saved).
+    pub store: Option<super::store::HumanStoreStatus>,
     labour: LabourTable,
     rng: RngRegistry,
     food_cell: (usize, usize),
@@ -243,6 +245,7 @@ impl IslandLife {
             shortfalls: Shortfalls::default(),
             scheduler: IslandScheduler::new(scenario_cadences),
             commands: CommandState::default(),
+            store: None,
             labour: LabourTable::load_default().map_err(IslandLifeError::Labour)?,
             food_cell,
             water_cell,
@@ -312,6 +315,7 @@ impl IslandLife {
             shortfalls: snap.shortfalls,
             scheduler: snap.scheduler,
             commands: snap.commands,
+            store: None,
             labour: LabourTable::load_default().map_err(IslandLifeError::Labour)?,
             food_cell: snap.food_cell,
             water_cell: snap.water_cell,
@@ -533,7 +537,13 @@ impl IslandLife {
             ));
             self.materials
                 .register_human(&r.agent_id, human.body.weight_kg);
-            self.humans.registry.add_human_no_storage(human);
+            // Added first, folder second: a failed write is counted and the
+            // human still exists.
+            if let Err(e) = self.humans.registry.add_human(human) {
+                if let Some(store) = self.store.as_mut() {
+                    store.record(vec![e]);
+                }
+            }
             self.positions.0.insert(
                 r.agent_id.clone(),
                 super::humans::EstatePosition {
@@ -635,8 +645,18 @@ impl IslandLife {
         if due.hydrology_ecology_resource {
             self.six_hourly()?;
         }
+        if due.human_store {
+            self.sync_store();
+        }
         self.scheduler.record(due);
         Ok(())
+    }
+
+    /// Write every human's folder; failures are counted in the store status.
+    pub fn sync_store(&mut self) {
+        if let Some(store) = self.store.as_mut() {
+            store.record(self.humans.sync_store());
+        }
     }
 
     /// Whether a founder is inside the estate layout (has a metric position

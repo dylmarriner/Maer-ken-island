@@ -15,7 +15,7 @@ use mk_island::IslandScenario;
 use serde::{Deserialize, Serialize};
 
 pub const RUNNER_USAGE: &str = "usage:
-  island run --scenario <path> [--canon <path>] [--steps <n>] [--dt <seconds>] [--load <snapshot>] [--save <snapshot>] [--log <path>]
+  island run --scenario <path> [--canon <path>] [--steps <n>] [--dt <seconds>] [--load <snapshot>] [--save <snapshot>] [--log <path>] [--save-root <dir>]
   island replay --scenario <path> [--canon <path>] --log <path> [--save <snapshot>]
   island inspect --snapshot <path>
   island serve [--data-dir ./island-data] [--seed <64 hex chars>] [--bind 127.0.0.1:8080]";
@@ -63,16 +63,29 @@ pub fn summary(world: &IslandWorldState) -> Result<String, String> {
     let hash = world.state_hash().map_err(|e| e.to_string())?;
     let life = &world.life;
     let days = world.sim_time_seconds() / 86_400.0;
+    let store = world.human_store_status().map_or(String::new(), |s| {
+        format!(
+            "\nhuman store run {}: {} syncs, {} write errors{}",
+            s.run_id,
+            s.syncs,
+            s.errors,
+            s.last_error
+                .as_ref()
+                .map_or(String::new(), |e| format!(" (last: {e})"))
+        )
+    });
     Ok(format!(
-        "tick {} ({days:.3} simulated days)\nhumans {}\nstate hash {}",
+        "tick {} ({days:.3} simulated days)\nhumans {}{store}\nstate hash {}",
         world.tick(),
         life.humans.registry.iter().count(),
         hex(hash),
     ))
 }
 
-fn save(world: &IslandWorldState, args: &[String]) -> Result<(), String> {
+fn save(world: &mut IslandWorldState, args: &[String]) -> Result<(), String> {
     if let Some(path) = flag(args, "--save") {
+        // The folders must match the snapshot being written.
+        world.sync_human_store();
         save_island_snapshot(world, Path::new(&path)).map_err(|e| e.to_string())?;
         println!("saved {path}");
     }
@@ -89,10 +102,16 @@ fn run(args: &[String]) -> Result<String, String> {
         Some(path) => load_island_snapshot(Path::new(&path)).map_err(|e| e.to_string())?,
         None => IslandWorldState::new(canon(args)?, scenario(args)?).map_err(|e| e.to_string())?,
     };
+    if let Some(root) = flag(args, "--save-root") {
+        let run_id = world
+            .enable_human_store(Path::new(&root))
+            .map_err(|e| e.to_string())?;
+        println!("run {run_id}: human folders in {root}/{run_id}/humans");
+    }
     for _ in 0..steps {
         world.step(dt).map_err(|e| e.to_string())?;
     }
-    save(&world, args)?;
+    save(&mut world, args)?;
     if let Some(path) = flag(args, "--log") {
         let file = RunLogFile {
             until_tick: world.tick(),
@@ -110,9 +129,9 @@ fn replay(args: &[String]) -> Result<String, String> {
     let bytes = std::fs::read(&path).map_err(|e| format!("cannot read {path}: {e}"))?;
     let file: RunLogFile =
         serde_json::from_slice(&bytes).map_err(|e| format!("{path} is not a run log: {e}"))?;
-    let world = replay_island(canon(args)?, scenario(args)?, &file.log, file.until_tick)
+    let mut world = replay_island(canon(args)?, scenario(args)?, &file.log, file.until_tick)
         .map_err(|e| e.to_string())?;
-    save(&world, args)?;
+    save(&mut world, args)?;
     summary(&world)
 }
 

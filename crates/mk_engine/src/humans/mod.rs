@@ -166,9 +166,31 @@ pub struct HumanSystem {
     /// history; that lives on each `HumanBeing` itself.
     #[serde(default)]
     conversation_log: VecDeque<dialogue::ConversationEvent>,
+    /// Whether every step rewrites every human's folder (upstream
+    /// behaviour, the default). The island turns it off and syncs on its
+    /// own cadence. Runtime-only: never serialised or hashed.
+    #[serde(skip, default = "auto_sync_default")]
+    auto_sync: bool,
+}
+
+fn auto_sync_default() -> bool {
+    true
 }
 
 impl HumanSystem {
+    /// Choose whether each step rewrites every human's folder. When off,
+    /// the caller syncs with [`Self::sync_store`]; a human who dies is still
+    /// written the same step.
+    pub fn set_auto_sync(&mut self, on: bool) {
+        self.auto_sync = on;
+    }
+
+    /// Write every human's folder now (no-op without storage). Errors are
+    /// returned, never swallowed.
+    pub fn sync_store(&self) -> Vec<crate::io::human_storage::HumanStorageError> {
+        self.registry.sync_to_storage()
+    }
+
     /// A pair bond ends when the partner dies (or is no longer tracked), so
     /// the widowed partner is free to bond again.
     fn end_bonds_with_the_dead(&mut self) {
@@ -227,6 +249,7 @@ impl HumanSystem {
         Self {
             registry: HumanRegistry::new(),
             conversation_log: VecDeque::new(),
+            auto_sync: true,
         }
     }
 
@@ -242,6 +265,7 @@ impl HumanSystem {
         let mut system = Self {
             registry: HumanRegistry::with_storage(storage)?,
             conversation_log: VecDeque::new(),
+            auto_sync: true,
         };
         let seed_errors = system.registry.seed_founders().err().unwrap_or_default();
         Ok((system, seed_errors))
@@ -1002,6 +1026,7 @@ impl HumanSystem {
             self.propagate_grief(agent_id);
         }
 
+        let dead_ids: Vec<String> = newly_dead.iter().map(|(id, _, _)| id.clone()).collect();
         for (agent_id, age, reason) in newly_dead {
             let death_event = serde_json::json!({
                 "kind": "died",
@@ -1038,7 +1063,14 @@ impl HumanSystem {
         // Persist every living human's evolving state/experiences each tick
         // (no-op when storage isn't configured for this registry). A failed
         // write never changes who exists or how the world evolves.
-        let sync_errors = self.registry.sync_to_storage();
+        let sync_errors = if self.auto_sync {
+            self.registry.sync_to_storage()
+        } else {
+            dead_ids
+                .iter()
+                .filter_map(|id| self.registry.sync_human_to_storage(id).err())
+                .collect()
+        };
         if let Some(first) = sync_errors.first() {
             tracing::warn!(
                 failed = sync_errors.len(),

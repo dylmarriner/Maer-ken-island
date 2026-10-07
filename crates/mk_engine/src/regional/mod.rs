@@ -27,6 +27,7 @@ pub mod replay;
 pub mod scheduler;
 pub mod seismicity;
 pub mod shape;
+pub mod store;
 pub mod synoptic;
 pub mod tectonics;
 pub mod terrain;
