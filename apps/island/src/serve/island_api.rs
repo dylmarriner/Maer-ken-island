@@ -132,6 +132,9 @@ pub fn routes(
                     })
             };
         view("estate", sim.clone(), |s| (*s.estate()).clone())
+            .or(view("properties", sim.clone(), |s| {
+                (*s.properties()).clone()
+            }))
             .or(view("vegetation", sim.clone(), |s| {
                 s.projection().vegetation.clone()
             }))
@@ -334,7 +337,12 @@ mod tests {
         assert_eq!(code, 200);
         let spaces = estate["spaces"].as_array().unwrap();
         assert!(spaces.iter().any(|s| s["label"] == "Kitchen"), "{estate}");
-        for view in ["/api/vegetation", "/api/economy", "/api/timeline"] {
+        for view in [
+            "/api/vegetation",
+            "/api/economy",
+            "/api/timeline",
+            "/api/properties",
+        ] {
             assert_eq!(get(&filter, view).await.0, 200, "{view}");
         }
         assert_eq!(get(&filter, "/api/nonsense").await.0, 404);

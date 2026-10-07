@@ -60,6 +60,21 @@ pub fn estate_view(world: &IslandWorldState) -> Value {
     })
 }
 
+/// The starter property: fixed for a run, so built once.
+pub fn properties_view(world: &IslandWorldState) -> Value {
+    let placed = &world.life.placed;
+    let layout = &placed.layout;
+    json!([{
+        "property_id": layout.property_id,
+        "medium_cell": [placed.location.0, placed.location.1],
+        "buildings": layout.buildings.len(),
+        "spaces": layout.spaces.len(),
+        "doors": layout.doors.len(),
+        "items": layout.items.len(),
+        "patch_size_m": [layout.patch.width_m, layout.patch.height_m],
+    }])
+}
+
 impl IslandProjection {
     fn capture(
         world: &IslandWorldState,
@@ -151,6 +166,7 @@ pub struct SimHandle {
     tx: Sender<Request>,
     projection: Arc<RwLock<Arc<IslandProjection>>>,
     estate: Arc<Value>,
+    properties: Arc<Value>,
 }
 
 #[derive(Debug)]
@@ -192,6 +208,10 @@ impl SimHandle {
         self.estate.clone()
     }
 
+    pub fn properties(&self) -> Arc<Value> {
+        self.properties.clone()
+    }
+
     pub fn stop(&self) {
         let _ = self.tx.send(Request::Stop);
     }
@@ -207,6 +227,7 @@ pub fn spawn(mut world: IslandWorldState, snapshot_path: Option<PathBuf>) -> Sim
     ))));
     let (tx, rx) = channel::<Request>();
     let estate = Arc::new(estate_view(&world));
+    let properties = Arc::new(properties_view(&world));
     let shared = projection.clone();
     std::thread::Builder::new()
         .name("island-sim".into())
@@ -280,5 +301,6 @@ pub fn spawn(mut world: IslandWorldState, snapshot_path: Option<PathBuf>) -> Sim
         tx,
         projection,
         estate,
+        properties,
     }
 }
