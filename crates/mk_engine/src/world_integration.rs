@@ -186,6 +186,12 @@ pub(crate) fn spin_up_climate(
     (state, climatology, hydrology)
 }
 
+/// How many planetary `WorldState`s have been built in this process
+/// (feature `construction-counters`). The island must leave it at zero.
+#[cfg(feature = "construction-counters")]
+pub static PLANETARY_WORLD_CONSTRUCTIONS: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+
 /// Complete world state for Phase 5
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorldState {
@@ -447,6 +453,8 @@ impl WorldState {
     /// subsystem derives its physics from the canon, so a world is never
     /// built on an invalid one.
     pub fn new(canon: Arc<CanonLocked>, initial_seed: [u8; 32]) -> Self {
+        #[cfg(feature = "construction-counters")]
+        PLANETARY_WORLD_CONSTRUCTIONS.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         if let Err(err) = mk_core::canon::validator::validate_canon(&canon) {
             panic!("WorldState::new: invalid canon: {err}");
         }

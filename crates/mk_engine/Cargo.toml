@@ -5,6 +5,11 @@ edition = "2021"
 authors = ["Maer'Ken Execution Team"]
 description = "Phase 2+ physical world engine for Marr'Kena MK-I simulation"
 
+[features]
+# Counts planetary `WorldState` constructions so a test can prove the island
+# never builds the planetary world. Off by default; costs nothing when off.
+construction-counters = []
+
 [dependencies]
 mk_core = { path = "../mk_core" }
 mk_interventions = { path = "../mk_interventions" }
