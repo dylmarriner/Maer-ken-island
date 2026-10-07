@@ -110,24 +110,54 @@ pub(crate) fn ocean_density(temp_k: f64, salinity: f64) -> f64 {
     density.max(1000.0)
 }
 
+/// Wind drift: the surface current is ~3% of the wind speed (Wright &
+/// Thompson 1983: 2.5-3.5%), so a 7 m/s wind drives ~20 cm/s.
+const WIND_DRIFT_FRACTION: f64 = 0.03;
+/// Ekman deflection of the surface current from the wind: 45° to the
+/// right in the northern hemisphere, to the left in the southern.
+const EKMAN_DEFLECTION_RAD: f64 = std::f64::consts::FRAC_PI_4;
+/// Largest wind-driven surface current (cm/s): beyond the strongest
+/// open-ocean currents, so extreme winds stay physical.
+const MAX_WIND_DRIVEN_CM_S: f64 = 500.0;
+
 /// Compute surface current from wind stress
 ///
-/// Ekman current: wind drives surface layer ~45° to wind direction
+/// Wind drift at [`WIND_DRIFT_FRACTION`] of the wind speed, turned 45° to
+/// the right of the wind where the Coriolis parameter is positive and to
+/// the left where it is negative (Ekman). Returned in cm/s, as
+/// [`OceanVelocity`] is.
+///
+/// This replaces upstream's `0.008·|w|·w·cos 45°/100`, which gave 0.28 cm/s
+/// for a 7 m/s wind (50-100x too weak), turned the current by no angle and
+/// ignored the Coriolis parameter it was passed (recorded in `UPSTREAM.md`).
 fn surface_current_from_wind(
-    wind_u: f64,    // m/s
-    wind_v: f64,    // m/s
-    _coriolis: f64, // rad/s
+    wind_u: f64,   // m/s
+    wind_v: f64,   // m/s
+    coriolis: f64, // rad/s
 ) -> OceanVelocity {
-    let tau_x = wind_u.abs() * wind_u;
-    let tau_y = wind_v.abs() * wind_v;
-    let factor = 0.008;
-    let cos45 = std::f64::consts::FRAC_1_SQRT_2;
-    let u_current = (tau_x * factor * cos45) / 100.0;
-    let v_current = (tau_y * factor * cos45) / 100.0;
-
+    let theta = if coriolis > 0.0 {
+        EKMAN_DEFLECTION_RAD
+    } else if coriolis < 0.0 {
+        -EKMAN_DEFLECTION_RAD
+    } else {
+        0.0
+    };
+    // Rotate the wind vector clockwise by `theta` (right-hand turn).
+    let (sin, cos) = theta.sin_cos();
+    let scale = 100.0 * WIND_DRIFT_FRACTION;
+    let (u, v) = (
+        scale * (wind_u * cos + wind_v * sin),
+        scale * (-wind_u * sin + wind_v * cos),
+    );
+    let speed = u.hypot(v);
+    let limit = if speed > MAX_WIND_DRIVEN_CM_S {
+        MAX_WIND_DRIVEN_CM_S / speed
+    } else {
+        1.0
+    };
     OceanVelocity {
-        u_east: u_current,
-        v_north: v_current,
+        u_east: u * limit,
+        v_north: v * limit,
     }
 }
 
@@ -337,6 +367,31 @@ pub fn step_ocean_on(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn wind_drift_is_three_percent_of_the_wind_turned_by_the_coriolis_sign() {
+        // A 10 m/s westerly: 30 cm/s, turned 45° right (northern) or left
+        // (southern) of its direction (east).
+        let north = surface_current_from_wind(10.0, 0.0, 1.0e-4);
+        let south = surface_current_from_wind(10.0, 0.0, -1.0e-4);
+        let (n_speed, s_speed) = (
+            north.u_east.hypot(north.v_north),
+            south.u_east.hypot(south.v_north),
+        );
+        assert!((n_speed - 30.0).abs() < 1e-9 && (s_speed - 30.0).abs() < 1e-9);
+        // Right of east is south; left of east is north.
+        assert!(north.v_north < 0.0 && north.u_east > 0.0);
+        assert!(south.v_north > 0.0 && south.u_east > 0.0);
+        assert!((north.v_north + south.v_north).abs() < 1e-9);
+        // 45°, to rounding.
+        assert!((north.u_east - north.v_north.abs()).abs() < 1e-9);
+        // No Coriolis parameter: straight downwind.
+        let eq = surface_current_from_wind(10.0, 0.0, 0.0);
+        assert_eq!((eq.u_east, eq.v_north), (30.0, 0.0));
+        // Extreme but finite wind stays physical.
+        let gale = surface_current_from_wind(1.0e9, 1.0e9, 1.0e-4);
+        assert!(gale.u_east.hypot(gale.v_north) <= MAX_WIND_DRIVEN_CM_S + 1e-9);
+    }
 
     #[test]
     fn ocean_deterministic() {

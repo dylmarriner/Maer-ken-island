@@ -1,0 +1,24 @@
+{
+  "coastal_outlets": 2552,
+  "fresh_water_to_ocean_kg_last_step": 357708801604.17566,
+  "lake_cells": 2688,
+  "land_rain_mm_day": {
+    "max": 25.68562569298062,
+    "mean": 1.8473783215353716
+  },
+  "land_surface_temperature_k": {
+    "max": 288.6622914012972,
+    "mean": 280.41762157329686,
+    "min": 270.5029649082856
+  },
+  "local_days": 30,
+  "ocean_surface_temperature_k": {
+    "max": 292.27337665378536,
+    "mean": 290.82573638335384,
+    "min": 288.36624180388435
+  },
+  "river_cells": 2884,
+  "seed": "3184701bbcebf2462768d517e54f0520b0036042d6511e8a5247d23a5392131e",
+  "state_hash": "30f9e47d81c58d7ea46e2b72af1b1894f606a937be7d1093e1aad3b64e8fb848",
+  "strongest_interior_current_cm_s": 79.29658758315017
+}

@@ -181,6 +181,9 @@ Implementation notes: upstream's one-cell-per-step routing cannot make real rive
 - [x] **Step 4:** Re-run the test twice and assert identical final blake3 hash.
 - [x] **Step 5:** Update `UPSTREAM.md` with regional physical wrappers; run `cargo fmt --all -- --check` and `cargo clippy --workspace --all-targets -- -D warnings`.
 - [x] **Step 6:** Commit `feat(engine): couple island physical systems`.
-- [ ] **Step 7:** Add `island_preview physical --profile <path> --seed <hex> --days <n> --out <dir>` writing surface temperature, mean rainfall, river/lake, ocean surface temperature and current-vector PNGs plus `summary.json`; same determinism test pattern as Phase 1 Task 6.
-- [ ] **Step 8:** Commit the default-seed 30-day preview under `docs/previews/phase2/` and commit `feat(preview): render island physical state`.
+- [x] **Step 7:** Add `island_preview physical --profile <path> --seed <hex> --days <n> --out <dir>` writing surface temperature, mean rainfall, river/lake, ocean surface temperature and current-vector PNGs plus `summary.json`; same determinism test pattern as Phase 1 Task 6.
+- [x] **Step 8:** Commit the default-seed 30-day preview under `docs/previews/phase2/` and commit `feat(preview): render island physical state`.
 - [ ] **Step 9 (Gate 2 review):** The owner checks the previews for plausibility (warmer north/cooler south at the reference latitude, wetter windward and drier leeward of ranges, rivers reaching the sea) before Phase 3.
+
+Implementation notes: the year-long realism test (`slow_a_year_of_island_weather_matches_the_reference_packs`, 19 s) gives on the owner's island: lapse 6.46 K/km (ref 6.5), diurnal range ocean 0.37 K / coastal 8.0 K / inland 12.8 K (ref 0.1-0.5 / 5-9 / 9-15, land widened by the 36 h day), windward:leeward rain 7.2 (ref 3-8), SST seasonal range 4.8 K (ref 3-6), runoff ratio 0.56 (Budyko 0.2-0.85). Reviewing the preview exposed an upstream ocean defect (wind-driven currents 50-100x too weak, no Ekman turning); fixed and recorded in `UPSTREAM.md`. `island_preview physical` runs the owner's island for 30 days in ~9 s. Gate 2 (Step 9) is the owner's review of `docs/previews/phase2/`.
+

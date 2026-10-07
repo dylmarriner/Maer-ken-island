@@ -3,17 +3,21 @@
 //! ```text
 //! island_preview geophysics --profile <path> [--seed <64 hex>] --out <dir>
 //! island_preview gallery --profile <path> --seeds <n> --out <dir>
+//! island_preview physical --profile <path> [--seed <64 hex>] --days <n> --out <dir>
 //! ```
 
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use island_preview::{generate, render_gallery, render_geophysics, Output};
+use island_preview::{
+    generate, render_gallery, render_geophysics, render_physical, simulate_physical, Output,
+};
 use mk_island::IslandProfile;
 
 const USAGE: &str = "usage:
   island_preview geophysics --profile <path> [--seed <64 hex chars>] --out <dir>
-  island_preview gallery --profile <path> --seeds <n> --out <dir>";
+  island_preview gallery --profile <path> --seeds <n> --out <dir>
+  island_preview physical --profile <path> [--seed <64 hex chars>] --days <n> --out <dir>";
 
 fn flag(args: &[String], name: &str) -> Option<String> {
     args.windows(2).find(|w| w[0] == name).map(|w| w[1].clone())
@@ -71,6 +75,20 @@ fn run(args: Vec<String>) -> Result<(), String> {
                 .parse()
                 .map_err(|_| "--seeds must be a whole number")?;
             write_all(&out, &render_gallery(&profile, n))
+        }
+        "physical" => {
+            let seed = match flag(&args, "--seed") {
+                Some(hex) => parse_seed(&hex)?,
+                None => profile
+                    .seed_bytes()
+                    .ok_or("the profile pins no seed; pass --seed")?,
+            };
+            let days: u64 = flag(&args, "--days")
+                .ok_or(USAGE)?
+                .parse()
+                .map_err(|_| "--days must be a whole number")?;
+            let run = simulate_physical(&profile, seed, days).map_err(|e| e.to_string())?;
+            write_all(&out, &render_physical(&run))
         }
         _ => Err(USAGE.to_string()),
     }

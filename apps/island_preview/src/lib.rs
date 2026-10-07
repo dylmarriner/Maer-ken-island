@@ -9,6 +9,8 @@ pub mod font;
 
 use std::collections::BTreeMap;
 
+use std::sync::Arc;
+
 use mk_core::canon::CanonLocked;
 use mk_engine::regional::boundary::sample_regional_boundaries;
 use mk_engine::regional::deposits::{deposit_models, DepositKind};
@@ -16,6 +18,9 @@ use mk_engine::regional::geology::Lithology;
 use mk_engine::regional::geophysics::{
     generate_regional_geophysics, RegionalGeophysics, RegionalGeophysicsError,
 };
+use mk_engine::regional::hydrology::{discharge_m3_s, RIVER_MIN_DISCHARGE_M3_S};
+use mk_engine::regional::levels::sample_coarse_at_medium;
+use mk_engine::regional::physical::{RegionalPhysicalError, RegionalPhysicalState};
 use mk_engine::regional::shape::component_sizes;
 use mk_engine::tectonics::BoundaryType;
 use mk_island::{DomainLevel, IslandDomain, IslandProfile};
@@ -534,4 +539,267 @@ pub fn render_gallery(profile: &IslandProfile, seeds: u32) -> Vec<Output> {
             .expect("gallery serialises"),
     ));
     outputs
+}
+
+/// A simulated stretch of the island's physical state, with the means the
+/// previews show.
+pub struct PhysicalRun {
+    pub domain: IslandDomain,
+    pub state: RegionalPhysicalState,
+    pub seed: [u8; 32],
+    pub days: u64,
+    /// Mean surface temperature (K) and rain (mm/day) per coarse cell over
+    /// the run.
+    pub mean_temperature_k: Vec<f64>,
+    pub mean_rain_mm_day: Vec<f64>,
+}
+
+/// Bootstraps the island for `profile` and `seed` (which must make a valid
+/// island) and runs `days` local days of the physical tick.
+pub fn simulate_physical(
+    profile: &IslandProfile,
+    seed: [u8; 32],
+    days: u64,
+) -> Result<PhysicalRun, RegionalPhysicalError> {
+    let canon = Arc::new(island_canon());
+    let domain = IslandDomain::from_profile(profile.clone()).expect("valid profile");
+    let mut state = RegionalPhysicalState::bootstrap(&canon, &domain, seed)?;
+    let n = domain.rows(DomainLevel::Coarse) * domain.cols(DomainLevel::Coarse);
+    let (mut temperature, mut rain) = (vec![0.0; n], vec![0.0; n]);
+    let dt = canon.rotation_period_s as u64;
+    for day in 1..=days {
+        state.step(&canon, &domain, seed, (day * dt) as f64, day, dt)?;
+        for i in 0..n {
+            temperature[i] += state.climate.surface_temperature.data()[i];
+            rain[i] += state.weather.precipitation.data()[i];
+        }
+    }
+    let scale = 1.0 / days.max(1) as f64;
+    Ok(PhysicalRun {
+        domain,
+        state,
+        seed,
+        days,
+        mean_temperature_k: temperature.into_iter().map(|v| v * scale).collect(),
+        mean_rain_mm_day: rain.into_iter().map(|v| v * scale).collect(),
+    })
+}
+
+fn ramp(stops: &[(f64, [u8; 3])], v: f64) -> [u8; 3] {
+    if v <= stops[0].0 {
+        return stops[0].1;
+    }
+    for w in stops.windows(2) {
+        if v <= w[1].0 {
+            return lerp(w[0].1, w[1].1, (v - w[0].0) / (w[1].0 - w[0].0));
+        }
+    }
+    stops[stops.len() - 1].1
+}
+
+/// Surface temperature colours: fixed 270-305 K range so previews compare.
+pub fn temperature_colour(k: f64) -> [u8; 3] {
+    ramp(
+        &[
+            (270.0, [40, 70, 200]),
+            (280.0, [60, 190, 220]),
+            (288.0, [230, 230, 100]),
+            (296.0, [240, 140, 40]),
+            (305.0, [190, 30, 30]),
+        ],
+        k,
+    )
+}
+
+/// Rain colours (mm/day): white through blue to purple.
+pub fn rain_colour(mm_day: f64) -> [u8; 3] {
+    ramp(
+        &[
+            (0.0, [245, 245, 235]),
+            (2.0, [170, 210, 240]),
+            (5.0, [60, 120, 220]),
+            (10.0, [90, 40, 180]),
+            (25.0, [50, 0, 90]),
+        ],
+        mm_day,
+    )
+}
+
+impl Image {
+    /// A straight line, Bresenham.
+    fn line(&mut self, x0: i64, y0: i64, x1: i64, y1: i64, c: [u8; 3]) {
+        let (dx, dy) = ((x1 - x0).abs(), -(y1 - y0).abs());
+        let (sx, sy) = (if x0 < x1 { 1 } else { -1 }, if y0 < y1 { 1 } else { -1 });
+        let (mut x, mut y, mut err) = (x0, y0, dx + dy);
+        loop {
+            if x >= 0 && y >= 0 {
+                self.set(x as usize, y as usize, c);
+            }
+            if x == x1 && y == y1 {
+                break;
+            }
+            let e2 = 2 * err;
+            if e2 >= dy {
+                err += dy;
+                x += sx;
+            }
+            if e2 <= dx {
+                err += dx;
+                y += sy;
+            }
+        }
+    }
+}
+
+/// The `physical` subcommand's files.
+pub fn render_physical(run: &PhysicalRun) -> Vec<Output> {
+    let (domain, s) = (&run.domain, &run.state);
+    let coarse = DomainLevel::Coarse;
+    let medium = DomainLevel::Medium;
+    let cols_c = domain.cols(coarse);
+    let land = |r: usize, c: usize| *s.geophysics.elevation_m.get(r, c) > 0.0;
+    // A coarse field at a medium cell, bilinear.
+    let at = |f: &dyn Fn(usize, usize) -> f64, r: usize, c: usize| {
+        sample_coarse_at_medium(f, domain, r, c)
+    };
+    let shade = |col: [u8; 3], is_land: bool| {
+        if is_land {
+            lerp(col, [255, 255, 255], 0.12)
+        } else {
+            col
+        }
+    };
+
+    let temperature = grid_image(domain, |r, c| {
+        let k = at(&|a, b| run.mean_temperature_k[a * cols_c + b], r, c);
+        shade(temperature_colour(k), land(r, c))
+    });
+    let rainfall = grid_image(domain, |r, c| {
+        let mm = at(&|a, b| run.mean_rain_mm_day[a * cols_c + b], r, c);
+        let col = rain_colour(mm);
+        if land(r, c) {
+            col
+        } else {
+            lerp(col, [60, 60, 80], 0.35)
+        }
+    });
+    let net = s.flow_network();
+    let mut rivers = grid_image(domain, |r, c| {
+        if !land(r, c) {
+            return [15, 25, 50];
+        }
+        if net.lake_depth_m(r, c) > 0.0 {
+            return [120, 200, 255];
+        }
+        let q = discharge_m3_s(&s.hydrology, domain, r, c);
+        if q >= RIVER_MIN_DISCHARGE_M3_S {
+            let t = (q.log10() / 3.0).clamp(0.0, 1.0);
+            return lerp([140, 230, 255], [0, 40, 200], t);
+        }
+        [95, 95, 85]
+    });
+    buffer_outline(&mut rivers, domain);
+    let sst = |a: usize, b: usize| s.ocean.columns.get(a, b).surface_temp;
+    let mut ocean_t = grid_image(domain, |r, c| {
+        if land(r, c) {
+            [70, 70, 70]
+        } else {
+            temperature_colour(at(&sst, r, c))
+        }
+    });
+    let mut currents = grid_image(domain, |r, c| {
+        if land(r, c) {
+            [70, 70, 70]
+        } else {
+            lerp(temperature_colour(at(&sst, r, c)), [20, 20, 30], 0.6)
+        }
+    });
+    // Current vectors: one arrow per 6 x 6 coarse cells, scaled so the
+    // strongest drawn current is 28 px (the scale is in summary.json).
+    let (rows_m, step) = (domain.rows(medium), 6usize);
+    let px_per_coarse = (domain.cell_size_m(coarse) / domain.cell_size_m(medium)).round() as usize;
+    let sampled: Vec<(usize, usize)> = (step / 2..domain.rows(coarse))
+        .step_by(step)
+        .flat_map(|r| (step / 2..cols_c).step_by(step).map(move |c| (r, c)))
+        .filter(|&(r, c)| s.ocean.columns.get(r, c).depth > 0.0)
+        .collect();
+    // The strongest interior current sets the scale: the edge cells are
+    // forced to the boundary inflow and would dominate it.
+    let (rows_c, margin) = (domain.rows(coarse), 8usize);
+    let strongest_cm_s = sampled
+        .iter()
+        .filter(|&&(r, c)| r >= margin && c >= margin && r + margin < rows_c && c + margin < cols_c)
+        .map(|&(r, c)| {
+            let v = s.ocean.currents.get(r, c);
+            v.u_east.hypot(v.v_north)
+        })
+        .fold(0.0_f64, f64::max);
+    let px_per_cm_s = if strongest_cm_s > 0.0 {
+        28.0 / strongest_cm_s
+    } else {
+        0.0
+    };
+    for &(r, c) in &sampled {
+        let v = s.ocean.currents.get(r, c);
+        let (x0, y0) = (
+            ((c as f64 + 0.5) * px_per_coarse as f64) as i64,
+            (rows_m as f64 - (r as f64 + 0.5) * px_per_coarse as f64) as i64,
+        );
+        let (x1, y1) = (
+            x0 + (v.u_east * px_per_cm_s).round() as i64,
+            y0 - (v.v_north * px_per_cm_s).round() as i64,
+        );
+        currents.line(x0, y0, x1, y1, [255, 255, 255]);
+        currents.mark(x1.max(0) as usize, y1.max(0) as usize, 1, [255, 220, 0]);
+    }
+    buffer_outline(&mut ocean_t, domain);
+
+    let stats = |values: &dyn Fn(usize) -> Option<f64>| {
+        let v: Vec<f64> = (0..run.mean_rain_mm_day.len()).filter_map(values).collect();
+        (
+            v.iter().cloned().fold(f64::MAX, f64::min),
+            v.iter().cloned().fold(f64::MIN, f64::max),
+            v.iter().sum::<f64>() / v.len().max(1) as f64,
+        )
+    };
+    let is_land_c = |i: usize| *s.coarse_elevation_m().data().get(i).unwrap_or(&0.0) > 0.0;
+    let (tl_min, tl_max, tl_mean) = stats(&|i| is_land_c(i).then_some(run.mean_temperature_k[i]));
+    let (to_min, to_max, to_mean) =
+        stats(&|i| (!is_land_c(i)).then_some(run.mean_temperature_k[i]));
+    let (_, rl_max, rl_mean) = stats(&|i| is_land_c(i).then_some(run.mean_rain_mm_day[i]));
+    let rivers_cells = net.outlets().count();
+    let river_cells = (0..domain.rows(medium))
+        .flat_map(|r| (0..domain.cols(medium)).map(move |c| (r, c)))
+        .filter(|&(r, c)| {
+            land(r, c) && discharge_m3_s(&s.hydrology, domain, r, c) >= RIVER_MIN_DISCHARGE_M3_S
+        })
+        .count();
+    let lake_cells = (0..domain.rows(medium))
+        .flat_map(|r| (0..domain.cols(medium)).map(move |c| (r, c)))
+        .filter(|&(r, c)| land(r, c) && net.lake_depth_m(r, c) > 0.0)
+        .count();
+    let summary = json!({
+        "seed": run.seed.iter().map(|b| format!("{b:02x}")).collect::<String>(),
+        "local_days": run.days,
+        "land_surface_temperature_k": {"min": tl_min, "max": tl_max, "mean": tl_mean},
+        "ocean_surface_temperature_k": {"min": to_min, "max": to_max, "mean": to_mean},
+        "land_rain_mm_day": {"max": rl_max, "mean": rl_mean},
+        "strongest_interior_current_cm_s": strongest_cm_s,
+        "river_cells": river_cells,
+        "lake_cells": lake_cells,
+        "coastal_outlets": rivers_cells,
+        "fresh_water_to_ocean_kg_last_step": s.river_water_to_ocean_kg,
+        "state_hash": s.state_hash().iter().map(|b| format!("{b:02x}")).collect::<String>(),
+    });
+    vec![
+        ("temperature.png".into(), temperature.png()),
+        ("rainfall.png".into(), rainfall.png()),
+        ("rivers_lakes.png".into(), rivers.png()),
+        ("ocean_temperature.png".into(), ocean_t.png()),
+        ("ocean_currents.png".into(), currents.png()),
+        (
+            "summary.json".into(),
+            serde_json::to_vec_pretty(&summary).expect("summary serialises"),
+        ),
+    ]
 }
