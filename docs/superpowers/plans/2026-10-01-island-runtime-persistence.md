@@ -66,12 +66,15 @@ Implementation notes: `regional/world.rs` `IslandWorldState` wraps `IslandLife` 
 - Produces: `IslandWorldState::step(dt_seconds: u64) -> Result<(), IslandWorldError>`.
 - Per human substep, in fixed order: apply queued commands for this tick (Task 4) → humans/interactions, active labour tasks and estate energy (`human_seconds`) → weather/ocean/zonal background/insolation (`weather_ocean_seconds`) → hydrology/ecology/resources (`regenerate()` once per firing)/local vegetation (`hydrology_ecology_resource_seconds`) → tectonics/geology and fault stress (`geophysics_seconds`; earthquakes are resolved at the human substep in which they nucleate so shaking reaches humans and structures in the same tick) → human store sync (`human_store_seconds`, Task 3b) → audit/hash commit.
 
-- [ ] **Step 1:** Write tests comparing one 86,400-second step against 1,440 × 60-second calls and requiring identical scheduler counters and final state hash.
-- [ ] **Step 2:** Write tests for deterministic remainder handling with irregular `dt_seconds = 3,701` and repeated execution.
-- [ ] **Step 3:** Run `cargo test -p mk_engine --test island_scheduler`; expect FAIL.
-- [ ] **Step 4:** Implement accumulator-driven substep dispatch in the fixed order above, reusing Phase-2 physical and Phase-3 human/ecology/resource step functions.
-- [ ] **Step 5:** Re-run; expect PASS. Slow tier for the 1,440-step comparison if it exceeds ~30 s debug.
-- [ ] **Step 6:** Commit `feat(engine): schedule island subsystems`.
+- [x] **Step 1:** Write tests comparing one 86,400-second step against 1,440 × 60-second calls and requiring identical scheduler counters and final state hash.
+- [x] **Step 2:** Write tests for deterministic remainder handling with irregular `dt_seconds = 3,701` and repeated execution.
+- [x] **Step 3:** Run `cargo test -p mk_engine --test island_scheduler`; expect FAIL.
+- [x] **Step 4:** Implement accumulator-driven substep dispatch in the fixed order above, reusing Phase-2 physical and Phase-3 human/ecology/resource step functions.
+- [x] **Step 5:** Re-run; expect PASS. Slow tier for the 1,440-step comparison if it exceeds ~30 s debug.
+- [x] **Step 6:** Commit `feat(engine): schedule island subsystems`.
+
+Implementation notes: `regional/scheduler.rs` (`IslandScheduler`, `SchedulerCounters`, `SchedulerAccumulators`, `Due`); `IslandLife::advance` now takes its cadences from the scenario and dispatches by the simulated clock (firings depend only on the clock, so slicing time differently cannot change them). A remainder shorter than a substep is carried (3,701 s = 61 whole minutes + 41 s waiting). Verified: 1 h as one step equals 60 one-minute steps; two 3,701 s steps equal one 7,402 s step; a full day in one step equals 1,440 steps (slow tier). Geophysics and human-store firings are counted but their work is Task 2b/3b; the command queue (Task 4) is not yet applied at the head of a substep. The scheduler state is in the state digest, so the week digest was re-pinned (`bf836cb8…6e3f`).
+
 
 ### Task 2b: Deep-time spin-up
 

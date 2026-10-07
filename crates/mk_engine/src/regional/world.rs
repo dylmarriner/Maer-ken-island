@@ -52,6 +52,14 @@ impl IslandWorldState {
         self.life.sim_time_s as f64
     }
 
+    /// Advance by `dt_seconds`: whole human substeps run in the scheduler's
+    /// fixed order, the remainder is carried to the next call.
+    pub fn step(&mut self, dt_seconds: u64) -> Result<(), IslandWorldError> {
+        self.life
+            .advance(dt_seconds)
+            .map_err(IslandWorldError::Bootstrap)
+    }
+
     /// The canonical state hash: JSON `Value` (sorted maps) hashed, so
     /// `HashMap`-backed upstream state hashes the same in every process.
     pub fn state_hash(&self) -> Result<[u8; 32], IslandWorldError> {

@@ -35,13 +35,11 @@ use super::local_vegetation::{seed_local_vegetation, LocalVegetationError, Local
 use super::materials::{Material, MaterialError, MaterialLedger};
 use super::physical::{RegionalPhysicalError, RegionalPhysicalState};
 use super::property::{place_regional_estate, PlaceEstateError, PlacedEstate};
+use super::scheduler::IslandScheduler;
 use crate::humans::HumanSystem;
 use crate::resource_economy::ResourceEconomyState;
 use crate::topology::GridTopology;
 
-const HUMAN_STEP_S: u64 = 60;
-const PHYSICAL_STEP_S: u64 = 3_600;
-const ECOLOGY_STEP_S: u64 = 6 * 3_600;
 /// Light daily activity while the founders live at home (MET).
 const HOME_MET: f64 = 1.3;
 /// Food and water each founder takes per 6 hours: ~2.4 kg of plant food
@@ -96,6 +94,7 @@ pub struct IslandLife {
     pub tick: u64,
     pub audits_closed: u64,
     pub shortfalls: Shortfalls,
+    pub scheduler: IslandScheduler,
     labour: LabourTable,
     rng: RngRegistry,
     food_cell: (usize, usize),
@@ -190,6 +189,7 @@ impl IslandLife {
                         .total_cmp(&discharge_m3_s(&physical.hydrology, &domain, b.0, b.1))
                 });
         let topology = GridTopology::regional(&domain, medium);
+        let scenario_cadences = scenario.cadences;
         Ok(Self {
             rng: RngRegistry::new(scenario.seed),
             canon,
@@ -208,6 +208,7 @@ impl IslandLife {
             tick: 0,
             audits_closed: 0,
             shortfalls: Shortfalls::default(),
+            scheduler: IslandScheduler::new(scenario_cadences),
             labour: LabourTable::load_default().map_err(IslandLifeError::Labour)?,
             food_cell,
             water_cell,
@@ -266,7 +267,7 @@ impl IslandLife {
                 self.scenario.seed,
                 self.sim_time_s as f64,
                 self.tick,
-                PHYSICAL_STEP_S,
+                self.scenario.cadences.weather_ocean_seconds,
             )
             .map_err(IslandLifeError::Physical)?;
         let size = self.domain.cell_size_m(DomainLevel::Medium);
@@ -290,11 +291,12 @@ impl IslandLife {
             .sum();
         let founders = self.founders();
         let labour = self.labour.clone();
+        let dt_physical = self.scenario.cadences.weather_ocean_seconds;
         self.audited(|life, ledger| {
-            life.energy.step(PHYSICAL_STEP_S as f64, solar_kw, ledger);
+            life.energy.step(dt_physical as f64, solar_kw, ledger);
             for (id, body) in &founders {
                 let kcal = labour
-                    .energy_kcal(body, HOME_MET, PHYSICAL_STEP_S as f64)
+                    .energy_kcal(body, HOME_MET, dt_physical as f64)
                     .unwrap_or(0.0);
                 let _ = life.materials.respire(id, kcal, ledger);
             }
@@ -302,8 +304,9 @@ impl IslandLife {
     }
 
     fn six_hourly(&mut self) -> Result<(), IslandLifeError> {
-        self.ecology.step(ECOLOGY_STEP_S as f64, None, None);
-        self.vegetation.step(&self.ecology, ECOLOGY_STEP_S);
+        let dt_ecology = self.scenario.cadences.hydrology_ecology_resource_seconds;
+        self.ecology.step(dt_ecology as f64, None, None);
+        self.vegetation.step(&self.ecology, dt_ecology);
         let founders = self.founders();
         let area = self.domain.cell_area_m2(DomainLevel::Medium);
         self.audited(|life, ledger| {
@@ -347,11 +350,13 @@ impl IslandLife {
         })
     }
 
-    /// Advance by `seconds` of simulated time in 60 s human steps.
+    /// Advance by `seconds` of simulated time in human substeps; a
+    /// remainder shorter than a substep is carried to the next call.
     pub fn advance(&mut self, seconds: u64) -> Result<(), IslandLifeError> {
-        let steps = seconds / HUMAN_STEP_S;
+        let steps = self.scheduler.take_substeps(seconds);
+        let human_s = self.scenario.cadences.human_seconds;
         for _ in 0..steps {
-            self.sim_time_s += HUMAN_STEP_S;
+            self.sim_time_s += human_s;
             self.tick += 1;
             {
                 let energy = self.energy.clone();
@@ -371,16 +376,18 @@ impl IslandLife {
                     &ctx,
                     &self.topology,
                     self.tick,
-                    HUMAN_STEP_S,
+                    human_s,
                     &self.rng,
                 );
             }
-            if self.sim_time_s.is_multiple_of(PHYSICAL_STEP_S) {
+            let due = self.scheduler.due(self.sim_time_s);
+            if due.weather_ocean {
                 self.hourly()?;
             }
-            if self.sim_time_s.is_multiple_of(ECOLOGY_STEP_S) {
+            if due.hydrology_ecology_resource {
                 self.six_hourly()?;
             }
+            self.scheduler.record(due);
         }
         Ok(())
     }
@@ -433,6 +440,7 @@ impl IslandLife {
         h.update(canonical(&self.energy).as_bytes());
         h.update(canonical(&self.economy).as_bytes());
         h.update(format!("{:?}", self.materials).as_bytes());
+        h.update(canonical(&self.scheduler).as_bytes());
         h.update(&self.sim_time_s.to_le_bytes());
         *h.finalize().as_bytes()
     }
