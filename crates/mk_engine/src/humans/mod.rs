@@ -178,6 +178,20 @@ fn auto_sync_default() -> bool {
 }
 
 impl HumanSystem {
+    /// Feed the whole system's canonical JSON to `sink`, one human at a
+    /// time, so a digest of a large population never holds more than one
+    /// human's `serde_json::Value` (whose maps are sorted, hence canonical
+    /// whatever the in-memory `HashMap` order) in memory at once.
+    pub fn canonical_chunks(&self, mut sink: impl FnMut(&[u8])) {
+        for human in self.registry.iter() {
+            let value = serde_json::to_value(human).expect("a human serialises");
+            sink(value.to_string().as_bytes());
+        }
+        sink(&self.registry.next_human_id().to_le_bytes());
+        let log = serde_json::to_value(&self.conversation_log).expect("the log serialises");
+        sink(log.to_string().as_bytes());
+    }
+
     /// Choose whether each step rewrites every human's folder. When off,
     /// the caller syncs with [`Self::sync_store`]; a human who dies is still
     /// written the same step.

@@ -702,7 +702,9 @@ impl IslandLife {
                 .collect::<Vec<_>>(),
         );
         let canonical = |v: &dyn erased::Json| v.value().to_string();
-        h.update(canonical(&self.humans).as_bytes());
+        self.humans.canonical_chunks(|bytes| {
+            h.update(bytes);
+        });
         h.update(canonical(&self.positions).as_bytes());
         h.update(canonical(&self.energy).as_bytes());
         h.update(canonical(&self.economy).as_bytes());

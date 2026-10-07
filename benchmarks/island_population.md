@@ -27,8 +27,36 @@ Caveats, so the numbers are not over-read:
 - Settlers all arrive at the yard and are not given jobs or a larger
   property; the household economy is sized for the founders. This measures
   the human runtime cost on the island, not a realistic village.
-- Per-human folders are off here (`--save-root` adds ~30 ms per full sync
-  for two humans; at thousands of humans the hourly sync will cost
-  proportionally more and needs its own measurement).
-- Snapshot size grows with population; 336 MB at two humans is dominated
-  by the physical grids (`benchmarks/island_snapshot.md`).
+
+## Snapshots and the human store at scale
+
+Measured with `ISLAND_SCALE_STORE=1`, 60 steps, files on disk (the test uses
+`CARGO_TARGET_TMPDIR`, not the RAM-backed `/tmp`):
+
+| Humans | Snapshot file | Save | Load | Peak RSS during snapshot | Full folder sync |
+|---:|---:|---:|---:|---:|---:|
+| 1,002 | 452 MB | 13.6 s | 3.5 s | 718 MB | 17.6 s |
+| 5,002 | 923 MB | 30.0 s | 10.2 s | 1,667 MB | 48.9 s |
+
+**A real defect found and fixed here.** The first 5,002-human snapshot was
+killed by `earlyoom` at 3.6 GB RSS on a 16 GB machine: `state_digest` turned
+the whole population into one `serde_json::Value` and a string, and the save
+built the whole JSON payload as one buffer. Now the digest hashes one human at
+a time (`HumanSystem::canonical_chunks`), the save streams JSON to disk
+through the hasher and patches the digest into the header, and the load
+verifies the digest in 1 MB chunks and parses from a buffered reader. At 1,002
+humans the snapshot peak fell from 1,943 MB to 718 MB. The state digest value
+changed with the method, so the week digest was re-pinned.
+
+Honest limits:
+
+- The machine was under heavy memory and swap pressure from other
+  applications during these runs, so wall-clock figures (and the 1.8 s/step in
+  the 5,002 run, against 0.5-0.7 s in quieter runs) are pessimistic and noisy;
+  peak memory is the reliable column.
+- A **full folder sync of 5,000 humans takes about 49 s**, against about 31 s
+  of wall clock per simulated hour at 117x. Syncing every human hourly does
+  not scale to that size; the store needs dirty-only writes or a slower
+  cadence at large populations. Up to about 1,000 humans (17 s per sync) it
+  is workable. Open.
+- Short spans, no births, deaths or long-run growth (unchanged).

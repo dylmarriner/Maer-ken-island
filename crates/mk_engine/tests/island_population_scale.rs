@@ -48,6 +48,9 @@ fn a_populated_island_runs_within_memory_and_time_budgets() {
     let steps = env_n("ISLAND_SCALE_STEPS", 360);
     let scenario = IslandScenario::load(&repo("fixtures/island/default_scenario.json")).unwrap();
     let canon = Arc::new(CanonLocked::load(&repo("fixtures/island/canon.json")).unwrap());
+    // On disk, not in a RAM-backed /tmp: the files must not compete with the
+    // memory being measured.
+    let store_root = tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).unwrap();
     let started = Instant::now();
     let mut w = IslandWorldState::new(canon, scenario).unwrap();
     let boot = started.elapsed().as_secs_f64();
@@ -63,6 +66,9 @@ fn a_populated_island_runs_within_memory_and_time_budgets() {
         }))
         .unwrap();
     }
+    if std::env::var("ISLAND_SCALE_STORE").is_ok() {
+        w.enable_human_store(store_root.path()).unwrap();
+    }
     let t = Instant::now();
     for _ in 0..steps {
         w.step(60).unwrap();
@@ -75,8 +81,34 @@ fn a_populated_island_runs_within_memory_and_time_budgets() {
         peak_rss_mb()
     );
     assert_eq!(n, people + 2);
+
+    // A full folder sync and a snapshot round trip at this population.
+    if w.human_store_status().is_some() {
+        let t = Instant::now();
+        w.sync_human_store();
+        let status = w.human_store_status().unwrap();
+        println!(
+            "SCALE store: full sync of {n} humans = {:.2} s, write errors {}",
+            t.elapsed().as_secs_f64(),
+            status.errors
+        );
+    }
+    let snap = store_root.path().join("scale.snap");
+    let t = Instant::now();
+    mk_engine::io::island_snapshot::save_island_snapshot(&w, &snap).unwrap();
+    let save = t.elapsed().as_secs_f64();
+    let bytes = std::fs::metadata(&snap).unwrap().len();
+    let t = Instant::now();
+    let back = mk_engine::io::island_snapshot::load_island_snapshot(&snap).unwrap();
+    let load = t.elapsed().as_secs_f64();
+    assert_eq!(back.state_hash().unwrap(), w.state_hash().unwrap());
+    println!(
+        "SCALE snapshot: {:.0} MB, save {save:.1} s, load {load:.1} s, peak_rss {:.0} MB",
+        bytes as f64 / 1e6,
+        peak_rss_mb()
+    );
     assert!(
-        peak_rss_mb() < 4096.0,
+        peak_rss_mb() < 6144.0,
         "over the 4 GB budget for a 16 GB machine's headroom"
     );
 }

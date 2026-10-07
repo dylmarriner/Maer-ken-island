@@ -11,7 +11,7 @@
 //! is large: the medium hydrology grids dominate. Compression is a
 //! Phase 5 option.
 
-use std::io::Write;
+use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -64,6 +64,22 @@ struct Envelope {
     life: IslandLifeSnapshot,
 }
 
+struct HashingWriter<'a, W: Write> {
+    inner: &'a mut W,
+    hasher: blake3::Hasher,
+}
+
+impl<W: Write> Write for HashingWriter<'_, W> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let n = self.inner.write(buf)?;
+        self.hasher.update(&buf[..n]);
+        Ok(n)
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.inner.flush()
+    }
+}
+
 fn canon_digest(canon: &CanonLocked) -> [u8; 32] {
     *blake3::hash(&bincode::serialize(canon).expect("canon serialises")).as_bytes()
 }
@@ -109,17 +125,27 @@ pub fn save_island_snapshot(
         state_digest: state.life.state_digest(),
         life: state.life.to_snapshot(),
     };
-    let payload = serde_json::to_vec(&envelope)
-        .map_err(|e| IslandSnapshotError::Serialization(e.to_string()))?;
-    let digest = blake3::hash(&payload);
     let tmp = path.with_extension("tmp");
     let io = |e| IslandSnapshotError::Io(path.to_path_buf(), e);
     {
-        let mut file = std::fs::File::create(&tmp).map_err(io)?;
-        file.write_all(MAGIC).map_err(io)?;
-        file.write_all(&FORMAT_VERSION.to_le_bytes()).map_err(io)?;
+        // Stream the payload to disk through the hasher: the whole JSON is
+        // never held in memory. The digest is patched into the header after.
+        let file = std::fs::File::create(&tmp).map_err(io)?;
+        let mut out = BufWriter::new(file);
+        out.write_all(MAGIC).map_err(io)?;
+        out.write_all(&FORMAT_VERSION.to_le_bytes()).map_err(io)?;
+        out.write_all(&[0u8; 32]).map_err(io)?;
+        let mut hashing = HashingWriter {
+            inner: &mut out,
+            hasher: blake3::Hasher::new(),
+        };
+        serde_json::to_writer(&mut hashing, &envelope)
+            .map_err(|e| IslandSnapshotError::Serialization(e.to_string()))?;
+        let digest = hashing.hasher.finalize();
+        out.flush().map_err(io)?;
+        let mut file = out.into_inner().map_err(|e| io(e.into_error()))?;
+        file.seek(SeekFrom::Start(12)).map_err(io)?;
         file.write_all(digest.as_bytes()).map_err(io)?;
-        file.write_all(&payload).map_err(io)?;
         file.sync_all().map_err(io)?;
     }
     std::fs::rename(&tmp, path).map_err(io)
@@ -128,22 +154,40 @@ pub fn save_island_snapshot(
 /// Load an island snapshot, validating the digest, the format, the
 /// scenario and canon before returning any state.
 pub fn load_island_snapshot(path: &Path) -> Result<IslandWorldState, IslandSnapshotError> {
-    let bytes = std::fs::read(path).map_err(|e| IslandSnapshotError::Io(path.to_path_buf(), e))?;
-    if bytes.len() < HEADER_LEN {
-        return Err(IslandSnapshotError::Truncated);
-    }
-    if &bytes[..8] != MAGIC {
+    let io = |e| IslandSnapshotError::Io(path.to_path_buf(), e);
+    let mut file = std::fs::File::open(path).map_err(io)?;
+    let mut header = [0u8; HEADER_LEN];
+    file.read_exact(&mut header).map_err(|e| {
+        if e.kind() == std::io::ErrorKind::UnexpectedEof {
+            IslandSnapshotError::Truncated
+        } else {
+            IslandSnapshotError::Io(path.to_path_buf(), e)
+        }
+    })?;
+    if &header[..8] != MAGIC {
         return Err(IslandSnapshotError::BadMagic);
     }
-    let version = u32::from_le_bytes(bytes[8..12].try_into().expect("4 bytes"));
+    let version = u32::from_le_bytes(header[8..12].try_into().expect("4 bytes"));
     if version != FORMAT_VERSION {
         return Err(IslandSnapshotError::UnsupportedFormat(version));
     }
-    let (digest, payload) = (&bytes[12..HEADER_LEN], &bytes[HEADER_LEN..]);
-    if blake3::hash(payload).as_bytes() != digest {
+    // Verify the digest in chunks, then parse from the same file: the
+    // payload is never held in memory as one buffer.
+    let mut hasher = blake3::Hasher::new();
+    let mut chunk = vec![0u8; 1 << 20];
+    loop {
+        let n = file.read(&mut chunk).map_err(io)?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&chunk[..n]);
+    }
+    drop(chunk);
+    if hasher.finalize().as_bytes() != &header[12..HEADER_LEN] {
         return Err(IslandSnapshotError::DigestMismatch);
     }
-    let envelope: Envelope = serde_json::from_slice(payload)
+    file.seek(SeekFrom::Start(HEADER_LEN as u64)).map_err(io)?;
+    let envelope: Envelope = serde_json::from_reader(BufReader::with_capacity(1 << 20, file))
         .map_err(|e| IslandSnapshotError::Serialization(e.to_string()))?;
     envelope
         .scenario
