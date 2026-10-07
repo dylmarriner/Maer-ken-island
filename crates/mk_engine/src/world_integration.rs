@@ -127,7 +127,7 @@ const SPIN_UP_STEPS_PER_ORBIT: usize = 54;
 /// Returns the climate state after the second orbit (back at the starting
 /// orbital phase), the climatology of that second orbit, and the spun-up
 /// soil and surface water.
-fn spin_up_climate(
+pub(crate) fn spin_up_climate(
     canon: &CanonLocked,
     initial: crate::climate::ClimateState,
     geothermal_flux_w_m2: &mk_core::grid::Grid2<f64>,

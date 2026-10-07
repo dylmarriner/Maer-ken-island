@@ -1,15 +1,17 @@
-//! Sampling the regional boundary forcing (Phase 1 Task 2).
+//! Sampling the regional boundary forcing (Phase 1 Task 2, Phase 2 Task 2).
 //!
 //! Astronomy is the canon's analytic orbit, rotation and moon geometry
 //! (`crate::orbit`, `crate::rotation`, `crate::tides`), so the region sees
 //! the same sun and moons as the planetary code. Ocean and atmosphere
-//! edge values are a provisional zonal climatology with deterministic
-//! noise (`provisional: true`); Phase 2 Task 2 replaces them with values
-//! derived from the zonal background through a separate function. Every
+//! edge values are zonal means plus deterministic day-to-day noise: from
+//! a provisional climatology in [`sample_regional_boundaries`]
+//! (`provisional: true`, enough for geophysics), or from the zonal
+//! background in [`sample_regional_boundaries_with_background`]. Every
 //! random value comes from a named blake3 stream keyed by the seed, the
 //! canon digest, the field, the edge, the cell and (for weather-like
 //! fields) the local day — never from wall-clock time or iteration order.
 
+use super::zonal::ZonalBackgroundState;
 use mk_core::canon::{CanonDerived, CanonLocked};
 use mk_island::{
     AstronomyForcing, AtmosphereBoundaryForcing, CrustKind, DomainLevel, Edge,
@@ -79,15 +81,94 @@ fn saturation_specific_humidity(t_k: f64, p_pa: f64) -> f64 {
     0.622 * e_s / (p_pa - 0.378 * e_s)
 }
 
-/// The edge forcing and astronomy at `sim_time_seconds`.
+/// Zonal means an edge cell's forcing is built on, before its
+/// deterministic day-to-day noise.
+struct EdgeMeans {
+    sea_surface_temperature_k: f64,
+    air_temperature_k: f64,
+    wind_u_m_s: f64,
+    wind_v_m_s: f64,
+    relative_humidity: f64,
+}
+
+/// The edge forcing and astronomy at `sim_time_seconds`, with ocean and
+/// atmosphere edges from a provisional zonal climatology (`provisional:
+/// true`). Geophysics uses only its astronomy and plates; the physical
+/// tick uses [`sample_regional_boundaries_with_background`].
 pub fn sample_regional_boundaries(
     seed: [u8; 32],
     canon: &CanonLocked,
     domain: &IslandDomain,
     sim_time_seconds: f64,
 ) -> RegionalBoundaryState {
-    let digest = CanonDerived::from(canon).canon_digest;
     let t = sim_time_seconds.max(0.0);
+    let orbit = crate::orbit::step_orbit(canon, t);
+    let rotation = crate::rotation::step_rotation(t, orbit.mean_anomaly, canon);
+    let tilt = canon.obliquity_deg.to_radians();
+    // +1 at the hemisphere's summer solstice, -1 at its winter solstice.
+    let season = |lat: f64| {
+        if tilt > 0.0 {
+            lat.signum() * rotation.subsolar_latitude / tilt
+        } else {
+            0.0
+        }
+    };
+    sample_with(seed, canon, domain, t, true, |lat| {
+        // Zonal-mean SST: ~28 °C at the equator, ~16 °C at 41°.
+        let sst = 273.15 + 28.0 * lat.cos().powi(2) + SST_SEASONAL_AMPLITUDE_K * season(lat);
+        EdgeMeans {
+            sea_surface_temperature_k: sst,
+            air_temperature_k: sst - 1.0
+                + (AIR_SEASONAL_AMPLITUDE_K - SST_SEASONAL_AMPLITUDE_K) * season(lat),
+            // Trades below ~30°, westerlies peaking near 60° (zonal-mean
+            // surface wind climatology).
+            wind_u_m_s: -7.0 * (3.0 * lat.abs()).cos(),
+            wind_v_m_s: 0.0,
+            relative_humidity: MARINE_RELATIVE_HUMIDITY,
+        }
+    })
+}
+
+/// The edge forcing and astronomy at `sim_time_seconds`, with ocean and
+/// atmosphere edges taken from the zonal background's bands at the edge
+/// latitudes (`provisional: false`): SST from the band's ocean columns, marine air 1 K below it, the band's surface wind, and
+/// upstream's marine relative humidity.
+pub fn sample_regional_boundaries_with_background(
+    seed: [u8; 32],
+    canon: &CanonLocked,
+    domain: &IslandDomain,
+    background: &ZonalBackgroundState,
+    sim_time_seconds: f64,
+) -> RegionalBoundaryState {
+    sample_with(
+        seed,
+        canon,
+        domain,
+        sim_time_seconds.max(0.0),
+        false,
+        |lat| {
+            let sst = background.sea_surface_temperature_at(lat);
+            let (u, v) = background.wind_at(lat);
+            EdgeMeans {
+                sea_surface_temperature_k: sst,
+                air_temperature_k: sst - 1.0,
+                wind_u_m_s: u,
+                wind_v_m_s: v,
+                relative_humidity: crate::weather::relative_humidity(lat, true),
+            }
+        },
+    )
+}
+
+fn sample_with(
+    seed: [u8; 32],
+    canon: &CanonLocked,
+    domain: &IslandDomain,
+    t: f64,
+    provisional: bool,
+    means: impl Fn(f64) -> EdgeMeans,
+) -> RegionalBoundaryState {
+    let digest = CanonDerived::from(canon).canon_digest;
 
     let orbit = crate::orbit::step_orbit(canon, t);
     let rotation = crate::rotation::step_rotation(t, orbit.mean_anomaly, canon);
@@ -109,15 +190,6 @@ pub fn sample_regional_boundaries(
 
     // Weather-like noise changes once per local day.
     let day = (t / canon.rotation_period_s).floor() as u64;
-    let tilt = canon.obliquity_deg.to_radians();
-    // +1 at the hemisphere's summer solstice, -1 at its winter solstice.
-    let season = |lat: f64| {
-        if tilt > 0.0 {
-            lat.signum() * rotation.subsolar_latitude / tilt
-        } else {
-            0.0
-        }
-    };
 
     let mut ocean_edges = Vec::new();
     let mut atmosphere_edges = Vec::new();
@@ -142,11 +214,8 @@ pub fn sample_regional_boundaries(
         for (i, &lat) in lats.iter().enumerate() {
             let i = i as u64;
             let noise = |label: &str| signed(&seed, &digest, label, &[e, i, day]);
-            // Zonal-mean SST: ~28 °C at the equator, ~16 °C at 41°.
-            let sst = 273.15
-                + 28.0 * lat.cos().powi(2)
-                + SST_SEASONAL_AMPLITUDE_K * season(lat)
-                + 0.3 * noise("sst");
+            let m = means(lat);
+            let sst = m.sea_surface_temperature_k + 0.3 * noise("sst");
             ocean.sea_surface_temperature_k.push(sst);
             ocean
                 .salinity_psu
@@ -154,18 +223,13 @@ pub fn sample_regional_boundaries(
             ocean.inflow_m_s.push(0.05 + 0.05 * noise("inflow"));
             ocean.sea_level_anomaly_m.push(0.1 * noise("sla"));
 
-            let air_t = sst - 1.0
-                + (AIR_SEASONAL_AMPLITUDE_K - SST_SEASONAL_AMPLITUDE_K) * season(lat)
-                + 1.5 * noise("air_t");
+            let air_t = m.air_temperature_k + 0.3 * noise("sst") + 1.5 * noise("air_t");
             let pressure = canon.sea_level_pressure_pa + 800.0 * noise("pressure");
             air.air_temperature_k.push(air_t);
-            // Trades below ~30°, westerlies peaking near 60° (zonal-mean
-            // surface wind climatology).
-            air.wind_u_m_s
-                .push(-7.0 * (3.0 * lat.abs()).cos() + 2.0 * noise("u"));
-            air.wind_v_m_s.push(1.5 * noise("v"));
+            air.wind_u_m_s.push(m.wind_u_m_s + 2.0 * noise("u"));
+            air.wind_v_m_s.push(m.wind_v_m_s + 1.5 * noise("v"));
             air.specific_humidity_kg_kg
-                .push(MARINE_RELATIVE_HUMIDITY * saturation_specific_humidity(air_t, pressure));
+                .push(m.relative_humidity * saturation_specific_humidity(air_t, pressure));
             air.surface_pressure_pa.push(pressure);
         }
         ocean_edges.push(ocean);
@@ -197,11 +261,11 @@ pub fn sample_regional_boundaries(
 
     RegionalBoundaryState {
         ocean: OceanBoundaryForcing {
-            provisional: true,
+            provisional,
             edges: ocean_edges,
         },
         atmosphere: AtmosphereBoundaryForcing {
-            provisional: true,
+            provisional,
             edges: atmosphere_edges,
         },
         tectonic: TectonicBoundaryForcing { far_field },

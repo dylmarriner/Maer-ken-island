@@ -56,6 +56,12 @@ Phase 1 adds the regional island domain and its geophysics. Almost all of it is 
 3. `mk_engine::regional` (new) — island-scale geophysics built on the imported models without changing them: tectonics (`regional_plates`, `step_regional_tectonics` on a flat, non-wrapping domain), seismicity from regional fault stress, volcanism through the item-2 geometry, terrain (a continental plateau, forearc and main range, trench and outer rise, arc and rift volcanoes, domain-warped noise, a stand-in for erosion), sea-level fitting to the target land area, with an edge ceiling relative to sea level that keeps coasts off the ocean buffer, then lithology and primary mineral deposits. Upstream has no rock-type map and places resources by biome. Here deposits form only where their geology allows, and petroleum only under water no deeper than 500 m.
 4. `apps/island_preview` (new) — renders the geophysics maps and a seed gallery to PNG/JSON.
 
+## Phase 2 divergences (2026-10-07)
+
+1. `mk_engine::world_integration::spin_up_climate` is `pub(crate)` (was private) so the zonal background reuses the world's own two-orbit spin-up instead of copying it. No behaviour change.
+2. `mk_engine::regional::zonal` (new) — the zonal background: upstream `step_climate` and `step_weather` unchanged on a 64-band × 64-column grid, where each band's land columns match upstream tectonics' land fraction at that latitude. Calibrated against the upstream 32 × 64 world (±1.5 K per band, ±0.5 K global mean).
+3. `mk_engine::regional::boundary` — `sample_regional_boundaries_with_background` (`provisional: false`) takes ocean and atmosphere edges from the background's bands; the Phase 1 sampler is kept for geophysics and now shares its loop.
+
 ## Drift check (2026-10-02)
 
 Upstream `dylmarriner/Maer-Ken` default-branch HEAD is `7c05f0dcf254387ffd7322dbb525fe4807228602`, equal to the pin: no upstream commits since the extraction, so upstream has not fixed the Phase 0 defects either. Re-check immediately before Phase 1.

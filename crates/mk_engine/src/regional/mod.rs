@@ -12,3 +12,4 @@ pub mod shape;
 pub mod tectonics;
 pub mod terrain;
 pub mod volcanism;
+pub mod zonal;
