@@ -85,7 +85,7 @@ Measured on a 16 GB development machine, release build (`benchmarks/`):
 
 An 8 GB machine is comfortable for the founders and for thousands of people. Compiling is the heavy part: `rustc` can use 4 GB or more, so on a small or busy machine build with `cargo build -j 1`, and keep large files out of `/tmp` where it is RAM-backed.
 
-Limits worth knowing (full list in [`docs/ISLAND_SYSTEM_STATUS.md`](docs/ISLAND_SYSTEM_STATUS.md)): people work and eat through a simplified household model, not yet through timed, energy-costed tasks; children grow along WHO curves but still act like adults; there is no refinery, town or deep-time spin-up yet; populated runs have been measured for hours, not for generations.
+Limits worth knowing (full list in [`docs/ISLAND_SYSTEM_STATUS.md`](docs/ISLAND_SYSTEM_STATUS.md)): people work and eat through a simplified household model, not yet through timed, energy-costed tasks; children grow along WHO curves, eat by body size and stay with their mother until five, but older children still act like adults; there is no refinery, town or deep-time spin-up yet; populated runs have been measured for hours, not for generations.
 
 ## Source authority
 

@@ -30,6 +30,7 @@ fn a_child_born_mid_run_is_adopted_with_its_mothers_carbon_and_position() {
     let mut w = world();
     let mut child = HumanBeing::new("Baby-1".to_string(), BiologicalSex::Female);
     child.body.weight_kg = 3.3;
+    child.development = mk_engine::humans::DevelopmentSnapshot::new(0.3);
     child
         .profile
         .canonical_schema
@@ -68,9 +69,16 @@ fn a_child_born_mid_run_is_adopted_with_its_mothers_carbon_and_position() {
         "the newborn starts where its mother stands"
     );
 
-    // A day later the child has eaten and breathed like everyone else.
+    // A day later the child has eaten and breathed like everyone else, and
+    // at every step it was where its mother was (an infant is carried).
     for _ in 0..(24 * 60) {
         w.step(60).unwrap();
+        let at = |id: &str| w.life.humans.registry.get_human(id).unwrap().position;
+        assert_eq!(
+            at("Baby-1"),
+            at("Gem-K"),
+            "the infant strayed from its mother"
+        );
     }
     assert!(w.life.humans.registry.get_human("Baby-1").is_some());
     assert_eq!(w.life.shortfalls.food, 0, "the household found food");

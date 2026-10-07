@@ -53,6 +53,36 @@ const HOME_MET: f64 = 1.3;
 /// what is tracked) and 2.6 L of drinking water a day.
 const FOOD_KG_PER_MEAL: f64 = 0.6;
 const WATER_KG_PER_DRINK: f64 = 0.65;
+/// Body weight from which a person eats and drinks the full ration; lighter
+/// people (children) take a share that scales with metabolic rate, weight^0.75.
+const FULL_RATION_WEIGHT_KG: f64 = 55.0;
+/// Children younger than this stay with their mother: they do not choose
+/// where to go (they are carried, then toddle behind her).
+const DEPENDENT_AGE_YEARS: f64 = 5.0;
+
+/// The share of a full meal or drink a person of this weight takes. Exactly
+/// 1 from `FULL_RATION_WEIGHT_KG` up, so adults are unaffected.
+fn ration_factor(weight_kg: f64) -> f64 {
+    (weight_kg / FULL_RATION_WEIGHT_KG)
+        .powf(0.75)
+        .clamp(0.05, 1.0)
+}
+
+/// A child's mother, from its birth record.
+fn mother_of(human: &crate::humans::HumanBeing) -> Option<String> {
+    human
+        .profile
+        .canonical_schema
+        .as_ref()
+        .and_then(|s| {
+            s.reproductive_systems
+                .genetics_system
+                .birth_records
+                .last()
+                .map(|r| r.mother_id.clone())
+        })
+        .filter(|m| !m.is_empty())
+}
 /// Share of the body's water loss that is excretion to the soil.
 const EXCRETION_TO_SOIL_FRACTION: f64 = 0.6;
 
@@ -419,9 +449,14 @@ impl IslandLife {
         let area = self.domain.cell_area_m2(DomainLevel::Medium);
         self.audited(|life, ledger| {
             for (id, _) in &founders {
+                let ration = life
+                    .humans
+                    .registry
+                    .get_human(id)
+                    .map_or(1.0, |h| ration_factor(h.body.weight_kg));
                 match life.materials.gather_biotic(
                     Material::PlantFood,
-                    FOOD_KG_PER_MEAL,
+                    FOOD_KG_PER_MEAL * ration,
                     &mut life.ecology,
                     life.food_cell,
                     area,
@@ -442,7 +477,7 @@ impl IslandLife {
                     );
                     for candidate in water_search_cells(cell, rows, cols) {
                         drawn = life.materials.gather_water(
-                            WATER_KG_PER_DRINK,
+                            WATER_KG_PER_DRINK * ration,
                             &mut life.physical.hydrology,
                             candidate,
                             area,
@@ -710,18 +745,7 @@ impl IslandLife {
             .iter()
             .filter(|h| !self.materials.is_registered(h.agent_id()))
             .map(|h| {
-                let mother = h
-                    .profile
-                    .canonical_schema
-                    .as_ref()
-                    .and_then(|s| {
-                        s.reproductive_systems
-                            .genetics_system
-                            .birth_records
-                            .last()
-                            .map(|r| r.mother_id.clone())
-                    })
-                    .filter(|m| !m.is_empty());
+                let mother = mother_of(h);
                 (h.agent_id().to_string(), h.body.weight_kg, mother)
             })
             .collect();
@@ -734,6 +758,45 @@ impl IslandLife {
                 .copied()
             {
                 self.positions.0.insert(id, at);
+            }
+        }
+    }
+
+    /// Children under `DEPENDENT_AGE_YEARS` go where their mother goes: they
+    /// are carried, then toddle behind her, instead of wandering off alone.
+    /// A child whose mother is dead or absent keeps its own movement.
+    fn keep_children_with_mothers(&mut self) {
+        let following: Vec<(
+            String,
+            crate::humans::GridPosition,
+            Option<super::humans::EstatePosition>,
+        )> = self
+            .humans
+            .registry
+            .iter()
+            .filter(|h| h.development.age_years < DEPENDENT_AGE_YEARS)
+            .filter_map(|h| {
+                let mother = self.humans.registry.get_human(&mother_of(h)?)?;
+                matches!(mother.profile.status, mk_core::human::HumanStatus::Alive).then(|| {
+                    (
+                        h.agent_id().to_string(),
+                        mother.position,
+                        self.positions.0.get(mother.agent_id()).copied(),
+                    )
+                })
+            })
+            .collect();
+        for (id, grid, estate) in following {
+            if let Some(child) = self.humans.registry.get_human_mut(&id) {
+                child.set_runtime_position(grid);
+            }
+            match estate {
+                Some(at) => {
+                    self.positions.0.insert(id, at);
+                }
+                None => {
+                    self.positions.0.remove(&id);
+                }
             }
         }
     }
@@ -765,6 +828,7 @@ impl IslandLife {
                 &self.rng,
             );
         }
+        self.keep_children_with_mothers();
         self.adopt_newborns();
         let due = self.scheduler.due(self.sim_time_s);
         if due.weather_ocean {
@@ -864,5 +928,31 @@ mod erased {
         fn value(&self) -> serde_json::Value {
             serde_json::to_value(self).expect("state serialises")
         }
+    }
+}
+
+#[cfg(test)]
+mod ration_tests {
+    use super::ration_factor;
+
+    #[test]
+    fn adults_take_the_full_ration_and_children_a_metabolic_share() {
+        for adult_kg in [55.0, 58.0, 72.0, 110.0] {
+            assert_eq!(ration_factor(adult_kg), 1.0, "{adult_kg} kg");
+        }
+        let infant = ration_factor(5.1);
+        assert!(
+            (0.1..0.2).contains(&infant),
+            "a 5 kg infant takes {infant:.3} of a ration"
+        );
+        let child = ration_factor(20.0);
+        assert!(
+            (0.4..0.6).contains(&child),
+            "a 20 kg child takes {child:.3}"
+        );
+        assert!(
+            ration_factor(5.0) < ration_factor(20.0) && ration_factor(20.0) < ration_factor(40.0)
+        );
+        assert!(ration_factor(0.0) >= 0.05, "never zero");
     }
 }
