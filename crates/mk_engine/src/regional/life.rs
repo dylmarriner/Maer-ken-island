@@ -17,6 +17,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use std::path::Path;
 use std::sync::Arc;
 
 use mk_core::canon::CanonLocked;
@@ -29,6 +30,7 @@ use mk_island::{
 use super::ecology::{RegionalEcologyError, RegionalEcologyState};
 use super::energy::{solar_output_kw, EstateEnergy};
 use super::estate_layout::Space;
+use super::human_store::{open_run, HumanStore, HumanStoreError, RunId};
 use super::humans::{
     bootstrap_regional_humans, step_regional_humans, HumanEstatePositions, RegionalHumanContext,
     RegionalHumanError,
@@ -153,6 +155,10 @@ pub struct IslandLife {
     pub scheduler: IslandScheduler,
     labour: LabourTable,
     rng: RngRegistry,
+    /// This run's folder tree, once somebody asks for one. Records rather
+    /// than state: it is absent from the snapshot and from the state digest,
+    /// and an island with one behaves exactly like an island without.
+    human_store: Option<HumanStore>,
     food_cell: (usize, usize),
     water_cell: Option<(usize, usize)>,
     topology: GridTopology,
@@ -268,6 +274,7 @@ impl IslandLife {
             sleep_seconds: BTreeMap::new(),
             scheduler: IslandScheduler::new(scenario_cadences),
             labour: LabourTable::load_default().map_err(IslandLifeError::Labour)?,
+            human_store: None,
             food_cell,
             water_cell,
             topology,
@@ -358,10 +365,84 @@ impl IslandLife {
             respired_since_meal: snapshot.respired_since_meal,
             sleep_seconds: snapshot.sleep_seconds,
             labour: LabourTable::load_default().map_err(IslandLifeError::Labour)?,
+            // A restored island keeps no records until someone attaches
+            // some: the folders belong to the run that wrote them, and a
+            // reload is a new run.
+            human_store: None,
             food_cell: snapshot.food_cell,
             water_cell: snapshot.water_cell,
             topology,
         })
+    }
+
+    /// Start keeping a folder for every human, under a run of this
+    /// island's own.
+    ///
+    /// Returns the run's id, which is also the name of its directory under
+    /// `save_root`. Calling this twice starts a second run with its own
+    /// folders rather than writing into the first one's.
+    ///
+    /// The island's behaviour does not change: with the store attached, the
+    /// state digest after any number of steps is the same as without it, and
+    /// the same again if every write fails. The folders are a record of the
+    /// run, not an input to it.
+    pub fn enable_human_store(&mut self, save_root: &Path) -> Result<RunId, HumanStoreError> {
+        let (mut store, storage) =
+            open_run(save_root, &self.scenario_digest(), &self.scenario.seed)?;
+        // Upstream rewrites every human's files on every step. At a
+        // 60-second human step that is 1,440 full rewrites per simulated
+        // day, so the island syncs on `human_store_seconds` instead — and
+        // immediately when somebody dies, which is the one moment a stale
+        // file would be a lie rather than a lag.
+        self.humans.set_auto_sync(false);
+        self.humans
+            .registry
+            .set_storage(storage)
+            .map_err(HumanStoreError::Storage)?;
+        for human in self.humans.registry.iter() {
+            if matches!(human.profile.status, mk_core::human::HumanStatus::Alive) {
+                store.note_status(human.agent_id(), true, &mut Vec::new());
+            }
+        }
+        let id = store.run_id().clone();
+        self.human_store = Some(store);
+        Ok(id)
+    }
+
+    /// This run's records, if any are being kept.
+    pub fn human_store(&self) -> Option<&HumanStore> {
+        self.human_store.as_ref()
+    }
+
+    /// Identifies the scenario this island is running, so two runs of the
+    /// same one share a prefix and two different ones do not.
+    fn scenario_digest(&self) -> [u8; 32] {
+        let canonical = serde_json::to_vec(&self.scenario).unwrap_or_default();
+        *blake3::hash(&canonical).as_bytes()
+    }
+
+    /// Write every human's full state to their folder now.
+    ///
+    /// Failures are counted on the store and logged, never returned: a disk
+    /// that will not take a record is not a reason for the island to stop
+    /// having a history.
+    pub fn sync_humans(&mut self) {
+        let Some(mut store) = self.human_store.take() else {
+            return;
+        };
+        store.note_failures(&self.humans.registry.sync_to_storage());
+        self.human_store = Some(store);
+    }
+
+    /// Write one human's final state the moment they die.
+    fn sync_one_human(&mut self, agent_id: &str) {
+        let Some(mut store) = self.human_store.take() else {
+            return;
+        };
+        if let Err(e) = self.humans.registry.sync_human_to_storage(agent_id) {
+            store.note_failure(&e);
+        }
+        self.human_store = Some(store);
     }
 
     /// Run `f` as one audited household step: the ledger's net flows must
@@ -585,8 +666,28 @@ impl IslandLife {
             // tally is written, without rebuilding a body and cloning an
             // agent id per human per substep just to look at one bool.
             let mut spent = std::mem::take(&mut self.sleep_seconds);
+            // Taken out for the same reason, and only when records are being
+            // kept: an island with no store walks this loop exactly as it
+            // did before.
+            let mut store = self.human_store.take();
+            let mut died: Vec<String> = Vec::new();
+            // Accumulators belonging to people who are no longer alive. Both
+            // are hashed, and `hourly()` only clears the living, so without
+            // this a dead founder's last unspent hour and unpaid meal would
+            // sit in the digest for the rest of the run and the maps would
+            // grow with every death the island ever has.
+            let mut forget: Vec<String> = Vec::new();
             for human in self.humans.registry.iter() {
-                if !matches!(human.profile.status, mk_core::human::HumanStatus::Alive) {
+                let alive = matches!(human.profile.status, mk_core::human::HumanStatus::Alive);
+                if let Some(store) = store.as_mut() {
+                    store.note_status(human.agent_id(), alive, &mut died);
+                }
+                if !alive {
+                    if spent.remove(human.agent_id()).is_some()
+                        || self.respired_since_meal.contains_key(human.agent_id())
+                    {
+                        forget.push(human.agent_id().to_string());
+                    }
                     continue;
                 }
                 let entry = match spent.get_mut(human.agent_id()) {
@@ -602,12 +703,28 @@ impl IslandLife {
                 }
             }
             self.sleep_seconds = spent;
+            self.human_store = store;
+            for id in forget {
+                // The dead respire nothing and are owed no meal. Dropping
+                // these moves no carbon: the ledger sent their body's carbon
+                // to detritus when they died, and these only ever recorded
+                // what the next hour and the next meal would have cost.
+                self.respired_since_meal.remove(&id);
+            }
+            // A death is written at once: every other record can lag a
+            // cadence and catch up, but a dead person's folder never will.
+            for id in died {
+                self.sync_one_human(&id);
+            }
             let due = self.scheduler.due(self.sim_time_s);
             if due.weather_ocean {
                 self.hourly()?;
             }
             if due.hydrology_ecology_resource {
                 self.six_hourly()?;
+            }
+            if due.human_store {
+                self.sync_humans();
             }
             self.scheduler.record(due);
         }
@@ -695,6 +812,58 @@ mod erased {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use std::path::PathBuf;
+
+    fn repo(path: &str) -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .join(path)
+    }
+
+    /// A dead founder's unspent hour and unpaid meal are dropped rather than
+    /// carried for the rest of the run.
+    ///
+    /// Both maps are hashed into the state digest and `hourly()` only clears
+    /// the living, so without this every death the island ever has would
+    /// leave a permanent entry behind — growing the maps without bound and
+    /// hashing state that stopped meaning anything the moment its owner
+    /// died. Found in review on PR #3.
+    #[test]
+    fn the_dead_stop_accumulating_hours_and_meals() {
+        let mut scenario =
+            IslandScenario::load(&repo("fixtures/island/default_scenario.json")).unwrap();
+        scenario.estate_patch.tree_cap = 200;
+        let canon = Arc::new(CanonLocked::load(&repo("fixtures/island/canon.json")).unwrap());
+        let mut life = IslandLife::bootstrap(scenario, canon).expect("the island bootstraps");
+
+        // Two hours so both accumulators have something in them: the sleep
+        // tally fills every substep, the meal debt on the hour.
+        life.advance(2 * 3_600).unwrap();
+        assert!(
+            life.respired_since_meal.contains_key("Gem-K"),
+            "nobody respired, so there is nothing to test"
+        );
+
+        life.humans
+            .registry
+            .get_human_mut("Gem-K")
+            .unwrap()
+            .profile
+            .status = mk_core::human::HumanStatus::Dead;
+        life.advance(life.scenario.cadences.human_seconds).unwrap();
+
+        assert!(
+            !life.sleep_seconds.contains_key("Gem-K"),
+            "a dead founder is still banking hours"
+        );
+        assert!(
+            !life.respired_since_meal.contains_key("Gem-K"),
+            "a dead founder is still owed a meal"
+        );
+        // And the living are untouched.
+        assert!(life.sleep_seconds.contains_key("Gem-D"));
+    }
 
     #[test]
     fn both_home_activities_are_named_in_the_reference_packs() {

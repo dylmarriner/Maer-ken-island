@@ -97,6 +97,18 @@ Phase 1 adds the regional island domain and its geophysics. Almost all of it is 
     types (`regional::{physical, ecology, property, local_vegetation, estate_layout, materials}`),
     not on imported ones.
 
+26. `mk_engine::humans::HumanSystem::set_auto_sync` — **an upstream behaviour switch, needs an
+    upstream PR.** `HumanSystem::step` rewrites every human's full-state files on every call
+    (`humans/mod.rs`). `auto_sync` defaults to `true`, so the planetary `WorldState` is unchanged,
+    and it is `#[serde(skip)]` so no serialized world and no state digest moves. The island sets
+    it `false`: at a 60-second human step that is 1,440 full rewrites per simulated day. Births,
+    deaths and events are still written when they happen either way.
+    `mk_engine::regional::human_store` (new) — one run's folder tree:
+    `<save root>/<run id>/humans/`, `run id = blake3(scenario digest ‖ seed ‖ counter)[..12]` with
+    the counter in `<save root>/runs.json`, opened through `HumanStorage::try_new` so a missing
+    storage key refuses rather than writing records in plaintext. Island-only; upstream
+    `HumanStorage` and `HumanRegistry` are used as they are.
+
 ## Drift check (2026-10-02)
 
 Upstream `dylmarriner/Maer-Ken` default-branch HEAD is `7c05f0dcf254387ffd7322dbb525fe4807228602`, equal to the pin: no upstream commits since the extraction, so upstream has not fixed the Phase 0 defects either. Re-check immediately before Phase 1.

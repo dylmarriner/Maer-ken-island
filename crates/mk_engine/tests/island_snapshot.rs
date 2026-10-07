@@ -52,7 +52,7 @@ fn a_saved_island_comes_back_as_the_same_island() {
     life.advance(3_600).unwrap();
     let before = hex(life.state_digest());
 
-    save_island_snapshot(&life, &path).unwrap();
+    save_island_snapshot(&mut life, &path).unwrap();
     let mut back = load_island_snapshot(canon(), &path).unwrap();
 
     assert_eq!(hex(back.state_digest()), before, "the island changed");
@@ -77,10 +77,10 @@ fn a_saved_island_comes_back_as_the_same_island() {
 fn saving_twice_leaves_one_whole_file_and_no_temporaries() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("island.mks");
-    let life = small_island();
+    let mut life = small_island();
 
-    save_island_snapshot(&life, &path).unwrap();
-    save_island_snapshot(&life, &path).unwrap();
+    save_island_snapshot(&mut life, &path).unwrap();
+    save_island_snapshot(&mut life, &path).unwrap();
 
     let left: Vec<_> = std::fs::read_dir(dir.path())
         .unwrap()
@@ -97,7 +97,7 @@ fn saving_twice_leaves_one_whole_file_and_no_temporaries() {
 fn a_flipped_byte_anywhere_is_refused() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("island.mks");
-    save_island_snapshot(&small_island(), &path).unwrap();
+    save_island_snapshot(&mut small_island(), &path).unwrap();
     let good = std::fs::read(&path).unwrap();
 
     // The canon digest, the start of the state and its last byte: each is
@@ -139,7 +139,7 @@ fn a_truncated_or_foreign_file_is_refused_before_it_is_parsed() {
     ));
 
     // A real snapshot cut short: whole header, half a payload.
-    save_island_snapshot(&small_island(), &path).unwrap();
+    save_island_snapshot(&mut small_island(), &path).unwrap();
     let good = std::fs::read(&path).unwrap();
     std::fs::write(&path, &good[..good.len() / 2]).unwrap();
     assert!(
@@ -167,7 +167,7 @@ fn a_truncated_or_foreign_file_is_refused_before_it_is_parsed() {
 fn an_island_saved_under_other_physics_will_not_load() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("island.mks");
-    save_island_snapshot(&small_island(), &path).unwrap();
+    save_island_snapshot(&mut small_island(), &path).unwrap();
 
     let mut other = CanonLocked::load(&repo("fixtures/island/canon.json")).unwrap();
     other.rotation_period_s *= 2.0;
@@ -242,7 +242,7 @@ fn slow_a_full_island_survives_a_trip_through_a_file() {
 
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("island.mks");
-    save_island_snapshot(&w, &path).unwrap();
+    save_island_snapshot(&mut w, &path).unwrap();
     let bytes = std::fs::metadata(&path).unwrap().len();
     println!("{trees} trees, {} MB on disk", bytes / 1_048_576);
     assert!(

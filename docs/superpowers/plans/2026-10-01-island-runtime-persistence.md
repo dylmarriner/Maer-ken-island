@@ -141,11 +141,34 @@ already compares through the digest rather than a separate field to assert on.
 - Upstream `HumanSystem::step` calls `registry.sync_to_storage()` every call (`humans/mod.rs:880`). Add `HumanSystem::set_auto_sync(bool)` (default `true`, preserving upstream `WorldState` behaviour). The island sets it `false` and syncs on `human_store_seconds`, at every snapshot save, and immediately when a human dies. Event files (`events/`, memories, relationships) are still appended when they happen.
 - Storage errors (returned by the Phase-0 registry changes) are counted in the audit trail and shown by the CLI/dashboard, never discarded.
 
-- [ ] **Step 1:** Write tests: founders get folders on enable; a birth during a stepped run creates the child's folder in the same tick with a `born` event and parents' `reproduced` events; folders after a snapshot save match the snapshot's human state; a fresh run with the same seed under the same root uses a new `run_id` directory; with auto-sync off, full-state files are rewritten only on the store cadence; state hash is identical with the store enabled, disabled or failing.
-- [ ] **Step 2:** Run `cargo test -p mk_engine --test island_human_store`; expect FAIL.
-- [ ] **Step 3:** Implement on top of upstream `HumanStorage` (no second folder format).
-- [ ] **Step 4:** Re-run, plus `cargo test -p mk_engine --lib humans::`; expect PASS. Record per-sync cost for the Phase-5 benchmark.
-- [ ] **Step 5:** Record `set_auto_sync` in `UPSTREAM.md`. Commit `feat(island): keep a folder for every human`.
+- [x] **Step 1:** Write tests: founders get folders on enable; a birth during a stepped run creates the child's folder in the same tick with a `born` event and parents' `reproduced` events; folders after a snapshot save match the snapshot's human state; a fresh run with the same seed under the same root uses a new `run_id` directory; with auto-sync off, full-state files are rewritten only on the store cadence; state hash is identical with the store enabled, disabled or failing.
+- [ ] **Step 2:** Run `cargo test -p mk_engine --test island_human_store`; expect FAIL. Not done as written, as in Task 3: the tests and the module were written together.
+- [x] **Step 3:** Implement on top of upstream `HumanStorage` (no second folder format).
+- [x] **Step 4:** Re-run, plus `cargo test -p mk_engine --lib humans::`; expect PASS. Record per-sync cost for the Phase-5 benchmark.
+- [x] **Step 5:** Record `set_auto_sync` in `UPSTREAM.md`. Commit `feat(island): keep a folder for every human`.
+
+**Built (2026-10-07):** `open_run` claims the next run under the save root — the counter in
+`runs.json` is written back *before* any human is, so a crash mid-run burns an id rather than
+reusing one — and the id is `blake3(scenario digest ‖ seed ‖ counter)[..12]`, stable for a given
+scenario, seed and run number rather than a timestamp. The store opens through
+`HumanStorage::try_new`, which refuses a missing storage key instead of writing people's records
+in plaintext.
+
+`IslandLife::enable_human_store` sets `auto_sync` false and syncs on `human_store_seconds` (the
+cadence and its counter already existed in the scheduler and were computed but never acted on),
+at every `save_island_snapshot` — which now takes `&mut` for that reason, so a checkpoint
+checkpoints everything — and immediately when somebody dies, which is the one moment a stale file
+would be a lie rather than a lag. Failed writes are counted on the store with their most recent
+reason and surfaced by the CLI, never discarded: a human whose folder will not write still exists.
+
+What the tests are actually for: `keeping_records_does_not_change_what_happens` and
+`the_island_runs_on_when_every_write_fails` both assert an identical state digest against an
+island with no store at all. A world that ran differently when asked to keep records would not be
+worth the records.
+
+`crates/mk_engine/src/regional/world.rs` is not modified: this repository's composition is
+`regional/life.rs` (`IslandLife`), which is where the store lives.
+
 
 ### Task 4: External commands and deterministic replay
 

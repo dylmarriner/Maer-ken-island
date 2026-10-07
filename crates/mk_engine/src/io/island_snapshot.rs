@@ -135,7 +135,13 @@ fn canon_digest(canon: &CanonLocked) -> [u8; DIGEST_LEN] {
 /// leaves the previous snapshot intact rather than a half-written one: the
 /// rename is the only moment the file changes, and it either happens or it
 /// does not.
-pub fn save_island_snapshot(life: &IslandLife, path: &Path) -> Result<(), IslandSnapshotError> {
+///
+/// Takes `&mut` because a checkpoint is a checkpoint of everything: if the
+/// island is keeping folders for its people, they are brought up to date
+/// here, so the snapshot and the folders beside it describe the same moment
+/// rather than two moments a cadence apart.
+pub fn save_island_snapshot(life: &mut IslandLife, path: &Path) -> Result<(), IslandSnapshotError> {
+    life.sync_humans();
     // The state is written straight into the compressor, and the file is
     // assembled from pieces rather than concatenated. A full island is 338 MB
     // of JSON and 44 MB compressed; holding either of them more than once
@@ -258,7 +264,12 @@ fn write_atomically(path: &Path, pieces: &[&[u8]]) -> Result<(), IslandSnapshotE
         return Err(IslandSnapshotError::Io(e));
     }
     // And the directory entry itself needs flushing, or the rename can be
-    // lost while the file's contents survive.
+    // lost while the file's contents survive. Opening a directory to fsync
+    // it is a Unix idiom: Windows refuses, which is why the result is
+    // discarded rather than raised. The snapshot is already whole and
+    // renamed by this point, so the worst a refusal costs is that a power
+    // cut in the next moment could lose the rename — and NTFS journals
+    // metadata, which is the thing this call is standing in for.
     if let Some(parent) = path.parent() {
         let dir = if parent.as_os_str().is_empty() {
             Path::new(".")
