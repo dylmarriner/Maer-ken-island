@@ -521,3 +521,83 @@ fn walking_somewhere_costs_more_than_sitting_still() {
         sat.hydration
     );
 }
+
+/// Nobody outlives the longest life anyone has actually lived.
+///
+/// `maximum_verified_lifespan` has sat in the life-history pack unchecked;
+/// this ties the runtime's hard biological ceiling to it.
+#[test]
+fn nobody_outlives_the_longest_verified_human_life() {
+    use mk_core::human::BiologicalSex;
+    use mk_core::rng::RngRegistry;
+    use mk_engine::humans::{lifecycle::step_lifecycle, HumanBeing};
+    use mk_engine::validation::ReferenceDomain;
+
+    let verified = reference()
+        .item(ReferenceDomain::Humans, "maximum_verified_lifespan")
+        .and_then(|i| i.point())
+        .expect("the pack records a longest verified life");
+
+    let rng = RngRegistry::new([9u8; 32]);
+    let world = observation(1.0, 1.0, 20.0);
+    let mut human = HumanBeing::new("methuselah".into(), BiologicalSex::Female);
+    // Fed, watered and sheltered, just past the record: only the ceiling
+    // itself can be what ends this.
+    human.development.age_years = verified + 0.5;
+    step_lifecycle(&mut human, HOUR_YEARS, 1, &world, &rng, (0, 0));
+
+    assert!(
+        matches!(human.profile.status, mk_core::human::HumanStatus::Dead),
+        "someone reached {:.2} years, past the verified record of {verified}",
+        human.development.age_years
+    );
+}
+
+/// A woman's fertility ends before menopause, not after it.
+///
+/// The pack's `menopause_age` was never checked against anything. The
+/// runtime models the end of fertility rather than menopause itself — about
+/// a decade earlier (te Velde & Pearson 2002, cited where the constants
+/// live) — so the honest check is the ordering: fertile well before the
+/// pack's earliest menopause, finished by its latest.
+#[test]
+fn fertility_ends_before_the_published_menopause_window_closes() {
+    use mk_core::human::BiologicalSex;
+    use mk_engine::humans::{lifecycle::reproductive_timeline, HumanBeing};
+    use mk_engine::validation::ReferenceDomain;
+
+    let (earliest, latest) = reference()
+        .item(ReferenceDomain::Humans, "menopause_age")
+        .and_then(|i| i.range())
+        .expect("the pack records a menopause window");
+
+    // Several women, because the age is drawn per individual.
+    for i in 0..32 {
+        let woman = HumanBeing::new(format!("woman-{i:02}"), BiologicalSex::Female);
+        let timeline = reproductive_timeline(&woman);
+        assert!(
+            timeline.fecundity(25.0) > 0.0,
+            "woman-{i:02} is infertile at 25"
+        );
+        assert_eq!(
+            timeline.fecundity(latest),
+            0.0,
+            "woman-{i:02} is still fertile at {latest}, the latest published menopause"
+        );
+    }
+
+    // And the end of fertility really does precede menopause rather than
+    // coinciding with it: the average woman is finished before the earliest
+    // published menopause age.
+    let finished_early = (0..32)
+        .filter(|i| {
+            let woman = HumanBeing::new(format!("woman-{i:02}"), BiologicalSex::Female);
+            reproductive_timeline(&woman).fecundity(earliest) == 0.0
+        })
+        .count();
+    assert!(
+        finished_early > 16,
+        "only {finished_early} of 32 women were infertile by {earliest}, so fertility is not \
+         ending the decade before menopause the constants claim"
+    );
+}
