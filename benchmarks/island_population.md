@@ -77,5 +77,9 @@ roughly a seventh of the size.
 
 `island_bench` also showed that **stepping does not use the extra cores**: 200 steps run at 976
 steps/s with one thread and 932 with eight (speedup 0.96). The island step is effectively
-single-threaded for a small population, so a faster CPU core helps more than more cores. Whether
-a populated island (thousands of people) parallelises better was not measured.
+single-threaded for a small population, so a faster CPU core helps more than more cores. A populated island does
+not either: with 1,002 people, 60 steps run at 11.6 steps/s on one thread and 11.4 on eight (0.98), and
+the people step is the main cost (about 86 ms per step, 5.2 s of 12 s) and is single-threaded. One
+hourly human-store firing for a 1,000-person shard took about 5.3 s on this disk. Parallelising the
+people step would be the first lever if a larger population ever needs to run faster than the
+measured 117x real time at 5,000 people; it would have to keep results identical at any thread count.
