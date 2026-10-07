@@ -27,7 +27,7 @@ fidelity limits. The project is **not complete**: see "Not done".
 |---|---|---|
 | Island physics, one simulated year | 22 s, 213 MB peak | `benchmarks/phase2_physical.md` |
 | Human runtime, 5,000 people | 23 us/human-step, 153 MB peak | `benchmarks/humans_population.md` |
-| **Combined island, one simulated week** (physics, ecology, estate, 200,000 trees, 2 founders, energy, materials) | 47 s, **323 MB peak** | `benchmarks/island_week.md` |
+| **Combined island, one simulated week** (physics, ecology, estate, 200,000 trees, 2 founders, energy, materials) | 49 s, **307 MB peak** | `benchmarks/island_week.md` |
 
 The combined island (without persistence, the scheduler, a larger population, the refinery/town and the app) is measured above; those remain unmeasured until Phases 4, 4b and 5.
 

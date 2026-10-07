@@ -17,8 +17,8 @@ Cadences: humans 60 s, physics hourly, ecology and households 6-hourly.
 | Quantity | Result |
 |---|---|
 | Simulated span | 7 days (10,080 human steps, 168 physics steps, 28 ecology steps) |
-| Wall clock, including bootstrap | 47 s |
-| Peak resident memory | 323 MB (323,304 kB) |
+| Wall clock, including bootstrap | 49 s |
+| Peak resident memory | 307 MB (314,484 kB), re-measured after the biome fix (D32) |
 | Stock audits (material carbon, body carbon, water) | 196, all closed |
 | Founders | both alive, both in the estate |
 | Food and water shortfalls | 0 |
