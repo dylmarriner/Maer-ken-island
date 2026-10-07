@@ -55,6 +55,10 @@ pub struct ZonalBackgroundState {
     pub band_land_columns: Vec<usize>,
     /// Area-weighted planetary means.
     pub global_mean_surface_temperature_k: f64,
+    /// Planetary mean radiative-equilibrium temperature at the current
+    /// orbital phase (K): the target the regional meridional transport
+    /// relaxes toward.
+    pub global_mean_radiative_temperature_k: f64,
     pub mean_absorbed_flux_w_m2: f64,
     pub global_mean_precipitation_mm_day: f64,
     /// Zonal means per band, south to north.
@@ -179,6 +183,7 @@ impl ZonalBackgroundState {
             grid,
             band_land_columns,
             global_mean_surface_temperature_k: 0.0,
+            global_mean_radiative_temperature_k: 0.0,
             mean_absorbed_flux_w_m2: 0.0,
             global_mean_precipitation_mm_day: 0.0,
             band_precipitation_mm_day: Vec::new(),
@@ -188,7 +193,7 @@ impl ZonalBackgroundState {
             planetary_volcanic_co2_mol_yr: PLANETARY_VOLCANIC_CO2_MOL_YR,
             sim_time_seconds: 0.0,
         };
-        state.derive(&weather);
+        state.derive(canon, 0.0, &weather);
         state
     }
 
@@ -212,14 +217,23 @@ impl ZonalBackgroundState {
             &elevation,
             &self.grid,
         );
-        self.derive(&weather);
+        self.derive(canon, sim_time_seconds, &weather);
         self.sim_time_seconds = sim_time_seconds;
     }
 
     /// Refresh the planetary means and band fields from the climate and
     /// the weather on it.
-    fn derive(&mut self, weather: &WeatherState) {
+    fn derive(&mut self, canon: &CanonLocked, t: f64, weather: &WeatherState) {
         let (n, cols) = (self.grid.nlat, self.grid.nlon);
+        let (elevation, geothermal) = surface(&self.grid, &self.band_land_columns);
+        let latitudes: Vec<f64> = (0..n).map(|r| self.grid.lat_rad(r)).collect();
+        self.global_mean_radiative_temperature_k = crate::climate::planetary_radiative_terms(
+            &forcing(canon, t, 0.0, &elevation, &geothermal),
+            self.climate.co2_concentration,
+            &latitudes,
+            cols,
+        )
+        .0;
         let weights: Vec<f64> = (0..n)
             .map(|r| self.grid.lat_rad(r).cos().max(0.0))
             .collect();

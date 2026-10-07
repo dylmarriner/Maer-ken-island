@@ -431,39 +431,68 @@ pub fn seasonal_temperature_amplitude(axial_tilt_rad: f64, latitude_rad: f64) ->
     seasonal_adjustment(0.0, axial_tilt_rad, latitude_rad).abs()
 }
 
+/// Planet-wide terms and local adjustments a regional window cannot
+/// compute from its own cells (island divergence): they come from the
+/// zonal background and the regional lapse rate.
+pub struct RegionalClimateTerms<'a> {
+    /// CO₂ concentration (ppm), stepped by the background.
+    pub co2_ppm: f64,
+    /// Area-weighted planetary mean radiative-equilibrium temperature (K).
+    pub global_mean_radiative_k: f64,
+    /// Area-weighted planetary mean absorbed flux (W/m²).
+    pub mean_absorbed_flux_w_m2: f64,
+    /// Added to each cell's equilibrium temperature (K), row-major; empty
+    /// for none. The regional lapse rate enters here, so it relaxes in
+    /// with the heat capacity rather than accumulating step to step.
+    pub equilibrium_offset_k: &'a [f64],
+}
+
 /// Step climate forward from `previous` under `forcing`.
 pub fn step_climate(
     previous: &ClimateState,
     forcing: &ClimateForcing<'_>,
     grid_spec: &mk_core::grid::GridSpec,
 ) -> ClimateState {
-    let (nlat, nlon) = (grid_spec.nlat, grid_spec.nlon);
-    let reference_volcanic_co2_mol_yr = if previous.reference_volcanic_co2_mol_yr > 0.0 {
-        previous.reference_volcanic_co2_mol_yr
-    } else {
-        forcing.volcanic_co2_mol_yr.max(0.0)
-    };
-    let co2 = step_co2(
-        previous.co2_concentration,
-        previous.global_temperature(),
-        forcing.volcanic_co2_mol_yr,
-        reference_volcanic_co2_mol_yr,
-        forcing.dt_seconds,
-    );
-    let co2_forcing = co2_forcing_w_m2(co2);
+    let latitudes: Vec<f64> = (0..grid_spec.nlat).map(|r| grid_spec.lat_rad(r)).collect();
+    step_climate_on(previous, forcing, &latitudes, grid_spec, None)
+}
+
+/// The planet-wide terms of a step: the cos-latitude-weighted mean
+/// radiative-equilibrium temperature (K) and mean absorbed flux (W/m²) of
+/// a `latitudes.len() × nlon` grid at CO₂ `co2_ppm`. The zonal background
+/// calls this to supply them to a regional window.
+pub fn planetary_radiative_terms(
+    forcing: &ClimateForcing<'_>,
+    co2_ppm: f64,
+    latitudes: &[f64],
+    nlon: usize,
+) -> (f64, f64) {
+    let co2_forcing = co2_forcing_w_m2(co2_ppm);
     let emission = effective_emission_coefficient(grey_absorptivity(
         forcing.surface_pressure_pa,
         forcing.surface_gravity_m_s2,
     ));
-    let albedo = forcing.albedo.clamp(0.0, 1.0);
+    let (_, _, global_mean, mean_absorbed) =
+        radiative_field(forcing, co2_forcing, emission, latitudes, nlon);
+    (global_mean, mean_absorbed)
+}
 
-    // Radiative-equilibrium temperature and absorbed flux per cell.
+/// Absorbed flux and radiative-equilibrium temperature per cell, with the
+/// cos-latitude-weighted means of each.
+fn radiative_field(
+    forcing: &ClimateForcing<'_>,
+    co2_forcing: f64,
+    emission: f64,
+    latitudes: &[f64],
+    nlon: usize,
+) -> (Vec<f64>, Vec<f64>, f64, f64) {
+    let nlat = latitudes.len();
+    let albedo = forcing.albedo.clamp(0.0, 1.0);
     let mut absorbed = vec![0.0; nlat * nlon];
     let mut radiative = vec![0.0; nlat * nlon];
     let (mut weighted_sum, mut weight_total) = (0.0, 0.0);
     let mut weighted_absorbed = 0.0;
-    for row in 0..nlat {
-        let latitude = grid_spec.lat_rad(row);
+    for (row, &latitude) in latitudes.iter().enumerate() {
         let insolation = daily_mean_insolation(
             forcing.toa_solar_flux_w_m2,
             latitude,
@@ -486,10 +515,52 @@ pub fn step_climate(
     } else {
         0.0
     };
-    let mean_absorbed_flux_w_m2 = if weight_total > 0.0 {
+    let mean_absorbed = if weight_total > 0.0 {
         weighted_absorbed / weight_total
     } else {
         0.0
+    };
+    (absorbed, radiative, global_mean, mean_absorbed)
+}
+
+/// [`step_climate`] over rows at the given `latitudes` (rad), optionally
+/// with planet-wide terms supplied from outside. With `regional: None` and
+/// the grid's own latitudes it is exactly `step_climate`.
+pub fn step_climate_on(
+    previous: &ClimateState,
+    forcing: &ClimateForcing<'_>,
+    latitudes: &[f64],
+    grid_spec: &mk_core::grid::GridSpec,
+    regional: Option<&RegionalClimateTerms<'_>>,
+) -> ClimateState {
+    let (nlat, nlon) = (latitudes.len(), grid_spec.nlon);
+    let reference_volcanic_co2_mol_yr = if previous.reference_volcanic_co2_mol_yr > 0.0 {
+        previous.reference_volcanic_co2_mol_yr
+    } else {
+        forcing.volcanic_co2_mol_yr.max(0.0)
+    };
+    let co2 = match regional {
+        Some(terms) => terms.co2_ppm,
+        None => step_co2(
+            previous.co2_concentration,
+            previous.global_temperature(),
+            forcing.volcanic_co2_mol_yr,
+            reference_volcanic_co2_mol_yr,
+            forcing.dt_seconds,
+        ),
+    };
+    let co2_forcing = co2_forcing_w_m2(co2);
+    let emission = effective_emission_coefficient(grey_absorptivity(
+        forcing.surface_pressure_pa,
+        forcing.surface_gravity_m_s2,
+    ));
+
+    // Radiative-equilibrium temperature and absorbed flux per cell.
+    let (absorbed, radiative, computed_mean, computed_absorbed) =
+        radiative_field(forcing, co2_forcing, emission, latitudes, nlon);
+    let (global_mean, mean_absorbed_flux_w_m2) = match regional {
+        Some(terms) => (terms.global_mean_radiative_k, terms.mean_absorbed_flux_w_m2),
+        None => (computed_mean, computed_absorbed),
     };
 
     let mut surface = vec![0.0; nlat * nlon];
@@ -500,8 +571,13 @@ pub fn step_climate(
     for row in 0..nlat {
         for col in 0..nlon {
             let idx = row * nlon + col;
+            let offset = regional
+                .and_then(|t| t.equilibrium_offset_k.get(idx))
+                .copied()
+                .unwrap_or(0.0);
             let equilibrium = (1.0 - MERIDIONAL_TRANSPORT_FRACTION) * radiative[idx]
-                + MERIDIONAL_TRANSPORT_FRACTION * global_mean;
+                + MERIDIONAL_TRANSPORT_FRACTION * global_mean
+                + offset;
             let heat_capacity = surface_heat_capacity_j_m2_k(cell(forcing.elevation_m, row, col));
             // Linearised radiative restoring strength at this temperature.
             let feedback = (4.0 * emission * equilibrium.max(1.0).powi(3)).max(1e-9);

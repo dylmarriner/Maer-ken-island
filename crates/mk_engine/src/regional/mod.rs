@@ -3,7 +3,9 @@
 //! mk_island → mk_core`).
 
 pub mod boundary;
+pub mod climate;
 pub mod deposits;
+pub mod edge;
 pub mod geology;
 pub mod geophysics;
 pub mod levels;
@@ -13,4 +15,5 @@ pub mod shape;
 pub mod tectonics;
 pub mod terrain;
 pub mod volcanism;
+pub mod weather;
 pub mod zonal;

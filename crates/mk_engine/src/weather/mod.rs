@@ -93,7 +93,7 @@ impl WeatherState {
 ///
 /// Simple hadley cell model: equatorward flow in tropics, poleward in subtropics
 /// Returns wind speed (positive = eastward)
-fn zonal_wind(latitude: f64, coriolis_param: f64) -> f64 {
+pub(crate) fn zonal_wind(latitude: f64, coriolis_param: f64) -> f64 {
     let lat_deg = latitude * 180.0 / std::f64::consts::PI;
 
     // Trade winds equatorward of ~30°
@@ -116,7 +116,7 @@ const REFERENCE_MERIDIONAL_GRADIENT_K_PER_RAD: f64 = 40.0;
 const REFERENCE_MERIDIONAL_WIND_M_S: f64 = 3.0;
 /// Water vapour scale height divided by the air's (~2 km / ~8 km): the
 /// share of the air column's mass over which vapour is distributed.
-const VAPOUR_COLUMN_FRACTION: f64 = 0.25;
+pub(crate) const VAPOUR_COLUMN_FRACTION: f64 = 0.25;
 /// Share of absorbed radiation the surface spends evaporating water (Earth:
 /// ~80 of ~240 W/m²), which sets global-mean evaporation = precipitation.
 const LATENT_HEAT_SHARE: f64 = 0.33;
@@ -127,7 +127,7 @@ const SECONDS_PER_DAY: f64 = 86_400.0;
 /// northward temperature gradient: thermally direct surface flow runs from
 /// the cold (high-pressure) side toward the warm side — equatorward trade
 /// winds in both hemispheres — scaled against Earth's reference gradient.
-fn meridional_wind_from_gradient(temp_gradient_k_per_rad: f64) -> f64 {
+pub(crate) fn meridional_wind_from_gradient(temp_gradient_k_per_rad: f64) -> f64 {
     (REFERENCE_MERIDIONAL_WIND_M_S * temp_gradient_k_per_rad
         / REFERENCE_MERIDIONAL_GRADIENT_K_PER_RAD)
         .clamp(-10.0, 10.0)
@@ -156,7 +156,7 @@ pub(crate) fn relative_humidity(latitude_rad: f64, is_ocean: bool) -> f64 {
 /// `precipitable_water_kg_m2` at relative humidity `rh`: rain forms more
 /// readily the closer the air is to saturation, and not at all in dry,
 /// subsiding air.
-fn rainout_weight(precipitable_water_kg_m2: f64, rh: f64) -> f64 {
+pub(crate) fn rainout_weight(precipitable_water_kg_m2: f64, rh: f64) -> f64 {
     let efficiency = ((rh - 0.3) / 0.7).clamp(0.0, 1.0);
     precipitable_water_kg_m2.max(0.0) * efficiency
 }
