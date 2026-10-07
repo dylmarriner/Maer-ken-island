@@ -109,6 +109,37 @@ pub fn step_tides(
     grid_spec: &mk_core::grid::GridSpec,
     ledger: &mut Ledger,
 ) -> TidalState {
+    let latitudes: Vec<f64> = (0..grid_spec.nlat).map(|r| grid_spec.lat_rad(r)).collect();
+    let longitudes: Vec<f64> = (0..grid_spec.nlon).map(|c| grid_spec.lon_rad(c)).collect();
+    step_tides_on(
+        canon,
+        sim_time_seconds,
+        dt_seconds,
+        grid_spec,
+        &latitudes,
+        &longitudes,
+        1.0,
+        ledger,
+    )
+}
+
+/// [`step_tides`] on cells at the given row `latitudes` and column
+/// `longitudes` (rad), with the dissipation power (state and ledger)
+/// scaled by `power_share`, the fraction of the planet's tidal heating
+/// that falls on the cells. The island supplies its own geometry and its
+/// ocean's share; with the grid's own geometry and `1.0` it is exactly
+/// `step_tides`.
+#[allow(clippy::too_many_arguments)]
+pub fn step_tides_on(
+    canon: &Arc<CanonLocked>,
+    sim_time_seconds: f64,
+    dt_seconds: u64,
+    grid_spec: &mk_core::grid::GridSpec,
+    latitudes: &[f64],
+    longitudes: &[f64],
+    power_share: f64,
+    ledger: &mut Ledger,
+) -> TidalState {
     let tau = std::f64::consts::TAU;
     let mckenz_period_seconds = canon.moon_mckenz_period_s;
     let hahn_period_seconds = canon.moon_hahn_period_s;
@@ -147,10 +178,8 @@ pub fn step_tides(
     let cells = grid_spec.nlat * grid_spec.nlon;
     let mut potential_data = Vec::with_capacity(cells);
     let mut height_m = Vec::with_capacity(cells);
-    for ilat in 0..grid_spec.nlat {
-        let lat_rad = grid_spec.lat_rad(ilat);
-        for ilon in 0..grid_spec.nlon {
-            let lon_rad = grid_spec.lon_rad(ilon);
+    for &lat_rad in latitudes.iter().take(grid_spec.nlat) {
+        for &lon_rad in longitudes.iter().take(grid_spec.nlon) {
             let mckenz = degree_two_potential(lat_rad, lon_rad, mckenz_lon);
             let hahn = degree_two_potential(lat_rad, lon_rad, hahn_lon);
             potential_data.push(mckenz_weight * mckenz + hahn_weight * hahn);
@@ -170,19 +199,20 @@ pub fn step_tides(
     // Tidal dissipation from each moon's torque, integrated over the step
     // and ledger-tracked from the tidal reservoir into ocean heat.
     let rotation_rate = tau / canon.rotation_period_s;
-    let heating_power_w = tidal_dissipation_power_w(
-        mckenz_mass_kg,
-        canon.mckenz_semi_major_axis_m,
-        radius,
-        rotation_rate,
-        tau / mckenz_period_seconds,
-    ) + tidal_dissipation_power_w(
-        hahn_mass_kg,
-        canon.hahn_semi_major_axis_m,
-        radius,
-        rotation_rate,
-        tau / hahn_period_seconds,
-    );
+    let heating_power_w = power_share.max(0.0)
+        * (tidal_dissipation_power_w(
+            mckenz_mass_kg,
+            canon.mckenz_semi_major_axis_m,
+            radius,
+            rotation_rate,
+            tau / mckenz_period_seconds,
+        ) + tidal_dissipation_power_w(
+            hahn_mass_kg,
+            canon.hahn_semi_major_axis_m,
+            radius,
+            rotation_rate,
+            tau / hahn_period_seconds,
+        ));
     ledger.push(FluxEntry {
         source: Reservoir::TidalHeat,
         sink: Reservoir::OceanHeat,

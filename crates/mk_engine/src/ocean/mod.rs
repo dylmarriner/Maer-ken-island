@@ -104,7 +104,7 @@ impl OceanColumn {
 }
 
 /// Compute ocean density from the first-order seawater density envelope.
-fn ocean_density(temp_k: f64, salinity: f64) -> f64 {
+pub(crate) fn ocean_density(temp_k: f64, salinity: f64) -> f64 {
     let density =
         RHO0_SW * (1.0 - ALPHA_T_SW * (temp_k - T_REF_SW) + BETA_S_SW * (salinity - S_REF_SW));
     density.max(1000.0)
@@ -198,6 +198,20 @@ pub fn step_ocean(
     forcing: &OceanForcing<'_>,
     grid_spec: &mk_core::grid::GridSpec,
 ) -> OceanState {
+    let latitudes: Vec<f64> = (0..grid_spec.nlat).map(|r| grid_spec.lat_rad(r)).collect();
+    step_ocean_on(canon, previous, forcing, &latitudes, grid_spec)
+}
+
+/// [`step_ocean`] over rows at the given `latitudes` (rad): the island's
+/// regional ocean supplies its own. With the grid's latitudes it is
+/// exactly `step_ocean`.
+pub fn step_ocean_on(
+    canon: &CanonLocked,
+    previous: &Grid2<OceanColumn>,
+    forcing: &OceanForcing<'_>,
+    latitudes: &[f64],
+    grid_spec: &mk_core::grid::GridSpec,
+) -> OceanState {
     let grid_rows = grid_spec.nlat;
     let grid_cols = grid_spec.nlon;
     let dt = forcing.dt_seconds.max(0.0);
@@ -218,7 +232,7 @@ pub fn step_ocean(
     let mut water_gained_total = 0.0;
     let mut water_lost_total = 0.0;
 
-    for row in 0..grid_rows {
+    for (row, &latitude) in latitudes.iter().enumerate().take(grid_rows) {
         for col in 0..grid_cols {
             let sst = *forcing.climate.surface_temperature.get(row, col);
             let elevation = forcing
@@ -265,7 +279,7 @@ pub fn step_ocean(
 
             // Freshwater exchange: precipitation in, evaporation out.
             let wind = *forcing.wind.get(row, col);
-            let rh = super::weather::relative_humidity(grid_spec.lat_rad(row), true);
+            let rh = super::weather::relative_humidity(latitude, true);
             let evaporation =
                 evaporation_mm_day(sst, wind.speed(), rh, canon.sea_level_pressure_pa);
             let precipitation = forcing.precipitation_mm_day.get(row, col).max(0.0);

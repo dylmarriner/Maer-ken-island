@@ -136,12 +136,14 @@ Implementation notes: the Eady rate reduces to `0.31 g |∂T/∂y| / (N T)` (f c
 - Produces: `step_regional_ocean(canon: &CanonLocked, previous: &Grid2<OceanColumn>, forcing: &OceanForcing<'_>, domain: &IslandDomain, ocean_boundary: &OceanBoundaryForcing) -> OceanState` on Coarse — same inputs as upstream `step_ocean` (`OceanForcing { wind, climate, precipitation_mm_day, coriolis, elevation_m, dt_seconds }`) with regional Coriolis and geometry. Edge relaxation here covers salinity and currents; SST comes from climate (Task 3).
 - Produces: `step_regional_tides(canon: &Arc<CanonLocked>, sim_time_seconds: f64, dt_seconds: u64, domain: &IslandDomain, astronomy: &AstronomyForcing, ledger: &mut Ledger) -> TidalState` on Medium. Keeps upstream's dissipation ledger entry, scaled to the domain's ocean area, and uses `longitude_rad_for_col` against the moons' sub-lunar longitudes.
 
-- [ ] **Step 1:** Write tests asserting land cells contain no ocean column, every edge ocean cell receives boundary salinity/current forcing, currents do not wrap, tidal height varies across the domain with longitude, tidal dissipation is booked in the ledger, and identical forcing produces identical bytes.
-- [ ] **Step 2:** Run `cargo test -p mk_engine --test regional_ocean`; expect FAIL.
-- [ ] **Step 3:** Reuse upstream seawater density/evaporation/heat equations and add deterministic edge relaxation/advection against `OceanBoundaryForcing`.
-- [ ] **Step 4:** Keep tide phase analytic; map tide amplitude onto regional ocean cells.
-- [ ] **Step 5:** Run `cargo test -p mk_engine --test regional_ocean` and `cargo test -p mk_engine --lib -- ocean:: tides::` plus `cargo test -p mk_engine --test tides`; expect PASS.
-- [ ] **Step 6:** Commit `feat(engine): regionalize ocean and tides`.
+- [x] **Step 1:** Write tests asserting land cells contain no ocean column, every edge ocean cell receives boundary salinity/current forcing, currents do not wrap, tidal height varies across the domain with longitude, tidal dissipation is booked in the ledger, and identical forcing produces identical bytes.
+- [x] **Step 2:** Run `cargo test -p mk_engine --test regional_ocean`; expect FAIL.
+- [x] **Step 3:** Reuse upstream seawater density/evaporation/heat equations and add deterministic edge relaxation/advection against `OceanBoundaryForcing`.
+- [x] **Step 4:** Keep tide phase analytic; map tide amplitude onto regional ocean cells.
+- [x] **Step 5:** Run `cargo test -p mk_engine --test regional_ocean` and `cargo test -p mk_engine --lib -- ocean:: tides::` plus `cargo test -p mk_engine --test tides`; expect PASS.
+- [x] **Step 6:** Commit `feat(engine): regionalize ocean and tides`.
+
+Implementation notes: `step_ocean` and `step_tides` were split like `step_climate` (`step_ocean_on`, `step_tides_on`) so no equation is copied. Ocean currents are cm/s and the boundary inflow m/s, so edge currents are converted. Edge cells clear of the corners equal the boundary exactly; within 5 cells of a corner the two edges' targets blend by weight. The tide field is on the coarse grid (RAM: the medium grid would cost ~46 MB per snapshot for fields that vary over thousands of km). `step_regional_tides` takes the coarse elevation instead of `AstronomyForcing`: the sub-lunar longitudes come from the same analytic function the boundary sampler uses (a test pins them equal).
 
 ### Task 5: Regional hydrology and coastline exchange
 
