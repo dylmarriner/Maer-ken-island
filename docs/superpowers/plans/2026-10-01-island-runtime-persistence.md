@@ -485,9 +485,15 @@ a replay exactly like anybody created later rather than through a second path th
 Each keeps the birthplace they were created with — that is a fact about them — and lands in the
 estate's General zone, because a person stored before there was an island has no island location.
 
-**Still not served, and not faked:** `/api/properties`, `/api/economy` and `/api/timeline`. The
-projection carries no property list, economy summary or timeline, so adding those paths would mean
-inventing the data rather than re-slicing it. The roster is the world's. `GET /api/world/humans` and
+**Now served (2026-10-08), and the reason they were not is worth keeping:** `/api/properties`,
+`/api/economy` and `/api/timeline`. This said the projection carried no property list, economy
+summary or timeline, so serving them would mean inventing the data. That was wrong, and nothing
+but measuring the island showed it — the estate holds two properties with six buildings and
+eighty-odd items each, and the replay log is a real record of everything that has reached the
+island from outside. The economy is the only one that was nearly right: it is genuinely empty,
+with no resource nodes seeded the way a planetary world seeds them. That is a fact about the
+island rather than a reason to hide the endpoint, so it is served and says so in the reply, and
+it fills as soon as somebody builds. The `/island` page reads all three. The roster is the world's. `GET /api/world/humans` and
 `/api/world/humans/{id}` serve the island's own people in the shape the People page already
 draws — the same ten per-person sections — plus where they are and whether they are asleep,
 which the stored roster has no way to know. With a world running the page uses them, and says
