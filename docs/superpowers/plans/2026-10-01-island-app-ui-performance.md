@@ -192,6 +192,7 @@ Task 6 status (partly done): `apps/island/src/bin/island_bench.rs` (JSON: bootst
 - [ ] **Step 1:** Write script tests using temporary git repositories for unchanged, changed and missing upstream paths.
 - [ ] **Step 2:** Implement check/apply modes with explicit commit pin and clean-worktree guard.
 - [ ] **Step 3:** Move the Phase 0b creator/population code out of `apps/island_humans` with its tests; point `apps/island` at the new location; then remove `apps/island_humans`.
+Task 7 status: Step 4's inventory is done (`docs/island/PRUNING_INVENTORY.md`): 9 of 35 modules (8.5% of the lines) are unreachable from the apps, all tooling, with no runtime or memory benefit; **the recommendation is not to prune** (it only makes the upstream sync harder). Pruning is therefore an owner decision, not outstanding work.
 - [ ] **Step 4:** Use `cargo tree`, source search and tests to identify planetary-only modules not reachable from `apps/island`/`apps/island_ui`; remove in small commits, running the fast tier after each cut.
 - [ ] **Step 5:** Update README/docs to make `apps/island` and `apps/island_ui` the entry points.
 - [ ] **Step 6:** Run fmt, clippy `-D warnings`, fast and slow tiers, the fixed-seed replay comparison and the release benchmark.
