@@ -10,6 +10,7 @@ pub mod ecology;
 pub mod edge;
 pub mod energy;
 pub mod estate_layout;
+pub mod fauna;
 pub mod geology;
 pub mod geophysics;
 pub mod humans;

@@ -129,7 +129,20 @@ pub struct RegionalEcologyState {
     pub npp_kgc_m2_yr: Grid2<f64>,
     /// Standing producer carbon, kgC m⁻², zero off land.
     pub biomass_kgc_m2: Grid2<f64>,
+    /// Grazer carbon, kgC m⁻², zero where there are no producers (see
+    /// [`super::fauna`]; every parameter of that model is an assumption).
+    pub herbivore_kgc_m2: Grid2<f64>,
     pub vegetation: VegetationSystem,
+}
+
+/// Where the grazers' carbon went in one step, summed over the land (kg C).
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct GrazerFlows {
+    pub eaten: f64,
+    pub growth: f64,
+    pub faeces: f64,
+    pub respired: f64,
+    pub deaths: f64,
 }
 
 /// Biome of a land or sea cell from the annual-mean climate.
@@ -244,10 +257,24 @@ impl RegionalEcologyState {
 
         let mut vegetation = VegetationSystem::new();
         vegetation.seed_from_biomes(&biome_grid);
+        // Grazers start at their equilibrium wherever producers stand.
+        let herbivores: Vec<f64> = biome_grid
+            .data()
+            .iter()
+            .zip(&npp)
+            .map(|(&b, &n)| {
+                if residence_years(b) > 0.0 && n > 0.0 {
+                    super::fauna::equilibrium_kgc_m2(n)
+                } else {
+                    0.0
+                }
+            })
+            .collect();
         Ok(Self {
             biome_grid,
             npp_kgc_m2_yr: Grid2::from_data(&spec, npp),
             biomass_kgc_m2: Grid2::from_data(&spec, biomass),
+            herbivore_kgc_m2: Grid2::from_data(&spec, herbivores),
             vegetation,
         })
     }
@@ -290,6 +317,56 @@ impl RegionalEcologyState {
             }
             self.biomass_kgc_m2.data_mut()[i] = next.max(0.0);
         }
+    }
+
+    /// One ecology step with the grazers: they eat a capped share of each
+    /// cell's production (passed to the plants as harvest), then their own
+    /// pools advance. `cell_area_m2` converts the per-area flows to kg.
+    pub fn step_with_grazers(&mut self, dt_seconds: f64, cell_area_m2: f64) -> GrazerFlows {
+        if !(dt_seconds.is_finite() && dt_seconds > 0.0) {
+            return GrazerFlows::default();
+        }
+        let dt_years = dt_seconds / SECONDS_PER_YEAR;
+        let mut harvest = self.npp_kgc_m2_yr.clone();
+        for ((h, npp), g) in harvest
+            .data_mut()
+            .iter_mut()
+            .zip(self.npp_kgc_m2_yr.data())
+            .zip(self.herbivore_kgc_m2.data())
+        {
+            *h = super::fauna::intake_kgc_m2_yr(*g, *npp);
+        }
+        self.step(dt_seconds, Some(&harvest), None);
+        let mut totals = GrazerFlows::default();
+        for (g, npp) in self
+            .herbivore_kgc_m2
+            .data_mut()
+            .iter_mut()
+            .zip(self.npp_kgc_m2_yr.data())
+        {
+            let (next, f) = super::fauna::step_cell(*g, *npp, dt_years);
+            *g = next;
+            totals.eaten += f.eaten;
+            totals.growth += f.growth;
+            totals.faeces += f.faeces;
+            totals.respired += f.respired;
+            totals.deaths += f.deaths;
+        }
+        for v in [
+            &mut totals.eaten,
+            &mut totals.growth,
+            &mut totals.faeces,
+            &mut totals.respired,
+            &mut totals.deaths,
+        ] {
+            *v *= cell_area_m2;
+        }
+        totals
+    }
+
+    /// Total grazer carbon on the grid (kgC).
+    pub fn total_herbivore_kgc(&self, cell_area_m2: f64) -> f64 {
+        self.herbivore_kgc_m2.data().iter().sum::<f64>() * cell_area_m2
     }
 
     /// Rescale the biomass field so the land total is `total_kgc` (the

@@ -471,7 +471,8 @@ impl IslandLife {
 
     fn six_hourly(&mut self) -> Result<(), IslandLifeError> {
         let dt_ecology = self.scenario.cadences.hydrology_ecology_resource_seconds;
-        self.ecology.step(dt_ecology as f64, None, None);
+        let cell_area = self.domain.cell_area_m2(DomainLevel::Medium);
+        self.ecology.step_with_grazers(dt_ecology as f64, cell_area);
         self.vegetation.step(&self.ecology, dt_ecology);
         let founders = self.founders();
         let area = self.domain.cell_area_m2(DomainLevel::Medium);
@@ -993,6 +994,7 @@ impl IslandLife {
         };
         feed(self.ecology.biomass_kgc_m2.data());
         feed(self.ecology.npp_kgc_m2_yr.data());
+        feed(self.ecology.herbivore_kgc_m2.data());
         for t in &self.vegetation.trees {
             feed(&[
                 t.position_m.0,

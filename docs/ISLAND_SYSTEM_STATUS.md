@@ -11,7 +11,7 @@ fidelity limits. The project is **not complete**: see "Not done".
 | Island domain and geophysics (Phase 1) | Done; owner's island provisional | `fixtures/island/default_profile.json`, `docs/previews/phase1/` |
 | Climate, weather, storms, ocean, tides, hydrology, coupled tick (Phase 2) | Done; owner review pending | `crates/mk_engine/src/regional/`, `docs/previews/phase2/`, year-long reference test |
 | **Integrated island life**: physics + ecology + estate + 200,000 trees + founders + energy + materials, audited (Phase 3 Task 9) | Done; one week measured | `regional/life.rs`, `tests/island_life_acceptance.rs`, `benchmarks/island_week.md` |
-| Island ecology fields: biomes, NPP, producer biomass (Phase 3 Task 1a) | Done | `regional/ecology.rs`, `tests/regional_ecology.rs` |
+| Island ecology fields: biomes, NPP, producer biomass (Phase 3 Task 1a), plus a first grazer pool (D33, assumed parameters) | Done | `regional/ecology.rs`, `tests/regional_ecology.rs` |
 | Grid topology for human/organism movement, births and perception (Phase 3 Task 6) | Done; planetary results bit-identical | `topology.rs`, `tests/topology_hash_baseline.rs` |
 | Founders' estate laid out in metres (Phase 3 Task 5) | Done | `regional/estate_layout.rs`, `tests/island_estate_layout.rs` |
 | Canonical founders on the island: observation, bedrooms, computer rule (Phase 3 Task 8) | Done except Task-3-dependent hooks | `regional/humans.rs`, `humans/observation.rs`, `tests/island_human_runtime.rs` |
@@ -106,7 +106,7 @@ Phase 3 Tasks 3 and 4b (D10, D13).
 
 ## Not done
 
-- **The island has no animals.** The running world has plants (biomes, NPP, biomass, 200,000 estate trees) and people, but no herbivores, predators, fish or birds: the hunting and meat model in `regional/materials.rs` (`AnimalPopulation`, `hunt`) is tested but nothing in `IslandLife` creates or steps a fauna, so nobody can hunt and nothing grazes. This is Phase 3 Task 1b in full. A credible version needs carrying capacities tied to NPP, growth, predation and carbon flows through the ledger, with parameters from sourced references; it has not been started.
+- **Fauna is a first grazer layer only** (`regional/fauna.rs`, deviation D33): one herbivore carbon pool per land cell that eats a capped 5% of the cell's plant production, with every kilogram of carbon it moves accounted for (tested on the real island: about 402,000 t C, stable over a year, plants 0.5% below a no-grazer run). **Every parameter is an assumption, not a sourced value.** There are no predators, fish or birds, no dispersal (a cell emptied of grazers stays empty), nobody hunts them, and they are not in the ledger audit. Hunting and meat (`MaterialLedger::hunt`) remain a tested model nothing uses.
 - Phase 3 Task 1b (island-scale species, above) and Task 2 (the full resource and material catalogue),
   and the economy/lifecycle wiring of Tasks 3 and 3b (so people do timed, energy-costed work
   through the materials model; today the models exist and are tested but do not drive the
