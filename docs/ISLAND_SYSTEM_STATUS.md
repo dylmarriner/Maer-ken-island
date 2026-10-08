@@ -94,7 +94,23 @@ runtime answering the HTTP poll.
 
 Pacing the test dashboards at `Times(600)` instead of `AsFastAsPossible` thins the digests out,
 and turning the digest off in the tests entirely was tried too. Neither fixed it, and neither
-made it worse; the variance above swamps both. **The real fix is for the suite to stop running nineteen full
+made it worse; the variance above swamps both.
+
+The obvious cheap fix does not work, and it is worth saying why so nobody spends an afternoon on
+it. `IslandProfile::test_small` is 240 x 192 medium cells against the default's 1,200 x 960 --
+25x fewer, and seven other test files already use it. Setting `scenario.profile` to it in
+`a_running_dashboard` fails every test in the file at bootstrap:
+
+```
+ShapeRequirementsUnmet { metrics: ShapeMetrics { area_m2: 8.3e9, compactness: 0.174,
+convexity: 0.470, major_headlands: 0, major_bays: 4 }, reasons: ["0 major headlands, need 3"] }
+```
+
+Those seven files call `IslandDomain::from_profile`, which builds the geometry and stops. A
+dashboard test needs `IslandLife::bootstrap`, which validates the generated coastline against the
+profile's shape rules, and the default scenario's seed does not produce a small island with three
+headlands. Making the small profile usable here means finding a seed that does -- which is worth
+doing, and is a deliberate piece of work rather than a line changed. **The real fix is for the suite to stop running nineteen full
 islands at once**, by sharing one between the tests that only read, which is a refactor of that
 file rather than a line of it, and worth doing deliberately rather than smuggling into a
 dashboard branch. Until then: a failure of this one test alone, with the other eighteen passing,
