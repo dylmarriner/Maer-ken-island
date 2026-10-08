@@ -1178,12 +1178,64 @@ pub fn record_sexual_activity(
             conception_attempted: conception.is_some(),
             conception_result: Some(conception_result),
         });
+    // An audit log, not state anything reads back during a run (the live
+    // count is `reproduction.sexual_activity_count`): keep only the most
+    // recent entries. Unbounded, it grew about 5 MB per person per simulated
+    // year (15,000 entries after 413 days) and was the largest part of a
+    // person's memory.
+    let log = &mut schema
+        .reproductive_systems
+        .reproduction_system
+        .sexual_activities;
+    if log.len() > MAX_SEXUAL_ACTIVITY_LOG {
+        let excess = log.len() - MAX_SEXUAL_ACTIVITY_LOG;
+        log.drain(..excess);
+    }
 }
+
+/// Most recent entries kept in a person's `sexual_activities` log.
+pub const MAX_SEXUAL_ACTIVITY_LOG: usize = 128;
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use mk_core::human::schema::HumanSchema;
+
+    #[test]
+    fn the_sexual_activity_log_is_bounded_and_keeps_the_most_recent_entries() {
+        let mut registry = HumanRegistry::new();
+        let mut person = HumanBeing::new("log_person".to_string(), BiologicalSex::Female);
+        person.profile.canonical_schema.as_mut().expect("a schema");
+        registry.add_human_no_storage(person);
+        for tick in 0..1_000u64 {
+            record_sexual_activity(&mut registry, "log_person", "partner", tick, Some(false));
+        }
+        let human = registry.get_human("log_person").unwrap();
+        let log = &human
+            .profile
+            .canonical_schema
+            .as_ref()
+            .unwrap()
+            .reproductive_systems
+            .reproduction_system
+            .sexual_activities;
+        assert_eq!(
+            log.len(),
+            MAX_SEXUAL_ACTIVITY_LOG,
+            "the log must not grow without bound"
+        );
+        assert!(
+            log.last().unwrap().activity_id.ends_with("tick999"),
+            "newest kept"
+        );
+        assert!(
+            log.first()
+                .unwrap()
+                .activity_id
+                .ends_with(&format!("tick{}", 1_000 - MAX_SEXUAL_ACTIVITY_LOG)),
+            "oldest dropped"
+        );
+    }
 
     #[test]
     fn the_normal_quantile_inverts_the_normal_cdf() {
