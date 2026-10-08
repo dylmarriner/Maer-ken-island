@@ -166,7 +166,23 @@ the estate's electrical system is still free (D13).
   per human, external commands and replay, operator interventions, the headless runner, and the
   dashboard with a world behind it. What Task 6 still lacks is a map: the island page describes
   the world in words and tables, and nothing draws it.
-- Phase 4b: energy, industry, town, economy.
+- Phase 4b: energy, industry, town, economy. **Blocked at its own first step, and the block is
+  the network rather than the work.** Task 1 Step 1 is "assemble cited reference values" --
+  turbine efficiency curves by type and head range, Darcy-Weisbach penstock friction, oil
+  reservoir recovery factors and Arps decline parameters, crude assays, refinery energy per
+  barrel. Verified from this container on 2026-10-08, not assumed:
+
+  ```
+  https://doi.org               000
+  https://www.ieahydro.org      000
+  https://canyonhydro.com       000
+  ```
+
+  `000` is curl for no connection at all. Writing those values from memory and attaching
+  citations to them would look exactly like sourced data and would not be any -- the provenance
+  would be invented even where the number happened to be right, which is the failure
+  `REALISM.md` exists to prevent. Everything downstream (sizing, staffing, the town) hangs off
+  that table, so the phase waits on reachable sources or on the values being supplied.
 - Phase 5: the desktop app (`island-ui`, Bevy) replacing the human-only bootstrap, performance
   work, pruning, final benchmarks. The `island serve` web dashboard covers the human-only
   bootstrap in the meantime. With `--scenario` it now has a world and a clock; it still has no
