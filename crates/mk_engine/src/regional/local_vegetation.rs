@@ -194,6 +194,23 @@ impl LocalVegetationPatch {
     }
 
     /// Carbon (kgC) in the patch: trees plus stands.
+    /// The patch's extent and grid, for a caller that has to say where the
+    /// individual trees are.
+    ///
+    /// Exposed because the dashboard draws them: individual stems exist
+    /// only within `individual_radius_m` of [`Self::centre_m`], and a map
+    /// that shows them without showing that boundary invites the reader to
+    /// conclude the rest of the island has none, rather than that the rest
+    /// of the island models them as stand cover.
+    pub fn patch_spec(&self) -> &LocalPatchSpec {
+        &self.patch
+    }
+
+    /// The centre individual stems are measured from, in domain metres.
+    pub fn centre_m(&self) -> (f64, f64) {
+        self.centre_m
+    }
+
     pub fn total_carbon_kgc(&self) -> f64 {
         self.trees
             .iter()

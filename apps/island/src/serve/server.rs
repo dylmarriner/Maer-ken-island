@@ -427,6 +427,85 @@ const TIMELINE_IS_EXTERNAL: &str =
      record the replay runner reads, so this cannot disagree with it. It is not a history of \
      what the islanders did: nothing here is a person going to bed or felling a tree.";
 
+/// A PNG, or a 404 when there is no island to draw.
+///
+/// `no-cache` rather than the elevation map's silence: these layers are
+/// redrawn as the island's biomass grows, and a browser that held the
+/// first one would show the forest it bootstrapped with for ever.
+fn png_reply(bytes: Option<std::sync::Arc<Vec<u8>>>) -> impl warp::Reply {
+    match bytes {
+        None => warp::reply::with_status(
+            warp::reply::with_header(
+                warp::reply::with_header(Vec::new(), "content-type", "text/plain; charset=utf-8"),
+                "cache-control",
+                "no-cache",
+            ),
+            StatusCode::NOT_FOUND,
+        ),
+        Some(bytes) => warp::reply::with_status(
+            warp::reply::with_header(
+                warp::reply::with_header(bytes.to_vec(), "content-type", "image/png"),
+                "cache-control",
+                "no-cache",
+            ),
+            StatusCode::OK,
+        ),
+    }
+}
+
+/// Said in `/api/trees`, because a viewer that drew an empty island and
+/// said nothing would be read as a treeless one.
+const TREES_ARE_LOCAL: &str =
+    "Individual stems exist only inside `individual_radius_m` of `individual_centre_m` — the \
+     ground around the founders' estate. Out there the engine holds a `TreeInstance` per stem \
+     above a minimum diameter, with its own height, diameter and biomass. Everywhere else, \
+     including the rest of the 4 km patch and the whole island beyond it, vegetation is modelled \
+     as stand cover and biomass per cell, not as trees, so there is nothing individual to draw \
+     and an empty box here does not mean bare ground. `kind` is Tree, Shrub or Grass and is not \
+     a species: the island's vegetation carries no species, and island-scale species is open \
+     work. `in_box` is how many really stood in the box before thinning, `shown` how many came \
+     back; zoom in until they agree and you are looking at every stem there is.";
+
+/// How many stems `/api/trees` will return however large a `cap` is asked
+/// for. Four thousand draws in a few milliseconds on a canvas and costs
+/// about 400 kB of JSON; a caller asking for the whole 200,000 would get
+/// a 20 MB body and a picture indistinguishable from a thinned one.
+const TREE_CAP_CEILING: usize = 4_000;
+
+/// The box `/api/trees` is asked about, in domain metres, with a cap on
+/// how many stems come back.
+///
+/// Defaulted rather than required so `/api/trees` with no query at all
+/// answers something sensible — a box large enough to hold any island the
+/// engine builds, which the thinning then samples.
+#[derive(serde::Deserialize)]
+struct TreeBox {
+    #[serde(default = "lowest")]
+    x0: f64,
+    #[serde(default = "lowest")]
+    y0: f64,
+    #[serde(default = "highest")]
+    x1: f64,
+    #[serde(default = "highest")]
+    y1: f64,
+    #[serde(default = "default_tree_cap")]
+    cap: usize,
+}
+
+/// Not zero: a default of zero would quietly clip to the north-east
+/// quadrant of the domain, and nothing says domain metres are positive.
+fn lowest() -> f64 {
+    f64::MIN
+}
+
+fn highest() -> f64 {
+    f64::MAX
+}
+
+fn default_tree_cap() -> usize {
+    TREE_CAP_CEILING
+}
+
 /// Said in `/api/conversations`, because a reader needs to know what these
 /// lines are and, just as much, what they are not.
 const CONVERSATIONS_ARE_COMPOSED: &str =
@@ -768,6 +847,55 @@ pub fn routes_with_world(
             ),
         });
 
+    // The stems themselves, inside a box of domain metres, so a viewer can
+    // zoom from the whole island down to a stand of trees and have the
+    // server send only what is in frame.
+    //
+    // A box rather than the lot: the patch holds about 200,000 stems, and
+    // the honest answer to "show me all the trees" is a thinned sample
+    // plus the count that was thinned, which `Trees` carries. Zoom in far
+    // enough and the thinning stops and every stem in view is real.
+    let get_trees = warp::path!("api" / "trees")
+        .and(read())
+        .and(warp::query::<TreeBox>())
+        .and(with(world.clone()))
+        .map(|query: TreeBox, world: Option<SimHandle>| match world {
+            None => json(
+                StatusCode::NOT_FOUND,
+                &serde_json::json!({ "errors": ["No island is running, so nothing is growing. Start the server with --scenario."] }),
+            ),
+            Some(world) => {
+                let found = world.trees_in(
+                    query.x0,
+                    query.y0,
+                    query.x1,
+                    query.y1,
+                    query.cap.min(TREE_CAP_CEILING),
+                );
+                json(
+                    StatusCode::OK,
+                    &serde_json::json!({
+                        "trees": found,
+                        "note": TREES_ARE_LOCAL,
+                    }),
+                )
+            }
+        });
+
+    // The two vegetation layers. Unlike the elevation these are redrawn
+    // as the island grows, so a browser must not keep the first one for
+    // ever: they are served `no-cache`, which is a revalidation rather
+    // than a refetch and costs a 304 when nothing has changed.
+    let get_vegetation = warp::path!("api" / "vegetation.png")
+        .and(read())
+        .and(with(world.clone()))
+        .map(|world: Option<SimHandle>| png_reply(world.map(|w| w.vegetation_png())));
+
+    let get_patch = warp::path!("api" / "patch.png")
+        .and(read())
+        .and(with(world.clone()))
+        .map(|world: Option<SimHandle>| png_reply(world.map(|w| w.patch_png())));
+
     let get_conversations = warp::path!("api" / "conversations")
         .and(read())
         .and(with(world.clone()))
@@ -1079,7 +1207,7 @@ pub fn routes_with_world(
             }
             json(
                 StatusCode::NOT_FOUND,
-                &serde_json::json!({ "errors": ["No such endpoint. The dashboard serves /api/status, /api/world, /api/world/<estate|vegetation|materials|clock>, /api/world/humans, /api/world/humans/<agent-id>, /api/world/interventions, /api/world/commands/<id>, /api/properties, /api/economy, /api/timeline, /api/conversations, /api/map.png, /api/cell/<row>/<col>, /api/control, /api/health, /api/humans, /api/humans/<agent-id>, /api/activity and /api/creator/options."] }),
+                &serde_json::json!({ "errors": ["No such endpoint. The dashboard serves /api/status, /api/world, /api/world/<estate|vegetation|materials|clock>, /api/world/humans, /api/world/humans/<agent-id>, /api/world/interventions, /api/world/commands/<id>, /api/properties, /api/economy, /api/timeline, /api/conversations, /api/map.png, /api/vegetation.png, /api/patch.png, /api/cell/<row>/<col>, /api/trees, /api/control, /api/health, /api/humans, /api/humans/<agent-id>, /api/activity and /api/creator/options."] }),
             )
         });
 
@@ -1090,6 +1218,9 @@ pub fn routes_with_world(
         .or(get_conversations)
         .or(get_map)
         .or(get_cell)
+        .or(get_trees)
+        .or(get_vegetation)
+        .or(get_patch)
         .or(get_world)
         .or(post_world_human)
         .or(post_world_intervention)

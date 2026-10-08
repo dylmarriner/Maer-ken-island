@@ -93,6 +93,18 @@ pub struct IslandProjection {
     /// with it, and `/api/conversations` serves them on their own.
     #[serde(skip)]
     pub conversations: Arc<Vec<Conversation>>,
+    /// Every individual stem the island holds, republished on its own
+    /// cadence -- `TREES_EVERY`, a simulated day, rather than the hourly
+    /// one the records and the economy ride. The patch holds about
+    /// 200,000 of them at 56 bytes apiece, so this copy is eleven
+    /// megabytes where the conversation feed is forty short strings;
+    /// `tests/tree_cost.rs` measures it.
+    ///
+    /// Skipped from the status body, and harder than the other skips: a
+    /// page polling the clock every second must not be handed two hundred
+    /// thousand stems with it. `/api/trees` serves the ones inside a box.
+    #[serde(skip)]
+    pub trees: Arc<Vec<mk_engine::regional::local_vegetation::TreeInstance>>,
     /// The canonical state digest, and the tick it was taken at.
     ///
     /// Two islands showing the same digest at the same tick are the same
@@ -153,6 +165,13 @@ pub struct Person {
     /// they are off the estate patch entirely.
     pub space: Option<String>,
     pub position_m: Option<(f64, f64)>,
+    /// The medium-grid cell they stand on, so the map can draw them.
+    ///
+    /// Served rather than derived on the page: turning metres into a cell
+    /// is the server's arithmetic, and the one time this branch let a
+    /// coordinate conversion happen somewhere it did not belong, a birth
+    /// came out 0.716 degrees from the equator.
+    pub cell: Option<(usize, usize)>,
     /// Carbon in the body (kg), which is the measure the island's own
     /// acceptance test holds the founders to.
     pub body_carbon_kg: Option<f64>,
@@ -205,6 +224,13 @@ pub struct Land {
     /// How many of those cells are land. The rest are sea, and nobody can
     /// be created there.
     pub land_cells: usize,
+    /// How wide one of those cells is, in metres.
+    ///
+    /// Here so the viewer can turn domain metres into picture pixels. The
+    /// map is one pixel per cell and the trees are in metres, and without
+    /// this the page would have to hold a copy of the engine's 2 km and
+    /// hope it never changes.
+    pub cell_size_m: f64,
 }
 
 /// What the household has moved, and whether its books closed.
@@ -229,6 +255,7 @@ pub struct Views {
     pub records: Arc<BTreeMap<String, HumanBeing>>,
     pub records_at_tick: u64,
     pub conversations: Arc<Vec<Conversation>>,
+    pub trees: Arc<Vec<mk_engine::regional::local_vegetation::TreeInstance>>,
     pub properties: Arc<Vec<Property>>,
     pub economy: Arc<Economy>,
     pub economy_at_tick: u64,
@@ -243,6 +270,7 @@ impl Views {
             records: IslandProjection::records_now(life),
             records_at_tick: life.tick,
             conversations: IslandProjection::conversations_now(life),
+            trees: IslandProjection::trees_now(life),
             properties: IslandProjection::properties_now(life),
             economy: IslandProjection::economy_now(life),
             economy_at_tick: life.tick,
@@ -428,6 +456,20 @@ pub struct Terrain {
     pub domain: mk_island::IslandDomain,
     pub elevation_m: mk_core::grid::Grid2<f64>,
     pub land_mask: mk_core::grid::Grid2<bool>,
+    /// The high-detail patch: south-west corner and size, domain metres.
+    /// Fixed by the scenario, so it belongs here with the terrain.
+    pub patch: (f64, f64, f64, f64),
+    pub individual_centre_m: (f64, f64),
+    pub individual_radius_m: f64,
+    /// The estate's yard, as domain metres: west, south, east, north.
+    ///
+    /// Here because it is a hole in the wood. `seed_local_vegetation`
+    /// refuses to place a stem inside the yard, and the individual radius
+    /// is measured from the yard's own centre, so zooming to the middle of
+    /// the individually-modelled wood lands you in a clearing with nothing
+    /// in it. A viewer that did not know about the yard could only show
+    /// that as an unexplained empty square.
+    pub yard: (f64, f64, f64, f64),
 }
 
 impl Terrain {
@@ -437,7 +479,117 @@ impl Terrain {
             domain: life.domain.clone(),
             elevation_m: life.physical.geophysics.elevation_m.clone(),
             land_mask: life.physical.geophysics.land_mask.clone(),
+            patch: {
+                let p = life.vegetation.patch_spec();
+                (p.origin_x_m, p.origin_y_m, p.width_m, p.height_m)
+            },
+            individual_centre_m: life.vegetation.centre_m(),
+            individual_radius_m: life.vegetation.individual_radius_m,
+            yard: {
+                let y = life.placed.layout.yard;
+                (y.x0, y.y0, y.x1, y.y1)
+            },
         }
+    }
+}
+
+/// A stem's id, stirred, so that taking one in n of them samples the wood
+/// rather than the order it was generated in.
+///
+/// SplitMix64's finalising mix, which is a few multiplies and shifts and
+/// spreads neighbouring ids right across the range. It is not randomness
+/// and must not be: the same stem hashes the same way on every request and
+/// in every process, so two people looking at the same box see the same
+/// trees, and so does a test.
+fn scattered(id: u64) -> u64 {
+    let mut z = id.wrapping_add(0x9E37_79B9_7F4A_7C15);
+    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    z ^ (z >> 31)
+}
+
+/// Individual trees inside a box of domain metres, thinned to `cap`.
+///
+/// Capped because the island holds about 200,000 stems and a viewer zoomed
+/// out over all of them wants a sample, not the lot: 200,000 of anything
+/// is megabytes and draws as a solid block anyway.
+///
+/// Thinned on a hash of the stem's id rather than on its place in the
+/// list, and that is not fussiness -- both of the obvious ways are wrong.
+///
+/// The stems are generated in an order that tracks position, so taking the
+/// first `cap` of them takes a patch of ground rather than a sample of the
+/// wood. Taking every nth fixes that and buys a worse problem, which the
+/// viewer showed rather than argued: the generation order is near-periodic
+/// in space, a stride beats against that period, and a 4 km view of the
+/// estate came out in vertical stripes and chevrons that are nowhere in
+/// the island. A hash has no period to beat against. It is still a pure
+/// function of the stem and not randomness, so the same box always answers
+/// with the same trees -- for two people looking at one wood, and for a
+/// test.
+///
+/// Zoom in far enough that fewer than `cap` stand in view and the thinning
+/// stops: every stem in the box comes back, which is the point of the
+/// whole thing.
+///
+/// `in_box` says how many really stood there, so a thinned view can never
+/// be read as a thin wood.
+pub fn trees_in(
+    terrain: &Terrain,
+    all: &[mk_engine::regional::local_vegetation::TreeInstance],
+    x0: f64,
+    y0: f64,
+    x1: f64,
+    y1: f64,
+    cap: usize,
+) -> Trees {
+    let (lo_x, hi_x) = (x0.min(x1), x0.max(x1));
+    let (lo_y, hi_y) = (y0.min(y1), y0.max(y1));
+    let in_view = |t: &&mk_engine::regional::local_vegetation::TreeInstance| {
+        t.position_m.0 >= lo_x
+            && t.position_m.0 <= hi_x
+            && t.position_m.1 >= lo_y
+            && t.position_m.1 <= hi_y
+    };
+
+    let mut total = 0usize;
+    let mut in_box = 0usize;
+    for t in all.iter().filter(|t| t.alive) {
+        total += 1;
+        if in_view(&t) {
+            in_box += 1;
+        }
+    }
+
+    // One stem in `stride` is kept, chosen by its hash, so the sample is
+    // spread over the box instead of over the list. The `take` is the hard
+    // cap: a hash keeps about `in_box / stride` of them rather than exactly
+    // that many, and the caller was promised no more than it asked for.
+    let stride = in_box.div_ceil(cap.max(1)).max(1) as u64;
+    let trees: Vec<Tree> = all
+        .iter()
+        .filter(|t| t.alive)
+        .filter(in_view)
+        .filter(|t| scattered(t.id).is_multiple_of(stride))
+        .take(cap)
+        .map(|t| Tree {
+            id: t.id,
+            kind: format!("{:?}", t.kind),
+            x_m: t.position_m.0,
+            y_m: t.position_m.1,
+            height_m: t.height_m,
+            stem_diameter_m: t.stem_diameter_m,
+        })
+        .collect();
+    Trees {
+        shown: trees.len(),
+        trees,
+        in_box,
+        patch: terrain.patch,
+        individual_centre_m: terrain.individual_centre_m,
+        individual_radius_m: terrain.individual_radius_m,
+        yard: terrain.yard,
+        total,
     }
 }
 
@@ -467,6 +619,50 @@ pub fn cell_of(terrain: &Terrain, row: usize, col: usize) -> Option<Cell> {
             col,
         ),
     })
+}
+
+/// One tree, as the map draws it.
+///
+/// Position is domain metres, the same frame everything else on the map
+/// uses. `kind` is `Tree`, `Shrub` or `Grass` and **not a species**: the
+/// engine's `TreeInstance` carries no species, and the species system in
+/// `organisms/runtime.rs` is not wired into the island's vegetation.
+/// Island-scale species is Phase 3 Task 1b, still open.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct Tree {
+    pub id: u64,
+    pub kind: String,
+    pub x_m: f64,
+    pub y_m: f64,
+    pub height_m: f64,
+    pub stem_diameter_m: f64,
+}
+
+/// Where individual trees exist, and how many are in view.
+///
+/// The island does not model every tree. Within `individual_radius_m` of
+/// `centre_m` the engine holds a `TreeInstance` per stem above a minimum
+/// diameter; outside it — including the rest of the 4 km patch and the
+/// whole island beyond — vegetation is stand cover and biomass per cell.
+/// A viewer that did not say so would let somebody read an empty island
+/// as a treeless one.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct Trees {
+    pub trees: Vec<Tree>,
+    /// How many stood in the requested box, before the cap.
+    pub in_box: usize,
+    /// How many are being returned.
+    pub shown: usize,
+    /// The whole patch: south-west corner and size, in domain metres.
+    pub patch: (f64, f64, f64, f64),
+    /// Centre and radius of the individually-modelled area, domain metres.
+    pub individual_centre_m: (f64, f64),
+    pub individual_radius_m: f64,
+    /// The estate's yard, west, south, east and north in domain metres: a
+    /// cleared rectangle the engine places no stem inside.
+    pub yard: (f64, f64, f64, f64),
+    /// Every individual stem the island holds, in or out of view.
+    pub total: usize,
 }
 
 /// One cell of the island, for somebody who clicked on the map.
@@ -508,6 +704,7 @@ impl IslandProjection {
             economy_at_tick,
             timeline,
             conversations,
+            trees,
         } = views;
         let day_s = life.canon.rotation_period_s;
         Self {
@@ -532,6 +729,7 @@ impl IslandProjection {
             economy_at_tick,
             timeline,
             conversations,
+            trees,
             digest: Digest {
                 current: digest.at_tick == life.tick,
                 ..digest
@@ -666,6 +864,13 @@ impl IslandProjection {
         )
     }
 
+    /// Copy the island's individual stems.
+    pub fn trees_now(
+        life: &IslandLife,
+    ) -> Arc<Vec<mk_engine::regional::local_vegetation::TreeInstance>> {
+        Arc::new(life.vegetation.trees.clone())
+    }
+
     /// Hash the island now. Expensive — see [`Digest`].
     pub fn digest_now(life: &IslandLife) -> Digest {
         Digest {
@@ -694,6 +899,11 @@ fn people(life: &IslandLife) -> Vec<Person> {
                 age_years: human.development.age_years,
                 space: at.map(|p| space_name(life, p.space)),
                 position_m: at.map(|p| p.position_m),
+                cell: at.and_then(|p| {
+                    let size = life.domain.cell_size_m(mk_island::DomainLevel::Medium);
+                    let (x, y) = p.position_m;
+                    (x >= 0.0 && y >= 0.0).then(|| ((y / size) as usize, (x / size) as usize))
+                }),
                 body_carbon_kg: life.materials.body_carbon_kg(id),
             }
         })
@@ -769,6 +979,7 @@ fn land(life: &IslandLife) -> Land {
             .iter()
             .filter(|&&land| land)
             .count(),
+        cell_size_m: life.domain.cell_size_m(Medium),
     }
 }
 

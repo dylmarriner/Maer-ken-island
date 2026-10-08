@@ -89,7 +89,23 @@
   <section class="panel" aria-labelledby="map-heading" id="map-panel" hidden>
     <h2 id="map-heading">The island</h2>
     <p class="panel-note" id="map-note"></p>
-    <img id="map" alt="Elevation map of the island: land shaded by height, with the coastline and the domain's edge buffer. Click a point to read that cell." />
+    <div class="map-controls">
+      <button type="button" id="map-out">Zoom out</button>
+      <button type="button" id="map-in">Zoom in</button>
+      <button type="button" id="map-whole">Whole island</button>
+      <button type="button" id="map-estate">To the estate</button>
+      <button type="button" id="map-trees">To the trees</button>
+      <label for="map-layer">Showing</label>
+      <select id="map-layer">
+        <option value="elevation">Elevation</option>
+        <option value="vegetation">Vegetation</option>
+      </select>
+      <span id="map-scale"></span>
+    </div>
+    <div id="map-frame">
+      <canvas id="map" width="900" height="720" role="img" aria-label="Map of the island: land shaded by height, with the coastline and the domain's edge buffer. Zoom in far enough and the individual trees around the estate are drawn. Click a point to read that cell."></canvas>
+    </div>
+    <p class="panel-note" id="map-key"></p>
     <div id="map-cell" aria-live="polite"></div>
   </section>
 

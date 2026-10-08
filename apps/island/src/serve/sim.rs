@@ -186,6 +186,14 @@ pub struct SimHandle {
     /// life of the process. Rendering it once and handing out an `Arc`
     /// keeps it off the sim thread's path entirely.
     map_png: Arc<Vec<u8>>,
+    /// The island's standing vegetation, and the estate patch's, as PNGs.
+    ///
+    /// Unlike the elevation render these go stale: biomass grows. They are
+    /// redrawn on the stems' cadence, behind an `RwLock` the HTTP handlers
+    /// only ever read, for the same reason everything else here is --
+    /// nobody but the sim thread may touch the island.
+    vegetation_png: Arc<RwLock<Arc<Vec<u8>>>>,
+    patch_png: Arc<RwLock<Arc<Vec<u8>>>>,
     /// Why the replay log last failed to write, if it did.
     ///
     /// The log is what makes a run reproducible, and the timeline the
@@ -230,6 +238,45 @@ impl SimHandle {
     /// The island's elevation map as a PNG, rendered once at startup.
     pub fn map_png(&self) -> Arc<Vec<u8>> {
         Arc::clone(&self.map_png)
+    }
+
+    /// The island's standing vegetation as a PNG, at one pixel per medium
+    /// cell, as of the last redraw.
+    pub fn vegetation_png(&self) -> Arc<Vec<u8>> {
+        match self.vegetation_png.read() {
+            Ok(it) => Arc::clone(&it),
+            Err(poisoned) => Arc::clone(&poisoned.into_inner()),
+        }
+    }
+
+    /// The estate's 4 km patch as a PNG, at one pixel per 5 m stand cell.
+    pub fn patch_png(&self) -> Arc<Vec<u8>> {
+        match self.patch_png.read() {
+            Ok(it) => Arc::clone(&it),
+            Err(poisoned) => Arc::clone(&poisoned.into_inner()),
+        }
+    }
+
+    /// The individual stems standing inside a box of domain metres.
+    ///
+    /// Read off the published projection and the startup terrain, never
+    /// off the island: the same rule as `cell`. The stems are behind an
+    /// `Arc`, so this clones a pointer and then walks it, and the sim
+    /// thread is free to publish a newer set underneath in the meantime --
+    /// the caller just answers from the one it took.
+    pub fn trees_in(
+        &self,
+        x0: f64,
+        y0: f64,
+        x1: f64,
+        y1: f64,
+        cap: usize,
+    ) -> crate::serve::projection::Trees {
+        let stems = match self.projection.read() {
+            Ok(current) => Arc::clone(&current.trees),
+            Err(poisoned) => Arc::clone(&poisoned.into_inner().trees),
+        };
+        crate::serve::projection::trees_in(&self.terrain, &stems, x0, y0, x1, y1, cap)
     }
 
     /// Why the replay log last failed to write, if it did. `None` means the
@@ -365,6 +412,21 @@ const DIGEST_EVERY: u64 = 60;
 /// the digest down turned the page stale.
 const VIEWS_EVERY: u64 = 60;
 
+/// Steps between refreshes of the published stems.
+///
+/// Its own cadence, and a far slower one, because this copy is nothing
+/// like the others: the patch holds about 200,000 `TreeInstance`s at 56
+/// bytes apiece, so republishing them is an eleven-megabyte memcpy, where
+/// the whole conversation feed is forty short strings. `tests/tree_cost.rs`
+/// measures what it actually costs against a step.
+///
+/// A simulated day is the right staleness for what it shows. Trees are the
+/// slowest thing on the island -- a stem puts on millimetres in a year --
+/// so a map of them an hour or a day old is the same map. Nothing a person
+/// does through the dashboard plants or fells one: the commands that exist
+/// place structures and people, and those ride the fast views.
+const TREES_EVERY: u64 = 1_440;
+
 /// Start an island running on its own thread.
 ///
 /// Returns as soon as the thread is spawned, with a projection already
@@ -405,6 +467,16 @@ pub fn spawn_with(
     let map_png =
         Arc::new(island_preview::elevation_image(&life.domain, &life.physical.geophysics).png());
     let terrain = Arc::new(crate::serve::projection::Terrain::of(&life));
+    // The vegetation layers, likewise drawn here and then redrawn by the
+    // thread on the stems' cadence. Unlike the elevation they move:
+    // biomass grows, and a page that drew the island's vegetation once at
+    // bootstrap would be showing last year's forest for ever.
+    let vegetation_png = Arc::new(RwLock::new(Arc::new(
+        island_preview::biomass_image(&life.domain, &life.ecology, &life.physical.geophysics).png(),
+    )));
+    let patch_png = Arc::new(RwLock::new(Arc::new(
+        island_preview::stand_image(&life.vegetation).png(),
+    )));
     let first = IslandProjection::digest_now(&life);
     let views = Views::of(&life);
     let projection = Arc::new(RwLock::new(IslandProjection::of(
@@ -429,11 +501,15 @@ pub fn spawn_with(
         log_error: Arc::new(Mutex::new(None)),
         map_png,
         terrain,
+        vegetation_png,
+        patch_png,
     };
     let stop = Arc::clone(&handle.stop);
     let outcomes = Arc::clone(&handle.outcomes);
     let pacing = Arc::clone(&handle.pacing);
     let log_error = Arc::clone(&handle.log_error);
+    let vegetation_png = Arc::clone(&handle.vegetation_png);
+    let patch_png = Arc::clone(&handle.patch_png);
 
     std::thread::Builder::new()
         .name("island-sim".into())
@@ -451,6 +527,8 @@ pub fn spawn_with(
                 log,
                 log_error,
                 snapshots,
+                vegetation_png,
+                patch_png,
             })
         })
         .expect("the simulation thread starts");
@@ -473,6 +551,9 @@ struct Loop {
     /// Shared with the handle, so a failed write reaches the dashboard
     /// rather than only stderr.
     log_error: Arc<Mutex<Option<String>>>,
+    /// Shared with the handle, and redrawn on the stems' cadence.
+    vegetation_png: Arc<RwLock<Arc<Vec<u8>>>>,
+    patch_png: Arc<RwLock<Arc<Vec<u8>>>>,
     /// Where `ControlCommand::Snapshot` writes. Without one the command is
     /// *refused*, because the alternative is what this used to do: record
     /// "wrote a snapshot" in the timeline and write nothing.
@@ -646,6 +727,32 @@ fn run(mut it: Loop) {
             // share of a *full* island's 1.7 ms step, not of the fast ones
             // that actually set the loop's pace.
             it.views.conversations = IslandProjection::conversations_now(&it.life);
+        }
+
+        if it.life.tick.is_multiple_of(TREES_EVERY) {
+            it.views.trees = IslandProjection::trees_now(&it.life);
+            // The vegetation layers, on the same cadence and for the same
+            // reason: they are the only things on the map that change and
+            // are expensive to draw. The lock is held for the swap alone,
+            // never across the render, so a request can never wait on a
+            // million-cell repaint.
+            let island = Arc::new(
+                island_preview::biomass_image(
+                    &it.life.domain,
+                    &it.life.ecology,
+                    &it.life.physical.geophysics,
+                )
+                .png(),
+            );
+            let patch = Arc::new(island_preview::stand_image(&it.life.vegetation).png());
+            match it.vegetation_png.write() {
+                Ok(mut slot) => *slot = island,
+                Err(poisoned) => *poisoned.into_inner() = island,
+            }
+            match it.patch_png.write() {
+                Ok(mut slot) => *slot = patch,
+                Err(poisoned) => *poisoned.into_inner() = patch,
+            }
         }
 
         if it.life.tick.is_multiple_of(DIGEST_EVERY) {

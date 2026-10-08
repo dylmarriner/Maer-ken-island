@@ -175,8 +175,42 @@ the estate's electrical system is still free (D13).
   aimed at a clicked cell came back "put 100 kg of water into the island's stores, asked for at
   cell (624, 575)".
 
-  Still missing from a map proper: nothing is drawn *on* it — no people, no structures, no
-  estate — and the Creator page does not use it yet, only the intervention form.
+  **It now zooms, and it draws what is on it.** The `<img>` is a canvas holding the view in
+  domain metres, and zooming in improves the picture in place rather than magnifying one render:
+
+  | Zoom | What is actually drawn | Where it comes from |
+  | --- | --- | --- |
+  | Whole island | elevation, or standing vegetation, at one pixel per 2 km cell | `/api/map.png`, `/api/vegetation.png` |
+  | The estate's 4 km patch | stand cover at one pixel per 5 m cell, 400× finer | `/api/patch.png` |
+  | Within 807 m of the estate | ~200,000 individual stems, each at its own trunk diameter | `/api/trees?x0..` |
+  | Any zoom | the founders at their own metres, structures and the estate at their cells | `/api/world`, `/api/economy` |
+
+  Verified in Chromium against the real island: the whole island at 2,401 km across, the patch
+  at 4 km with 3,904 of 186,718 stems drawn, and 40 m across with 100 stems, "which is every one
+  of them".
+
+  What it still does not show, and does not pretend to:
+
+  - **Species.** `TreeInstance` carries `PlantKind` — Tree, Shrub or Grass — and nothing else.
+    The engine's species system in `organisms/runtime.rs` is not wired into the island's
+    vegetation; that is Phase 3 Task 1b, above, and still open. The page's key says so in those
+    words rather than colouring three kinds and calling them species.
+  - **Crowns.** A stem is a position, a height and a trunk diameter. Each is drawn at its own
+    diameter with a floor so a narrow one stays visible, and the key says that is what the dot
+    size is.
+  - **Individual trees anywhere but the wood.** Beyond `individual_radius_m` — which is 807 m on
+    the default scenario, not the scenario's requested 1,000, because the engine shrinks it to
+    stay under `tree_cap` — vegetation is stand cover per cell. The viewer draws the circle, and
+    the key says an empty box is not bare ground.
+
+  Two things the viewer had to be told about the island rather than guess, both found by
+  looking at what it drew: the estate's yard is cleared, so the middle of the wood is a hole
+  and "to the trees" aims at a stem rather than at the centre; and inside the circle the stand
+  cover is drawn paler because the stems' carbon has been taken out of it and put into the
+  trees — the same carbon, counted once.
+
+  Still missing from a map proper: the Creator page does not use it yet, only the intervention
+  form.
 - Phase 4b: energy, industry, town, economy. **Blocked at its own first step, and the block is
   the network rather than the work.** Task 1 Step 1 is "assemble cited reference values" --
   turbine efficiency curves by type and head range, Darcy-Weisbach penstock friction, oil

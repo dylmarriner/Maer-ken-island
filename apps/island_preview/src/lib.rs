@@ -228,6 +228,82 @@ pub fn elevation_image(domain: &IslandDomain, g: &RegionalGeophysics) -> Image {
     img
 }
 
+/// The top of the biomass ramp, in kgC/m². Standing producer carbon on
+/// this island's land tops out just under it -- the densest medium cell
+/// measures 18.6 -- so the scale is the island's own range rather than a
+/// round number picked to be safe.
+pub const BIOMASS_FULL_KGC_M2: f64 = 20.0;
+
+/// What a square metre of standing producer carbon is coloured.
+///
+/// Square-rooted, not linear, and that is a decision rather than a
+/// flourish. The island's land is heavily skewed: the median medium cell
+/// carries 0.8 kgC/m² and the densest 18.6, so a linear ramp puts half the
+/// island inside the bottom twenty-fifth of its own scale and draws the
+/// whole interior as one flat tan. The square root is still a monotonic
+/// function of a real measurement -- darker is always more carbon -- but
+/// it spends its range where the island actually is. The viewer's key says
+/// the scale is square-rooted and gives both ends, because a colour
+/// nobody can read back into a number is decoration.
+///
+/// Sea is left to the caller: biomass over water is zero, and colouring it
+/// as bare ground would draw the ocean as a desert.
+pub fn biomass_colour(kgc_m2: f64) -> [u8; 3] {
+    const BARE: [u8; 3] = [196, 186, 150];
+    const SPARSE: [u8; 3] = [154, 176, 104];
+    const CLOSED: [u8; 3] = [28, 82, 44];
+    let t = (kgc_m2.max(0.0) / BIOMASS_FULL_KGC_M2)
+        .clamp(0.0, 1.0)
+        .sqrt();
+    if t < 0.5 {
+        lerp(BARE, SPARSE, t / 0.5)
+    } else {
+        lerp(SPARSE, CLOSED, (t - 0.5) / 0.5)
+    }
+}
+
+/// The island's standing vegetation on the medium grid, north up.
+///
+/// The companion to [`elevation_image`], and the layer that makes the rest
+/// of the island's vegetation visible at all: individual stems exist only
+/// in a wood a kilometre across, and everything beyond it is this.
+pub fn biomass_image(
+    domain: &IslandDomain,
+    ecology: &mk_engine::regional::ecology::RegionalEcologyState,
+    g: &RegionalGeophysics,
+) -> Image {
+    const SEA: [u8; 3] = [24, 48, 74];
+    let mut img = grid_image(domain, |r, c| {
+        if *g.land_mask.get(r, c) {
+            biomass_colour(*ecology.biomass_kgc_m2.get(r, c))
+        } else {
+            SEA
+        }
+    });
+    buffer_outline(&mut img, domain);
+    img
+}
+
+/// The estate's 4 km patch at its own 5 m resolution, north up.
+///
+/// Four hundred times finer than [`biomass_image`] over the same ground,
+/// which is the whole reason it exists: the medium grid draws the patch as
+/// four flat squares, and the stand cover underneath has a value every
+/// five metres.
+pub fn stand_image(patch: &mk_engine::regional::local_vegetation::LocalVegetationPatch) -> Image {
+    let spec = patch.patch_spec();
+    let (rows, cols) = (spec.rows, spec.cols);
+    let area = spec.cell_size_m * spec.cell_size_m;
+    let mut img = Image::new(cols, rows, [0, 0, 0]);
+    for r in 0..rows {
+        for c in 0..cols {
+            let cell = patch.stands.get(r, c);
+            img.set(c, rows - 1 - r, biomass_colour(cell.biomass_kgc / area));
+        }
+    }
+    img
+}
+
 /// Marks deposits of `kinds` on an image of the medium grid scaled down by
 /// `factor`.
 fn mark_deposits(

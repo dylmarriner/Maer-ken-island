@@ -598,8 +598,17 @@ button.link {
 .panel-note .warn { color: var(--warn-ink); font-weight: 600; }
 
 /* The island's map. */
-#map { display: block; max-width: 100%; height: auto; border: 1px solid var(--line); border-radius: 6px; }
-#map { cursor: crosshair; }
+#map { display: block; width: 100%; height: auto; aspect-ratio: 5 / 4; border: 1px solid var(--line); border-radius: 6px; }
+#map { cursor: crosshair; touch-action: none; background: #0b1016; }
+#map.map-dragging { cursor: grabbing; }
+.map-controls { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; margin-bottom: 0.5rem; }
+.map-controls span { color: var(--ink-soft); font-variant-numeric: tabular-nums; }
 #map-cell { margin-top: 0.6rem; min-height: 3rem; }
 #map-cell .cell-where { margin: 0 0 0.2rem; font-variant-numeric: tabular-nums; }
 #map-cell .cell-what { margin: 0; color: var(--ink-soft); }
+
+/* Markers over the map, in the picture's own coordinate space. */
+#map-frame { position: relative; display: block; max-width: 100%; }
+.map-key-person, .map-key-structure, .map-key-estate { font-weight: 600; }
+.map-key-person { color: #8a6b00; }
+.map-key-structure { color: #a43c18; }

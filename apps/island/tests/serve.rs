@@ -1255,6 +1255,189 @@ async fn a_cell_of_the_island_can_be_asked_about_by_row_and_column() {
 }
 
 #[tokio::test]
+async fn the_islands_individual_trees_can_be_asked_for_by_the_box() {
+    let (world, port, server) = a_running_dashboard().await;
+
+    // Everything there is. The default box is the whole domain, so this
+    // is the island's entire stock of individual stems.
+    let (status, response) = get(port, "/api/trees").await;
+    assert_eq!(status, 200, "{response}");
+    let body: serde_json::Value = serde_json::from_str(body_of(&response)).unwrap();
+    let all = &body["trees"];
+    let total = all["total"].as_u64().expect("a total");
+    assert!(total > 0, "this island has individual stems: {all}");
+    assert_eq!(
+        all["in_box"].as_u64(),
+        Some(total),
+        "the default box is the whole domain, so everything is in it: {all}"
+    );
+    assert_eq!(
+        all["shown"].as_u64(),
+        Some(total),
+        "fewer stems than the cap, so nothing is thinned: {all}"
+    );
+
+    // The note is the endpoint's own account of what it is not: a reader
+    // who takes an empty box for bare ground has been misled by this page.
+    let note = body["note"].as_str().expect("a note");
+    assert!(
+        note.contains("individual_radius_m") && note.contains("stand cover"),
+        "says where individual stems exist and what is everywhere else: {note}"
+    );
+
+    // Each stem is a real measurement, not a placeholder. `kind` is the
+    // engine's `PlantKind` -- Tree, Shrub or Grass -- and deliberately not
+    // a species: the island's vegetation carries none, and a page claiming
+    // one would be fabricating exactly what `HUMAN_SCOPE.md` forbids.
+    let stems = all["trees"].as_array().expect("stems");
+    for stem in stems {
+        let kind = stem["kind"].as_str().expect("a kind");
+        assert!(
+            matches!(kind, "Tree" | "Shrub" | "Grass"),
+            "the engine's whole plant vocabulary, and not a species: {kind}"
+        );
+        assert!(
+            stem["height_m"].as_f64().expect("a height") > 0.0,
+            "a stem has a height: {stem}"
+        );
+        assert!(
+            stem["stem_diameter_m"].as_f64().expect("a diameter") > 0.0,
+            "a stem has a trunk: {stem}"
+        );
+    }
+
+    // Nothing stands in the estate's yard. The viewer draws that hole and
+    // says what it is, so if the engine ever started planting there the
+    // page would be explaining a clearing that was not one.
+    let yard = all["yard"].as_array().expect("a yard");
+    let at = |i: usize| yard[i].as_f64().expect("a yard edge");
+    let (w, s, e, n) = (at(0), at(1), at(2), at(3));
+    assert!(
+        e > w && n > s,
+        "the yard is a rectangle with area: {yard:?}"
+    );
+    for stem in stems {
+        let (x, y) = (
+            stem["x_m"].as_f64().expect("an x"),
+            stem["y_m"].as_f64().expect("a y"),
+        );
+        assert!(
+            x < w || x > e || y < s || y > n,
+            "a stem stands in the estate's cleared yard: {stem}"
+        );
+    }
+
+    // Asked for fewer than there are, the answer is thinned -- and says
+    // so. `in_box` is the count before thinning, which is the number that
+    // stops a sampled wood being read as a thin one.
+    let want = (total / 2).max(1);
+    let (status, response) = get(port, &format!("/api/trees?cap={want}")).await;
+    assert_eq!(status, 200, "{response}");
+    let thinned: serde_json::Value = serde_json::from_str(body_of(&response)).unwrap();
+    let thinned = &thinned["trees"];
+    assert_eq!(
+        thinned["in_box"].as_u64(),
+        Some(total),
+        "thinning changes what is sent, never what is reported to be there: {thinned}"
+    );
+    let shown = thinned["shown"].as_u64().expect("a count");
+    assert!(
+        shown <= want && shown > 0,
+        "asked for at most {want} and got {shown}: {thinned}"
+    );
+
+    // The same box answers the same way twice. The thinning is a hash of
+    // each stem's id and not a sample of the list, so it has to be a pure
+    // function of the request -- two people looking at one wood see one
+    // wood.
+    let (_, again) = get(port, &format!("/api/trees?cap={want}")).await;
+    let again: serde_json::Value = serde_json::from_str(body_of(&again)).unwrap();
+    assert_eq!(
+        again["trees"]["trees"], thinned["trees"],
+        "the same box thinned differently on a second request"
+    );
+
+    // A box with nothing in it is an empty list and an honest zero, not a
+    // 404 and not the whole island.
+    let (status, response) = get(port, "/api/trees?x0=-9000&y0=-9000&x1=-8000&y1=-8000").await;
+    assert_eq!(status, 200, "{response}");
+    let empty: serde_json::Value = serde_json::from_str(body_of(&response)).unwrap();
+    assert_eq!(empty["trees"]["in_box"].as_u64(), Some(0), "{empty}");
+    assert_eq!(empty["trees"]["shown"].as_u64(), Some(0), "{empty}");
+    assert_eq!(
+        empty["trees"]["total"].as_u64(),
+        Some(total),
+        "an empty box does not mean an empty island: {empty}"
+    );
+
+    world.stop();
+    server.abort();
+}
+
+#[tokio::test]
+async fn the_islands_vegetation_is_served_at_two_resolutions() {
+    let (world, port, server) = a_running_dashboard().await;
+
+    // The island's standing vegetation, one pixel per medium cell, the
+    // same shape as the elevation render it sits beside. The dashboard
+    // draws one over the other, so a different shape would misplace every
+    // cell on the map.
+    let (status, head, island) = get_bytes(port, "/api/vegetation.png").await;
+    assert_eq!(status, 200, "{head}");
+    assert!(
+        head.to_ascii_lowercase()
+            .contains("content-type: image/png"),
+        "served as a PNG: {}",
+        head.lines().take(8).collect::<Vec<_>>().join(" | ")
+    );
+    // Not cached. This layer is redrawn as biomass grows, and a browser
+    // holding the first one would show the forest the island bootstrapped
+    // with for ever -- which is the one way a growing world can look
+    // static and nobody notices.
+    assert!(
+        head.to_ascii_lowercase()
+            .contains("cache-control: no-cache"),
+        "the vegetation changes, so it must be revalidated: {}",
+        head.lines().take(8).collect::<Vec<_>>().join(" | ")
+    );
+
+    let (_, _, elevation) = get_bytes(port, "/api/map.png").await;
+    assert_eq!(
+        png_size(&island),
+        png_size(&elevation),
+        "the vegetation layer is drawn over the elevation one, so they are the same grid"
+    );
+
+    // The estate's patch, at its own far finer resolution. This is the
+    // middle rung of the zoom: 2 km cells across the island, this over
+    // the estate, individual stems in the wood.
+    let (status, head, patch) = get_bytes(port, "/api/patch.png").await;
+    assert_eq!(status, 200, "{head}");
+    let (pw, ph) = png_size(&patch);
+    let (iw, _) = png_size(&island);
+    assert!(
+        pw > iw,
+        "the patch covers 4 km in {pw} pixels against the island's {iw} for its whole width, so it \
+         must be the finer picture or it is not worth serving"
+    );
+    assert_eq!(pw, ph, "the patch is square: {pw} by {ph}");
+
+    world.stop();
+    server.abort();
+}
+
+/// Width and height out of a PNG's IHDR, which is always the first chunk.
+fn png_size(bytes: &[u8]) -> (u32, u32) {
+    assert!(
+        bytes.len() > 24 && bytes.starts_with(&[0x89, b'P', b'N', b'G']),
+        "not a PNG: {} bytes",
+        bytes.len()
+    );
+    let be = |at: usize| u32::from_be_bytes(bytes[at..at + 4].try_into().expect("four bytes"));
+    (be(16), be(20))
+}
+
+#[tokio::test]
 async fn the_island_is_served_as_a_picture_of_itself() {
     let (world, port, server) = a_running_dashboard().await;
 
