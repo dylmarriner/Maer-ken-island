@@ -1,7 +1,19 @@
 name: CI
 
 on:
+  # `push` is deliberately limited to the default branch. Before this, a
+  # bare `push:` alongside `pull_request:` meant every push to a PR branch
+  # started CI *twice* on the same commit — two full fmt + clippy +
+  # `cargo test --workspace` runs of 18-28 minutes each, for identical
+  # work. (Proof, on f63ab04: run #92 `event: push` and run #93
+  # `event: pull_request`, same `head_sha`.) This repository is private, so
+  # those are billable minutes, and half of them bought nothing.
+  #
+  # The trade: a push to a branch with no pull request open no longer runs
+  # CI. Work here reaches `main` through a pull request, so that branch is
+  # covered by the `pull_request` event from the moment one is opened.
   push:
+    branches: [main]
   pull_request:
   schedule:
     # Nightly slow tier, 03:17 UTC.
