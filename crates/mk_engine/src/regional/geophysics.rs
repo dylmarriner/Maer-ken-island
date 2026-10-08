@@ -102,6 +102,73 @@ impl std::error::Error for RegionalGeophysicsError {}
 
 /// The largest 4-connected landmass (`elevation > 0`); ties go to the one
 /// whose first cell comes first in row-major order.
+/// Steepest ground an ordinary footing goes on, as a gradient (rise over
+/// run) between a cell and a land neighbour.
+///
+/// One in three — about 18° — is where ground is conventionally classed
+/// very steep and building stops being a footing on a slope and becomes
+/// engineered terracing or piling. It is a *planning* threshold, not a
+/// physical limit: dry soil stands much steeper than this (its angle of
+/// repose is nearer 30–35°, a gradient of 0.58–0.70), so this is about what
+/// can be built on cheaply, not what stands up.
+///
+/// This replaces `crate::physics::MAX_CLIMB_HEIGHT_M` for the island, and
+/// is not a matter of taste. That constant is an **absolute** 2 m of relief
+/// between neighbouring cells, ported from a game whose cells are small and
+/// carrying its own note that it "may need tuning against Maer-Ken's actual
+/// elevation scale". The island's medium cells are 2 km apart, so 2 m of
+/// relief is a gradient of 0.1% — flatter than a drainage ditch. Measured
+/// across the default island it admits **0 of 66,116 land cells**: not
+/// "almost nothing", nothing at all, including the estate's own cell at
+/// 8.6%, where the founders' house already stands.
+pub const MAX_BUILD_GRADIENT: f64 = 1.0 / 3.0;
+
+/// Whether a medium cell is gentle enough to build on.
+///
+/// A gradient rather than a height difference, because the answer has to
+/// survive a change of resolution: the same hillside is 2 m per cell on one
+/// grid and 200 m per cell on another, and only the ratio is the hillside.
+///
+/// # What this cannot tell you
+///
+/// At 2 km per cell this is a *mean* gradient across kilometres of ground,
+/// so it cannot judge a building plot — a 15% cell holds flat benches and
+/// steep faces, and this sees neither. What it can honestly do is exclude
+/// mountainside, and that is all it claims. On the default island it admits
+/// 99.9% of land, which is not the gate being lax: the island really is
+/// gentle at this scale, with a steepest land gradient of 42%. A rule that
+/// turned down ordinary ground to look strict would be the lie, not this.
+///
+/// Sea neighbours are skipped rather than counted as a drop to the sea
+/// floor, which would make every coast unbuildable — the coast is where
+/// people build.
+pub fn is_buildable_cell(
+    elevation_m: &Grid2<f64>,
+    land_mask: &Grid2<bool>,
+    cell_size_m: f64,
+    row: usize,
+    col: usize,
+) -> bool {
+    let (rows, cols) = (elevation_m.nlat(), elevation_m.nlon());
+    if row >= rows || col >= cols || !*land_mask.get(row, col) || cell_size_m <= 0.0 {
+        return false;
+    }
+    let here = *elevation_m.get(row, col);
+    [(0i64, 1i64), (0, -1), (1, 0), (-1, 0)]
+        .iter()
+        .all(|(drow, dcol)| {
+            let (r, c) = (row as i64 + drow, col as i64 + dcol);
+            if r < 0 || c < 0 || r >= rows as i64 || c >= cols as i64 {
+                return true;
+            }
+            let (r, c) = (r as usize, c as usize);
+            if !*land_mask.get(r, c) {
+                return true;
+            }
+            (here - *elevation_m.get(r, c)).abs() / cell_size_m <= MAX_BUILD_GRADIENT
+        })
+}
+
 pub fn primary_land_component(elevation_m: &Grid2<f64>) -> Grid2<bool> {
     let (rows, cols) = (elevation_m.nlat(), elevation_m.nlon());
     let land: Vec<bool> = elevation_m.data().iter().map(|&e| e > 0.0).collect();

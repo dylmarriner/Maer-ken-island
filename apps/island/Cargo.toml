@@ -12,6 +12,7 @@ path = "src/main.rs"
 island_humans = { path = "../island_humans" }
 mk_core = { path = "../../crates/mk_core" }
 mk_engine = { path = "../../crates/mk_engine" }
+mk_island = { path = "../../crates/mk_island" }
 mk_interventions = { path = "../../crates/mk_interventions" }
 bytes = "1"
 serde.workspace = true

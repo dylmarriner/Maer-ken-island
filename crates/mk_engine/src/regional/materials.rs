@@ -549,6 +549,45 @@ impl MaterialLedger {
         Ok(())
     }
 
+    /// Material put into the island's stores from outside the simulated
+    /// system, by an operator rather than by anybody gathering it.
+    ///
+    /// Every other way into `stock` takes the material from somewhere
+    /// interior — a cell's biomass, the crust, a river — because that is
+    /// what gathering is. An injection has no such origin, so it is booked
+    /// from [`Reservoir::OperatorIntervention`], which is a boundary
+    /// reservoir: the audit still closes on the tick it lands, and the
+    /// inflow stays visible and attributable in the ledger rather than
+    /// appearing as matter the island made from nothing.
+    pub fn inject(&mut self, m: Material, kg: f64, ledger: &mut Ledger) -> f64 {
+        let kg = kg.max(0.0);
+        if kg == 0.0 {
+            return 0.0;
+        }
+        self.add(m, kg);
+        let composition = composition(m);
+        flow(
+            ledger,
+            FluxKind::Carbon,
+            Reservoir::OperatorIntervention,
+            Reservoir::MaterialCarbon,
+            kg * composition.carbon_per_kg,
+        );
+        if m == Material::Water {
+            // Only `Material::Water` counts toward `MaterialWater`; water
+            // held inside a food is not in that stock (see `stock_of`), so
+            // booking it would open the audit it is meant to close.
+            flow(
+                ledger,
+                FluxKind::Water,
+                Reservoir::OperatorIntervention,
+                Reservoir::MaterialWater,
+                kg,
+            );
+        }
+        kg
+    }
+
     /// Draw `kg` of water from a cell: standing water first, then a small
     /// share of the river flow. Refused if the cell has none.
     pub fn gather_water(
@@ -729,6 +768,39 @@ impl MaterialLedger {
             FluxKind::Water,
             Reservoir::MaterialWater,
             Reservoir::SoilWater,
+            body.water_kg,
+        );
+        Ok(())
+    }
+
+    /// Take a body out of the ledger because an operator removed the person
+    /// from the world, rather than because they died.
+    ///
+    /// Separate from [`MaterialLedger::on_death`] on purpose. A death leaves
+    /// the body here: its carbon goes to detritus and its water to the soil,
+    /// both interior, because a dead body is still matter on the island. A
+    /// removal does not — the person is gone, and so is what they were made
+    /// of — so it leaves through [`Reservoir::OperatorIntervention`], which
+    /// is the boundary. Booking a removal as a death would put a corpse's
+    /// worth of carbon into the island's soil for somebody who was never
+    /// there to die.
+    pub fn remove_body(&mut self, id: &str, ledger: &mut Ledger) -> Result<(), MaterialError> {
+        let body = self
+            .bodies
+            .remove(id)
+            .ok_or_else(|| MaterialError::NoSuchHuman(id.into()))?;
+        flow(
+            ledger,
+            FluxKind::Carbon,
+            Reservoir::HumanCarbon,
+            Reservoir::OperatorIntervention,
+            body.carbon_kg,
+        );
+        flow(
+            ledger,
+            FluxKind::Water,
+            Reservoir::MaterialWater,
+            Reservoir::OperatorIntervention,
             body.water_kg,
         );
         Ok(())

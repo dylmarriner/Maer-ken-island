@@ -122,6 +122,14 @@ fn finite(grid: &Grid2<f64>, what: &'static str) -> Result<(), RegionalPhysicalE
 }
 
 impl RegionalPhysicalState {
+    /// Mean elevation per coarse cell (m), derived from the terrain when
+    /// the state is built. Readable because the coarse grids — climate,
+    /// weather — are indexed against it, and anything editing one of them
+    /// needs the height of the cell it is editing.
+    pub fn elevation_coarse_m(&self) -> &Grid2<f64> {
+        &self.elevation_coarse_m
+    }
+
     /// Generate the island's geophysics for `seed`, then spin the physical
     /// systems up through two orbits so the world starts on its seasonal
     /// cycle with a climatology, running rivers and full lakes. The

@@ -109,6 +109,107 @@ Phase 1 adds the regional island domain and its geophysics. Almost all of it is 
     storage key refuses rather than writing records in plaintext. Island-only; upstream
     `HumanStorage` and `HumanRegistry` are used as they are.
 
+27. `mk_engine::regional::interventions` (new) — upstream's `InterventionAction` executor adapted
+    to `IslandLife`. `IslandLife::intervene` validates with upstream's own
+    `validate_intervention` and then applies, or refuses with
+    `IslandInterventionError::NotSupportedOnIsland { action, reason }`; `IslandCommand::Intervention`
+    carries it into the replay log, so an intervened-in run replays to the same canonical digest
+    (`a_run_somebody_intervened_in_replays_to_the_same_island`). Island-only: upstream's
+    `interventions::InterventionExecutor` against `WorldState` is untouched, and `mk_interventions`
+    is unchanged — the island speaks upstream's action vocabulary rather than a translation of it,
+    so a log records what was actually asked for.
+
+    **Applied on the island:** `Pause`, `Resume`, `Step` (directives, as upstream);
+    `ModifyClimate` (all four parameters, against the island's own coarse climate and weather
+    grids, with the heat booked from `Reservoir::OperatorIntervention` exactly as upstream books
+    it); `InjectBiomass { Producers }`; `InjectResource { Water }`; `ConstructStructure` (the island's
+    economy is upstream's `ResourceEconomyState` and the recipes are the same, through the island's
+    own buildability rule — item 28); `SpawnHuman`; `RemoveHuman`.
+
+    **`NotSupportedOnIsland`,** with the reason each refusal gives. The list is
+    `regional::interventions::refusal` and `every_action_is_supported_or_refused_by_name` holds
+    the two together by walking every variant:
+
+    | Action | Why the island has no meaning for it |
+    |---|---|
+    | `SculptTerrain`, `SmoothTerrain` | The island's terrain is generated from its canon-locked scenario and hashed into the state digest. An edited coastline would put an island out of agreement with its own canon, and every snapshot and replay of it is checked against that. |
+    | `InjectBiomass` — `Consumers`, `Apex`, `Decomposers` | The island has no animal populations. `regional::ecology` carries standing producer carbon and NPP; species are not seeded at island scale (item 13). `Producers` is applied, against the biomass field. |
+    | `InjectResource` — `Minerals`, `Nutrients`, `Energy`, `Organic` | The island's stores are nine named materials (wood, charcoal, coal, limestone, quicklime, plant food, meat, fibre, water). Only water names the same thing in both vocabularies; the rest would have to be guessed at. |
+    | `InjectEnergy` | The island's energy is the estate's own plant — fuel stores, generators, solar arrays, batteries — not an energy field over the ground, so there is nowhere a quantity of energy at a coordinate would land. |
+    | `TriggerDisturbance` | The island runs no disturbance system; `crate::disturbance` is planetary state its physical step does not carry. |
+    | `ModifyScenario` | The island's scenario is an `IslandScenario`, whose digest every snapshot and replay is checked against. Upstream's three settable parameters are planetary and name nothing in it. |
+    | `Scrub`, `Branch`, `Fork` | The island can be saved and loaded (`io::island_snapshot`), but its runner keeps no branch registry for a fork to be rooted in. |
+
+    Two island differences inside the actions that *are* applied. A `Location` off the domain is
+    **refused** rather than clamped: upstream's planet has a cell for every coordinate, and
+    clamping here would quietly move an intervention aimed at the open sea onto the nearest coast.
+    And `RemoveHuman` touches four places where upstream touches one — the registry, the estate
+    position table, the body in the material ledger (out through the boundary, not to detritus:
+    a removal is not a death) and the two per-person accumulators, which are hashed, so a ghost
+    left in any of them would make two islands that agree about who is alive disagree about their
+    digest.
+
+    `mk_engine::regional::materials` gains `inject` and `remove_body` for the two crossings above,
+    both booked against `Reservoir::OperatorIntervention`, and `RegionalPhysicalState` gains an
+    `elevation_coarse_m()` accessor. **Note on the energy booking:** the island's physical state
+    rebuilds its ledger at the start of every physical step — it is a record of that step's fluxes,
+    not a running total — and the island keeps no cumulative energy ledger. So a climate
+    intervention's joules are readable on the step the intervention lands on and gone after the
+    next one. The material injections are different: `MaterialWater` and `MaterialCarbon` are
+    audited against the ledger on every household step, so those go through `IslandLife::audited`
+    and the audit closes on the tick they land.
+
+
+28. `mk_engine::regional::geophysics::{MAX_BUILD_GRADIENT, is_buildable_cell}` (new) and
+    `mk_engine::resource_economy::ResourceEconomyState::place_structure` (new) — **the island's
+    buildability rule, and the seam it needed.**
+
+    Upstream's `physics::is_buildable` gates on `MAX_CLIMB_HEIGHT_M`: an **absolute** 2 m of
+    relief between a cell and each of its four neighbours, ported from a game with small cells
+    and carrying its own note that it "may need tuning against Maer-Ken's actual elevation
+    scale". That is a statement about a grid's resolution, not about terrain — the same hillside
+    is 2 m per cell on one grid and 200 m per cell on another. On the island's 2 km medium cells
+    it is a gradient of 0.1%, and measured across the default island it admits **0 of 66,116 land
+    cells**. Not almost none: none, the founders' estate at 8.6% included, where the house
+    already stands.
+
+    So the island asks the same question as a gradient. `MAX_BUILD_GRADIENT` is 1 in 3 (about
+    18°), where ground is conventionally classed very steep and building stops being a footing on
+    a slope and becomes engineered terracing. It is a planning threshold, not a physical one —
+    dry soil stands far steeper, its angle of repose nearer 30–35° (a gradient of 0.58–0.70) — so
+    it is about what can be built on cheaply rather than what stands up. Sea neighbours are
+    skipped rather than counted as a drop to the sea floor, which would refuse every coast, and
+    the coast is where people build.
+
+    Measured gradient distribution over the default island's land, which is what the threshold
+    was chosen against rather than guessed at:
+
+    | at or under | share of land |
+    |---|---|
+    | 0.1% (upstream's gate here) | **0.0%** |
+    | 2% | 22.9% |
+    | 5% | 79.6% |
+    | 10% | 95.0% |
+    | 20% | 99.4% |
+    | 30% | 99.9% |
+    | steepest land on the island | 42.5% (849 m over 2 km) |
+
+    **What it cannot do, stated rather than left to be discovered.** At 2 km per cell this is a
+    mean gradient across kilometres, so it cannot judge a building plot: a 15% cell holds flat
+    benches and steep faces and this sees neither. It excludes mountainside, and that is all it
+    claims. It admits 99.9% of this island's land — which is the island being gentle at this
+    scale, not the rule being lax. A gate tightened to look strict would turn down ordinary
+    ground, which is the failure mode it exists to end.
+
+    `place_structure` is `construct_for_operator` with the terrain gate lifted out in front of
+    it: upstream's path is unchanged and still gates, and the island calls the inner one after
+    making its own judgement. The recipe check and the event-log record are shared, so a
+    structure placed by the island is as visible in the economy's books as any agent-built one;
+    the only thing a caller takes on is the terrain judgement. Suitable for upstreaming as a pure
+    refactor, and the gradient rule is a candidate for replacing `MAX_CLIMB_HEIGHT_M` upstream
+    too — the same resolution argument applies to any grid.
+
+
 ## Drift check (2026-10-02)
 
 Upstream `dylmarriner/Maer-Ken` default-branch HEAD is `7c05f0dcf254387ffd7322dbb525fe4807228602`, equal to the pin: no upstream commits since the extraction, so upstream has not fixed the Phase 0 defects either. Re-check immediately before Phase 1.

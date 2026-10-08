@@ -1,3 +1,9 @@
 /target/
 *.blend1
 .DS_Store
+
+# Runtime output: `island serve` stores people under ./island-data by
+# default, including humans/.secret_storage_key, which must never be
+# committed — without it those records cannot be read, and with it in a
+# repository they are not protected by anything.
+/island-data/

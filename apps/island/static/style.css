@@ -364,6 +364,12 @@ form legend { font-weight: 650; padding: 0 0.4rem; }
 label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.9rem; color: var(--ink-soft); }
 label .hint { color: var(--muted); font-size: 0.78rem; }
 label.full, .field-grid > .full { grid-column: 1 / -1; }
+/* `display: flex` above is an author rule, so it beats the browser's own
+   `[hidden] { display: none }` and a hidden label stays on screen. Found by
+   driving the creator page: switching to a cell left the room dropdown
+   showing beside the row and column fields, offering a choice that did
+   nothing. The same reason `.banner[hidden]` needs its own rule. */
+label[hidden], .field-grid > [hidden] { display: none; }
 
 input, select, textarea {
   font: inherit;

@@ -4,8 +4,12 @@
 use super::auth::ControlAuth;
 use super::pages;
 use super::read;
+use super::sim::{IslandCommand, SimHandle, SimSpeed};
 use super::view;
 use island_humans::{CreateHumanError, CreateHumanRequest, IslandHumanPopulation};
+use mk_engine::regional::commands::ControlCommand;
+use mk_engine::regional::create_human::{CreateLocation, IslandCreateHuman};
+use mk_engine::regional::estate_layout::SpaceId;
 use std::sync::{Arc, Mutex};
 use warp::http::StatusCode;
 use warp::Filter;
@@ -125,6 +129,47 @@ pub fn detail(population: &IslandHumanPopulation, agent_id: &str) -> Option<serd
     }))
 }
 
+/// One islander, in the same shape the stored roster uses.
+///
+/// `view::sections` wants a `HumanSummary`, which the stored population
+/// builds from its own side-table of typed-in names. A person in the world
+/// has no such table — an `agent_id` is all they are called — so the
+/// summary is built from the record itself and the name *is* the id. That
+/// is the honest answer rather than a prettier invented one.
+pub fn world_detail(
+    human: &mk_engine::humans::HumanBeing,
+    current: &super::projection::IslandProjection,
+) -> serde_json::Value {
+    let summary = island_humans::HumanSummary {
+        agent_id: human.agent_id().to_string(),
+        name: human.agent_id().to_string(),
+        human_id: human.profile.human_id.to_string(),
+        biological_sex: format!("{:?}", human.biological_sex()),
+        status: format!("{:?}", human.profile.status),
+        age_years: human.development.age_years,
+    };
+    let here = current
+        .people
+        .iter()
+        .find(|p| p.agent_id == summary.agent_id);
+    serde_json::json!({
+        "summary": summary,
+        "folder": serde_json::Value::Null,
+        "sections": view::sections(human, &summary, None),
+        "human": serde_json::to_value(human).unwrap_or(serde_json::Value::Null),
+        // Where they are now, which the stored roster has no answer for.
+        "where": here.map(|p| serde_json::json!({
+            "space": p.space,
+            "asleep": p.asleep,
+            "body_carbon_kg": p.body_carbon_kg,
+        })),
+        // Records are refreshed on the hour, so the page can say how old
+        // this reading is rather than implying it is live.
+        "records_at_tick": current.records_at_tick,
+        "tick": current.clock.tick,
+    })
+}
+
 /// The creation log, newest first: who has been added to the island and by
 /// which door (the dashboard, the CLI, a test).
 pub fn activity(population: &IslandHumanPopulation, limit: usize) -> serde_json::Value {
@@ -209,10 +254,163 @@ pub fn create(
     }
 }
 
+/// A request to create somebody *in the world*.
+///
+/// The dashboard's stored-person fields, plus where on the island they
+/// start. `space` names a room of the estate by its layout id; `row`/`col`
+/// put them on a cell. Exactly one is required, because "somewhere" is not
+/// a place and guessing one would put a person where nobody asked.
+#[derive(Debug, serde::Deserialize)]
+struct WorldCreateRequest {
+    name: String,
+    biological_sex: String,
+    birth_timestamp: String,
+    age_years: f64,
+    height_cm: f64,
+    build: String,
+    hair_color: String,
+    eye_color: String,
+    skin_tone: String,
+    space: Option<u32>,
+    row: Option<usize>,
+    col: Option<usize>,
+    /// Default true: somebody created on the island was, as a rule, born
+    /// there. A creator who means otherwise says so and gives coordinates.
+    #[serde(default = "yes")]
+    birthplace_here: bool,
+    #[serde(default)]
+    birth_latitude: f64,
+    #[serde(default)]
+    birth_longitude: f64,
+}
+
+fn yes() -> bool {
+    true
+}
+
+impl WorldCreateRequest {
+    /// Turn the wire shape into a command, or say what is wrong with it.
+    ///
+    /// Only the parts the engine cannot check are checked here: the sex
+    /// word and the choice of location. Everything else — the age, the
+    /// height, whether that room exists, whether that cell is in the sea —
+    /// belongs to the island and is checked on its own thread against the
+    /// live world, which is the only place those answers are true.
+    fn into_command(self) -> Result<IslandCreateHuman, Vec<String>> {
+        let mut problems = Vec::new();
+        let sex = match self.biological_sex.trim().to_ascii_lowercase().as_str() {
+            "male" => Some(mk_core::human::BiologicalSex::Male),
+            "female" => Some(mk_core::human::BiologicalSex::Female),
+            other => {
+                problems.push(format!(
+                    "biological_sex: {other:?} is not one the spawn templates support; use male or female."
+                ));
+                None
+            }
+        };
+        let location = match (self.space, self.row, self.col) {
+            (Some(id), None, None) => Some(CreateLocation::EstateSpace(SpaceId(id))),
+            (None, Some(row), Some(col)) => Some(CreateLocation::IslandCell { row, col }),
+            (None, None, None) => {
+                problems.push(
+                    "location: say where they start — `space` for a room of the estate, or `row` and `col` for a cell of the island."
+                        .to_string(),
+                );
+                None
+            }
+            _ => {
+                problems.push(
+                    "location: give either `space` or both `row` and `col`, not a mixture."
+                        .to_string(),
+                );
+                None
+            }
+        };
+        match (sex, location) {
+            (Some(biological_sex), Some(location)) if problems.is_empty() => {
+                Ok(IslandCreateHuman {
+                    name: self.name,
+                    biological_sex,
+                    birth_timestamp: self.birth_timestamp,
+                    age_years: self.age_years,
+                    height_cm: self.height_cm,
+                    build: self.build,
+                    hair_color: self.hair_color,
+                    eye_color: self.eye_color,
+                    skin_tone: self.skin_tone,
+                    location,
+                    birthplace_here: self.birthplace_here,
+                    birth_latitude: self.birth_latitude,
+                    birth_longitude: self.birth_longitude,
+                })
+            }
+            _ => Err(problems),
+        }
+    }
+}
+
+/// Running the island: pause it, resume it, step it, or change its speed.
+#[derive(Debug, serde::Deserialize)]
+#[serde(tag = "command", rename_all = "snake_case")]
+enum ControlRequest {
+    Pause,
+    Resume,
+    /// Advance exactly this many steps and then hold. `ControlCommand::Step`
+    /// has been in the island's vocabulary since Task 4 with nothing behind
+    /// it; this is the loop's step budget, which is also what an upstream
+    /// `InterventionAction::Step` now drives.
+    Step {
+        ticks: u64,
+    },
+    /// `real`, `max`, or a multiplier like `60`.
+    SetSpeed {
+        speed: String,
+    },
+}
+
+impl ControlRequest {
+    /// Apply it, and give back the command to record.
+    fn apply(&self, world: &SimHandle) -> Result<ControlCommand, String> {
+        match self {
+            Self::Pause => {
+                world.set_paused(true);
+                Ok(ControlCommand::Pause)
+            }
+            Self::Resume => {
+                world.set_paused(false);
+                Ok(ControlCommand::Resume)
+            }
+            Self::Step { ticks } => {
+                world.step_for(*ticks);
+                Ok(ControlCommand::Step(*ticks))
+            }
+            Self::SetSpeed { speed } => {
+                let parsed: SimSpeed = speed.parse()?;
+                world.set_speed(parsed);
+                Ok(ControlCommand::SetSpeed(speed.clone()))
+            }
+        }
+    }
+}
+
 #[derive(Debug, serde::Deserialize)]
 struct ActivityQuery {
     limit: Option<usize>,
 }
+
+/// Said in `/api/economy` rather than left for a reader to infer from three
+/// empty lists.
+const NO_RESOURCE_NODES: &str =
+    "The island seeds no resource nodes from its biomes, the way a planetary world does, so \
+     `resource_nodes` is always 0. Structures and events are real: they are what has actually \
+     been built here and what the economy recorded doing it, which is nothing until somebody \
+     builds something.";
+
+/// Said in `/api/timeline` for the same reason.
+const TIMELINE_IS_EXTERNAL: &str =
+    "Everything that has reached this island from outside, in the order it applied — the same \
+     record `island replay` reads, so this cannot disagree with it. It is not a history of what \
+     the islanders did: nothing here is a person going to bed or felling a tree.";
 
 /// Headers every response carries. The pages load nothing from anywhere but
 /// this server, so the policy can say exactly that: no third-party script,
@@ -243,6 +441,37 @@ pub fn routes(
     population: SharedPopulation,
     auth: ControlAuth,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = std::convert::Infallible> + Clone {
+    routes_with_world(population, auth, None)
+}
+
+/// The routes, with a running island behind `/api/world` when there is one.
+///
+/// `island serve` without `--scenario` serves the stored population alone,
+/// exactly as it did before there was a world to serve: the endpoint then
+/// says so rather than inventing a world or disappearing.
+pub fn routes_with_world(
+    population: SharedPopulation,
+    auth: ControlAuth,
+    world: Option<SimHandle>,
+) -> impl Filter<Extract = (impl warp::Reply,), Error = std::convert::Infallible> + Clone {
+    let get_world = warp::path!("api" / "world")
+        .and(read())
+        .and(with(world.clone()))
+        .map(|world: Option<SimHandle>| match world {
+            Some(handle) => json(
+                StatusCode::OK,
+                &serde_json::to_value(handle.projection()).unwrap_or_default(),
+            ),
+            // Not an error: this dashboard is simply not running one.
+            None => json(
+                StatusCode::OK,
+                &serde_json::json!({
+                    "running": false,
+                    "reason": "No island is running. Start the server with --scenario to simulate one."
+                }),
+            ),
+        });
+
     let get_status = warp::path!("api" / "status")
         .and(read())
         .and(with(population.clone()))
@@ -313,7 +542,7 @@ pub fn routes(
         .and(warp::body::content_length_limit(MAX_CREATE_BODY))
         .and(warp::body::bytes())
         .and(with(population))
-        .and(with(auth))
+        .and(with(auth.clone()))
         .map(
             |authorization: Option<String>,
              body: bytes::Bytes,
@@ -337,6 +566,393 @@ pub fn routes(
             },
         );
 
+    // Creating somebody *in the world*, as against storing them. The reply
+    // is 202 and a command id: the island applies it on its own thread
+    // before its next step, and the page polls for what happened. A
+    // request cannot be allowed to reach into a running world and change
+    // it mid-step, so there is no way to answer this synchronously.
+    let post_world_human = warp::path!("api" / "world" / "humans")
+        .and(warp::post())
+        .and(warp::header::optional::<String>("authorization"))
+        .and(warp::body::content_length_limit(MAX_CREATE_BODY))
+        .and(warp::body::bytes())
+        .and(with(world.clone()))
+        .and(with(auth.clone()))
+        .map(
+            |authorization: Option<String>,
+             body: bytes::Bytes,
+             world: Option<SimHandle>,
+             auth: ControlAuth| {
+                let Some(world) = world else {
+                    return json(
+                        StatusCode::CONFLICT,
+                        &serde_json::json!({ "errors": ["No island is running, so there is nowhere to put anybody. Start the server with --scenario."] }),
+                    );
+                };
+                if !auth.permits(authorization.as_deref()) {
+                    // The same rule as storing a person: a world write is
+                    // no less a write for happening a step later.
+                    return json(
+                        StatusCode::UNAUTHORIZED,
+                        &serde_json::json!({
+                            "errors": [match auth.mode() {
+                                "token" => "That control token was not accepted.",
+                                _ => "This dashboard is not allowed to create people.",
+                            }],
+                            "writes": auth.describe(),
+                            "writes_mode": auth.mode(),
+                        }),
+                    );
+                }
+                let request: WorldCreateRequest = match serde_json::from_slice(&body) {
+                    Ok(request) => request,
+                    Err(err) => {
+                        return json(
+                            StatusCode::BAD_REQUEST,
+                            &serde_json::json!({ "errors": [format!(
+                                "That request body is not the JSON this endpoint expects: {err}."
+                            )] }),
+                        )
+                    }
+                };
+                match request.into_command() {
+                    Err(problems) => json(
+                        StatusCode::UNPROCESSABLE_ENTITY,
+                        &serde_json::json!({ "errors": problems }),
+                    ),
+                    Ok(command) => match world.send(IslandCommand::CreateHuman(Box::new(command))) {
+                        Some(id) => json(
+                            StatusCode::ACCEPTED,
+                            &serde_json::json!({
+                                "command": id,
+                                "poll": format!("/api/world/commands/{id}"),
+                            }),
+                        ),
+                        None => json(
+                            StatusCode::CONFLICT,
+                            &serde_json::json!({ "errors": ["The island has stopped, so nothing more will be applied."] }),
+                        ),
+                    },
+                }
+            },
+        );
+
+    // The three endpoints Task 6's interface list names, and which were
+    // recorded as "not served" for longer than they should have been.
+    //
+    // I had written that serving them would mean inventing the data. That
+    // was wrong, and measuring the island is what showed it: the estate
+    // holds two properties with six buildings and eighty-odd items each,
+    // the economy holds whatever has been built in it, and the replay log
+    // is a timeline of everything that has reached the island from outside.
+    // All three are re-slicing, not invention.
+    //
+    // What *is* honest to say is that the economy is empty until somebody
+    // builds something, and that the island seeds no resource nodes the way
+    // a planetary world does. So it says so, in the reply, rather than
+    // being left out and read as a missing feature.
+    let get_properties = warp::path!("api" / "properties")
+        .and(read())
+        .and(with(world.clone()))
+        .map(|world: Option<SimHandle>| match world {
+            None => json(
+                StatusCode::NOT_FOUND,
+                &serde_json::json!({ "errors": ["No island is running, so it has no properties. Start the server with --scenario."] }),
+            ),
+            Some(world) => {
+                let current = world.projection();
+                json(
+                    StatusCode::OK,
+                    &serde_json::json!({
+                        "properties": *current.properties,
+                        "estate_cell": current.estate.cell,
+                        "spaces": current.estate.spaces,
+                    }),
+                )
+            }
+        });
+
+    let get_economy = warp::path!("api" / "economy")
+        .and(read())
+        .and(with(world.clone()))
+        .map(|world: Option<SimHandle>| match world {
+            None => json(
+                StatusCode::NOT_FOUND,
+                &serde_json::json!({ "errors": ["No island is running, so it has no economy. Start the server with --scenario."] }),
+            ),
+            Some(world) => {
+                let current = world.projection();
+                let economy = &*current.economy;
+                json(
+                    StatusCode::OK,
+                    &serde_json::json!({
+                        "resource_nodes": economy.resource_nodes,
+                        "structures": economy.structures,
+                        "events": economy.events,
+                        "at_tick": current.economy_at_tick,
+                        "tick": current.clock.tick,
+                        "note": NO_RESOURCE_NODES,
+                    }),
+                )
+            }
+        });
+
+    let get_timeline = warp::path!("api" / "timeline")
+        .and(read())
+        .and(with(world.clone()))
+        .map(|world: Option<SimHandle>| match world {
+            None => json(
+                StatusCode::NOT_FOUND,
+                &serde_json::json!({ "errors": ["No island is running, so nothing has happened to it. Start the server with --scenario."] }),
+            ),
+            Some(world) => {
+                let current = world.projection();
+                json(
+                    StatusCode::OK,
+                    &serde_json::json!({
+                        "entries": *current.timeline,
+                        "tick": current.clock.tick,
+                        "note": TIMELINE_IS_EXTERNAL,
+                    }),
+                )
+            }
+        });
+
+    // An operator intervention, in upstream's own vocabulary. The body is
+    // a serialized `InterventionAction`, so what reaches the island is
+    // what upstream's executor would have been given — a dashboard is not
+    // a second vocabulary for the same thing.
+    //
+    // Answered 202 and a command id, like a creation and for the same
+    // reason: it applies on the island's own thread between steps. The
+    // refusals the island makes for actions with no island meaning come
+    // back through that poll, naming the action and why, rather than being
+    // pre-screened here against a list that would then have to be kept in
+    // step with the engine's.
+    let post_world_intervention = warp::path!("api" / "world" / "interventions")
+        .and(warp::post())
+        .and(warp::header::optional::<String>("authorization"))
+        .and(warp::body::content_length_limit(MAX_CREATE_BODY))
+        .and(warp::body::bytes())
+        .and(with(world.clone()))
+        .and(with(auth.clone()))
+        .map(
+            |authorization: Option<String>,
+             body: bytes::Bytes,
+             world: Option<SimHandle>,
+             auth: ControlAuth| {
+                let Some(world) = world else {
+                    return json(
+                        StatusCode::CONFLICT,
+                        &serde_json::json!({ "errors": ["No island is running, so there is nothing to intervene in. Start the server with --scenario."] }),
+                    );
+                };
+                if !auth.permits(authorization.as_deref()) {
+                    return json(
+                        StatusCode::UNAUTHORIZED,
+                        &serde_json::json!({
+                            "errors": [match auth.mode() {
+                                "token" => "That control token was not accepted.",
+                                _ => "This dashboard is not allowed to intervene in the world.",
+                            }],
+                            "writes": auth.describe(),
+                            "writes_mode": auth.mode(),
+                        }),
+                    );
+                }
+                let action: mk_interventions::InterventionAction =
+                    match serde_json::from_slice(&body) {
+                        Ok(action) => action,
+                        Err(err) => {
+                            return json(
+                                StatusCode::BAD_REQUEST,
+                                &serde_json::json!({ "errors": [format!(
+                                    "That request body is not an intervention: {err}."
+                                )] }),
+                            )
+                        }
+                    };
+                match world.send(IslandCommand::Intervention(Box::new(action))) {
+                    Some(id) => json(
+                        StatusCode::ACCEPTED,
+                        &serde_json::json!({
+                            "command": id,
+                            "poll": format!("/api/world/commands/{id}"),
+                        }),
+                    ),
+                    None => json(
+                        StatusCode::CONFLICT,
+                        &serde_json::json!({ "errors": ["The island has stopped, so nothing more will be applied."] }),
+                    ),
+                }
+            },
+        );
+
+    // The world's roster, and one islander in full. The same per-person
+    // sections the stored roster uses, built from the world's own people —
+    // so a dashboard with an island running has one set of people rather
+    // than two different lists.
+    let get_world_humans = warp::path!("api" / "world" / "humans")
+        .and(read())
+        .and(with(world.clone()))
+        .map(|world: Option<SimHandle>| match world {
+            None => json(
+                StatusCode::NOT_FOUND,
+                &serde_json::json!({ "errors": ["No island is running."] }),
+            ),
+            Some(world) => {
+                let current = world.projection();
+                json(
+                    StatusCode::OK,
+                    &serde_json::json!({
+                        "people": current.people,
+                        "records_at_tick": current.records_at_tick,
+                        "tick": current.clock.tick,
+                    }),
+                )
+            }
+        });
+
+    let get_world_human = warp::path!("api" / "world" / "humans" / String)
+        .and(read())
+        .and(with(world.clone()))
+        .map(|agent_id: String, world: Option<SimHandle>| {
+            let Some(world) = world else {
+                return json(
+                    StatusCode::NOT_FOUND,
+                    &serde_json::json!({ "errors": ["No island is running."] }),
+                );
+            };
+            let current = world.projection();
+            match current.records.get(&agent_id) {
+                Some(human) => json(StatusCode::OK, &world_detail(human, &current)),
+                None => json(
+                    StatusCode::NOT_FOUND,
+                    &serde_json::json!({ "errors": [format!(
+                        "Nobody on the island has the id {agent_id:?}."
+                    )] }),
+                ),
+            }
+        });
+
+    // Running the island, as against changing it. Pausing and speed move
+    // nothing in the world — they decide only how often a fixed step
+    // happens — so these apply at once rather than being queued, and are
+    // recorded in the replay log for the account of what the operator did.
+    let post_control = warp::path!("api" / "control")
+        .and(warp::post())
+        .and(warp::header::optional::<String>("authorization"))
+        .and(warp::body::content_length_limit(MAX_CREATE_BODY))
+        .and(warp::body::bytes())
+        .and(with(world.clone()))
+        .and(with(auth.clone()))
+        .map(
+            |authorization: Option<String>,
+             body: bytes::Bytes,
+             world: Option<SimHandle>,
+             auth: ControlAuth| {
+                let Some(world) = world else {
+                    return json(
+                        StatusCode::CONFLICT,
+                        &serde_json::json!({ "errors": ["No island is running. Start the server with --scenario."] }),
+                    );
+                };
+                if !auth.permits(authorization.as_deref()) {
+                    return json(
+                        StatusCode::UNAUTHORIZED,
+                        &serde_json::json!({
+                            "errors": ["This dashboard is not allowed to control the island."],
+                            "writes": auth.describe(),
+                            "writes_mode": auth.mode(),
+                        }),
+                    );
+                }
+                let request: ControlRequest = match serde_json::from_slice(&body) {
+                    Ok(request) => request,
+                    Err(err) => {
+                        return json(
+                            StatusCode::BAD_REQUEST,
+                            &serde_json::json!({ "errors": [format!(
+                                "That request body is not the JSON this endpoint expects: {err}."
+                            )] }),
+                        )
+                    }
+                };
+                match request.apply(&world) {
+                    Err(problem) => json(
+                        StatusCode::UNPROCESSABLE_ENTITY,
+                        &serde_json::json!({ "errors": [problem] }),
+                    ),
+                    Ok(control) => {
+                        // Queued only for the record: the pacing already
+                        // changed, and the log should say that it did.
+                        world.send(IslandCommand::Control(control));
+                        let pacing = world.pacing();
+                        json(
+                            StatusCode::OK,
+                            &serde_json::json!({
+                                "speed": pacing.speed.describe(),
+                                "paused": pacing.paused,
+                            }),
+                        )
+                    }
+                }
+            },
+        );
+
+    // The parts of the world, each on its own path. The same data the
+    // projection carries, split the way somebody asking for one of them
+    // would expect to find it.
+    let world_part = warp::path!("api" / "world" / String)
+        .and(read())
+        .and(with(world.clone()))
+        .map(|part: String, world: Option<SimHandle>| {
+            let Some(world) = world else {
+                return json(
+                    StatusCode::NOT_FOUND,
+                    &serde_json::json!({ "errors": ["No island is running."] }),
+                );
+            };
+            let current = world.projection();
+            let body = match part.as_str() {
+                "estate" => serde_json::to_value(&current.estate),
+                "vegetation" => serde_json::to_value(&current.land),
+                "materials" => serde_json::to_value(&current.stocks),
+                "clock" => serde_json::to_value(&current.clock),
+                other => {
+                    return json(
+                        StatusCode::NOT_FOUND,
+                        &serde_json::json!({ "errors": [format!(
+                            "The island has no part called {other:?}. It serves estate, vegetation, materials and clock."
+                        )] }),
+                    )
+                }
+            };
+            json(StatusCode::OK, &body.unwrap_or_default())
+        });
+
+    let get_command = warp::path!("api" / "world" / "commands" / u64)
+        .and(read())
+        .and(with(world.clone()))
+        .map(|id: u64, world: Option<SimHandle>| match world {
+            None => json(
+                StatusCode::NOT_FOUND,
+                &serde_json::json!({ "errors": ["No island is running."] }),
+            ),
+            Some(world) => match world.outcome(id) {
+                Some(outcome) => json(
+                    StatusCode::OK,
+                    &serde_json::to_value(outcome).unwrap_or_default(),
+                ),
+                None => json(
+                    StatusCode::NOT_FOUND,
+                    &serde_json::json!({ "errors": [format!(
+                        "Command {id} is not one this island remembers. Outcomes are kept only briefly."
+                    )] }),
+                ),
+            },
+        });
+
     // Anything under /api that matched no route is a client error worth
     // returning as JSON, so a script never has to parse an HTML page to find
     // out it asked for the wrong thing. Everything else gets the page.
@@ -357,11 +973,22 @@ pub fn routes(
             }
             json(
                 StatusCode::NOT_FOUND,
-                &serde_json::json!({ "errors": ["No such endpoint. The dashboard serves /api/status, /api/health, /api/humans, /api/humans/<agent-id>, /api/activity and /api/creator/options."] }),
+                &serde_json::json!({ "errors": ["No such endpoint. The dashboard serves /api/status, /api/world, /api/world/<estate|vegetation|materials|clock>, /api/world/humans, /api/world/humans/<agent-id>, /api/world/interventions, /api/world/commands/<id>, /api/properties, /api/economy, /api/timeline, /api/control, /api/health, /api/humans, /api/humans/<agent-id>, /api/activity and /api/creator/options."] }),
             )
         });
 
     let api = get_status
+        .or(get_properties)
+        .or(get_economy)
+        .or(get_timeline)
+        .or(get_world)
+        .or(post_world_human)
+        .or(post_world_intervention)
+        .or(get_world_human)
+        .or(get_world_humans)
+        .or(get_command)
+        .or(post_control)
+        .or(world_part)
         .or(get_health)
         .or(get_options)
         .or(get_activity)
@@ -394,8 +1021,18 @@ pub async fn run(
     auth: ControlAuth,
     bind: std::net::SocketAddr,
 ) -> std::io::Result<()> {
+    run_with_world(population, auth, bind, None).await
+}
+
+/// Serve, with a running island behind `/api/world` when there is one.
+pub async fn run_with_world(
+    population: SharedPopulation,
+    auth: ControlAuth,
+    bind: std::net::SocketAddr,
+    world: Option<SimHandle>,
+) -> std::io::Result<()> {
     let listener = tokio::net::TcpListener::bind(bind).await?;
-    warp::serve(routes(population, auth))
+    warp::serve(routes_with_world(population, auth, world))
         .incoming(listener)
         .graceful(async {
             let _ = tokio::signal::ctrl_c().await;

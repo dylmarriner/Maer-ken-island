@@ -4,7 +4,9 @@ use warp::Filter;
 
 pub mod auth;
 pub mod pages;
+pub mod projection;
 pub mod server;
+pub mod sim;
 pub mod view;
 
 /// A method filter for everything that only reads. Monitors and proxies ask

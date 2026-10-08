@@ -20,6 +20,14 @@ const statusEl = document.getElementById("status");
 const searchEl = document.getElementById("search");
 const sortEl = document.getElementById("sort");
 
+/// Whose roster this is. When an island is running the page shows *its*
+/// people: a dashboard with a world should not have two different lists of
+/// humans, one stored and one alive. Without a world it shows the stored
+/// population exactly as before.
+let onTheIsland = false;
+
+const leadEl = document.getElementById("people-lead");
+
 let everyone = [];
 let selected = null;
 
@@ -215,7 +223,8 @@ async function select(agentId) {
   history.replaceState(null, "", url);
   loadingPerson();
   try {
-    const person = await getJson("/api/humans/" + encodeURIComponent(agentId));
+    const path = onTheIsland ? "/api/world/humans/" : "/api/humans/";
+    const person = await getJson(path + encodeURIComponent(agentId));
     if (selected !== agentId) return; // a faster click won
     drawPerson(person);
   } catch (error) {
@@ -234,17 +243,59 @@ function describeStatus(status) {
   return `${count(status.population, "person", "people")}, ${where} · ${clock}.`;
 }
 
+/// What this roster is of, said plainly. A reader should never have to work
+/// out whether they are looking at people who live somewhere or records on
+/// a disk.
+function describeWorld(world) {
+  const behind = world.tick - world.records_at_tick;
+  const freshness =
+    behind <= 0
+      ? "Their records are current."
+      : `Their full records were read ${behind} step${behind === 1 ? "" : "s"} ago; where they are and whether they are asleep is current.`;
+  return `${count(world.people.length, "person", "people")} living on the island. ${freshness}`;
+}
+
 async function load() {
   try {
-    const [status, humans] = await Promise.all([getJson("/api/status"), getJson("/api/humans")]);
+    const [status, stored, world] = await Promise.all([
+      getJson("/api/status"),
+      getJson("/api/humans"),
+      getJson("/api/world"),
+    ]);
     clearOffline();
-    everyone = humans;
-    statusEl.textContent = describeStatus(status);
+    onTheIsland = world && world.running === true;
+    if (onTheIsland) {
+      // The standing copy says nothing has stepped these people, which is
+      // true of a stored population and false of a living one.
+      leadEl.textContent =
+        "Pick someone to see how they are: who they are, what their body is " +
+        "doing, how they feel and how they think. These people are living on " +
+        "the island — the readings move as they breathe, sleep and eat.";
+      const roster = await getJson("/api/world/humans");
+      // The world's people in the shape this roster already draws.
+      everyone = roster.people.map((person) => ({
+        agent_id: person.agent_id,
+        name: person.agent_id,
+        human_id: person.agent_id,
+        biological_sex: "",
+        status: person.alive ? "Alive" : "Dead",
+        age_years: person.age_years,
+      }));
+      statusEl.textContent = describeWorld(roster);
+    } else {
+      everyone = stored;
+      statusEl.textContent = describeStatus(status);
+    }
     fillChrome(status);
     if (everyone.length === 0) {
       rosterEl.replaceChildren();
       detailEl.replaceChildren(
-        emptyState("Nobody lives here yet", "Create the first person and they will appear in this roster."),
+        emptyState(
+          "Nobody lives here yet",
+          onTheIsland
+            ? "The island is running but has nobody on it."
+            : "Create the first person and they will appear in this roster.",
+        ),
       );
       rosterCountEl.textContent = "";
       return;

@@ -24,8 +24,8 @@
 <main id="main">
   <div class="intro">
     <p class="eyebrow">Overview</p>
-    <h1>The island, before the clock starts</h1>
-    <p class="lead">Everyone here has a full canonical record — body, temperament, needs, attention, the lot — kept in their own encrypted folder on disk. What they do not have yet is time. Nothing is stepped until the island world arrives, so these people are waiting rather than living.</p>
+    <h1 id="intro-heading">The island, before the clock starts</h1>
+    <p class="lead" id="intro-lead">Everyone here has a full canonical record — body, temperament, needs, attention, the lot — kept in their own encrypted folder on disk. What they do not have yet is time. Nothing is stepped until the island world arrives, so these people are waiting rather than living.</p>
   </div>
 
   <p class="banner is-error" id="offline" hidden>
@@ -38,6 +38,21 @@
     <div class="stat"><div class="label">Alive</div><div class="value"><span class="skeleton half"></span></div><div class="note">&nbsp;</div></div>
     <div class="stat"><div class="label">Median age</div><div class="value"><span class="skeleton half"></span></div><div class="note">&nbsp;</div></div>
     <div class="stat"><div class="label">Creating people</div><div class="value"><span class="skeleton half"></span></div><div class="note">&nbsp;</div></div>
+  </section>
+
+  <section class="panel" id="world-panel" hidden>
+    <h2>The island</h2>
+    <p class="panel-note" id="world-note">Reading…</p>
+    <div class="quick-links" id="world-controls" hidden>
+      <button class="secondary" type="button" id="pause">Pause</button>
+      <button class="secondary" type="button" data-speed="real">Real time</button>
+      <button class="secondary" type="button" data-speed="60">60x</button>
+      <button class="secondary" type="button" data-speed="1440">1440x</button>
+      <button class="secondary" type="button" data-speed="max">As fast as possible</button>
+    </div>
+    <p class="hint" id="world-control-note" hidden></p>
+    <div class="stats" id="world-stats"></div>
+    <div id="world-people"></div>
   </section>
 
   <div class="columns">
@@ -60,7 +75,7 @@
         <li><strong>Creating people works.</strong> Every request goes through the same spawn and validation path the engine uses, so a dashboard human and an engine human are the same thing.</li>
         <li><strong>Storage works.</strong> Each person gets a folder with their profile, traits, cognition, social, development, reproduction, memories, state, relationships and events.</li>
         <li><strong>Creation is reproducible.</strong> The seed plus the ordered creation log produces the same people again.</li>
-        <li><strong>Time is not running.</strong> Nobody ages, eats, sleeps or acts yet; the live readings on a person are the values they were built with.</li>
+        <li id="time-claim"><strong>Time is not running.</strong> Nobody ages, eats, sleeps or acts yet; the live readings on a person are the values they were built with.</li>
       </ul>
       <h3>Where the data lives</h3>
       <dl class="facts">

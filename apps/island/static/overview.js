@@ -11,11 +11,22 @@ import {
   fillChrome,
   getJson,
   message,
+  postJson,
   reportOffline,
 } from "/static/app.js";
 
 const statsEl = document.getElementById("stats");
 const activityEl = document.getElementById("activity");
+const worldPanel = document.getElementById("world-panel");
+const worldNote = document.getElementById("world-note");
+const worldStats = document.getElementById("world-stats");
+const worldPeople = document.getElementById("world-people");
+const worldControls = document.getElementById("world-controls");
+const worldControlNote = document.getElementById("world-control-note");
+const pauseEl = document.getElementById("pause");
+const introHeading = document.getElementById("intro-heading");
+const introLead = document.getElementById("intro-lead");
+const timeClaim = document.getElementById("time-claim");
 
 function stat(label, value, note) {
   const card = el("div", null, { class: "stat" });
@@ -121,6 +132,159 @@ function showActivity(feed) {
   }
 }
 
+
+/// A number with thousands separators, or a dash when there is nothing to
+/// show. Raw floats off the wire are unreadable in a column of figures.
+function figure(value, digits) {
+  if (typeof value !== "number" || !isFinite(value)) return "—";
+  return value.toLocaleString(undefined, {
+    minimumFractionDigits: digits || 0,
+    maximumFractionDigits: digits || 0,
+  });
+}
+
+/// The island's own clock, which runs on a 36-hour day.
+function clockWords(clock) {
+  const hour = Math.floor(clock.hour_of_day);
+  const minute = Math.floor((clock.hour_of_day - hour) * 60);
+  const time = `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+  return `Day ${Math.floor(clock.days) + 1}, ${time} of a ${figure(clock.day_length_hours)}-hour day`;
+}
+
+/// How the island is keeping up, when it has been running long enough to
+/// say. Shown plainly rather than hidden: an island that cannot keep up is
+/// something the person watching should know.
+function speedWords(clock) {
+  if (typeof clock.achieved_speed !== "number") return `Running at ${clock.requested_speed}`;
+  const achieved = clock.achieved_speed;
+  const words = achieved >= 2 ? `${figure(achieved)}x real time` : `${figure(achieved, 2)}x real time`;
+  return `Asked for ${clock.requested_speed}, managing ${words}`;
+}
+
+/// The digest line: what it was, and at which tick, so a reader is never
+/// led to think a carried value is live.
+function digestWords(world) {
+  const d = world.digest;
+  if (!d || !d.value) return "";
+  const when = d.current ? "now" : `as of tick ${figure(d.at_tick)}`;
+  return `State digest ${d.value.slice(0, 16)}… ${when}.`;
+}
+
+/// Say which dashboard this is.
+///
+/// The page was written when there was no world to run, and said so: a
+/// heading about the clock not having started, and a claim that nobody ages
+/// or sleeps. With --scenario both are false — time is running two panels
+/// down — and a page that contradicts itself is worse than one that admits
+/// a gap. So the standing copy is the no-world case and this replaces it
+/// when there is a world.
+function tellTheTruthAboutTime(running) {
+  if (!running) return;
+  introHeading.textContent = "The island, running";
+  introLead.textContent =
+    "Everyone here has a full canonical record — body, temperament, needs, " +
+    "attention, the lot — kept in their own encrypted folder on disk. The " +
+    "island is stepping: they age, sleep, breathe and eat, and what you see " +
+    "below is where they have got to.";
+  timeClaim.replaceChildren(
+    el("strong", "Time is running."),
+    document.createTextNode(
+      " The island steps on its own thread and these readings come from it. " +
+        "People created here are still stored rather than placed in the world: " +
+        "that join is Phase 4 Task 6, and it is not built yet.",
+    ),
+  );
+}
+
+/// Ask the island to run differently. Nothing it does changes the world —
+/// speed decides how often a fixed step happens, and a pause leaves exactly
+/// the state it was paused in — so these are safe to press.
+async function control(body) {
+  worldControlNote.hidden = false;
+  worldControlNote.textContent = "Asking the island…";
+  try {
+    const { status, body: answer } = await postJson("/api/control", body, "");
+    if (status === 200) {
+      worldControlNote.textContent = answer.paused
+        ? "Paused. The island is exactly where it stopped."
+        : `Running at ${answer.speed}.`;
+      paused = answer.paused;
+      pauseEl.textContent = paused ? "Resume" : "Pause";
+    } else if (status === 401) {
+      worldControlNote.textContent =
+        (answer.errors && answer.errors[0]) || "This dashboard may not control the island.";
+    } else {
+      worldControlNote.textContent =
+        (answer.errors && answer.errors[0]) || `The island answered ${status}.`;
+    }
+  } catch (error) {
+    worldControlNote.textContent = `The request did not get through: ${error.message}`;
+  }
+}
+
+let paused = false;
+
+pauseEl.addEventListener("click", () => control({ command: paused ? "resume" : "pause" }));
+for (const button of document.querySelectorAll("#world-controls [data-speed]")) {
+  button.addEventListener("click", () =>
+    control({ command: "set_speed", speed: button.dataset.speed }),
+  );
+}
+
+function showWorld(world) {
+  if (!world || world.running !== true) {
+    // No world is the ordinary case for a dashboard started without
+    // --scenario, so the panel stays out of the way rather than showing an
+    // error for something nobody asked for.
+    worldPanel.hidden = true;
+    return;
+  }
+  tellTheTruthAboutTime(true);
+  worldPanel.hidden = false;
+  worldControls.hidden = false;
+  worldNote.textContent =
+    `${clockWords(world.clock)}. ${speedWords(world.clock)}. ${digestWords(world)}`.trim();
+
+  const alive = world.people.filter((person) => person.alive).length;
+  const asleep = world.people.filter((person) => person.alive && person.asleep).length;
+  worldStats.replaceChildren(
+    stat("Islanders", String(alive), asleep === 1 ? "1 asleep" : `${asleep} asleep`),
+    stat("Trees on the estate", figure(world.land.trees), `${figure(world.land.patch_carbon_kgc)} kg of carbon`),
+    stat(
+      "Battery",
+      `${figure(world.estate.battery_charge_kwh, 1)} kWh`,
+      `of ${figure(world.estate.battery_capacity_kwh, 1)} kWh, with ${figure(world.estate.fuel_litres)} L of fuel`,
+    ),
+    stat(
+      "Books",
+      figure(world.stocks.audits_closed),
+      world.stocks.food_shortfalls + world.stocks.water_shortfalls === 0
+        ? "every step closed, nothing went short"
+        : `${world.stocks.food_shortfalls} food and ${world.stocks.water_shortfalls} water shortfalls`,
+    ),
+  );
+
+  const list = el("ul", null, { class: "feed" });
+  for (const person of world.people) {
+    const item = el("li", null, { class: "feed-item" });
+    const where = person.space || "off the estate";
+    const doing = !person.alive ? "died" : person.asleep ? "asleep" : "awake";
+    item.append(
+      el("span", person.agent_id, { class: "who" }),
+      el(
+        "span",
+        `${doing} · ${where} · ${ageWords(person.age_years)}` +
+          (typeof person.body_carbon_kg === "number"
+            ? ` · ${figure(person.body_carbon_kg, 1)} kg of body carbon`
+            : ""),
+        { class: "what" },
+      ),
+    );
+    list.append(item);
+  }
+  worldPeople.replaceChildren(list);
+}
+
 async function load() {
   // An old bookmark to a person used to point here; send it to the roster.
   const wanted = new URLSearchParams(location.search).get("human");
@@ -129,13 +293,15 @@ async function load() {
     return;
   }
   try {
-    const [status, feed] = await Promise.all([
+    const [status, feed, world] = await Promise.all([
       getJson("/api/status"),
       getJson("/api/activity?limit=8"),
+      getJson("/api/world"),
     ]);
     clearOffline();
     showStats(status);
     showActivity(feed);
+    showWorld(world);
   } catch (error) {
     reportOffline(error);
     message(activityEl, "The creation log could not be read while the server is unreachable.", "hint");
@@ -143,3 +309,15 @@ async function load() {
 }
 
 load();
+
+// A running island changes while the page is open, so the world panel
+// refreshes on its own. Only the world: the stored population and the
+// creation log change when somebody acts, not on their own.
+setInterval(async () => {
+  try {
+    showWorld(await getJson("/api/world"));
+  } catch (error) {
+    // A refresh that fails is not worth a banner — the next one will say
+    // so, and `load()` already reports a server that has gone away.
+  }
+}, 2000);

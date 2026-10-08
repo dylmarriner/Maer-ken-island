@@ -154,11 +154,21 @@ pub struct IslandLife {
     sleep_seconds: BTreeMap<String, (f64, f64)>,
     pub scheduler: IslandScheduler,
     labour: LabourTable,
-    rng: RngRegistry,
+    /// The world's keyed streams. Readable because creating a person in the
+    /// world draws from them (`create_human`), and a creation keyed on
+    /// anything else would not replay.
+    pub(crate) rng: RngRegistry,
     /// This run's folder tree, once somebody asks for one. Records rather
     /// than state: it is absent from the snapshot and from the state digest,
     /// and an island with one behaves exactly like an island without.
     human_store: Option<HumanStore>,
+    /// Everything that has reached this island from outside, in order.
+    ///
+    /// A record rather than state, like the folders: it is not hashed and
+    /// not snapshotted, because it describes how the island got here rather
+    /// than where it is. The runner writes it beside a snapshot, and
+    /// `replay::replay_island` turns it back into this island.
+    pub(crate) replay_log: super::replay::IslandReplayLog,
     food_cell: (usize, usize),
     water_cell: Option<(usize, usize)>,
     topology: GridTopology,
@@ -252,7 +262,7 @@ impl IslandLife {
                 });
         let topology = GridTopology::regional(&domain, medium);
         let scenario_cadences = scenario.cadences;
-        Ok(Self {
+        let mut life = Self {
             rng: RngRegistry::new(scenario.seed),
             canon,
             domain,
@@ -275,10 +285,17 @@ impl IslandLife {
             scheduler: IslandScheduler::new(scenario_cadences),
             labour: LabourTable::load_default().map_err(IslandLifeError::Labour)?,
             human_store: None,
+            // Filled in below: the digest needs the built island.
+            replay_log: super::replay::IslandReplayLog::new(String::new()),
             food_cell,
             water_cell,
             topology,
-        })
+        };
+        // A log says which scenario it belongs to, so replaying it against
+        // a different island refuses rather than reproducing nothing and
+        // looking like it had.
+        life.replay_log = super::replay::IslandReplayLog::new(life.scenario_digest_hex());
+        Ok(life)
     }
 
     /// Everything an island carries that cannot be derived again.
@@ -343,7 +360,7 @@ impl IslandLife {
         let domain = IslandDomain::from_profile(snapshot.scenario.profile.clone())
             .map_err(IslandLifeError::Domain)?;
         let topology = GridTopology::regional(&domain, DomainLevel::Medium);
-        Ok(Self {
+        let mut life = Self {
             canon,
             domain,
             scenario: snapshot.scenario,
@@ -369,10 +386,16 @@ impl IslandLife {
             // some: the folders belong to the run that wrote them, and a
             // reload is a new run.
             human_store: None,
+            // A restored island starts a fresh log: the commands that got
+            // it here are in the log beside the snapshot, not in the file.
+            // Its scenario is filled in below, as at bootstrap.
+            replay_log: super::replay::IslandReplayLog::new(String::new()),
             food_cell: snapshot.food_cell,
             water_cell: snapshot.water_cell,
             topology,
-        })
+        };
+        life.replay_log = super::replay::IslandReplayLog::new(life.scenario_digest_hex());
+        Ok(life)
     }
 
     /// Start keeping a folder for every human, under a run of this
@@ -420,7 +443,7 @@ impl IslandLife {
 
     /// Identifies the scenario this island is running, so two runs of the
     /// same one share a prefix and two different ones do not.
-    fn scenario_digest(&self) -> [u8; 32] {
+    pub(crate) fn scenario_digest(&self) -> [u8; 32] {
         let canonical = serde_json::to_vec(&self.scenario).unwrap_or_default();
         *blake3::hash(&canonical).as_bytes()
     }
@@ -451,7 +474,10 @@ impl IslandLife {
 
     /// Run `f` as one audited household step: the ledger's net flows must
     /// equal the change in each material stock.
-    fn audited(&mut self, f: impl FnOnce(&mut Self, &mut Ledger)) -> Result<(), IslandLifeError> {
+    pub(super) fn audited(
+        &mut self,
+        f: impl FnOnce(&mut Self, &mut Ledger),
+    ) -> Result<(), IslandLifeError> {
         let stocks = |m: &MaterialLedger| {
             [
                 m.stock_of(Reservoir::MaterialCarbon),
@@ -481,6 +507,17 @@ impl IslandLife {
         }
         self.audits_closed += 1;
         Ok(())
+    }
+
+    /// Drop every per-person accumulator for `id`.
+    ///
+    /// The two of them are hashed into the state digest, so a person who
+    /// has left the world has to leave these too or two islands that agree
+    /// about who is alive will disagree about their digest. `advance`
+    /// already does this for the dead; a removal needs the same.
+    pub(super) fn forget_accumulators(&mut self, id: &str) {
+        self.respired_since_meal.remove(id);
+        self.sleep_seconds.remove(id);
     }
 
     /// Every living human, with the body the labour model costs work against

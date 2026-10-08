@@ -90,6 +90,29 @@
         </div>
       </fieldset>
 
+      <fieldset id="place-fieldset" hidden>
+        <legend>Where on the island</legend>
+        <div class="field-grid">
+          <label class="full">Where they start
+            <select name="where" id="where">
+              <option value="estate">In a room of the estate</option>
+              <option value="island">Somewhere else on the island</option>
+            </select>
+          </label>
+          <label class="full" id="place-field">Room
+            <select name="place" id="place"></select>
+            <span class="hint" id="place-hint">The island is running, so this person is put into it and starts living from the next step.</span>
+          </label>
+          <label id="row-field" hidden>Row
+            <input name="row" id="row" type="number" min="0" step="1" inputmode="numeric">
+          </label>
+          <label id="col-field" hidden>Column
+            <input name="col" id="col" type="number" min="0" step="1" inputmode="numeric">
+          </label>
+          <span class="hint full" id="cell-hint" hidden></span>
+        </div>
+      </fieldset>
+
       <fieldset id="token-fieldset" hidden>
         <legend>Permission</legend>
         <div class="field-grid">
