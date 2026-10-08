@@ -949,3 +949,133 @@ async fn a_paused_island_still_hears_the_queue() {
     world.stop();
     server.abort();
 }
+
+/// The three endpoints Task 6 names, which were recorded as "not served"
+/// on the grounds that serving them would mean inventing the data.
+///
+/// That was wrong, and this is the test that holds the corrected claim:
+/// each one serves something the island actually holds, and says plainly
+/// what it does not.
+#[tokio::test]
+async fn properties_economy_and_timeline_serve_what_the_island_really_holds() {
+    let (world, port, server) = a_running_dashboard().await;
+
+    // Properties: the founders' estate, with its buildings and its things.
+    let (status, response) = get(port, "/api/properties").await;
+    assert_eq!(status, 200, "{response}");
+    let body: serde_json::Value = serde_json::from_str(body_of(&response)).unwrap();
+    let properties = body["properties"].as_array().expect("a property list");
+    assert!(!properties.is_empty(), "{body}");
+    let estate = properties
+        .iter()
+        .find(|p| p["on_this_island"] == true)
+        .expect("the founders' estate stands on this island");
+    assert!(
+        estate["owners"]
+            .as_array()
+            .is_some_and(|o| o.iter().any(|x| x == "Gem-D")),
+        "{estate}"
+    );
+    assert!(
+        estate["buildings"]
+            .as_array()
+            .is_some_and(|b| !b.is_empty()),
+        "an estate with no buildings is not an estate: {estate}"
+    );
+    assert!(
+        estate["items"].as_array().is_some_and(|i| !i.is_empty()),
+        "{estate}"
+    );
+
+    // Economy: empty, and saying why rather than looking broken.
+    let (status, response) = get(port, "/api/economy").await;
+    assert_eq!(status, 200, "{response}");
+    let body: serde_json::Value = serde_json::from_str(body_of(&response)).unwrap();
+    assert_eq!(body["resource_nodes"], 0);
+    assert_eq!(body["structures"].as_array().map(|s| s.len()), Some(0));
+    assert!(
+        body["note"]
+            .as_str()
+            .is_some_and(|n| n.contains("seeds no resource nodes")),
+        "an empty economy has to say it is empty on purpose: {body}"
+    );
+
+    // Timeline: nothing has reached this island yet.
+    let (status, response) = get(port, "/api/timeline").await;
+    assert_eq!(status, 200, "{response}");
+    let body: serde_json::Value = serde_json::from_str(body_of(&response)).unwrap();
+    assert_eq!(body["entries"].as_array().map(|e| e.len()), Some(0));
+
+    // Now build something and look again. Both views have to move, and
+    // promptly — not at the next hourly refresh.
+    let shelter = r#"{"ConstructStructure":{"structure":"WoodenShelter",
+        "location":{"latitude":-41.03,"longitude":173.56,"altitude":null}}}"#;
+    let (status, response) = post(port, "/api/world/interventions", shelter).await;
+    assert_eq!(status, 202, "{response}");
+    let id = serde_json::from_str::<serde_json::Value>(body_of(&response)).unwrap()["command"]
+        .as_u64()
+        .unwrap();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    loop {
+        let (_, response) = get(port, &format!("/api/world/commands/{id}")).await;
+        let value: serde_json::Value = serde_json::from_str(body_of(&response)).unwrap();
+        if value["state"] != "queued" {
+            assert_eq!(value["state"], "intervened", "{value}");
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the command never resolved"
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    loop {
+        let (_, response) = get(port, "/api/economy").await;
+        let body: serde_json::Value = serde_json::from_str(body_of(&response)).unwrap();
+        if body["structures"].as_array().is_some_and(|s| s.len() == 1) {
+            let built = &body["structures"][0];
+            assert_eq!(built["recipe"], "WoodenShelter", "{body}");
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "a structure that was built should be in the economy"
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+
+    let (_, response) = get(port, "/api/timeline").await;
+    let body: serde_json::Value = serde_json::from_str(body_of(&response)).unwrap();
+    let entries = body["entries"].as_array().expect("a timeline");
+    assert_eq!(entries.len(), 1, "{body}");
+    assert_eq!(entries[0]["what"], "ConstructStructure", "{body}");
+
+    world.stop();
+    server.abort();
+}
+
+/// Without an island there is nothing to serve, and these say so rather
+/// than returning an empty shape that reads as "there is nothing here".
+#[tokio::test]
+async fn the_three_views_need_an_island() {
+    let data_dir = tempfile::tempdir().unwrap();
+    let (population, _) =
+        island_humans::IslandHumanPopulation::open(data_dir.path(), [7u8; 32]).unwrap();
+    let population = Arc::new(Mutex::new(population));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let routes = server::routes(population, ControlAuth::LoopbackOnly);
+    let server = tokio::spawn(async move { warp::serve(routes).incoming(listener).run().await });
+
+    for path in ["/api/properties", "/api/economy", "/api/timeline"] {
+        let (status, response) = get(port, path).await;
+        assert_eq!(status, 404, "{path}: {response}");
+        assert!(
+            response.contains("No island is running"),
+            "{path}: {response}"
+        );
+    }
+    server.abort();
+}

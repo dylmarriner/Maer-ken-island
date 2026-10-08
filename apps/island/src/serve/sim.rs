@@ -25,7 +25,7 @@ use mk_engine::regional::create_human::{CreateHumanError, CreatedIslander};
 use mk_engine::regional::interventions::{IslandApplied, IslandDirective};
 use mk_engine::regional::life::IslandLife;
 
-use super::projection::{Digest, IslandProjection};
+use super::projection::{Digest, IslandProjection, Views};
 
 /// Something the world is asked to do.
 ///
@@ -305,14 +305,13 @@ pub fn spawn_logging(life: IslandLife, speed: SimSpeed, log: Option<PathBuf>) ->
     // about 930 ms against a 1.4 ms step, so the thread is handed this one
     // rather than computing its own.
     let first = IslandProjection::digest_now(&life);
-    let records = IslandProjection::records_now(&life);
+    let views = Views::of(&life);
     let projection = Arc::new(RwLock::new(IslandProjection::of(
         &life,
         &speed.describe(),
         None,
         first.clone(),
-        Arc::clone(&records),
-        life.tick,
+        views.clone(),
     )));
     let (commands, inbox) = channel();
     let handle = SimHandle {
@@ -341,8 +340,7 @@ pub fn spawn_logging(life: IslandLife, speed: SimSpeed, log: Option<PathBuf>) ->
                 projection,
                 stop,
                 digest: first,
-                records,
-                records_at_tick: 0,
+                views,
                 inbox,
                 outcomes,
                 log,
@@ -361,8 +359,7 @@ struct Loop {
     projection: Arc<RwLock<IslandProjection>>,
     stop: Arc<AtomicBool>,
     digest: Digest,
-    records: Arc<BTreeMap<String, mk_engine::humans::HumanBeing>>,
-    records_at_tick: u64,
+    views: Views,
     inbox: Receiver<Queued>,
     outcomes: Arc<Mutex<BTreeMap<u64, Outcome>>>,
     log: Option<PathBuf>,
@@ -427,8 +424,16 @@ fn run(mut it: Loop) {
             // Somebody who has just been created should be readable now,
             // not at the next hourly refresh. Waiting would mean creating a
             // person and then being told they do not exist.
-            it.records = IslandProjection::records_now(&it.life);
-            it.records_at_tick = it.life.tick;
+            it.views.records = IslandProjection::records_now(&it.life);
+            it.views.records_at_tick = it.life.tick;
+        }
+        if applied_anything {
+            // The same argument for the other two: a structure somebody
+            // just built, and the record of what they just did, are the
+            // things they are about to go and look at.
+            it.views.economy = IslandProjection::economy_now(&it.life);
+            it.views.economy_at_tick = it.life.tick;
+            it.views.timeline = IslandProjection::timeline_now(&it.life);
         }
 
         if !stepping {
@@ -449,8 +454,7 @@ fn run(mut it: Loop) {
                     &pacing.speed,
                     None,
                     it.digest.clone(),
-                    Arc::clone(&it.records),
-                    it.records_at_tick,
+                    it.views.clone(),
                 );
             }
             std::thread::sleep(Duration::from_millis(50));
@@ -483,8 +487,10 @@ fn run(mut it: Loop) {
 
         if it.life.tick.is_multiple_of(DIGEST_EVERY) {
             it.digest = IslandProjection::digest_now(&it.life);
-            it.records = IslandProjection::records_now(&it.life);
-            it.records_at_tick = it.life.tick;
+            it.views.records = IslandProjection::records_now(&it.life);
+            it.views.records_at_tick = it.life.tick;
+            it.views.economy = IslandProjection::economy_now(&it.life);
+            it.views.economy_at_tick = it.life.tick;
         }
 
         let now = Instant::now();
@@ -502,8 +508,7 @@ fn run(mut it: Loop) {
             &pacing.speed,
             achieved_speed(&recent),
             it.digest.clone(),
-            Arc::clone(&it.records),
-            it.records_at_tick,
+            it.views.clone(),
         );
 
         let took = started.elapsed();
@@ -631,17 +636,9 @@ fn publish(
     speed: &SimSpeed,
     achieved: Option<f64>,
     digest: Digest,
-    records: Arc<BTreeMap<String, mk_engine::humans::HumanBeing>>,
-    records_at_tick: u64,
+    views: Views,
 ) {
-    let next = IslandProjection::of(
-        life,
-        &speed.describe(),
-        achieved,
-        digest,
-        records,
-        records_at_tick,
-    );
+    let next = IslandProjection::of(life, &speed.describe(), achieved, digest, views);
     match projection.write() {
         Ok(mut slot) => *slot = next,
         Err(poisoned) => *poisoned.into_inner() = next,
@@ -818,8 +815,12 @@ mod timing {
         let t = Instant::now();
         let _ = IslandProjection::digest_now(&life);
         println!("one digest    : {:?}", t.elapsed());
+        // Views built once, outside the timer: this measures publishing a
+        // projection, not rebuilding every view, which the loop does on its
+        // own cadence rather than per step.
+        let views = Views::of(&life);
         let t = Instant::now();
-        let _ = IslandProjection::of(&life, "x", None, Default::default(), Default::default(), 0);
+        let _ = IslandProjection::of(&life, "x", None, Default::default(), views);
         println!("one projection: {:?}", t.elapsed());
         let t = Instant::now();
         let _ = IslandProjection::records_now(&life);

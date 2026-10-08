@@ -398,6 +398,20 @@ struct ActivityQuery {
     limit: Option<usize>,
 }
 
+/// Said in `/api/economy` rather than left for a reader to infer from three
+/// empty lists.
+const NO_RESOURCE_NODES: &str =
+    "The island seeds no resource nodes from its biomes, the way a planetary world does, so \
+     `resource_nodes` is always 0. Structures and events are real: they are what has actually \
+     been built here and what the economy recorded doing it, which is nothing until somebody \
+     builds something.";
+
+/// Said in `/api/timeline` for the same reason.
+const TIMELINE_IS_EXTERNAL: &str =
+    "Everything that has reached this island from outside, in the order it applied — the same \
+     record `island replay` reads, so this cannot disagree with it. It is not a history of what \
+     the islanders did: nothing here is a person going to bed or felling a tree.";
+
 /// Headers every response carries. The pages load nothing from anywhere but
 /// this server, so the policy can say exactly that: no third-party script,
 /// style, image or connection, no framing, and no form posting its own way
@@ -622,6 +636,87 @@ pub fn routes_with_world(
                 }
             },
         );
+
+    // The three endpoints Task 6's interface list names, and which were
+    // recorded as "not served" for longer than they should have been.
+    //
+    // I had written that serving them would mean inventing the data. That
+    // was wrong, and measuring the island is what showed it: the estate
+    // holds two properties with six buildings and eighty-odd items each,
+    // the economy holds whatever has been built in it, and the replay log
+    // is a timeline of everything that has reached the island from outside.
+    // All three are re-slicing, not invention.
+    //
+    // What *is* honest to say is that the economy is empty until somebody
+    // builds something, and that the island seeds no resource nodes the way
+    // a planetary world does. So it says so, in the reply, rather than
+    // being left out and read as a missing feature.
+    let get_properties = warp::path!("api" / "properties")
+        .and(read())
+        .and(with(world.clone()))
+        .map(|world: Option<SimHandle>| match world {
+            None => json(
+                StatusCode::NOT_FOUND,
+                &serde_json::json!({ "errors": ["No island is running, so it has no properties. Start the server with --scenario."] }),
+            ),
+            Some(world) => {
+                let current = world.projection();
+                json(
+                    StatusCode::OK,
+                    &serde_json::json!({
+                        "properties": *current.properties,
+                        "estate_cell": current.estate.cell,
+                        "spaces": current.estate.spaces,
+                    }),
+                )
+            }
+        });
+
+    let get_economy = warp::path!("api" / "economy")
+        .and(read())
+        .and(with(world.clone()))
+        .map(|world: Option<SimHandle>| match world {
+            None => json(
+                StatusCode::NOT_FOUND,
+                &serde_json::json!({ "errors": ["No island is running, so it has no economy. Start the server with --scenario."] }),
+            ),
+            Some(world) => {
+                let current = world.projection();
+                let economy = &*current.economy;
+                json(
+                    StatusCode::OK,
+                    &serde_json::json!({
+                        "resource_nodes": economy.resource_nodes,
+                        "structures": economy.structures,
+                        "events": economy.events,
+                        "at_tick": current.economy_at_tick,
+                        "tick": current.clock.tick,
+                        "note": NO_RESOURCE_NODES,
+                    }),
+                )
+            }
+        });
+
+    let get_timeline = warp::path!("api" / "timeline")
+        .and(read())
+        .and(with(world.clone()))
+        .map(|world: Option<SimHandle>| match world {
+            None => json(
+                StatusCode::NOT_FOUND,
+                &serde_json::json!({ "errors": ["No island is running, so nothing has happened to it. Start the server with --scenario."] }),
+            ),
+            Some(world) => {
+                let current = world.projection();
+                json(
+                    StatusCode::OK,
+                    &serde_json::json!({
+                        "entries": *current.timeline,
+                        "tick": current.clock.tick,
+                        "note": TIMELINE_IS_EXTERNAL,
+                    }),
+                )
+            }
+        });
 
     // An operator intervention, in upstream's own vocabulary. The body is
     // a serialized `InterventionAction`, so what reaches the island is
@@ -878,11 +973,14 @@ pub fn routes_with_world(
             }
             json(
                 StatusCode::NOT_FOUND,
-                &serde_json::json!({ "errors": ["No such endpoint. The dashboard serves /api/status, /api/world, /api/world/<estate|vegetation|materials|clock>, /api/world/humans, /api/world/humans/<agent-id>, /api/world/interventions, /api/world/commands/<id>, /api/control, /api/health, /api/humans, /api/humans/<agent-id>, /api/activity and /api/creator/options."] }),
+                &serde_json::json!({ "errors": ["No such endpoint. The dashboard serves /api/status, /api/world, /api/world/<estate|vegetation|materials|clock>, /api/world/humans, /api/world/humans/<agent-id>, /api/world/interventions, /api/world/commands/<id>, /api/properties, /api/economy, /api/timeline, /api/control, /api/health, /api/humans, /api/humans/<agent-id>, /api/activity and /api/creator/options."] }),
             )
         });
 
     let api = get_status
+        .or(get_properties)
+        .or(get_economy)
+        .or(get_timeline)
         .or(get_world)
         .or(post_world_human)
         .or(post_world_intervention)

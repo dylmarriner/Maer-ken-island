@@ -50,6 +50,32 @@ pub struct IslandProjection {
     #[serde(skip)]
     pub records: Arc<BTreeMap<String, HumanBeing>>,
     pub records_at_tick: u64,
+    /// The estate's properties: buildings, items, who owns them and where
+    /// they stand.
+    ///
+    /// Behind an `Arc` and built once, because this does not change: the
+    /// properties are placed at bootstrap and nothing in Phase 4 moves a
+    /// building or sells a quad bike. When something does, this becomes a
+    /// per-step or per-cadence refresh like `records`, and the shape here
+    /// does not have to change for that.
+    #[serde(skip)]
+    pub properties: Arc<Vec<Property>>,
+    /// The resource economy: what has been built and what it recorded.
+    ///
+    /// Refreshed on the digest's cadence, like `records`, and refreshed at
+    /// once when a command lands — a structure an operator just built
+    /// should be there when they look, not an hour of island time later.
+    #[serde(skip)]
+    pub economy: Arc<Economy>,
+    pub economy_at_tick: u64,
+    /// Everything that has reached the island from outside, in order.
+    ///
+    /// Refreshed when a command lands rather than on a cadence, because
+    /// that is exactly when it changes — and it is the one view where being
+    /// an hour of island time behind would be plainly wrong, since a person
+    /// looks at it to see what they just did.
+    #[serde(skip)]
+    pub timeline: Arc<Vec<TimelineEntry>>,
     /// The canonical state digest, and the tick it was taken at.
     ///
     /// Two islands showing the same digest at the same tick are the same
@@ -165,6 +191,123 @@ pub struct Stocks {
     pub water_shortfalls: u64,
 }
 
+/// The parts of a projection that are refreshed on their own schedule
+/// rather than rebuilt every step.
+///
+/// Together rather than as six parameters, because they travel together:
+/// the loop holds exactly this and hands it over whole, and `of` would
+/// otherwise take eleven arguments nobody could read in order.
+#[derive(Clone)]
+pub struct Views {
+    pub records: Arc<BTreeMap<String, HumanBeing>>,
+    pub records_at_tick: u64,
+    pub properties: Arc<Vec<Property>>,
+    pub economy: Arc<Economy>,
+    pub economy_at_tick: u64,
+    pub timeline: Arc<Vec<TimelineEntry>>,
+}
+
+impl Views {
+    /// Every view, built fresh. Used once at startup; the loop then
+    /// refreshes each part on its own schedule.
+    pub fn of(life: &IslandLife) -> Self {
+        Self {
+            records: IslandProjection::records_now(life),
+            records_at_tick: life.tick,
+            properties: IslandProjection::properties_now(life),
+            economy: IslandProjection::economy_now(life),
+            economy_at_tick: life.tick,
+            timeline: IslandProjection::timeline_now(life),
+        }
+    }
+}
+
+/// A property on the island, or belonging to it.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct Property {
+    pub name: String,
+    pub owners: Vec<String>,
+    /// The medium cell it stands on, when it has a fixed place.
+    pub cell: Option<(usize, usize)>,
+    /// Whether it stands on this island's estate cell. The inventory
+    /// carries an unowned homestead template with no location, and saying
+    /// which is which is cheaper than leaving a reader to work it out.
+    pub on_this_island: bool,
+    pub buildings: Vec<Building>,
+    pub items: Vec<Item>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct Building {
+    pub name: String,
+    pub kind: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct Item {
+    pub name: String,
+    pub kind: String,
+}
+
+/// The resource economy, as far as the island has one.
+///
+/// `resource_nodes` is a count rather than a list because it is always
+/// zero: the island does not seed resource nodes from its biomes the way a
+/// planetary world does, so there is nothing to list. It is reported rather
+/// than hidden, because "no nodes" is a fact about the island and leaving
+/// the field out would make an empty economy look like a missing endpoint.
+#[derive(Debug, Clone, Default, serde::Serialize)]
+pub struct Economy {
+    pub resource_nodes: usize,
+    pub structures: Vec<Structure>,
+    pub events: Vec<EconomyEntry>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct Structure {
+    pub id: u64,
+    pub cell: (i32, i32),
+    pub recipe: String,
+    pub material_cost: u32,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct EconomyEntry {
+    pub tick: u64,
+    pub by: String,
+    pub kind: String,
+    pub subject: String,
+    pub quantity: u32,
+}
+
+/// One thing that reached the island from outside.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct TimelineEntry {
+    pub tick: u64,
+    pub sequence: u64,
+    pub what: String,
+}
+
+/// A command in a line, for a timeline a person reads.
+fn describe(command: &mk_engine::regional::commands::IslandCommand) -> String {
+    use mk_engine::regional::commands::{ControlCommand, IslandCommand};
+    match command {
+        IslandCommand::CreateHuman(request) => {
+            format!("created {}", request.name)
+        }
+        IslandCommand::Intervention(action) => {
+            mk_engine::regional::interventions::action_name(action).to_string()
+        }
+        IslandCommand::Control(control) => match control {
+            ControlCommand::Pause => "paused".to_string(),
+            ControlCommand::Resume => "resumed".to_string(),
+            ControlCommand::Step(n) => format!("stepped {n}"),
+            ControlCommand::Snapshot => "wrote a snapshot".to_string(),
+            ControlCommand::SetSpeed(speed) => format!("set the speed to {speed}"),
+        },
+    }
+}
+
 impl IslandProjection {
     /// Describe an island, carrying `digest` forward from an earlier step.
     ///
@@ -177,9 +320,16 @@ impl IslandProjection {
         requested_speed: &str,
         achieved_speed: Option<f64>,
         digest: Digest,
-        records: Arc<BTreeMap<String, HumanBeing>>,
-        records_at_tick: u64,
+        views: Views,
     ) -> Self {
+        let Views {
+            records,
+            records_at_tick,
+            properties,
+            economy,
+            economy_at_tick,
+            timeline,
+        } = views;
         let day_s = life.canon.rotation_period_s;
         Self {
             running: true,
@@ -198,11 +348,98 @@ impl IslandProjection {
             stocks: stocks(life),
             records,
             records_at_tick,
+            properties,
+            economy,
+            economy_at_tick,
+            timeline,
             digest: Digest {
                 current: digest.at_tick == life.tick,
                 ..digest
             },
         }
+    }
+
+    /// The estate's properties, as they stand.
+    pub fn properties_now(life: &IslandLife) -> Arc<Vec<Property>> {
+        Arc::new(
+            life.placed
+                .property
+                .properties
+                .iter()
+                .map(|p| Property {
+                    name: p.name.clone(),
+                    owners: p.owner_agent_ids.clone(),
+                    cell: p.location,
+                    on_this_island: p.location == Some(life.placed.location),
+                    buildings: p
+                        .buildings
+                        .iter()
+                        .map(|b| Building {
+                            name: b.name.clone(),
+                            kind: format!("{:?}", b.kind),
+                        })
+                        .collect(),
+                    items: p
+                        .items
+                        .iter()
+                        .map(|i| Item {
+                            name: i.name.clone(),
+                            kind: format!("{:?}", i.kind),
+                        })
+                        .collect(),
+                })
+                .collect(),
+        )
+    }
+
+    /// What the resource economy holds, and what it has recorded.
+    pub fn economy_now(life: &IslandLife) -> Arc<Economy> {
+        Arc::new(Economy {
+            resource_nodes: life.economy.nodes.len(),
+            structures: life
+                .economy
+                .structures
+                .iter()
+                .map(|s| Structure {
+                    id: s.id,
+                    cell: (s.position.row, s.position.col),
+                    recipe: format!("{:?}", s.recipe),
+                    material_cost: s.material_cost,
+                })
+                .collect(),
+            events: life
+                .economy
+                .events
+                .iter()
+                .map(|e| EconomyEntry {
+                    tick: e.tick,
+                    by: e.agent_id.clone(),
+                    kind: format!("{:?}", e.kind),
+                    subject: e.subject.clone(),
+                    quantity: e.quantity,
+                })
+                .collect(),
+        })
+    }
+
+    /// Everything that has reached this island from outside, in order.
+    ///
+    /// Built from the replay log rather than from a separate record, so the
+    /// page and `island replay` are reading the same history — a timeline
+    /// that could disagree with the log would be a second account of the
+    /// same run.
+    pub fn timeline_now(life: &IslandLife) -> Arc<Vec<TimelineEntry>> {
+        Arc::new(
+            life.replay_log()
+                .entries
+                .iter()
+                .map(|entry| TimelineEntry {
+                    tick: entry.tick,
+                    sequence: entry.sequence,
+                    what: describe(&entry.command),
+                })
+                .collect(),
+        )
     }
 
     /// Copy every islander's record. Expensive — see [`IslandProjection`].
