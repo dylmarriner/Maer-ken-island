@@ -22,7 +22,8 @@ fidelity limits. The project is **not complete**: see "Not done".
 | Island scenario and estate placement (Phase 3 Task 4) | Done | `mk_island/src/scenario.rs`, `regional/property.rs`, `fixtures/island/default_scenario.json` |
 | Complete island snapshot: save, restore, tamper and canon rejection (Phase 4 Task 3) | Done. A full island — a dozen 1,152,000-cell grids, 200,000 stems, the founders and the RNG streams — writes atomically to one deflated, digest-prefixed file and restores to the same state digest, then runs on identically. The domain, grid topology and labour table are derived again on load rather than trusted from the file | `io/island_snapshot.rs`, `regional/life.rs`, `tests/island_snapshot.rs` |
 | A folder for every human, under a run of its own (Phase 4 Task 3b) | Done. `enable_human_store` claims a run id from a counter in the save root, writes a folder per person, and syncs on the store cadence, at every snapshot save and the moment somebody dies. Failed writes are counted and reported, never discarded. The state digest is identical with the store on, off, or failing | `regional/human_store.rs`, `regional/life.rs`, `tests/island_human_store.rs` |
-| Headless runner and Phase-4 acceptance (Phase 4 Task 5) | Done, less the replay command that waits on Task 4. `island run` advances a scenario or a saved island and prints the canonical digest; `island inspect` describes a snapshot without running it. Two runs of one scenario and seed agree, and stopping at 60 steps and resuming reaches the same digest as 120 straight through, measured on the full island from the command line | `apps/island/src/run.rs`, `tests/island_runtime_acceptance.rs` |
+| External commands and deterministic replay (Phase 4 Task 4) | Done but for interventions. Every command reaching the island from outside is recorded with the tick and order it applied at, and replaying the log reaches the same canonical digest — measured on a live dashboard session: three people created through the API at ticks 480, 544 and 609, replayed on their own to the same digest `628d33bc`. `IslandCommand::Intervention` is not built | `regional/commands.rs`, `regional/replay.rs`, `tests/island_replay.rs` |
+| Headless runner and Phase-4 acceptance (Phase 4 Task 5) | Done, `island replay` included. `island run` advances a scenario or a saved island and prints the canonical digest; `island inspect` describes a snapshot without running it. Two runs of one scenario and seed agree, and stopping at 60 steps and resuming reaches the same digest as 120 straight through, measured on the full island from the command line | `apps/island/src/run.rs`, `tests/island_runtime_acceptance.rs` |
 | The island behind the dashboard, read and write (Phase 4 Task 6) | Mostly done. `island serve --scenario` runs `IslandLife` on its own thread and publishes a projection after every step; `GET /api/world` and the overview read it. `POST /api/world/humans` queues a creation applied between steps, and the creator page picks a room from the estate's own layout. A person created there is in the world and breathing. The roster page shows the island's own people with their full records and where they are. Not done: the separate property/vegetation/economy/timeline endpoints, `--import-0b`, `POST /api/control`, and an island-map picker for a cell rather than a room | `serve/sim.rs`, `serve/projection.rs`, `regional/create_human.rs`, `tests/island_create_human.rs` |
 | Web dashboard: overview, roster with a readable per-person record, Human Creator, JSON API (`island serve`) | Done for the human-only bootstrap; the Phase 5 desktop app is separate | `apps/island/src/serve/`, `apps/island/static/` |
 
@@ -66,14 +67,14 @@ the estate's electrical system is still free (D13).
 
 - Phase 3 Task 1b (island-scale species) and Tasks 2 and 9 (and the economy/lifecycle wiring of Tasks 3 and 3b): materials and resources, physical
   materials, time and energy of actions, acceptance.
-- Phase 4: persistence, replay and external commands. Tasks 1, 2, 3, 3b and 5 (world composition,
-  the cadence scheduler, the island snapshot, a folder per human, the headless runner) are done.
-  Task 6 is mostly done: with `--scenario` the dashboard has a world behind it, and a person
-  created from the creator page is placed in a room of the estate, breathes and ages with the
-  founders. Still to come: Task 4 (external commands and deterministic replay), which the replay
-  log and `island replay` wait on, and Task 6's remainder — the separate property, vegetation,
-  economy and timeline endpoints, `POST /api/control`, an island-map picker for a cell rather than
-  a room, and `--import-0b`.
+- Phase 4: persistence, replay and external commands. Tasks 1, 2, 3, 3b, 4 and 5 (world
+  composition, the cadence scheduler, the island snapshot, a folder per human, external commands
+  and replay, the headless runner) are done, Task 4 but for interventions. Task 6 is mostly done:
+  with `--scenario` the dashboard has a world behind it, and a person created from the creator
+  page is placed in a room of the estate, breathes and ages with the founders. Still to come:
+  `IslandCommand::Intervention` — upstream's executor adapted to the island — and Task 6's
+  remainder: the separate property, vegetation, economy and timeline endpoints,
+  `POST /api/control`, an island-map picker for a cell rather than a room, and `--import-0b`.
 - Phase 4b: energy, industry, town, economy.
 - Phase 5: the desktop app (`island-ui`, Bevy) replacing the human-only bootstrap, performance
   work, pruning, final benchmarks. The `island serve` web dashboard covers the human-only

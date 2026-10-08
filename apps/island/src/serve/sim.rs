@@ -14,26 +14,29 @@
 //! the whole project is built on would stop meaning anything.
 
 use std::collections::BTreeMap;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
-use mk_engine::regional::create_human::{CreateHumanError, CreatedIslander, IslandCreateHuman};
+use mk_engine::regional::commands::{Applied, CommandError};
+use mk_engine::regional::create_human::{CreateHumanError, CreatedIslander};
 use mk_engine::regional::life::IslandLife;
 
 use super::projection::{Digest, IslandProjection};
 
 /// Something the world is asked to do.
 ///
+/// The engine's own command vocabulary, not a second one: a command the
+/// dashboard applies is recorded in the island's replay log exactly as one
+/// applied anywhere else, so a dashboard session can be replayed.
+///
 /// Writes never touch the island directly. They are queued here and applied
 /// by the thread that owns it, between steps, so the world is only ever
 /// changed from one place and a request can never land in the middle of a
 /// step.
-#[derive(Debug)]
-pub enum IslandCommand {
-    CreateHuman(Box<IslandCreateHuman>),
-}
+pub use mk_engine::regional::commands::IslandCommand;
 
 /// What became of a command.
 #[derive(Debug, Clone, serde::Serialize)]
@@ -52,6 +55,8 @@ pub enum Outcome {
     Refused {
         problems: Vec<String>,
     },
+    /// A control command: recorded, and nothing in the world moved.
+    Noted,
 }
 
 /// A queued command and the id it will be answered under.
@@ -222,6 +227,16 @@ const DIGEST_EVERY: u64 = 60;
 /// published for the island's starting state, so a page loaded immediately
 /// shows the world at tick 0 rather than an empty one.
 pub fn spawn(life: IslandLife, speed: SimSpeed) -> SimHandle {
+    spawn_logging(life, speed, None)
+}
+
+/// Start an island running, writing its replay log to `log` as commands
+/// land.
+///
+/// Written on each command rather than at the end: a log that only existed
+/// in memory would be lost by the thing a log is for, which is a run that
+/// stopped unexpectedly.
+pub fn spawn_logging(life: IslandLife, speed: SimSpeed, log: Option<PathBuf>) -> SimHandle {
     let step_seconds = life.scenario.cadences.human_seconds;
     // The starting island is hashed once — and only once: hashing costs
     // about 930 ms against a 1.4 ms step, so the thread is handed this one
@@ -261,6 +276,7 @@ pub fn spawn(life: IslandLife, speed: SimSpeed) -> SimHandle {
                 records_at_tick: 0,
                 inbox,
                 outcomes,
+                log,
             })
         })
         .expect("the simulation thread starts");
@@ -280,6 +296,7 @@ struct Loop {
     records_at_tick: u64,
     inbox: Receiver<Queued>,
     outcomes: Arc<Mutex<BTreeMap<u64, Outcome>>>,
+    log: Option<PathBuf>,
 }
 
 /// The loop itself: apply what was asked, step, publish, wait if there is
@@ -300,10 +317,24 @@ fn run(mut it: Loop) {
         // before the step that then moves that person along with everybody
         // else.
         let mut created_somebody = false;
+        let mut applied_anything = false;
         while let Ok(Queued { id, command }) = it.inbox.try_recv() {
             let outcome = apply(&mut it.life, command);
             created_somebody |= matches!(outcome, Outcome::Created { .. });
+            applied_anything |= !matches!(outcome, Outcome::Refused { .. });
             record(&it.outcomes, id, outcome);
+        }
+        if applied_anything {
+            if let Some(path) = &it.log {
+                // A failure here loses the record, not the world: say so
+                // and carry on, as the folders do.
+                if let Err(e) = it.life.replay_log().save(path) {
+                    eprintln!(
+                        "the replay log could not be written to {}: {e}",
+                        path.display()
+                    );
+                }
+            }
         }
         if created_somebody {
             // Somebody who has just been created should be readable now,
@@ -370,26 +401,31 @@ fn run(mut it: Loop) {
 }
 
 /// Do what was asked of the world, on the thread that owns it.
+///
+/// Through `apply_command`, so the island records it: a person created from
+/// the dashboard is in the replay log beside one created from the command
+/// line, and a dashboard session replays like any other run.
 fn apply(life: &mut IslandLife, command: IslandCommand) -> Outcome {
-    match command {
-        IslandCommand::CreateHuman(request) => match life.create_human(*request) {
-            Ok(CreatedIslander {
-                agent_id,
-                space,
-                cell,
-                storage_error,
-                ..
-            }) => Outcome::Created {
-                agent_id,
-                space,
-                cell,
-                tick: life.tick,
-                storage_error,
-            },
-            Err(CreateHumanError::Invalid(problems)) => Outcome::Refused { problems },
-            Err(e) => Outcome::Refused {
-                problems: vec![e.to_string()],
-            },
+    match life.apply_command(command) {
+        Ok(Applied::Created(CreatedIslander {
+            agent_id,
+            space,
+            cell,
+            storage_error,
+            ..
+        })) => Outcome::Created {
+            agent_id,
+            space,
+            cell,
+            tick: life.tick,
+            storage_error,
+        },
+        Ok(Applied::Noted) => Outcome::Noted,
+        Err(CommandError::Create(CreateHumanError::Invalid(problems))) => {
+            Outcome::Refused { problems }
+        }
+        Err(e) => Outcome::Refused {
+            problems: vec![e.to_string()],
         },
     }
 }

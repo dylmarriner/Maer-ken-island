@@ -20,7 +20,7 @@ use crate::humans::spawn::{agent_id_for_name, build_authored_human};
 use mk_island::DomainLevel;
 
 /// Where a new person starts.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum CreateLocation {
     /// A room, zone or building of the founders' estate, by the layout's
     /// own id. They stand at its centre.
@@ -30,7 +30,11 @@ pub enum CreateLocation {
 }
 
 /// A request to create one person in the world.
-#[derive(Debug, Clone)]
+///
+/// Serializable because the replay log carries it: a run is reproduced by
+/// re-applying the same requests at the same ticks, so the request is the
+/// record.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct IslandCreateHuman {
     pub name: String,
     pub biological_sex: BiologicalSex,

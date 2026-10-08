@@ -183,11 +183,46 @@ worth the records.
 - Produces: `IslandReplayLog { scenario_digest, entries: Vec<IslandReplayEntry { tick, sequence, command }> }`, appended for every applied command, and `replay_island(canon: Arc<CanonLocked>, scenario: IslandScenario, log: &IslandReplayLog, until_tick: Tick) -> Result<IslandWorldState, IslandReplayError>`.
 - Interventions are applied through the upstream executor's logic adapted to `IslandWorldState`; actions with no island meaning (planetary climate edits, orbit changes) return `CommandError::NotSupportedOnIsland` and are listed in `UPSTREAM.md`.
 
-- [ ] **Step 1:** Write a log with interventions and controls at repeated ticks and assert stable `(tick, sequence)` order.
-- [ ] **Step 2:** Run uninterrupted execution and replay from the same seed and log; assert identical final `state_hash`.
-- [ ] **Step 3:** Save halfway, load, continue replay; assert the same final hash.
-- [ ] **Step 4:** Run `cargo test -p mk_engine --test island_replay`; expect FAIL before implementation, PASS after.
-- [ ] **Step 5:** Commit `feat(engine): replay deterministic island commands`.
+- [x] **Step 1:** Write a log with interventions and controls at repeated ticks and assert stable `(tick, sequence)` order.
+- [x] **Step 2:** Run uninterrupted execution and replay from the same seed and log; assert identical final `state_hash`.
+- [x] **Step 3:** Save halfway, load, continue replay; assert the same final hash.
+- [x] **Step 4:** Run `cargo test -p mk_engine --test island_replay`; PASS. The FAIL half was not done as written, as in Tasks 3 and 3b: the tests and the module were written together.
+- [x] **Step 5:** Commit `feat(engine): replay deterministic island commands`.
+
+**Built (2026-10-08).** `IslandCommand::{CreateHuman, Control}` in `regional/commands.rs` is the
+only way in from outside, and `IslandLife::apply_command` records every applied command in an
+`IslandReplayLog` with the `(tick, sequence)` it applied at. `replay_island` runs a scenario
+forward, applying the log as it goes, and reaches the same canonical digest.
+
+Measured end to end rather than only in tests: a dashboard was run at 2,000x, three people were
+created through `POST /api/world/humans` from the command line, and the session's log was
+replayed on its own:
+
+    live dashboard, tick 720   -> 628d33bc0bd85c59...
+    island replay --until 720  -> 628d33bc0bd85c59...
+
+The log recorded the three creations at ticks 480, 544 and 609 — where they actually landed —
+and the replay rebuilt all five islanders.
+
+`sequence` is why commands landing on one tick come back in order: the second creation of a name
+becomes `name-2`, which only holds if the first is already there. `replay_island` sorts by
+`(tick, sequence)` rather than trusting the file's order, and
+`a_shuffled_log_still_reproduces_the_run` reverses a log and requires the same digest.
+
+Control commands are recorded and apply nothing — pausing an island leaves the state it was
+paused in, and a speed is a statement about real time. `control_commands_are_recorded_and_change_
+nothing` asserts that rather than assuming it.
+
+`island serve --log <path>` records a dashboard session, written as each command lands rather
+than at the end, because a log that only existed in memory would be lost by the thing a log is
+for. `island run --log` does the same, and `island replay --scenario --log [--until]` runs one
+again.
+
+**Not built:** `IslandCommand::Intervention`. Upstream's `InterventionAction` executor adapted to
+the island is its own piece of work, and the `NotSupportedOnIsland` list it needs belongs with
+it. Nothing here pretends otherwise: the variant does not exist rather than existing and
+refusing.
+
 
 ### Task 5: Phase-4 acceptance and headless runner
 

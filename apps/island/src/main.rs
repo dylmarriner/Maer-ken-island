@@ -13,9 +13,10 @@ use std::sync::{Arc, Mutex};
 
 const USAGE: &str = "\
 island serve   [--data-dir ./island-data] [--seed <64 hex>] [--bind 127.0.0.1:8080]
-               [--scenario <path> | --snapshot <path>] [--speed real|max|<n>]
+               [--scenario <path> | --snapshot <path>] [--speed real|max|<n>] [--log <path>]
 island run     (--scenario <path> | --snapshot <path>) [--steps <n>] [--dt <seconds>]
                [--save <path>] [--save-root <dir>]
+island replay  --scenario <path> --log <path> [--until <tick>]
 island inspect --snapshot <path> [--scenario <path>]
 
 serve    the dashboard: the overview at /, the roster at /people and the Human
@@ -30,6 +31,8 @@ serve    the dashboard: the overview at /, the roster at /people and the Human
                    max, or a multiplier like 60. Speed changes how often a
                    step runs, never its size, so the island is the same at
                    any speed.
+  --log PATH       record every command this dashboard applies, so the
+                   session can be replayed with `island replay`
 
 run      the simulated island, headless, printing its canonical state digest.
          Two runs of one scenario and seed print the same digest.
@@ -40,6 +43,13 @@ run      the simulated island, headless, printing its canonical state digest.
   --dt SECONDS     simulated seconds per step (default 60, the human step)
   --save PATH      write the island to a file when the run ends
   --save-root DIR  keep a folder for every human under DIR/<run id>/humans
+  --log PATH       write the commands this run applied, for `island replay`
+
+replay   a recorded run, printing the digest it reaches. It should be the
+         digest the original run printed.
+  --scenario PATH  the scenario the log was recorded against
+  --log PATH       the log to replay
+  --until TICK     stop at this tick (default: the log's last command)
 
 inspect  what is in a saved island, without running it.
   --snapshot PATH  the file to describe
@@ -99,7 +109,28 @@ fn headless_run(args: &[String]) {
         dt_seconds: number(args, "--dt", 60),
         save: flag(args, "--save").map(PathBuf::from),
         save_root: flag(args, "--save-root").map(PathBuf::from),
+        log: flag(args, "--log").map(PathBuf::from),
     }));
+}
+
+fn headless_replay(args: &[String]) {
+    if args.iter().any(|a| matches!(a.as_str(), "--help" | "-h")) {
+        help();
+    }
+    let (Some(scenario), Some(log)) = (flag(args, "--scenario"), flag(args, "--log")) else {
+        eprintln!("replay needs --scenario and --log.\n");
+        usage()
+    };
+    finish(headless::replay(
+        &PathBuf::from(scenario),
+        &PathBuf::from(log),
+        flag(args, "--until").map(|n| {
+            n.parse().unwrap_or_else(|_| {
+                eprintln!("--until {n:?} is not a number.\n");
+                usage()
+            })
+        }),
+    ));
 }
 
 fn headless_inspect(args: &[String]) {
@@ -127,6 +158,7 @@ fn main() {
     match command.as_str() {
         "serve" => {}
         "run" => return headless_run(rest),
+        "replay" => return headless_replay(rest),
         "inspect" => return headless_inspect(rest),
         other => {
             eprintln!("island has `serve`, `run` and `inspect`, not `{other}`.\n");
@@ -155,7 +187,7 @@ fn main() {
             // Read again below, where the world is opened; named here so
             // they are accepted rather than falling through to the usage
             // message as unknown flags.
-            "--scenario" | "--snapshot" | "--speed" => {}
+            "--scenario" | "--snapshot" | "--speed" | "--log" => {}
             _ => usage(),
         }
     }
@@ -189,7 +221,11 @@ fn main() {
                 "Simulating the island at {}. Its state is at /api/world.",
                 speed.describe()
             );
-            Some(serve::sim::spawn(life, speed))
+            let log = flag(rest, "--log").map(PathBuf::from);
+            if let Some(path) = &log {
+                println!("Recording commands to {}.", path.display());
+            }
+            Some(serve::sim::spawn_logging(life, speed, log))
         }
     };
 

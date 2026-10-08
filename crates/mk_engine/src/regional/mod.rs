@@ -4,6 +4,7 @@
 
 pub mod boundary;
 pub mod climate;
+pub mod commands;
 pub mod create_human;
 pub mod deposits;
 pub mod ecology;
@@ -24,6 +25,7 @@ pub mod ocean;
 pub mod par;
 pub mod physical;
 pub mod property;
+pub mod replay;
 pub mod scheduler;
 pub mod seismicity;
 pub mod shape;

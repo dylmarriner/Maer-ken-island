@@ -12,6 +12,7 @@ use std::sync::Arc;
 use mk_core::canon::CanonLocked;
 use mk_engine::io::{load_island_snapshot, save_island_snapshot};
 use mk_engine::regional::life::IslandLife;
+use mk_engine::regional::replay::{replay_island, IslandReplayLog};
 use mk_island::IslandScenario;
 
 /// Hex for a digest, the form every other tool in the project prints.
@@ -54,6 +55,9 @@ pub struct RunArgs {
     pub dt_seconds: u64,
     pub save: Option<PathBuf>,
     pub save_root: Option<PathBuf>,
+    /// Where to write the commands this run applied, so it can be run
+    /// again.
+    pub log: Option<PathBuf>,
 }
 
 /// Advance an island and print what it came to.
@@ -115,6 +119,41 @@ pub fn run(args: RunArgs) -> Result<(), String> {
         let size = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
         println!("  saved     {} ({} MB)", path.display(), size / 1_048_576);
     }
+    if let Some(path) = &args.log {
+        life.replay_log()
+            .save(path)
+            .map_err(|e| format!("cannot write {}: {e}", path.display()))?;
+        println!(
+            "  log       {} ({} command(s))",
+            path.display(),
+            life.replay_log().entries.len()
+        );
+    }
+    Ok(())
+}
+
+/// Run a scenario again from its log, and print where it got to.
+///
+/// The point of the digest it prints is that it should equal the one the
+/// original run printed. A replay that reached somewhere else would mean
+/// the island depends on something the log does not record, and the digest
+/// would stop being a statement about the world.
+pub fn replay(scenario_path: &Path, log_path: &Path, until: Option<u64>) -> Result<(), String> {
+    let scenario = IslandScenario::load(scenario_path).map_err(|e| e.to_string())?;
+    let canon = canon_for(scenario_path, &scenario)?;
+    let log = IslandReplayLog::load(log_path).map_err(|e| e.to_string())?;
+
+    let until = until.unwrap_or_else(|| log.entries.iter().map(|e| e.tick).max().unwrap_or(0));
+    println!("{}", log_path.display());
+    println!("  commands  {}", log.entries.len());
+    println!("  to tick   {until}");
+
+    let life = replay_island(Arc::new(canon), scenario, &log, until)
+        .map_err(|e| format!("the replay stopped: {e}"))?;
+
+    println!("  digest    {}", hex(life.state_digest()));
+    println!("  elapsed   {}", elapsed(&life));
+    println!("  people    {}", life.humans.registry.iter().count());
     Ok(())
 }
 
