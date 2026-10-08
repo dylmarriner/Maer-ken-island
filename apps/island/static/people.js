@@ -321,3 +321,70 @@ addEventListener("popstate", () => {
 });
 
 load();
+
+// ---------------------------------------------------------------------------
+// What the islanders have said to each other.
+//
+// The engine has generated these all along and nothing has ever shown them:
+// `HumanSystem` keeps a bounded feed, `mk_view` projects it, and no surface
+// read it. A simulation whose people talk and whose dashboard cannot show a
+// word of it is only half observable, and it is the half that cannot be
+// checked by looking.
+// ---------------------------------------------------------------------------
+
+const talkPanelEl = document.getElementById("talk-panel");
+const talkEl = document.getElementById("talk");
+const talkNoteEl = document.getElementById("talk-note");
+
+/// One conversation, as a short exchange with the speakers named.
+function conversationCard(conversation) {
+  const card = el("article", null, { class: "talk-card" });
+  const head = el("p", null, { class: "talk-head" });
+  head.append(
+    el("span", `tick ${conversation.tick}`, { class: "talk-tick" }),
+    el("span", conversation.relationship, { class: "talk-rel" }),
+  );
+  card.append(head);
+  for (const line of conversation.lines) {
+    const said = el("p", null, { class: "talk-line" });
+    // The name the engine used. When a person has no typed-in name it is
+    // their id, which is what `Person` does everywhere else on this
+    // dashboard rather than inventing something friendlier.
+    said.append(el("span", `${line.speaker_name}: `, { class: "talk-who" }));
+    said.append(document.createTextNode(line.text));
+    card.append(said);
+  }
+  return card;
+}
+
+async function loadConversations() {
+  try {
+    const data = await getJson("/api/conversations");
+    // Shown rather than paraphrased, like the island page's notes: a reader
+    // needs to know these lines are composed from real state and that no
+    // language model wrote them.
+    talkNoteEl.textContent = data.note;
+    if (!data.conversations.length) {
+      talkEl.replaceChildren(
+        emptyState(
+          "Nobody has spoken yet",
+          "Conversations happen when people are near each other or are kin. None has been generated on this island so far.",
+        ),
+      );
+    } else {
+      talkEl.replaceChildren(...data.conversations.map(conversationCard));
+    }
+    talkPanelEl.hidden = false;
+  } catch (error) {
+    // A missing island is not an error worth shouting about here: the page
+    // already says there is no world. Any other failure hides the panel
+    // rather than showing an empty one that looks like silence.
+    if (error.status !== 404) reportOffline(error);
+    talkPanelEl.hidden = true;
+  }
+}
+
+loadConversations();
+// People keep talking while the page is open, so this refreshes. Five
+// seconds matches the island page's own cadence.
+setInterval(loadConversations, 5000);

@@ -585,3 +585,11 @@ button.link {
 /* The numeric columns read better right-aligned against each other. */
 .data-table td:first-child,
 .data-table th:first-child { white-space: nowrap; }
+
+/* What the islanders have said to each other. */
+.talk-card { border: 1px solid var(--line); border-radius: 6px; padding: 0.7rem 0.9rem; margin: 0 0 0.7rem; }
+.talk-head { display: flex; gap: 0.6rem; align-items: baseline; margin: 0 0 0.45rem; }
+.talk-tick { color: var(--muted); font-size: 0.82rem; font-variant-numeric: tabular-nums; }
+.talk-rel { color: var(--muted); font-size: 0.82rem; font-style: italic; }
+.talk-line { margin: 0 0 0.3rem; line-height: 1.45; }
+.talk-who { font-weight: 600; }

@@ -13,10 +13,18 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+use mk_engine::humans::dialogue::ConversationRelationship;
 use mk_engine::humans::HumanBeing;
 use mk_engine::regional::estate_layout::Space;
 use mk_engine::regional::life::IslandLife;
 use serde::Serialize;
+
+/// How many of the island's recent conversations the dashboard shows.
+///
+/// `HumanSystem` keeps 500. Serving all of them would be a wall of text
+/// nobody reads, and the ones worth reading are the recent ones, so the
+/// page takes this many from the newest end and says so.
+pub const CONVERSATIONS_SHOWN: usize = 40;
 
 /// The island at one moment, as the dashboard sees it.
 #[derive(Debug, Clone, Default, Serialize)]
@@ -78,6 +86,13 @@ pub struct IslandProjection {
     /// looks at it to see what they just did.
     #[serde(skip)]
     pub timeline: Arc<Vec<TimelineEntry>>,
+    /// The island's recent conversations, newest first.
+    ///
+    /// Skipped from the status body like the other heavy views: a page
+    /// polling the clock every second has no use for forty conversations
+    /// with it, and `/api/conversations` serves them on their own.
+    #[serde(skip)]
+    pub conversations: Arc<Vec<Conversation>>,
     /// The canonical state digest, and the tick it was taken at.
     ///
     /// Two islands showing the same digest at the same tick are the same
@@ -213,6 +228,7 @@ pub struct Stocks {
 pub struct Views {
     pub records: Arc<BTreeMap<String, HumanBeing>>,
     pub records_at_tick: u64,
+    pub conversations: Arc<Vec<Conversation>>,
     pub properties: Arc<Vec<Property>>,
     pub economy: Arc<Economy>,
     pub economy_at_tick: u64,
@@ -226,6 +242,7 @@ impl Views {
         Self {
             records: IslandProjection::records_now(life),
             records_at_tick: life.tick,
+            conversations: IslandProjection::conversations_now(life),
             properties: IslandProjection::properties_now(life),
             economy: IslandProjection::economy_now(life),
             economy_at_tick: life.tick,
@@ -360,6 +377,45 @@ fn describe(command: &mk_engine::regional::commands::IslandCommand) -> String {
     }
 }
 
+/// One thing a person said, in a conversation somebody can read.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ConversationLine {
+    pub speaker_id: String,
+    pub speaker_name: String,
+    pub text: String,
+}
+
+/// A conversation between two islanders, as it happened.
+///
+/// The engine generates these from state it has already computed — the
+/// speaker's real emotion, their actual internal monologue, what the
+/// listener said to them last time — and never from a language model. The
+/// page shows the lines as the engine wrote them, for the same reason the
+/// server notes are shown rather than paraphrased: a conversation
+/// rewritten on the way to the screen is no longer evidence of what the
+/// simulation did.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct Conversation {
+    pub tick: u64,
+    /// `founders`, `parent and child`, `siblings` or `neighbours` — the
+    /// register the engine picked, in words rather than an enum name.
+    pub relationship: String,
+    pub lines: Vec<ConversationLine>,
+}
+
+/// How the two speakers are related, for somebody reading rather than
+/// parsing. `Other` is every pairing that is not kin, which on this island
+/// means two people who were near each other and one of them reached out,
+/// so "neighbours" says what it is without claiming more.
+fn relationship_name(relationship: ConversationRelationship) -> &'static str {
+    match relationship {
+        ConversationRelationship::Founders => "founders",
+        ConversationRelationship::ParentChild => "parent and child",
+        ConversationRelationship::Siblings => "siblings",
+        ConversationRelationship::Other => "neighbours",
+    }
+}
+
 impl IslandProjection {
     /// Describe an island, carrying `digest` forward from an earlier step.
     ///
@@ -381,6 +437,7 @@ impl IslandProjection {
             economy,
             economy_at_tick,
             timeline,
+            conversations,
         } = views;
         let day_s = life.canon.rotation_period_s;
         Self {
@@ -404,6 +461,7 @@ impl IslandProjection {
             economy,
             economy_at_tick,
             timeline,
+            conversations,
             digest: Digest {
                 current: digest.at_tick == life.tick,
                 ..digest
@@ -501,6 +559,39 @@ impl IslandProjection {
                 .registry
                 .iter()
                 .map(|human| (human.agent_id().to_string(), human.clone()))
+                .collect(),
+        )
+    }
+
+    /// The island's recent conversations, newest first.
+    ///
+    /// `HumanSystem` keeps a bounded feed of the last
+    /// `CONVERSATION_LOG_MAX_ENTRIES` exchanges across the whole
+    /// population. This copies the most recent `CONVERSATIONS_SHOWN` of
+    /// them and reverses the order, because somebody opening the page
+    /// wants what was just said, not what was said five hundred
+    /// conversations ago. Cheap: a bounded deque of short strings, nothing
+    /// like the per-human record copy.
+    pub fn conversations_now(life: &IslandLife) -> Arc<Vec<Conversation>> {
+        let all: Vec<&mk_engine::humans::dialogue::ConversationEvent> =
+            life.humans.conversation_log().collect();
+        Arc::new(
+            all.iter()
+                .rev()
+                .take(CONVERSATIONS_SHOWN)
+                .map(|event| Conversation {
+                    tick: event.tick,
+                    relationship: relationship_name(event.relationship).to_string(),
+                    lines: event
+                        .lines
+                        .iter()
+                        .map(|line| ConversationLine {
+                            speaker_id: line.speaker_id.to_string(),
+                            speaker_name: line.speaker_name.clone(),
+                            text: line.text.clone(),
+                        })
+                        .collect(),
+                })
                 .collect(),
         )
     }

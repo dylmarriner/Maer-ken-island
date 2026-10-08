@@ -427,6 +427,16 @@ const TIMELINE_IS_EXTERNAL: &str =
      record the replay runner reads, so this cannot disagree with it. It is not a history of \
      what the islanders did: nothing here is a person going to bed or felling a tree.";
 
+/// Said in `/api/conversations`, because a reader needs to know what these
+/// lines are and, just as much, what they are not.
+const CONVERSATIONS_ARE_COMPOSED: &str =
+    "What the islanders have said to each other, newest first. Every line is composed by the \
+     engine from state it had already computed: the speaker's own emotion and internal \
+     monologue, and what the listener said to them last time these two spoke. No language \
+     model is involved, and the same two people at the same tick always say the same thing. \
+     This is the whole island's recent feed, not one person's memory: each islander keeps their \
+     own, far longer, history.";
+
 /// Headers every response carries. The pages load nothing from anywhere but
 /// this server, so the policy can say exactly that: no third-party script,
 /// style, image or connection, no framing, and no form posting its own way
@@ -707,6 +717,28 @@ pub fn routes_with_world(
                         "at_tick": current.economy_at_tick,
                         "tick": current.clock.tick,
                         "note": NO_RESOURCE_NODES,
+                    }),
+                )
+            }
+        });
+
+    let get_conversations = warp::path!("api" / "conversations")
+        .and(read())
+        .and(with(world.clone()))
+        .map(|world: Option<SimHandle>| match world {
+            None => json(
+                StatusCode::NOT_FOUND,
+                &serde_json::json!({ "errors": ["No island is running, so nobody is talking. Start the server with --scenario."] }),
+            ),
+            Some(world) => {
+                let current = world.projection();
+                json(
+                    StatusCode::OK,
+                    &serde_json::json!({
+                        "conversations": *current.conversations,
+                        "tick": current.clock.tick,
+                        "shown": crate::serve::projection::CONVERSATIONS_SHOWN,
+                        "note": CONVERSATIONS_ARE_COMPOSED,
                     }),
                 )
             }
@@ -995,7 +1027,7 @@ pub fn routes_with_world(
             }
             json(
                 StatusCode::NOT_FOUND,
-                &serde_json::json!({ "errors": ["No such endpoint. The dashboard serves /api/status, /api/world, /api/world/<estate|vegetation|materials|clock>, /api/world/humans, /api/world/humans/<agent-id>, /api/world/interventions, /api/world/commands/<id>, /api/properties, /api/economy, /api/timeline, /api/control, /api/health, /api/humans, /api/humans/<agent-id>, /api/activity and /api/creator/options."] }),
+                &serde_json::json!({ "errors": ["No such endpoint. The dashboard serves /api/status, /api/world, /api/world/<estate|vegetation|materials|clock>, /api/world/humans, /api/world/humans/<agent-id>, /api/world/interventions, /api/world/commands/<id>, /api/properties, /api/economy, /api/timeline, /api/conversations, /api/control, /api/health, /api/humans, /api/humans/<agent-id>, /api/activity and /api/creator/options."] }),
             )
         });
 
@@ -1003,6 +1035,7 @@ pub fn routes_with_world(
         .or(get_properties)
         .or(get_economy)
         .or(get_timeline)
+        .or(get_conversations)
         .or(get_world)
         .or(post_world_human)
         .or(post_world_intervention)

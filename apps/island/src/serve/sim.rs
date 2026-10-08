@@ -525,6 +525,29 @@ fn run(mut it: Loop) {
             it.views.records_at_tick = it.life.tick;
             it.views.economy = IslandProjection::economy_now(&it.life);
             it.views.economy_at_tick = it.life.tick;
+            // Conversations ride the same cadence as the records of the
+            // people having them, which is a coherent rule and, more to
+            // the point, the only one that works.
+            //
+            // Refreshing them every step was tried first, on the argument
+            // that they are the liveliest thing the page shows and no
+            // command causes them. That argument was right and the change
+            // was still wrong. A step is not a fixed amount of work: the
+            // island runs at `AsFastAsPossible` here and in every test,
+            // where a step on a small island is microseconds, while this
+            // copy costs about the same 17 us whatever the island holds,
+            // because it is sized by the conversations and not by the
+            // world. Per step, across the test suite's concurrent sim
+            // threads, that was enough allocator churn to starve the HTTP
+            // runtime: `a_new_person_can_be_read_the_moment_they_exist`
+            // missed its sixty-second deadline, reproducibly, and passed
+            // again the moment this came off the per-step path.
+            //
+            // The 0.98% of a step measured by `tests/conversation_cost.rs`
+            // is real and was the wrong thing to reason from: it is a
+            // share of a *full* island's 1.7 ms step, not of the fast ones
+            // that actually set the loop's pace.
+            it.views.conversations = IslandProjection::conversations_now(&it.life);
         }
 
         let now = Instant::now();

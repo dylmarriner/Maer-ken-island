@@ -1061,6 +1061,87 @@ async fn properties_economy_and_timeline_serve_what_the_island_really_holds() {
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
     }
 
+    // Conversations, on this same island rather than another.
+    //
+    // This lives here, and not in a test of its own, deliberately. Every
+    // test in this file bootstraps a full island and spins a sim thread at
+    // AsFastAsPossible, and they run in parallel: a nineteenth was enough
+    // to starve the others and push `a_new_person_can_be_read_the_moment_
+    // they_exist` past its sixty-second deadline. Measured — the suite is
+    // 18 passed / 0 failed without that extra island and 18/1 with it.
+    // Folding these assertions into a dashboard that already exists keeps
+    // the island count where it was.
+    // Polled, not asserted on the first read: this view refreshes on the
+    // island's cadence rather than when a command lands, so a test that
+    // reads it once is racing the loop. The economy assertions above wait
+    // the same way and for the same reason.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    let body = loop {
+        let (status, response) = get(port, "/api/conversations").await;
+        assert_eq!(status, 200, "{response}");
+        let body: serde_json::Value = serde_json::from_str(body_of(&response)).unwrap();
+        if !body["conversations"]
+            .as_array()
+            .expect("a conversation list")
+            .is_empty()
+        {
+            break body;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the islanders never said anything: {body}"
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    };
+
+    // The note is put on the page with `textContent`, so markdown in it
+    // renders as punctuation. This branch shipped that bug once already.
+    let note = body["note"].as_str().expect("a note");
+    assert!(!note.contains('`'), "the note is shown as text: {note}");
+    assert!(
+        note.contains("No language model"),
+        "a reader must be told what composed these lines: {note}"
+    );
+
+    let conversations = body["conversations"]
+        .as_array()
+        .expect("a conversation list");
+    assert!(
+        conversations.len() <= body["shown"].as_u64().unwrap() as usize,
+        "no more than the cap it declares: {body}"
+    );
+
+    let first = &conversations[0];
+    for line in first["lines"].as_array().expect("lines") {
+        assert!(
+            !line["text"].as_str().expect("text").trim().is_empty(),
+            "every line says something: {line}"
+        );
+        assert!(
+            !line["speaker_name"]
+                .as_str()
+                .expect("a speaker")
+                .trim()
+                .is_empty(),
+            "every line names who said it: {line}"
+        );
+    }
+    // Words, not an enum name: the page prints this.
+    let relationship = first["relationship"].as_str().expect("a relationship");
+    assert!(
+        ["founders", "parent and child", "siblings", "neighbours"].contains(&relationship),
+        "unexpected relationship wording: {relationship}"
+    );
+    // Newest first, so a reader sees what was just said.
+    let ticks: Vec<u64> = conversations
+        .iter()
+        .map(|c| c["tick"].as_u64().expect("a tick"))
+        .collect();
+    assert!(
+        ticks.windows(2).all(|w| w[0] >= w[1]),
+        "newest first: {ticks:?}"
+    );
+
     let (_, response) = get(port, "/api/timeline").await;
     let body: serde_json::Value = serde_json::from_str(body_of(&response)).unwrap();
     let entries = body["entries"].as_array().expect("a timeline");
