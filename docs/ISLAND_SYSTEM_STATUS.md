@@ -53,10 +53,13 @@ The combined island (without persistence, the scheduler, a larger population, th
 incremental compilation on). On a machine with a small disk, `CARGO_INCREMENTAL=0` and
 `CARGO_PROFILE_DEV_DEBUG=0` keep it to a fraction of that.
 
-The last full-workspace run was **1,225 passing, 0 failing, 21 ignored, across 87 binaries**
-(2026-10-08, commit `bb1d309`), with `cargo fmt --all -- --check` and
-`cargo clippy --workspace --all-targets -- -D warnings` clean. The two tests above the
-earlier 1,223 are the pair that pins D34.
+The last full-workspace run was **1,226 passing, 0 failing, 22 ignored, across 88 binaries**
+(2026-10-08, commit `94b97b1`), with `cargo fmt --all -- --check` and
+`cargo clippy --workspace --all-targets -- -D warnings` clean.
+
+Run it with `--no-fail-fast`. Without it cargo stops at the first failing binary, and the run
+before this one reported "50 passed" across four binaries — a partial result that reads exactly
+like a whole-workspace one.
 
 The **slow tier passes too** — `cargo test --workspace --release -- --ignored slow_`, 10 tests,
 0 failures, on `a198ed5`: a simulated week on the island against the reference packs (64 s), a
