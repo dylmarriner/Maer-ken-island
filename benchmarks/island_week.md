@@ -94,9 +94,11 @@ never runs short of food or water. It does **not** show that the household is re
   and water are conserved) but the depletion is in the wrong place, and the ledger's shortfall
   counters say nothing about people far from the estate. Booking at the person's own cell is
   the remaining part of the economy wiring (Phase 3 Tasks 3, 3b and 9).
-- The children are slightly small for age (3.2 years at 10.5 kg is well under the WHO median of
-  about 14 kg); the model grows each child toward a sampled adult body, so a small-framed child
-  stays small. Not investigated further.
+- The children's sizes follow from their own sampled adult bodies, not from a growth error: each
+  child grows along the WHO curve toward the adult body it was sampled with, so a child sampled
+  with a lighter adult frame is below the median for its age. Backing the stored weights out
+  through the curve gives adult weights near 59 kg for the first child (matching its parents) and
+  plausible values for the others; the 3.2-year-old at 10.5 kg is a child with a small adult frame.
 - No one died in five years (two adults of 25-30 and three children) and the founders did not
   have a child with each other's partner beyond Gem-K's three; a decades-long run with deaths and
   a second generation has not been done.
