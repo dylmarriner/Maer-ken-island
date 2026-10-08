@@ -796,6 +796,35 @@ impl IslandLife {
         Ok(())
     }
 
+    /// A person who died this step: the body's carbon goes to detritus and its
+    /// water to the soil (through the audit, so the books must close), and
+    /// the person no longer stands anywhere in the estate. Without this a dead
+    /// person's carbon would sit in the ledger as human carbon forever.
+    fn bury_the_dead(&mut self) -> Result<(), IslandLifeError> {
+        let dead: Vec<String> = self
+            .humans
+            .registry
+            .iter()
+            .filter(|h| {
+                matches!(h.profile.status, mk_core::human::HumanStatus::Dead)
+                    && self.materials.is_registered(h.agent_id())
+            })
+            .map(|h| h.agent_id().to_string())
+            .collect();
+        if dead.is_empty() {
+            return Ok(());
+        }
+        self.audited(|life, ledger| {
+            for id in &dead {
+                let _ = life.materials.on_death(id, ledger);
+            }
+        })?;
+        for id in &dead {
+            self.positions.0.remove(id);
+        }
+        Ok(())
+    }
+
     /// A child born during the step joins the household books: its body
     /// enters the materials ledger with carbon taken from its mother, and it
     /// starts where she stands. Without this a newborn never eats, drinks or
@@ -805,7 +834,10 @@ impl IslandLife {
             .humans
             .registry
             .iter()
-            .filter(|h| !self.materials.is_registered(h.agent_id()))
+            .filter(|h| {
+                matches!(h.profile.status, mk_core::human::HumanStatus::Alive)
+                    && !self.materials.is_registered(h.agent_id())
+            })
             .map(|h| {
                 let mother = mother_of(h);
                 (h.agent_id().to_string(), h.body.weight_kg, mother)
@@ -893,6 +925,7 @@ impl IslandLife {
         }
         let humans_done = std::time::Instant::now();
         self.timings.humans += humans_done - started;
+        self.bury_the_dead()?;
         self.keep_children_with_mothers();
         self.adopt_newborns();
         self.timings.households += humans_done.elapsed();
