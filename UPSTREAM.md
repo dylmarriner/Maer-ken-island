@@ -109,6 +109,56 @@ Phase 1 adds the regional island domain and its geophysics. Almost all of it is 
     storage key refuses rather than writing records in plaintext. Island-only; upstream
     `HumanStorage` and `HumanRegistry` are used as they are.
 
+27. `mk_engine::regional::interventions` (new) — upstream's `InterventionAction` executor adapted
+    to `IslandLife`. `IslandLife::intervene` validates with upstream's own
+    `validate_intervention` and then applies, or refuses with
+    `IslandInterventionError::NotSupportedOnIsland { action, reason }`; `IslandCommand::Intervention`
+    carries it into the replay log, so an intervened-in run replays to the same canonical digest
+    (`a_run_somebody_intervened_in_replays_to_the_same_island`). Island-only: upstream's
+    `interventions::InterventionExecutor` against `WorldState` is untouched, and `mk_interventions`
+    is unchanged — the island speaks upstream's action vocabulary rather than a translation of it,
+    so a log records what was actually asked for.
+
+    **Applied on the island:** `Pause`, `Resume`, `Step` (directives, as upstream);
+    `ModifyClimate` (all four parameters, against the island's own coarse climate and weather
+    grids, with the heat booked from `Reservoir::OperatorIntervention` exactly as upstream books
+    it); `InjectBiomass { Producers }`; `InjectResource { Water }`; `SpawnHuman`; `RemoveHuman`.
+
+    **`NotSupportedOnIsland`,** with the reason each refusal gives. The list is
+    `regional::interventions::refusal` and `every_action_is_supported_or_refused_by_name` holds
+    the two together by walking every variant:
+
+    | Action | Why the island has no meaning for it |
+    |---|---|
+    | `SculptTerrain`, `SmoothTerrain` | The island's terrain is generated from its canon-locked scenario and hashed into the state digest. An edited coastline would put an island out of agreement with its own canon, and every snapshot and replay of it is checked against that. |
+    | `InjectBiomass` — `Consumers`, `Apex`, `Decomposers` | The island has no animal populations. `regional::ecology` carries standing producer carbon and NPP; species are not seeded at island scale (item 13). `Producers` is applied, against the biomass field. |
+    | `InjectResource` — `Minerals`, `Nutrients`, `Energy`, `Organic` | The island's stores are nine named materials (wood, charcoal, coal, limestone, quicklime, plant food, meat, fibre, water). Only water names the same thing in both vocabularies; the rest would have to be guessed at. |
+    | `InjectEnergy` | The island's energy is the estate's own plant — fuel stores, generators, solar arrays, batteries — not an energy field over the ground, so there is nowhere a quantity of energy at a coordinate would land. |
+    | `TriggerDisturbance` | The island runs no disturbance system; `crate::disturbance` is planetary state its physical step does not carry. |
+    | `ModifyScenario` | The island's scenario is an `IslandScenario`, whose digest every snapshot and replay is checked against. Upstream's three settable parameters are planetary and name nothing in it. |
+    | `Scrub`, `Branch`, `Fork` | The island can be saved and loaded (`io::island_snapshot`), but its runner keeps no branch registry for a fork to be rooted in. |
+    | `ConstructStructure` | Upstream's buildability gate (`physics::MAX_CLIMB_HEIGHT_M`) allows an **absolute** 2 m of relief between a cell and each of its four neighbours — nearly flat ground on a planetary grid, and a gradient under 0.1% on the island's 2 km medium cells. Measured against the real island it refuses cell (474, 544): the estate's own cell, where the founders' house stands. The island's economy and recipes *are* upstream's, so this was built and working before that measurement; it is refused rather than offered as an action that works and then turns almost everything down. An island rule wants a **gradient** rather than a height difference, and retuning a constant the planetary world also builds against is its own piece of work. |
+
+    Two island differences inside the actions that *are* applied. A `Location` off the domain is
+    **refused** rather than clamped: upstream's planet has a cell for every coordinate, and
+    clamping here would quietly move an intervention aimed at the open sea onto the nearest coast.
+    And `RemoveHuman` touches four places where upstream touches one — the registry, the estate
+    position table, the body in the material ledger (out through the boundary, not to detritus:
+    a removal is not a death) and the two per-person accumulators, which are hashed, so a ghost
+    left in any of them would make two islands that agree about who is alive disagree about their
+    digest.
+
+    `mk_engine::regional::materials` gains `inject` and `remove_body` for the two crossings above,
+    both booked against `Reservoir::OperatorIntervention`, and `RegionalPhysicalState` gains an
+    `elevation_coarse_m()` accessor. **Note on the energy booking:** the island's physical state
+    rebuilds its ledger at the start of every physical step — it is a record of that step's fluxes,
+    not a running total — and the island keeps no cumulative energy ledger. So a climate
+    intervention's joules are readable on the step the intervention lands on and gone after the
+    next one. The material injections are different: `MaterialWater` and `MaterialCarbon` are
+    audited against the ledger on every household step, so those go through `IslandLife::audited`
+    and the audit closes on the tick they land.
+
+
 ## Drift check (2026-10-02)
 
 Upstream `dylmarriner/Maer-Ken` default-branch HEAD is `7c05f0dcf254387ffd7322dbb525fe4807228602`, equal to the pin: no upstream commits since the extraction, so upstream has not fixed the Phase 0 defects either. Re-check immediately before Phase 1.

@@ -742,3 +742,210 @@ async fn a_person_can_be_created_on_a_cell_of_the_island() {
     world.stop();
     server.abort();
 }
+
+/// An intervention reaches the island in upstream's own vocabulary, and one
+/// with no island meaning comes back refused by name rather than quietly
+/// doing nothing.
+#[tokio::test]
+async fn interventions_reach_the_island_and_the_refusals_say_why() {
+    let (world, port, server) = a_running_dashboard().await;
+
+    let settled = |port: u16, id: u64| async move {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+        loop {
+            let (_, response) = get(port, &format!("/api/world/commands/{id}")).await;
+            let value: serde_json::Value = serde_json::from_str(body_of(&response)).unwrap();
+            if value["state"] != "queued" {
+                break value;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "the command never resolved"
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+    };
+
+    // Terrain is canon, and the island says so rather than shrugging.
+    let sculpt = r#"{"SculptTerrain":{"elevation_delta_m":100.0,
+        "region":{"center":{"latitude":-41.0,"longitude":174.0,"altitude":null},"radius_km":5.0}}}"#;
+    let (status, response) = post(port, "/api/world/interventions", sculpt).await;
+    assert_eq!(status, 202, "{response}");
+    let id = serde_json::from_str::<serde_json::Value>(body_of(&response)).unwrap()["command"]
+        .as_u64()
+        .unwrap();
+    let outcome = settled(port, id).await;
+    assert_eq!(outcome["state"], "refused", "{outcome}");
+    let problems = outcome["problems"].to_string();
+    assert!(problems.contains("SculptTerrain"), "{problems}");
+    assert!(problems.contains("canon"), "{problems}");
+
+    // And one the island can honour is honoured, with a summary of what it
+    // did rather than a bare acknowledgement.
+    let water = r#"{"InjectResource":{"resource_type":"Water","amount":120.0,
+        "location":{"latitude":-41.0,"longitude":174.0,"altitude":null}}}"#;
+    let (status, response) = post(port, "/api/world/interventions", water).await;
+    assert_eq!(status, 202, "{response}");
+    let id = serde_json::from_str::<serde_json::Value>(body_of(&response)).unwrap()["command"]
+        .as_u64()
+        .unwrap();
+    let outcome = settled(port, id).await;
+    assert_eq!(outcome["state"], "intervened", "{outcome}");
+    let summary = outcome["summary"].as_str().expect("a summary");
+    assert!(summary.contains("120"), "{summary}");
+
+    // A body that is not an intervention at all is a bad request, not a
+    // queued command nobody can account for.
+    let (status, response) = post(port, "/api/world/interventions", r#"{"Nonsense":{}}"#).await;
+    assert_eq!(status, 400, "{response}");
+
+    world.stop();
+    server.abort();
+}
+
+/// Pausing through the intervention endpoint actually pauses the loop.
+///
+/// Upstream hands `Pause` back as a directive for the host to carry out,
+/// and this is the host. A directive that were reported and not acted on
+/// would be a dashboard that accepted a pause and kept running, which is
+/// the kind of defect only running the thing catches.
+#[tokio::test]
+async fn pausing_through_an_intervention_actually_stops_the_clock() {
+    let (world, port, server) = a_running_dashboard().await;
+
+    let (status, response) = post(port, "/api/world/interventions", r#""Pause""#).await;
+    assert_eq!(status, 202, "{response}");
+    let id = serde_json::from_str::<serde_json::Value>(body_of(&response)).unwrap()["command"]
+        .as_u64()
+        .unwrap();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    loop {
+        let (_, response) = get(port, &format!("/api/world/commands/{id}")).await;
+        let value: serde_json::Value = serde_json::from_str(body_of(&response)).unwrap();
+        if value["state"] != "queued" {
+            assert_eq!(value["state"], "intervened", "{value}");
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the command never resolved"
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+
+    // Give the loop a moment to come to rest on the pause, then check the
+    // tick is still where it was a real second later. (The loop drains its
+    // inbox *before* the pause gate for exactly this reason: it used to
+    // gate first, which left a paused island deaf to the `Resume` queued
+    // behind the pause.)
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    let tick_of = |body: &str| -> u64 {
+        serde_json::from_str::<serde_json::Value>(body).unwrap()["clock"]["tick"]
+            .as_u64()
+            .expect("a tick")
+    };
+    let (_, before) = get(port, "/api/world").await;
+    let before = tick_of(body_of(&before));
+    tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+    let (_, after) = get(port, "/api/world").await;
+    assert_eq!(
+        tick_of(body_of(&after)),
+        before,
+        "the island kept running through a pause"
+    );
+
+    world.stop();
+    server.abort();
+}
+
+/// Resuming and stepping through the queue, which a paused island used to
+/// be deaf to.
+///
+/// The loop gated on the pause before draining its inbox, so a `Resume`
+/// queued as an intervention sat behind the pause it was meant to lift and
+/// the island never came back. Running the real island is what showed it;
+/// this is the test that would have.
+#[tokio::test]
+async fn a_paused_island_still_hears_the_queue() {
+    let (world, port, server) = a_running_dashboard().await;
+
+    let settled = |port: u16, id: u64| async move {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+        loop {
+            let (_, response) = get(port, &format!("/api/world/commands/{id}")).await;
+            let value: serde_json::Value = serde_json::from_str(body_of(&response)).unwrap();
+            if value["state"] != "queued" {
+                break value;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "the command never resolved — a paused island that cannot be resumed is the \
+                 defect this test exists for"
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+    };
+    let send = |port: u16, body: &'static str| async move {
+        let (status, response) = post(port, "/api/world/interventions", body).await;
+        assert_eq!(status, 202, "{response}");
+        serde_json::from_str::<serde_json::Value>(body_of(&response)).unwrap()["command"]
+            .as_u64()
+            .unwrap()
+    };
+    let tick = |port: u16| async move {
+        let (_, body) = get(port, "/api/world").await;
+        serde_json::from_str::<serde_json::Value>(body_of(&body)).unwrap()["clock"]["tick"]
+            .as_u64()
+            .expect("a tick")
+    };
+
+    let id = send(port, r#""Pause""#).await;
+    assert_eq!(settled(port, id).await["state"], "intervened");
+
+    // A creation queued while paused lands at the paused tick, rather than
+    // waiting in an inbox nobody is reading.
+    let spawn = r#"{"SpawnHuman":{"template_id":"male","location":{"latitude":-41.03,"longitude":173.56,"altitude":null},
+        "profile":{"name":"Tama","birth_timestamp":"1990-01-02T03:04:05Z","birth_latitude":-41.0,
+        "birth_longitude":174.0,"age_years":35.0,"height_cm":178.0,"build":"average",
+        "hair_color":"black","eye_color":"brown","skin_tone":"olive"}}}"#;
+    let id = send(port, spawn).await;
+    let outcome = settled(port, id).await;
+    assert_eq!(outcome["state"], "intervened", "{outcome}");
+
+    // And resuming through the queue works, which is the whole point.
+    let id = send(port, r#""Resume""#).await;
+    assert_eq!(settled(port, id).await["state"], "intervened");
+    let before = tick(port).await;
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    while tick(port).await == before {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the island did not resume"
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+
+    // `Step` advances exactly that many and then holds.
+    let id = send(port, r#"{"Step":{"ticks":3}}"#).await;
+    let outcome = settled(port, id).await;
+    assert_eq!(outcome["state"], "intervened", "{outcome}");
+    let at = outcome["tick"].as_u64().expect("a tick");
+    // Let the budget be paid, then check it stays put.
+    tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+    let settled_at = tick(port).await;
+    assert_eq!(
+        settled_at,
+        at + 3,
+        "a 3-step from {at} should settle at {}",
+        at + 3
+    );
+    tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+    assert_eq!(
+        tick(port).await,
+        settled_at,
+        "it should hold after stepping"
+    );
+
+    world.stop();
+    server.abort();
+}

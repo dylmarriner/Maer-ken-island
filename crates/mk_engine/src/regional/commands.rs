@@ -11,12 +11,24 @@
 use serde::{Deserialize, Serialize};
 
 use super::create_human::{CreateHumanError, IslandCreateHuman};
+use super::interventions::{IslandApplied, IslandInterventionError};
 
 /// Something asked of the island from outside.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum IslandCommand {
     /// Put a new person into the world.
     CreateHuman(Box<IslandCreateHuman>),
+    /// An operator intervention, in upstream's own vocabulary.
+    ///
+    /// Boxed because an `InterventionAction` is much the largest variant
+    /// and every command would otherwise carry its size.
+    ///
+    /// The action is upstream's type rather than an island translation of
+    /// it, so a log records what was actually asked for. Which of them the
+    /// island can honour is
+    /// [`regional::interventions::refusal`](super::interventions::refusal)'s
+    /// business, and a refused action never reaches the log.
+    Intervention(Box<mk_interventions::InterventionAction>),
     /// Change how the island is being run, without changing the world.
     Control(ControlCommand),
 }
@@ -47,12 +59,15 @@ pub enum ControlCommand {
 pub enum CommandError {
     /// The island refused the creation, with a reason per problem.
     Create(CreateHumanError),
+    /// The island refused the intervention, or has no meaning for it.
+    Intervention(IslandInterventionError),
 }
 
 impl std::fmt::Display for CommandError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Create(e) => write!(f, "{e}"),
+            Self::Intervention(e) => write!(f, "{e}"),
         }
     }
 }
@@ -63,6 +78,9 @@ impl std::error::Error for CommandError {}
 #[derive(Debug, Clone)]
 pub enum Applied {
     Created(super::create_human::CreatedIslander),
+    /// An intervention that the island carried out, or a directive for the
+    /// host to carry out.
+    Intervened(IslandApplied),
     /// A control command: recorded, and nothing in the world moved.
     Noted,
 }

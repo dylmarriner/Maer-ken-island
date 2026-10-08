@@ -218,10 +218,80 @@ than at the end, because a log that only existed in memory would be lost by the 
 for. `island run --log` does the same, and `island replay --scenario --log [--until]` runs one
 again.
 
-**Not built:** `IslandCommand::Intervention`. Upstream's `InterventionAction` executor adapted to
-the island is its own piece of work, and the `NotSupportedOnIsland` list it needs belongs with
-it. Nothing here pretends otherwise: the variant does not exist rather than existing and
-refusing.
+**`IslandCommand::Intervention` built (2026-10-08).** `regional::interventions` is upstream's
+`InterventionAction` executor adapted to `IslandLife`: `intervene` validates with upstream's own
+`validate_intervention`, then applies or refuses with `NotSupportedOnIsland { action, reason }`.
+The command carries upstream's action type rather than a translation of it, so a log records
+what was actually asked for, and an intervened-in run replays to the same digest
+(`a_run_somebody_intervened_in_replays_to_the_same_island`).
+
+Applied: `Pause`/`Resume`/`Step` (directives), `ModifyClimate` (all four parameters, with the
+heat booked from `OperatorIntervention` as upstream books it), `InjectBiomass { Producers }`,
+`InjectResource { Water }`, `SpawnHuman`, `RemoveHuman`. Refused, each
+naming what is missing: `SculptTerrain`/`SmoothTerrain` (the terrain is canon and hashed into
+the digest), the three animal `InjectBiomass` types (no species at island scale), the four
+non-water `InjectResource` types (the island's stores are named materials), `InjectEnergy` (the
+island's energy is the estate's plant, not a field), `TriggerDisturbance` (no disturbance
+system), `ModifyScenario` (a different scenario type, digest-checked),
+`Scrub`/`Branch`/`Fork` (no branch registry), and `ConstructStructure`. The table is in `UPSTREAM.md` and
+`every_action_is_supported_or_refused_by_name` walks every variant to keep the two in step.
+
+Two island differences inside the actions that are applied, both of which would have been
+defects if left as upstream has them. A `Location` off the domain is **refused** rather than
+clamped — upstream's planet has a cell for every coordinate, and clamping here would move an
+intervention aimed at the open sea onto the nearest coast. And `RemoveHuman` touches four places
+where upstream touches one: the registry, the estate position table, the body in the material
+ledger (out through the boundary, because a removal is not a death), and the two per-person
+accumulators, which are hashed — a ghost in any of them makes two islands that agree about who
+is alive disagree about their digest.
+
+`ConstructStructure` is the one that was built, measured, and then withdrawn. The island's
+economy is upstream's `ResourceEconomyState` and its recipes are the same, so it worked — but
+upstream's buildability gate allows an **absolute** 2 m of relief between a cell and each of its
+four neighbours (`physics::MAX_CLIMB_HEIGHT_M`, whose own comment says the threshold "may need
+tuning against Maer-Ken's actual elevation scale"). On a planetary grid that is nearly flat
+ground; on the island's 2 km cells it is a gradient under 0.1%. Driven against the real island
+it refused cell (474, 544) — the estate's own cell, where the founders' house already stands.
+An action that is offered and then turns down the ground people live on is worse than one that
+says it is not ready, so it is refused with that reason. An island rule wants a gradient rather
+than a height difference, and retuning a constant the planetary world also builds against is not
+something to do quietly in passing.
+
+Served at `POST /api/world/interventions`, 202 and a command id like a creation.
+
+**Three more defects, all found by running it rather than by testing it.** The sim loop's pause
+gate came *before* the command queue was drained, so a paused island was deaf: a `Resume` queued
+as an intervention sat in the inbox behind the pause it was meant to lift, and so did any
+creation made while paused. The island paused on request and would not come back. Applying a
+command does not advance the clock, so the queue is now drained first, paused or not, and a
+paused island publishes when something lands so that somebody created during a pause is visible
+rather than waiting for the resume. `Step` was in both vocabularies — upstream's directive and
+`ControlCommand::Step(u64)` — with nothing behind it; `Pacing` now carries a step budget the
+loop pays down one step per iteration, and `POST /api/control {"command":"step","ticks":n}`
+drives it. And `cells_in_region` took `radius_km` at its word: `validate_region` asks only that
+it be finite and positive, so `radius_km: 1e30` was a *valid* action and a walk over roughly
+`(2 x isize::MAX + 1)^2` offsets on the thread that owns the island — one accepted request and
+the world stops. The reach is clamped to the grid; a region larger than the island is the island.
+
+Measured on the real island (199,997 stems, the full scenario), not on a test fixture:
+
+    paused   : ticks 1075 -> 1075 across 3 real seconds
+    created while paused: 'tama' at cell (474, 544), tick 1075, and visible on the paused island
+    resumed  : 1077 -> 1132
+    step 5   : 1134 -> 1139, still 1139 three seconds later
+    step 3   : 1139 -> 1142, still 1142 two seconds later
+    refusals : SculptTerrain, TriggerDisturbance, InjectResource{Minerals},
+               InjectBiomass{Apex}, and 51.5, -0.12 as "not on this island"
+    applied  : 500 kg of water; Temperature 300 K over 37 coarse cells with 5.471e18 J booked
+               from outside; 200,000 kgC of producer carbon over 55 land cells
+
+**Two defects in Task 6's own code, found by writing this.** `IslandDomain::lat_lon_at_m` answers
+in **radians**, because its other caller does trigonometry with the result; `create_human`
+passed them straight through into a birthplace, which is degrees. Somebody born on an island at
+41° S was recorded as born at 0.716° S. And the estate path added the estate cell's origin to a
+layout rectangle that was already in absolute domain metres, putting a bedroom about 950 km
+north of the island. Nothing on the island reads a birthplace back, so every test passed both
+times; `somebody_born_here_is_born_at_this_islands_coordinates` is the one that would not have.
 
 
 ### Task 5: Phase-4 acceptance and headless runner

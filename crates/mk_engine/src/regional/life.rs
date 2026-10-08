@@ -474,7 +474,10 @@ impl IslandLife {
 
     /// Run `f` as one audited household step: the ledger's net flows must
     /// equal the change in each material stock.
-    fn audited(&mut self, f: impl FnOnce(&mut Self, &mut Ledger)) -> Result<(), IslandLifeError> {
+    pub(super) fn audited(
+        &mut self,
+        f: impl FnOnce(&mut Self, &mut Ledger),
+    ) -> Result<(), IslandLifeError> {
         let stocks = |m: &MaterialLedger| {
             [
                 m.stock_of(Reservoir::MaterialCarbon),
@@ -504,6 +507,17 @@ impl IslandLife {
         }
         self.audits_closed += 1;
         Ok(())
+    }
+
+    /// Drop every per-person accumulator for `id`.
+    ///
+    /// The two of them are hashed into the state digest, so a person who
+    /// has left the world has to leave these too or two islands that agree
+    /// about who is alive will disagree about their digest. `advance`
+    /// already does this for the dead; a removal needs the same.
+    pub(super) fn forget_accumulators(&mut self, id: &str) {
+        self.respired_since_meal.remove(id);
+        self.sleep_seconds.remove(id);
     }
 
     /// Every living human, with the body the labour model costs work against

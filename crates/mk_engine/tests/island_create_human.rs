@@ -256,3 +256,43 @@ fn an_age_nobody_has_reached_is_refused_but_an_old_age_is_not() {
         other => panic!("an impossible age was accepted: {other:?}"),
     }
 }
+
+#[test]
+fn somebody_born_here_is_born_at_this_islands_coordinates() {
+    // `IslandDomain::lat_lon_at_m` answers in radians, because its other
+    // caller does trigonometry with the result. A birthplace is degrees.
+    // The first version of `create_human` passed the radians straight
+    // through, so somebody born on an island at 41° S was recorded as born
+    // at 0.716° S — and nothing on the island reads a birthplace back, so
+    // every test still passed. This is the one that would not have.
+    let mut life = island();
+    let (space, _) = a_space(&life);
+    let mut request = somebody("Tane", CreateLocation::EstateSpace(space));
+    request.birthplace_here = true;
+    let made = life.create_human(request).expect("the request is good");
+
+    let reference = life.domain.profile().reference_latitude_deg;
+    assert!(
+        (made.birth_latitude - reference).abs() < 1.0,
+        "born at {:.4}° but the island is at {reference:.4}°",
+        made.birth_latitude
+    );
+    assert!(
+        (-90.0..=90.0).contains(&made.birth_latitude)
+            && (-180.0..=180.0).contains(&made.birth_longitude),
+        "a birthplace has to be a place on a planet: {:.4}, {:.4}",
+        made.birth_latitude,
+        made.birth_longitude
+    );
+
+    // And on a cell, not only on the estate.
+    let (row, col) = life.placed.location;
+    let mut request = somebody("Aroha", CreateLocation::IslandCell { row, col });
+    request.birthplace_here = true;
+    let made = life.create_human(request).expect("the request is good");
+    assert!(
+        (made.birth_latitude - reference).abs() < 1.0,
+        "born at {:.4}° but the island is at {reference:.4}°",
+        made.birth_latitude
+    );
+}

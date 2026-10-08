@@ -264,7 +264,7 @@ impl IslandLife {
                 let position_m = ((rect.x0 + rect.x1) / 2.0, (rect.y0 + rect.y1) / 2.0);
                 Ok(Placement {
                     cell: self.placed.location,
-                    lat_lon: self.patch_lat_lon(position_m),
+                    lat_lon: lat_lon_deg(&self.domain, position_m.0, position_m.1),
                     grid: super::humans::medium_cell_of(&self.domain, position_m),
                     estate: Some(super::humans::EstatePosition {
                         space: Space::Inside(*id),
@@ -290,7 +290,7 @@ impl IslandLife {
                 let (x, y) = ((*col as f64 + 0.5) * size, (*row as f64 + 0.5) * size);
                 Ok(Placement {
                     cell: (*row, *col),
-                    lat_lon: self.domain.lat_lon_at_m(x, y),
+                    lat_lon: lat_lon_deg(&self.domain, x, y),
                     grid: crate::agents::GridPosition::new(*row as i32, *col as i32),
                     // Only the estate's own patch has metre positions.
                     estate: None,
@@ -299,21 +299,32 @@ impl IslandLife {
             }
         }
     }
+}
 
-    /// Where a point on the estate patch is on the planet.
-    fn patch_lat_lon(&self, position_m: (f64, f64)) -> (f64, f64) {
-        let size = self.domain.cell_size_m(DomainLevel::Medium);
-        let (row, col) = self.placed.location;
-        self.domain.lat_lon_at_m(
-            col as f64 * size + position_m.0,
-            row as f64 * size + position_m.1,
-        )
-    }
+/// A point on the island as degrees of latitude and longitude.
+///
+/// `x_m` and `y_m` are measured from the domain's south-west corner, which
+/// is the frame the estate layout's rectangles are already in — a second
+/// thing the first version of this file got wrong, by adding the estate
+/// cell's own origin to a coordinate that already included it and putting
+/// a bedroom roughly 950 km north of the island.
+///
+/// `IslandDomain::lat_lon_at_m` answers in **radians** — its other caller,
+/// the synoptic model, wants them that way for trigonometry. A birthplace
+/// is degrees, and the first version of this file passed the radians
+/// straight through, so somebody born on an island at 41° S was recorded as
+/// born at 0.716° S — the equator rather than the roaring forties, in a
+/// field nothing on the island reads back, which is why it survived a test
+/// suite that checked where people were standing.
+fn lat_lon_deg(domain: &mk_island::IslandDomain, x_m: f64, y_m: f64) -> (f64, f64) {
+    let (latitude, longitude) = domain.lat_lon_at_m(x_m, y_m);
+    (latitude.to_degrees(), longitude.to_degrees())
 }
 
 /// A validated location.
 struct Placement {
     cell: (usize, usize),
+    /// Degrees, as a birthplace is written.
     lat_lon: (f64, f64),
     /// Where the human runtime itself places them.
     grid: crate::agents::GridPosition,

@@ -220,6 +220,14 @@ impl IslandLife {
                 self.replay_log.record(self.tick, command);
                 Ok(Applied::Created(made))
             }
+            IslandCommand::Intervention(action) => {
+                // Applied before it is recorded, because an intervention
+                // the island refuses never happened and must not be in a
+                // log that claims to reproduce the run.
+                let outcome = self.intervene(action).map_err(CommandError::Intervention)?;
+                self.replay_log.record(self.tick, command);
+                Ok(Applied::Intervened(outcome))
+            }
             IslandCommand::Control(control) => {
                 // Nothing in the world moves. It is recorded because a
                 // replay should be able to say what the operator did.

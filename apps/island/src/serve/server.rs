@@ -349,12 +349,19 @@ impl WorldCreateRequest {
     }
 }
 
-/// Running the island: pause it, resume it, or change its speed.
+/// Running the island: pause it, resume it, step it, or change its speed.
 #[derive(Debug, serde::Deserialize)]
 #[serde(tag = "command", rename_all = "snake_case")]
 enum ControlRequest {
     Pause,
     Resume,
+    /// Advance exactly this many steps and then hold. `ControlCommand::Step`
+    /// has been in the island's vocabulary since Task 4 with nothing behind
+    /// it; this is the loop's step budget, which is also what an upstream
+    /// `InterventionAction::Step` now drives.
+    Step {
+        ticks: u64,
+    },
     /// `real`, `max`, or a multiplier like `60`.
     SetSpeed {
         speed: String,
@@ -372,6 +379,10 @@ impl ControlRequest {
             Self::Resume => {
                 world.set_paused(false);
                 Ok(ControlCommand::Resume)
+            }
+            Self::Step { ticks } => {
+                world.step_for(*ticks);
+                Ok(ControlCommand::Step(*ticks))
             }
             Self::SetSpeed { speed } => {
                 let parsed: SimSpeed = speed.parse()?;
@@ -612,6 +623,76 @@ pub fn routes_with_world(
             },
         );
 
+    // An operator intervention, in upstream's own vocabulary. The body is
+    // a serialized `InterventionAction`, so what reaches the island is
+    // what upstream's executor would have been given — a dashboard is not
+    // a second vocabulary for the same thing.
+    //
+    // Answered 202 and a command id, like a creation and for the same
+    // reason: it applies on the island's own thread between steps. The
+    // refusals the island makes for actions with no island meaning come
+    // back through that poll, naming the action and why, rather than being
+    // pre-screened here against a list that would then have to be kept in
+    // step with the engine's.
+    let post_world_intervention = warp::path!("api" / "world" / "interventions")
+        .and(warp::post())
+        .and(warp::header::optional::<String>("authorization"))
+        .and(warp::body::content_length_limit(MAX_CREATE_BODY))
+        .and(warp::body::bytes())
+        .and(with(world.clone()))
+        .and(with(auth.clone()))
+        .map(
+            |authorization: Option<String>,
+             body: bytes::Bytes,
+             world: Option<SimHandle>,
+             auth: ControlAuth| {
+                let Some(world) = world else {
+                    return json(
+                        StatusCode::CONFLICT,
+                        &serde_json::json!({ "errors": ["No island is running, so there is nothing to intervene in. Start the server with --scenario."] }),
+                    );
+                };
+                if !auth.permits(authorization.as_deref()) {
+                    return json(
+                        StatusCode::UNAUTHORIZED,
+                        &serde_json::json!({
+                            "errors": [match auth.mode() {
+                                "token" => "That control token was not accepted.",
+                                _ => "This dashboard is not allowed to intervene in the world.",
+                            }],
+                            "writes": auth.describe(),
+                            "writes_mode": auth.mode(),
+                        }),
+                    );
+                }
+                let action: mk_interventions::InterventionAction =
+                    match serde_json::from_slice(&body) {
+                        Ok(action) => action,
+                        Err(err) => {
+                            return json(
+                                StatusCode::BAD_REQUEST,
+                                &serde_json::json!({ "errors": [format!(
+                                    "That request body is not an intervention: {err}."
+                                )] }),
+                            )
+                        }
+                    };
+                match world.send(IslandCommand::Intervention(Box::new(action))) {
+                    Some(id) => json(
+                        StatusCode::ACCEPTED,
+                        &serde_json::json!({
+                            "command": id,
+                            "poll": format!("/api/world/commands/{id}"),
+                        }),
+                    ),
+                    None => json(
+                        StatusCode::CONFLICT,
+                        &serde_json::json!({ "errors": ["The island has stopped, so nothing more will be applied."] }),
+                    ),
+                }
+            },
+        );
+
     // The world's roster, and one islander in full. The same per-person
     // sections the stored roster uses, built from the world's own people —
     // so a dashboard with an island running has one set of people rather
@@ -797,13 +878,14 @@ pub fn routes_with_world(
             }
             json(
                 StatusCode::NOT_FOUND,
-                &serde_json::json!({ "errors": ["No such endpoint. The dashboard serves /api/status, /api/world, /api/world/<estate|vegetation|materials|clock>, /api/world/humans, /api/world/humans/<agent-id>, /api/world/commands/<id>, /api/control, /api/health, /api/humans, /api/humans/<agent-id>, /api/activity and /api/creator/options."] }),
+                &serde_json::json!({ "errors": ["No such endpoint. The dashboard serves /api/status, /api/world, /api/world/<estate|vegetation|materials|clock>, /api/world/humans, /api/world/humans/<agent-id>, /api/world/interventions, /api/world/commands/<id>, /api/control, /api/health, /api/humans, /api/humans/<agent-id>, /api/activity and /api/creator/options."] }),
             )
         });
 
     let api = get_status
         .or(get_world)
         .or(post_world_human)
+        .or(post_world_intervention)
         .or(get_world_human)
         .or(get_world_humans)
         .or(get_command)

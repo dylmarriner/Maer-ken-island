@@ -22,6 +22,7 @@ use std::time::{Duration, Instant};
 
 use mk_engine::regional::commands::{Applied, CommandError};
 use mk_engine::regional::create_human::{CreateHumanError, CreatedIslander};
+use mk_engine::regional::interventions::{IslandApplied, IslandDirective};
 use mk_engine::regional::life::IslandLife;
 
 use super::projection::{Digest, IslandProjection};
@@ -54,6 +55,13 @@ pub enum Outcome {
     },
     Refused {
         problems: Vec<String>,
+    },
+    /// An intervention the island carried out, or a directive it carried
+    /// out on the loop.
+    Intervened {
+        summary: String,
+        touched: usize,
+        tick: u64,
     },
     /// A control command: recorded, and nothing in the world moved.
     Noted,
@@ -128,6 +136,11 @@ impl std::str::FromStr for SimSpeed {
 pub struct Pacing {
     pub speed: SimSpeed,
     pub paused: bool,
+    /// Steps a `Step` request still owes. While it is non-zero the island
+    /// advances even though it is paused, and holds again when it reaches
+    /// zero — which is what "advance exactly n and stop" means on a loop
+    /// that is otherwise standing still.
+    pub steps_owed: u64,
 }
 
 /// How many command outcomes are remembered.
@@ -184,7 +197,19 @@ impl SimHandle {
     /// Stop stepping, or start again. The world does not move while paused
     /// and is exactly as it was when it resumes.
     pub fn set_paused(&self, paused: bool) {
-        self.locked_pacing().paused = paused;
+        let mut pacing = self.locked_pacing();
+        pacing.paused = paused;
+        // Resuming cancels a half-finished `Step`: somebody who asks the
+        // island to run has asked for more than the three steps they had
+        // left owing, and pausing cancels it because a pause is a stop.
+        pacing.steps_owed = 0;
+    }
+
+    /// Advance exactly `ticks` more steps, then hold.
+    pub fn step_for(&self, ticks: u64) {
+        let mut pacing = self.locked_pacing();
+        pacing.paused = true;
+        pacing.steps_owed = ticks;
     }
 
     fn locked_pacing(&self) -> std::sync::MutexGuard<'_, Pacing> {
@@ -296,6 +321,7 @@ pub fn spawn_logging(life: IslandLife, speed: SimSpeed, log: Option<PathBuf>) ->
         pacing: Arc::new(Mutex::new(Pacing {
             speed,
             paused: false,
+            steps_owed: 0,
         })),
         commands,
         outcomes: Arc::new(Mutex::new(BTreeMap::new())),
@@ -350,38 +376,41 @@ fn run(mut it: Loop) {
     let mut recent: std::collections::VecDeque<(Instant, u64)> = std::collections::VecDeque::new();
 
     while !it.stop.load(Ordering::Relaxed) {
-        // Read fresh each iteration: an operator may have changed the speed
-        // or paused since the last one.
-        let pacing = *match it.pacing.lock() {
-            Ok(guard) => guard,
-            Err(poisoned) => poisoned.into_inner(),
-        };
-        if pacing.paused {
-            // Nothing moves, and the projection is left exactly as it was,
-            // which is the truth: the island is where it was paused. The
-            // speed window is cleared so that resuming does not report a
-            // speed measured across the pause.
-            recent.clear();
-            std::thread::sleep(Duration::from_millis(50));
-            continue;
-        }
         // Timed around the whole iteration, not just the step. Publishing
         // and applying commands are real work the island has to do before
         // it can step again, and a readout that left them out would have
         // claimed the island was keeping up while it ran much slower.
         let started = Instant::now();
 
-        // Commands first: a creation applies at the tick it was queued for,
-        // before the step that then moves that person along with everybody
-        // else.
+        // Commands first, and *before* the pause gate. A creation applies
+        // at the tick it was queued for, before the step that then moves
+        // that person along with everybody else — and applying a command
+        // does not advance the clock, so a paused island can still be
+        // asked things.
+        //
+        // The gate used to come first. That meant a paused island drained
+        // nothing: a `Resume` queued as an intervention sat in the inbox
+        // behind the pause it was meant to lift, and so did any creation
+        // made while paused. Running it is what showed it — the island
+        // paused on request and then would not come back.
         let mut created_somebody = false;
         let mut applied_anything = false;
         while let Ok(Queued { id, command }) = it.inbox.try_recv() {
-            let outcome = apply(&mut it.life, command);
+            let outcome = apply(&mut it.life, &it.pacing, command);
             created_somebody |= matches!(outcome, Outcome::Created { .. });
             applied_anything |= !matches!(outcome, Outcome::Refused { .. });
             record(&it.outcomes, id, outcome);
         }
+        // Read after the drain, not before: an operator may have changed
+        // the speed or paused since the last iteration, and one of the
+        // commands just applied may itself have been a pause, a resume or
+        // a step. This iteration should honour that rather than a reading
+        // taken before it landed.
+        let pacing = *match it.pacing.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        let stepping = !pacing.paused || pacing.steps_owed > 0;
         if applied_anything {
             if let Some(path) = &it.log {
                 // A failure here loses the record, not the world: say so
@@ -402,6 +431,32 @@ fn run(mut it: Loop) {
             it.records_at_tick = it.life.tick;
         }
 
+        if !stepping {
+            // Nothing moves, and the clock is left exactly where it was,
+            // which is the truth: the island is where it was paused. The
+            // speed window is cleared so that resuming does not report a
+            // speed measured across the pause.
+            recent.clear();
+            if applied_anything {
+                // Something did change — somebody was created, or an
+                // intervention landed — so the page has to be told, even
+                // though the clock did not move. A paused island that
+                // quietly held a stale projection would show an operator
+                // a world without the person they just made.
+                publish(
+                    &it.projection,
+                    &it.life,
+                    &pacing.speed,
+                    None,
+                    it.digest.clone(),
+                    Arc::clone(&it.records),
+                    it.records_at_tick,
+                );
+            }
+            std::thread::sleep(Duration::from_millis(50));
+            continue;
+        }
+
         if let Err(e) = it.life.advance(it.step_seconds) {
             // The island cannot continue — an audit that did not close, a
             // step that failed. Publishing a stale projection forever would
@@ -413,6 +468,17 @@ fn run(mut it: Loop) {
                 slot.running = false;
             }
             break;
+        }
+
+        if pacing.steps_owed > 0 {
+            // One of the steps this iteration owed has been taken. When
+            // the last is paid the island is simply paused, which is what
+            // `Step` asks for: advance exactly n, then hold.
+            let mut owed = match it.pacing.lock() {
+                Ok(guard) => guard,
+                Err(poisoned) => poisoned.into_inner(),
+            };
+            owed.steps_owed = owed.steps_owed.saturating_sub(1);
         }
 
         if it.life.tick.is_multiple_of(DIGEST_EVERY) {
@@ -463,7 +529,12 @@ fn run(mut it: Loop) {
 /// Through `apply_command`, so the island records it: a person created from
 /// the dashboard is in the replay log beside one created from the command
 /// line, and a dashboard session replays like any other run.
-fn apply(life: &mut IslandLife, command: IslandCommand) -> Outcome {
+/// `pacing` is here because an intervention can be a run-loop control.
+/// Upstream's executor hands `Pause` back as a directive for the host to
+/// carry out, and this is the host: a directive that were only reported
+/// and not acted on would be a dashboard that accepted a pause and kept
+/// running.
+fn apply(life: &mut IslandLife, pacing: &Mutex<Pacing>, command: IslandCommand) -> Outcome {
     match life.apply_command(command) {
         Ok(Applied::Created(CreatedIslander {
             agent_id,
@@ -478,6 +549,43 @@ fn apply(life: &mut IslandLife, command: IslandCommand) -> Outcome {
             tick: life.tick,
             storage_error,
         },
+        Ok(Applied::Intervened(IslandApplied::Mutated { summary, touched })) => {
+            Outcome::Intervened {
+                summary,
+                touched,
+                tick: life.tick,
+            }
+        }
+        Ok(Applied::Intervened(IslandApplied::Control { directive })) => {
+            let summary = match directive {
+                IslandDirective::Pause => {
+                    let mut pacing = pacing.lock().unwrap_or_else(|e| e.into_inner());
+                    pacing.paused = true;
+                    pacing.steps_owed = 0;
+                    "paused".to_string()
+                }
+                IslandDirective::Resume => {
+                    let mut pacing = pacing.lock().unwrap_or_else(|e| e.into_inner());
+                    pacing.paused = false;
+                    pacing.steps_owed = 0;
+                    "resumed".to_string()
+                }
+                // Upstream's `Step` advances exactly `ticks` and then
+                // pauses, and so does this: the loop pays the budget down
+                // one step per iteration and holds when it reaches zero.
+                IslandDirective::Step { ticks } => {
+                    let mut pacing = pacing.lock().unwrap_or_else(|e| e.into_inner());
+                    pacing.paused = true;
+                    pacing.steps_owed = ticks;
+                    format!("stepping {ticks} and then holding")
+                }
+            };
+            Outcome::Intervened {
+                summary,
+                touched: 0,
+                tick: life.tick,
+            }
+        }
         Ok(Applied::Noted) => Outcome::Noted,
         Err(CommandError::Create(CreateHumanError::Invalid(problems))) => {
             Outcome::Refused { problems }
