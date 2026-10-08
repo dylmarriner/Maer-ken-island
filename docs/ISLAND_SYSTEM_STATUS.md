@@ -53,9 +53,26 @@ The combined island (without persistence, the scheduler, a larger population, th
 incremental compilation on). On a machine with a small disk, `CARGO_INCREMENTAL=0` and
 `CARGO_PROFILE_DEV_DEBUG=0` keep it to a fraction of that.
 
-The last full-workspace run was **1,222 passing, 0 failing, 20 ignored, across 86 binaries**
-(2026-10-08, commit `69a7fd2`), with `cargo fmt --all -- --check` and
-`cargo clippy --workspace --all-targets -- -D warnings` clean. CI has not run any of it: every
+The last full-workspace run was **1,223 passing, 0 failing, 21 ignored, across 87 binaries**
+(2026-10-08, commit `3ae4013`), with `cargo fmt --all -- --check` and
+`cargo clippy --workspace --all-targets -- -D warnings` clean.
+
+The **slow tier passes too** — `cargo test --workspace --release -- --ignored slow_`, 10 tests,
+0 failures, on `a198ed5`: a simulated week on the island against the reference packs (64 s), a
+simulated year of weather, ten thousand years of seismicity, a full-size island through a file,
+the human runtime to five thousand people, and the Phase 4 cost benchmark.
+
+One caveat worth knowing before it bites somebody.
+`slow_the_human_runtime_stays_small_and_roughly_linear_to_five_thousand_people` asserts
+`cost(5000) <= 4 x cost(200)` — a ratio against the smallest and noisiest sample. Two hundred
+humans fit in cache and five thousand do not, so per-head cost genuinely grows and the 4x is the
+tolerance for that. On a container where the 200-human run came in at 17 us instead of its usual
+23-25, the bar dropped to 68.6 us and a perfectly ordinary 77 us failed it. Three reruns on the
+same commit passed (69, 75, 72 us) and `main` measures the same ~70 us at five thousand, so it is
+the assertion's denominator rather than the code. Comparing against a warmed baseline rather than
+the first sample would settle it.
+
+CI has not run any of it: every
 job since 2026-10-06 completes in 1-4 seconds with `runner_id: 0`, an empty `runner_name` and no
 `steps` array — no runner is ever assigned, so nothing executes to pass or fail, and `main` is
 red the same way on a commit that passed three times before. The repository is private, so
