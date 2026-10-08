@@ -79,12 +79,13 @@ Measured on a 16 GB development machine, release build (`benchmarks/`):
 |---|---|---|
 | Two founders, one simulated week | about 310 MB | 49 s |
 | Two founders, one simulated year | about 400 MB | about 32 min |
-| 1,000 people | about 600 MB | 115 ms per simulated minute |
-| 5,000 people | about 1.0 GB | 0.5 s per simulated minute |
+| 1,000 people, first hours | about 600 MB | 115 ms per simulated minute |
+| 5,000 people, first hours | about 1.0 GB | 0.5 s per simulated minute |
+| People, settled (after about a month) | about 6.7 MB each | so roughly 1,000 people on 8 GB and 2,000 on 16 GB |
 | Snapshot file, two people | 0.05 GB (compressed) | save about 2 s, load about 2 s |
 | Snapshot file, 5,000 people | about 0.9 GB measured before compression, so expect roughly 0.13 GB | save 30 s, load 10 s before compression |
 
-An 8 GB machine is comfortable for the founders and for thousands of people. Compiling is the heavy part: `rustc` can use 4 GB or more, so on a small or busy machine build with `cargo build -j 1`, and keep large files out of `/tmp` where it is RAM-backed.
+An 8 GB machine is comfortable for the founders and for hundreds of people; thousands fit only for short runs (see the settled figure above). Compiling is the heavy part: `rustc` can use 4 GB or more, so on a small or busy machine build with `cargo build -j 1`, and keep large files out of `/tmp` where it is RAM-backed.
 
 Five simulated years of the two founders ran in a flat 250-320 MB and ended with five people alive (three children), (that run predates booking each person's meals and drinks at the cell where they stand).
 

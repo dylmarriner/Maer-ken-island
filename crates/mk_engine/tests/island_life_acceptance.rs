@@ -20,7 +20,7 @@ const DAY: u64 = 86_400;
 /// scenario (`fixtures/island/default_scenario.json`), identical across
 /// processes. Changing any Phase 1-3 behaviour changes it: update it
 /// deliberately, in the commit that changes the behaviour.
-const WEEK_DIGEST: &str = "0e2da25fa5946909eae62c2ed06e06334c0ff219b8b9305e2d11beb24786f98e";
+const WEEK_DIGEST: &str = "4ce81ba13aefdfc89fcea8ff4d4d85d840352bbfde91fb38fb8ce9e26cae10d4";
 
 fn repo(path: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))

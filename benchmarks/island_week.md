@@ -22,7 +22,7 @@ Cadences: humans 60 s, physics hourly, ecology and households 6-hourly.
 | Stock audits (material carbon, body carbon, water) | 196, all closed |
 | Founders | both alive, both in the estate |
 | Food and water shortfalls | 0 |
-| State digest, two separate processes | identical (`0e2da25f...f98e`), re-pinned after the command state joined the digest |
+| State digest, two separate processes | identical (`4ce81ba1...10d4`), re-pinned after the command state joined the digest |
 
 Not in this number: Phases 4, 4b and 5 (persistence, replay, the app, a larger population, the
 refinery and town). The population is two humans; `benchmarks/humans_population.md` measures the
@@ -110,7 +110,7 @@ the cell they stand on (else the nearest cell around it that has any), and drink
 wet cell within two cells of where they stand (near the estate also its stream, or the wet cell
 beside it); someone with nothing in reach is a counted shortfall. `tests/island_foraging.rs`: a
 traveller placed 40+ cells from the estate has their meal taken from the plants around them, and
-finds water. The week digest changed for that reason, to `0e2da25f...f98e` (two separate
+finds water. The week digest changed for that reason, to `4ce81ba1...10d4` (two separate
 processes agree); the founders still have no shortfalls. The five-year run above was **not**
 repeated on the new code, so its end state (where the people are, who is alive) describes the
 earlier bookkeeping.

@@ -83,3 +83,28 @@ the people step is the main cost (about 86 ms per step, 5.2 s of 12 s) and is si
 hourly human-store firing for a 1,000-person shard took about 5.3 s on this disk. Parallelising the
 people step would be the first lever if a larger population ever needs to run faster than the
 measured 117x real time at 5,000 people; it would have to keep results identical at any thread count.
+
+## Correction: long-run memory per person (found 2026-10-09)
+
+The populated-island figures above (1,002 people 594 MB; 5,002 people 1,017 MB) cover **two to six
+simulated hours**. A person's record is small when fresh (about 0.06 MB as JSON) and was found to
+grow without limit: `reproduction_system.sexual_activities`, an audit log of every reproductive
+attempt, gained about 37 entries a day and reached 15,451 entries (5.7 MB) in 413 simulated days,
+about 5 MB per person per simulated year, with no ceiling (UPSTREAM.md #29). Those short runs could
+not show it, and neither could the founders-only runs (2 to 5 people: tens of MB over years). It is
+fixed: the log keeps its 128 most recent entries.
+
+Measured with a 26-person run (24 settlers plus the founders), a settler's full record at day 145:
+
+| | Fresh | After the first month | Day 145 | Day 413 |
+|---|---|---|---|---|
+| Unfixed | 0.06 MB | - | - | 7.0 MB (growing about 5 MB a year) |
+| Fixed | 0.06 MB | 1.67 MB | 1.67 MB (flat) | 1.68 MB at day 277 after the births, still flat (day 413 pending) |
+
+Process memory for the same 26 people: 401 MB fixed against 521 MB unfixed at day 145, and 398 MB against 591 MB at day 277 with 32 people (the
+unfixed run was growing; its reading then moved around as the allocator returned memory, so record
+size is the cleaner measure). Taking the fixed run's 401 MB less the roughly 226 MB of the world
+itself gives about 6.7 MB of process memory per person once their state has settled (the in-memory
+form is larger than the JSON record). **So the honest long-run capacity is on the order of 1,000 people on 8 GB and
+2,000 on 16 GB, not 5,000**; the 5,002-person figure is a short-run cost only. A long run at that
+size has not been done.
