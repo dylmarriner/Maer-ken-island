@@ -133,6 +133,24 @@ async fn a_dashboard_with_a_world_serves_the_island_as_it_steps() {
     // The stems are not what this is testing, and 200,000 of them make the
     // bootstrap slow enough to dominate the test.
     scenario.estate_patch.tree_cap = 50;
+    // A small island: 240 x 192 medium cells against the default's
+    // 1,200 x 960, 25x fewer. The grids are what load this suite, not the
+    // trees -- `tree_cap` shrinks the vegetation and leaves two
+    // 1,152,000-cell grids to build on every bootstrap and hash on every
+    // digest, a dozen times over, on four cores.
+    //
+    // The seed changes with the profile because it has to. `IslandLife`
+    // validates the coastline it generates against the profile's shape
+    // rules, and the default scenario's seed makes a small island with
+    // "0 major headlands, need 3". Seed 16 is simply the first that does
+    // not: found by trying 0, 1, 2 ... through
+    // `RegionalPhysicalState::bootstrap`, which runs that check before the
+    // expensive spin-up, so bad seeds cost nothing. It took 17 tries and
+    // 1.3 seconds.
+    scenario.profile = mk_island::IslandProfile::test_small();
+    let mut small_seed = [0u8; 32];
+    small_seed[..4].copy_from_slice(&16u32.to_le_bytes());
+    scenario.seed = small_seed;
     let canon =
         Arc::new(mk_core::canon::CanonLocked::load(&repo("fixtures/island/canon.json")).unwrap());
     let life = mk_engine::regional::life::IslandLife::bootstrap(scenario, canon).unwrap();
@@ -378,6 +396,23 @@ async fn creating_in_a_world_that_is_not_running_is_refused() {
     server.abort();
 }
 
+/// Where the founders' estate stands, in degrees, read from the island
+/// rather than written down here.
+///
+/// These tests used to spell out `-41.03, 173.56`, which is land on the
+/// default island and sea on any other. Asking the island means the
+/// coordinates follow the profile and the seed instead of pinning the
+/// tests to one geography.
+async fn estate_degrees(port: u16) -> (f64, f64) {
+    let (status, response) = get(port, "/api/world").await;
+    assert_eq!(status, 200, "{response}");
+    let world: serde_json::Value = serde_json::from_str(body_of(&response)).unwrap();
+    let estate = &world["estate"];
+    (
+        estate["latitude"].as_f64().expect("an estate latitude"),
+        estate["longitude"].as_f64().expect("an estate longitude"),
+    )
+}
 /// A dashboard with a small island running on it, and its port.
 async fn a_running_dashboard() -> (
     island::serve::sim::SimHandle,
@@ -395,6 +430,24 @@ async fn a_running_dashboard() -> (
     let mut scenario =
         mk_island::IslandScenario::load(&repo("fixtures/island/default_scenario.json")).unwrap();
     scenario.estate_patch.tree_cap = 50;
+    // A small island: 240 x 192 medium cells against the default's
+    // 1,200 x 960, 25x fewer. The grids are what load this suite, not the
+    // trees -- `tree_cap` shrinks the vegetation and leaves two
+    // 1,152,000-cell grids to build on every bootstrap and hash on every
+    // digest, a dozen times over, on four cores.
+    //
+    // The seed changes with the profile because it has to. `IslandLife`
+    // validates the coastline it generates against the profile's shape
+    // rules, and the default scenario's seed makes a small island with
+    // "0 major headlands, need 3". Seed 16 is simply the first that does
+    // not: found by trying 0, 1, 2 ... through
+    // `RegionalPhysicalState::bootstrap`, which runs that check before the
+    // expensive spin-up, so bad seeds cost nothing. It took 17 tries and
+    // 1.3 seconds.
+    scenario.profile = mk_island::IslandProfile::test_small();
+    let mut small_seed = [0u8; 32];
+    small_seed[..4].copy_from_slice(&16u32.to_le_bytes());
+    scenario.seed = small_seed;
     let canon =
         Arc::new(mk_core::canon::CanonLocked::load(&repo("fixtures/island/canon.json")).unwrap());
     let life = mk_engine::regional::life::IslandLife::bootstrap(scenario, canon).unwrap();
@@ -672,6 +725,24 @@ async fn a_phase_0b_population_can_be_carried_into_the_world() {
     let mut scenario =
         mk_island::IslandScenario::load(&repo("fixtures/island/default_scenario.json")).unwrap();
     scenario.estate_patch.tree_cap = 50;
+    // A small island: 240 x 192 medium cells against the default's
+    // 1,200 x 960, 25x fewer. The grids are what load this suite, not the
+    // trees -- `tree_cap` shrinks the vegetation and leaves two
+    // 1,152,000-cell grids to build on every bootstrap and hash on every
+    // digest, a dozen times over, on four cores.
+    //
+    // The seed changes with the profile because it has to. `IslandLife`
+    // validates the coastline it generates against the profile's shape
+    // rules, and the default scenario's seed makes a small island with
+    // "0 major headlands, need 3". Seed 16 is simply the first that does
+    // not: found by trying 0, 1, 2 ... through
+    // `RegionalPhysicalState::bootstrap`, which runs that check before the
+    // expensive spin-up, so bad seeds cost nothing. It took 17 tries and
+    // 1.3 seconds.
+    scenario.profile = mk_island::IslandProfile::test_small();
+    let mut small_seed = [0u8; 32];
+    small_seed[..4].copy_from_slice(&16u32.to_le_bytes());
+    scenario.seed = small_seed;
     let canon =
         Arc::new(mk_core::canon::CanonLocked::load(&repo("fixtures/island/canon.json")).unwrap());
     let life = mk_engine::regional::life::IslandLife::bootstrap(scenario, canon).unwrap();
@@ -949,10 +1020,14 @@ async fn a_paused_island_still_hears_the_queue() {
 
     // A creation queued while paused lands at the paused tick, rather than
     // waiting in an inbox nobody is reading.
-    let spawn = r#"{"SpawnHuman":{"template_id":"male","location":{"latitude":-41.03,"longitude":173.56,"altitude":null},
-        "profile":{"name":"Tama","birth_timestamp":"1990-01-02T03:04:05Z","birth_latitude":-41.0,
-        "birth_longitude":174.0,"age_years":35.0,"height_cm":178.0,"build":"average",
-        "hair_color":"black","eye_color":"brown","skin_tone":"olive"}}}"#;
+    let (lat, lon) = estate_degrees(port).await;
+    let spawn = format!(
+        r#"{{"SpawnHuman":{{"template_id":"male","location":{{"latitude":{lat},"longitude":{lon},"altitude":null}},
+        "profile":{{"name":"Tama","birth_timestamp":"1990-01-02T03:04:05Z","birth_latitude":{lat},
+        "birth_longitude":{lon},"age_years":35.0,"height_cm":178.0,"build":"average",
+        "hair_color":"black","eye_color":"brown","skin_tone":"olive"}}}}}}"#
+    );
+    let spawn: &'static str = Box::leak(spawn.into_boxed_str());
     let id = send(port, spawn).await;
     let outcome = settled(port, id).await;
     assert_eq!(outcome["state"], "intervened", "{outcome}");
@@ -1019,6 +1094,24 @@ async fn a_replay_log_that_cannot_be_written_is_said_on_the_page() {
     let mut scenario =
         mk_island::IslandScenario::load(&repo("fixtures/island/default_scenario.json")).unwrap();
     scenario.estate_patch.tree_cap = 50;
+    // A small island: 240 x 192 medium cells against the default's
+    // 1,200 x 960, 25x fewer. The grids are what load this suite, not the
+    // trees -- `tree_cap` shrinks the vegetation and leaves two
+    // 1,152,000-cell grids to build on every bootstrap and hash on every
+    // digest, a dozen times over, on four cores.
+    //
+    // The seed changes with the profile because it has to. `IslandLife`
+    // validates the coastline it generates against the profile's shape
+    // rules, and the default scenario's seed makes a small island with
+    // "0 major headlands, need 3". Seed 16 is simply the first that does
+    // not: found by trying 0, 1, 2 ... through
+    // `RegionalPhysicalState::bootstrap`, which runs that check before the
+    // expensive spin-up, so bad seeds cost nothing. It took 17 tries and
+    // 1.3 seconds.
+    scenario.profile = mk_island::IslandProfile::test_small();
+    let mut small_seed = [0u8; 32];
+    small_seed[..4].copy_from_slice(&16u32.to_le_bytes());
+    scenario.seed = small_seed;
     let canon =
         Arc::new(mk_core::canon::CanonLocked::load(&repo("fixtures/island/canon.json")).unwrap());
     let life = mk_engine::regional::life::IslandLife::bootstrap(scenario, canon).unwrap();
@@ -1122,8 +1215,12 @@ async fn properties_economy_and_timeline_serve_what_the_island_really_holds() {
 
     // Now build something and look again. Both views have to move, and
     // promptly — not at the next hourly refresh.
-    let shelter = r#"{"ConstructStructure":{"structure":"WoodenShelter",
-        "location":{"latitude":-41.03,"longitude":173.56,"altitude":null}}}"#;
+    let (lat, lon) = estate_degrees(port).await;
+    let shelter = format!(
+        r#"{{"ConstructStructure":{{"structure":"WoodenShelter",
+        "location":{{"latitude":{lat},"longitude":{lon},"altitude":null}}}}}}"#
+    );
+    let shelter = shelter.as_str();
     let (status, response) = post(port, "/api/world/interventions", shelter).await;
     assert_eq!(status, 202, "{response}");
     let id = serde_json::from_str::<serde_json::Value>(body_of(&response)).unwrap()["command"]

@@ -73,44 +73,34 @@ The two reference-pack tests are the ones that matter most when reading a diff l
 they compare a simulated week and a simulated year against recorded values, so they are what
 would catch a change to simulation behaviour that the fast suite cannot see.
 
-`a_new_person_can_be_read_the_moment_they_exist` in `apps/island/tests/serve.rs` **fails between
-one run in three and every run**, depending on how loaded the machine is, and it is not this
-branch's doing. Measured on this container: 18 tests, one failure in three runs; 19 tests, one
-failure in three; later, on the same commit with no changes at all, two in three and then three
-in three. Same test, same deadline, with and without the test this branch adds.
+`a_new_person_can_be_read_the_moment_they_exist` in `apps/island/tests/serve.rs` **used to fail
+between one run in three and every run**, depending on load. It is fixed, and the fix is worth
+describing because three attempts before it were not.
 
-Take the variance seriously before concluding anything from a run of three. A change was briefly
-believed to have made this worse because it went from one failure in three to three in three —
-the unchanged commit then did the same thing. A suite run takes two minutes, so three runs is a
-small sample of a noisy quantity.
+The cause was never that test. Every test in that file bootstraps its own island on its own sim
+thread, and this container has **four cores**. The dominant cost was not the stepping but the
+grids: two 1,152,000-cell grids built on every bootstrap and hashed on every `DIGEST_EVERY`,
+which `tree_cap` does not shrink. A dozen of those starves the runtime answering the HTTP polls
+the tests make, and a sixty-second deadline goes by.
 
-It is a resource timeout, not a defect in what it checks. The test waits up to sixty seconds for
-a `CreateHuman` command to be applied, which takes about a tenth of a second on an idle machine.
-Every test in that file bootstraps its own island and runs it on its own sim thread, and this
-container has **four cores**. The dominant cost is not the stepping but `DIGEST_EVERY`: every 60
-ticks the loop hashes the whole state, walking two 1,152,000-cell grids whatever `tree_cap` is,
-so a test island pays nearly what the real one does. Nineteen of those on four cores starves the
-runtime answering the HTTP poll.
+The fix is `IslandProfile::test_small` — 240 x 192 medium cells, **25x fewer** — which seven other
+test files already use. It needs its own seed: `IslandLife` validates the coastline it generates
+against the profile's shape rules, and the default scenario's seed makes a small island with
+"0 major headlands, need 3". Seed 16 is the first that passes, found by trying 0, 1, 2 ... through
+`RegionalPhysicalState::bootstrap`, which runs that check before the expensive spin-up so bad
+seeds cost nothing: **17 tries, 1.3 seconds**. Two tests also had `-41.03, 173.56` written into
+them, which is land on the default island and sea on this one; they now read the estate's position
+from `/api/world` instead of pinning themselves to one geography.
 
-Pacing the test dashboards at `Times(600)` instead of `AsFastAsPossible` thins the digests out,
-and turning the digest off in the tests entirely was tried too. Neither fixed it, and neither
-made it worse; the variance above swamps both.
+**Measured: five consecutive runs, 19 passed, 0 failed, about 18 seconds each**, against roughly
+130 seconds and a one-in-three failure before.
 
-The obvious cheap fix does not work, and it is worth saying why so nobody spends an afternoon on
-it. `IslandProfile::test_small` is 240 x 192 medium cells against the default's 1,200 x 960 --
-25x fewer, and seven other test files already use it. Setting `scenario.profile` to it in
-`a_running_dashboard` fails every test in the file at bootstrap:
-
-```
-ShapeRequirementsUnmet { metrics: ShapeMetrics { area_m2: 8.3e9, compactness: 0.174,
-convexity: 0.470, major_headlands: 0, major_bays: 4 }, reasons: ["0 major headlands, need 3"] }
-```
-
-Those seven files call `IslandDomain::from_profile`, which builds the geometry and stops. A
-dashboard test needs `IslandLife::bootstrap`, which validates the generated coastline against the
-profile's shape rules, and the default scenario's seed does not produce a small island with three
-headlands. Making the small profile usable here means finding a seed that does -- which is worth
-doing, and is a deliberate piece of work rather than a line changed. **The real fix is for the suite to stop running nineteen full
+Three things were tried first and are recorded so nobody repeats them. Pacing the dashboards at
+`Times(600)` instead of `AsFastAsPossible` thinned the digests and did not fix it. Turning the
+digest off in the tests did not fix it either, and left behind an unreachable knob that review
+caught. Blaming the test count was wrong: removing the test this branch added left the same
+failure. Each of those was a guess that looked right; the profile swap was the first thing that
+was measured before it was believed, and it is also the only one that worked. **The real fix is for the suite to stop running nineteen full
 islands at once**, by sharing one between the tests that only read, which is a refactor of that
 file rather than a line of it, and worth doing deliberately rather than smuggling into a
 dashboard branch. Until then: a failure of this one test alone, with the other eighteen passing,
