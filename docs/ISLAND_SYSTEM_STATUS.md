@@ -54,13 +54,13 @@ are pessimistic.
     cargo test --workspace --release
     cargo test --workspace --release -- --ignored slow_
 
-Last full run (2026-10-09, commit `e5f6196`, release build, `--test-threads 2`, one build job):
+Last full run (2026-10-09, commit `01ed5f9`, release build, `--test-threads 2`, one build job):
 
 | Check | Result |
 |---|---|
 | `cargo fmt --all -- --check` | clean |
-| `cargo clippy --workspace --all-targets -- -D warnings` | clean (same tree) |
-| `cargo test --workspace --release --no-fail-fast` | **1,153 passed, 0 failed**, 19 ignored |
+| `cargo clippy --workspace --all-targets -- -D warnings` | clean (same tree, run first in the same sequence) |
+| `cargo test --workspace --release --no-fail-fast` | **1,154 passed, 0 failed**, 19 ignored |
 | `cargo test --workspace --release -- --ignored slow_` | **7 passed, 0 failed**: human runtime to 5,000 people, crowded cell, island week, day-in-one-step equals 1,440 steps, long-horizon evolution, island year of weather, ten thousand years of seismicity |
 
 The previous full run (commit `56de476`) had caught a real failure the per-module runs had missed (a
