@@ -114,3 +114,13 @@ finds water. The week digest changed for that reason, to `4ce81ba1...10d4` (two 
 processes agree); the founders still have no shortfalls. The five-year run above was **not**
 repeated on the new code, so its end state (where the people are, who is alive) describes the
 earlier bookkeeping.
+
+## Founders only, 22.9 simulated years (live server, flat out)
+
+The two founders ran for 8,365 simulated days (22.9 years) on a binary from before the leak and
+death fixes: memory 257-260 MB for the whole run, no food shortfalls, 36 water shortfalls (before the
+soil-water fix), and the same 5 people from year 3 (three children of Gem-K, born in years 1 to 3).
+The founders cannot die naturally (governance veto), and the three children, aged up to about 22
+at the end, did not die either, but this run's population counter included the dead, so only the
+statuses (not the count) could have shown it; they were not checked at the end. It shows flat memory
+over 23 years for a small household, nothing about deaths.
