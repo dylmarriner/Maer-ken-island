@@ -16,6 +16,7 @@ import {
   message,
   postJson,
   reportOffline,
+  storedToken,
 } from "/static/app.js";
 
 const panels = {
@@ -212,6 +213,34 @@ async function showTimeline() {
   panels.timeline.hidden = false;
 }
 
+/// Take every view off the page. Used when the island is not running: what
+/// they hold was true once and is not now, and leaving a write form up for
+/// a stopped island invites an operator to act on it.
+function hidePanels() {
+  for (const id of ["intervene-panel", "properties-panel", "economy-panel", "timeline-panel"]) {
+    const panel = document.getElementById(id);
+    if (panel) panel.hidden = true;
+  }
+}
+
+/// Say which kind of "not running" this is, rather than assuming the one
+/// that is easier to explain.
+function sayNoWorld(stopped) {
+  noWorldEl.replaceChildren(
+    el("strong", stopped ? "The island has stopped." : "No island is running."),
+    el(
+      "span",
+      stopped
+        ? "It was running and is not now — an audit that did not close, or a step that failed. " +
+          "The server says why on the console it was started from. What this page last showed is " +
+          "gone rather than left up, because it is no longer true."
+        : "This dashboard was started without --scenario, so there is no world to describe. " +
+          "The People page still works: it shows the stored population.",
+    ),
+  );
+  noWorldEl.hidden = false;
+}
+
 async function load() {
   try {
     const status = await getJson("/api/status");
@@ -223,7 +252,23 @@ async function load() {
     const world = await getJson("/api/world");
     clearOffline();
     if (!world.running) {
-      noWorldEl.hidden = false;
+      // Everything shown was true of an island that is no longer stepping,
+      // and the form would still accept writes for it. Before this, a page
+      // that had been showing a running world simply kept showing it, with
+      // the banner added underneath.
+      hidePanels();
+      // Two different things read as `running: false`: a dashboard started
+      // without `--scenario`, which has no world at all, and one whose
+      // island stopped — an audit that did not close, a step that failed.
+      // The data endpoints tell them apart, because the first has nothing
+      // to serve and answers 404 while the second still answers.
+      let stopped = true;
+      try {
+        await getJson("/api/properties");
+      } catch (_) {
+        stopped = false;
+      }
+      sayNoWorld(stopped);
       return;
     }
     noWorldEl.hidden = true;
@@ -236,7 +281,8 @@ async function load() {
     ]);
   } catch (error) {
     if (error && error.status === 404) {
-      noWorldEl.hidden = false;
+      hidePanels();
+      sayNoWorld(false);
       return;
     }
     reportOffline(error);
@@ -362,6 +408,26 @@ function requestFor(place) {
 
 let places = [];
 
+/// Fill a `<select>` without disturbing a choice somebody has already made.
+///
+/// `replaceChildren` resets the selection to the first option. This page
+/// reloads every five seconds, so rebuilding unconditionally meant an
+/// operator could pick the second islander, have a refresh land before they
+/// pressed the button, and remove the first one instead. A destructive,
+/// irreversible action aimed at the wrong person because a timer fired.
+///
+/// So the options are rebuilt only when the set of them has actually
+/// changed, and the chosen value is put back afterwards when it still
+/// exists.
+function fillSelect(select, options) {
+    const wanted = options.map((o) => o.value).join("\u0000");
+    const have = [...select.options].map((o) => o.value).join("\u0000");
+    if (wanted === have) return;
+    const chosen = select.value;
+    select.replaceChildren(...options.map((o) => el("option", o.label, { value: o.value })));
+    if (options.some((o) => o.value === chosen)) select.value = chosen;
+}
+
 async function fillPlacesAndPeople() {
   const world = await getJson("/api/world");
   places = [
@@ -371,11 +437,13 @@ async function fillPlacesAndPeople() {
       longitude: world.estate.longitude,
     },
   ];
-  whereEl.replaceChildren(
-    ...places.map((p, i) => el("option", p.label, { value: String(i) })),
+  fillSelect(
+    whereEl,
+    places.map((p, i) => ({ value: String(i), label: p.label })),
   );
-  personEl.replaceChildren(
-    ...world.people.map((p) => el("option", p.agent_id, { value: p.agent_id })),
+  fillSelect(
+    personEl,
+    world.people.map((p) => ({ value: p.agent_id, label: p.agent_id })),
   );
 }
 
@@ -408,7 +476,21 @@ if (form) {
     }
     const body = requestFor(place || {});
     show("Asking the island…");
-    const { status, body: answer } = await postJson("/api/world/interventions", body, "");
+    const { status, body: answer } = await postJson(
+      "/api/world/interventions",
+      body,
+      storedToken(),
+    );
+    if (status === 401) {
+      // Sending "" here made every intervention 401 on a server started
+      // with ISLAND_CONTROL_TOKEN, with nothing saying why.
+      show(
+        `${(answer.errors && answer.errors.join(" ")) || "This dashboard may not intervene."} ` +
+          "Enter the control token on the Create a human page and it will be used here too.",
+        "is-error",
+      );
+      return;
+    }
     if (status !== 202) {
       show(
         (answer.errors && answer.errors.join(" ")) || `The island answered ${status}.`,

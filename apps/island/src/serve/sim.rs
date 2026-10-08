@@ -328,8 +328,11 @@ pub fn spawn_with(
 ) -> SimHandle {
     let step_seconds = life.scenario.cadences.human_seconds;
     // The starting island is hashed once — and only once: hashing costs
-    // about 930 ms against a 1.4 ms step, so the thread is handed this one
-    // rather than computing its own.
+    // about 800 ms against a 4.3 ms step on the real island
+    // (`benchmarks/phase4_cost.md`), so the thread is handed this one
+    // rather than computing its own. This comment said "930 ms against a
+    // 1.4 ms step" until a reviewer caught it: both figures were ones I had
+    // already corrected elsewhere in this branch and missed here.
     let first = IslandProjection::digest_now(&life);
     let views = Views::of(&life);
     let projection = Arc::new(RwLock::new(IslandProjection::of(
@@ -610,8 +613,17 @@ fn apply(
             },
             Ok(()) => {
                 let bytes = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
-                // Recorded only now that it happened.
-                let _ = life.apply_command(command);
+                // Recorded only now that it happened. The result is not
+                // checked because a `Control` command cannot fail —
+                // `apply_command`'s arm for it records and returns
+                // `Ok(Applied::Noted)` with no fallible step in between —
+                // and `.expect()` here would put a panic on the thread that
+                // owns the island for something that cannot occur. If that
+                // ever stops being true, this match stops compiling.
+                match life.apply_command(command) {
+                    Ok(_) => {}
+                    Err(e) => eprintln!("the snapshot was written but not recorded: {e}"),
+                }
                 Outcome::Saved {
                     path: path.display().to_string(),
                     bytes,

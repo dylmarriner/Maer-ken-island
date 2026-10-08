@@ -56,7 +56,12 @@ export function explain(error) {
 export async function getJson(path) {
   const response = await fetch(path, { headers: { accept: "application/json" } });
   if (!response.ok) {
-    throw new Error(`The server answered ${response.status} for ${path}.`);
+    // The code travels with the error. Without it a caller could only match
+    // on the message, and `island.js` had a `error.status === 404` branch
+    // that could never run because this threw a bare `Error`.
+    const failed = new Error(`The server answered ${response.status} for ${path}.`);
+    failed.status = response.status;
+    throw failed;
   }
   return response.json();
 }
@@ -67,6 +72,33 @@ export async function postJson(path, body, token) {
   const response = await fetch(path, { method: "POST", headers, body: JSON.stringify(body) });
   const payload = await response.json().catch(() => ({}));
   return { status: response.status, body: payload };
+}
+
+/** Where the control token lives for this browser tab.
+ *
+ * Shared because three pages need it and only one had it. The creator page
+ * read and wrote this key while the overview's controls and the island
+ * page's interventions both sent an empty token, so on a server started
+ * with `ISLAND_CONTROL_TOKEN` every pause, every speed change and every
+ * intervention came back 401 with nothing on screen explaining why. */
+export const TOKEN_KEY = "island-control-token";
+
+export function storedToken() {
+  try {
+    return sessionStorage.getItem(TOKEN_KEY) || "";
+  } catch (_) {
+    return "";
+  }
+}
+
+export function rememberToken(token) {
+  try {
+    if (token) sessionStorage.setItem(TOKEN_KEY, token);
+    else sessionStorage.removeItem(TOKEN_KEY);
+  } catch (_) {
+    // A browser with storage switched off still works; the token just has
+    // to be typed again next time.
+  }
 }
 
 /** Show the "cannot reach the server" banner, with the reason. */

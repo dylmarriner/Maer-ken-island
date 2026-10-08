@@ -13,6 +13,7 @@ import {
   message,
   postJson,
   reportOffline,
+  storedToken,
 } from "/static/app.js";
 
 const statsEl = document.getElementById("stats");
@@ -203,7 +204,10 @@ async function control(body, stepping) {
   worldControlNote.hidden = false;
   worldControlNote.textContent = "Asking the island…";
   try {
-    const { status, body: answer } = await postJson("/api/control", body, "");
+    // The token the creator page stored. Sending "" here meant every
+    // pause, step and speed change came back 401 on a server started with
+    // ISLAND_CONTROL_TOKEN, with nothing on screen saying why.
+    const { status, body: answer } = await postJson("/api/control", body, storedToken());
     if (status === 200) {
       // A step pauses first and then advances that many, so the island
       // *is* paused when the answer comes back — saying only "Paused"
@@ -217,8 +221,9 @@ async function control(body, stepping) {
       paused = answer.paused;
       pauseEl.textContent = paused ? "Resume" : "Pause";
     } else if (status === 401) {
-      worldControlNote.textContent =
-        (answer.errors && answer.errors[0]) || "This dashboard may not control the island.";
+      worldControlNote.textContent = `${
+        (answer.errors && answer.errors[0]) || "This dashboard may not control the island."
+      } Enter the control token on the Create a human page and it will be used here too.`;
     } else {
       worldControlNote.textContent =
         (answer.errors && answer.errors[0]) || `The island answered ${status}.`;
