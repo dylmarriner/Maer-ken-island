@@ -73,6 +73,26 @@ The two reference-pack tests are the ones that matter most when reading a diff l
 they compare a simulated week and a simulated year against recorded values, so they are what
 would catch a change to simulation behaviour that the fast suite cannot see.
 
+`a_new_person_can_be_read_the_moment_they_exist` in `apps/island/tests/serve.rs` **fails about
+one run in three**, and it is not this branch's doing. Measured on this container: 18 tests, one
+failure in three runs; 19 tests, one failure in three. Same test, same deadline, with and without
+the test this branch adds.
+
+It is a resource timeout, not a defect in what it checks. The test waits up to sixty seconds for
+a `CreateHuman` command to be applied, which takes about a tenth of a second on an idle machine.
+Every test in that file bootstraps its own island and runs it on its own sim thread, and this
+container has **four cores**. The dominant cost is not the stepping but `DIGEST_EVERY`: every 60
+ticks the loop hashes the whole state, walking two 1,152,000-cell grids whatever `tree_cap` is,
+so a test island pays nearly what the real one does. Nineteen of those on four cores starves the
+runtime answering the HTTP poll.
+
+Pacing the test dashboards at `Times(600)` instead of `AsFastAsPossible` thins the digests out
+and helped — it did not fix it. **The real fix is for the suite to stop running nineteen full
+islands at once**, by sharing one between the tests that only read, which is a refactor of that
+file rather than a line of it, and worth doing deliberately rather than smuggling into a
+dashboard branch. Until then: a failure of this one test alone, with the other eighteen passing,
+is this, and re-running confirms it. Any other failure is real.
+
 `slow_the_human_runtime_stays_small_and_roughly_linear_to_five_thousand_people` used to fail on
 a bad draw, and no longer does. It asserts `cost(5000) <= 4 x cost(200)` — a ratio against the
 smallest and noisiest sample. Two hundred humans fit in cache and five thousand do not, so

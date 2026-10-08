@@ -2510,6 +2510,57 @@ mod tests {
         assert_eq!(system.conversation_log().count(), 0);
     }
 
+    #[test]
+    fn two_sleeping_people_still_hold_a_conversation_every_tick() {
+        // Pins down D35, which was found by looking at the dashboard rather
+        // than by any test: on a running island the founders converse on
+        // every single tick, at every hour, including while both of them
+        // are asleep. 40 conversations at ticks 2001-2040 -- every
+        // consecutive tick -- were generated while `circadian.asleep` was
+        // true for both.
+        //
+        // Asserting the behaviour as it is, not as it should be. Family
+        // pairs are matched on `alive` alone: no sleep test, no check of
+        // what either person is doing.
+        let mut system = HumanSystem::new();
+        system
+            .registry
+            .add_human_no_storage(HumanBeing::gem_d_founder());
+        system
+            .registry
+            .add_human_no_storage(HumanBeing::gem_k_founder());
+        for id in ["Gem-D", "Gem-K"] {
+            system
+                .registry
+                .get_human_mut(id)
+                .expect("a founder")
+                .circadian
+                .asleep = true;
+        }
+
+        let rng = mk_core::rng::RngRegistry::new([21u8; 32]);
+        for tick in 0..3 {
+            system.step_dialogue(&rng, tick);
+        }
+
+        assert_eq!(
+            system.conversation_log().count(),
+            3,
+            "one conversation per tick, asleep throughout"
+        );
+        for human in ["Gem-D", "Gem-K"] {
+            assert!(
+                system
+                    .registry
+                    .get_human(human)
+                    .expect("a founder")
+                    .circadian
+                    .asleep,
+                "{human} stayed asleep the whole time"
+            );
+        }
+    }
+
     fn crowd(size: usize, cells: usize) -> HumanSystem {
         let mut system = HumanSystem::new();
         for n in 0..size {

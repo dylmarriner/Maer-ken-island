@@ -19,8 +19,9 @@ island run     (--scenario <path> | --snapshot <path>) [--steps <n>] [--dt <seco
 island replay  --scenario <path> --log <path> [--until <tick>]
 island inspect --snapshot <path> [--scenario <path>]
 
-serve    the dashboard: the overview at /, the roster at /people and the Human
-         Creator at /creator, with the JSON behind them under /api.
+serve    the dashboard: the overview at /, the roster at /people, the island
+         itself at /island and the Human Creator at /creator, with the JSON
+         behind them under /api.
   --data-dir DIR   where people are stored (default ./island-data)
   --seed HEX       64 hex characters; the same seed and the same creations
                    rebuild the same people (default all zeroes)

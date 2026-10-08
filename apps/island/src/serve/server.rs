@@ -435,7 +435,10 @@ const CONVERSATIONS_ARE_COMPOSED: &str =
      monologue, and what the listener said to them last time these two spoke. No language \
      model is involved, and the same two people at the same tick always say the same thing. \
      This is the whole island's recent feed, not one person's memory: each islander keeps their \
-     own, far longer, history.";
+     own, far longer, history. Expect repetition: a family pair converses on every tick, which \
+     is once a simulated minute, awake or asleep, and the state the lines are composed from \
+     barely moves in that time. That is a known limit of the model rather than of this page \
+     (D35 in the deviation register), and it is shown as it is rather than tidied up.";
 
 /// Headers every response carries. The pages load nothing from anywhere but
 /// this server, so the policy can say exactly that: no third-party script,
