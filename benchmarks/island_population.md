@@ -99,12 +99,13 @@ Measured with a 26-person run (24 settlers plus the founders), a settler's full 
 | | Fresh | After the first month | Day 145 | Day 413 |
 |---|---|---|---|---|
 | Unfixed | 0.06 MB | - | - | 7.0 MB (growing about 5 MB a year) |
-| Fixed | 0.06 MB | 1.67 MB | 1.67 MB (flat) | 1.68 MB at day 277 after the births, still flat (day 413 pending) |
+| Fixed | 0.06 MB | 1.67 MB | 1.67 MB (flat) | **1.69 MB at day 406**, after the births: +0.02 MB over 290 days |
 
-Process memory for the same 26 people: 401 MB fixed against 521 MB unfixed at day 145, and 398 MB against 591 MB at day 277 with 32 people (the
-unfixed run was growing; its reading then moved around as the allocator returned memory, so record
-size is the cleaner measure). Taking the fixed run's 401 MB less the roughly 226 MB of the world
-itself gives about 6.7 MB of process memory per person once their state has settled (the in-memory
-form is larger than the JSON record). **So the honest long-run capacity is on the order of 1,000 people on 8 GB and
-2,000 on 16 GB, not 5,000**; the 5,002-person figure is a short-run cost only. A long run at that
-size has not been done.
+Process memory for the same people, fixed against unfixed: 401 against 521 MB at day 145 (26 people)
+and 398 against 591 MB at day 277 (32 people); the fixed run then read 295 MB at day 406 (32
+people) as the allocator returned memory, so process memory moves by 100 MB or more between
+readings and record size is the cleaner measure. Taking the world itself as about 226 MB, the
+fixed runs put the settled cost at **about 2 to 7 MB of process memory per person** (the in-memory
+form is larger than the 1.7 MB JSON record). So the honest long-run capacity is **roughly 1,000
+people on 8 GB and 2,000 or more on 16 GB**, not 5,000: the 5,002-person figure is a short-run cost
+only. A long run at that size has not been done.

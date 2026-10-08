@@ -81,7 +81,7 @@ Measured on a 16 GB development machine, release build (`benchmarks/`):
 | Two founders, one simulated year | about 400 MB | about 32 min |
 | 1,000 people, first hours | about 600 MB | 115 ms per simulated minute |
 | 5,000 people, first hours | about 1.0 GB | 0.5 s per simulated minute |
-| People, settled (after about a month) | about 6.7 MB each | so roughly 1,000 people on 8 GB and 2,000 on 16 GB |
+| People, settled (after about a month) | about 2-7 MB each | so roughly 1,000 people on 8 GB and 2,000 or more on 16 GB |
 | Snapshot file, two people | 0.05 GB (compressed) | save about 2 s, load about 2 s |
 | Snapshot file, 5,000 people | about 0.9 GB measured before compression, so expect roughly 0.13 GB | save 30 s, load 10 s before compression |
 
