@@ -136,3 +136,13 @@ stay in the registry) and so could never fall; "no deaths observed" in earlier r
 `population` now counts the living, `deaths` the dead, and each roster entry has an `alive` flag.
 The earlier two-founders-plus-24-settlers run (an older binary, without the burial fix) did have a
 death, at 73.8 years, whose carbon stayed in the ledger.
+
+### Later reading (2026-10-09), counted by each person's status
+
+| Run | Simulated | Alive | Dead | Oldest child born in the run |
+|---|---|---|---|---|
+| 2 founders + 24 settlers aged 18-80 (binary without the burial fix) | 5.2 years | 38 | 1 (aged 73.8) | 4.5 years |
+| 2 founders + 20 elders aged 78-118 + 10 young adults (burial fix) | 1.4 years | 27 | 9 (aged 96.8 to 116.2) | 0.7 years |
+
+Process memory stayed at about 310-320 MB in both. A second generation (a child born in these runs
+growing up and having children) needs about 18 simulated years; neither run is there yet.
