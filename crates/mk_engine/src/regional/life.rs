@@ -539,6 +539,17 @@ impl IslandLife {
                         break;
                     }
                 }
+                // Nothing wet in reach: dig for water where they stand (the
+                // needs model counts soil moisture as water access too).
+                if drawn.is_err() {
+                    drawn = life.materials.gather_soil_water(
+                        WATER_KG_PER_DRINK * ration,
+                        &mut life.physical.hydrology,
+                        stands,
+                        area,
+                        ledger,
+                    );
+                }
                 match drawn {
                     Ok(kg) => {
                         let _ = life.materials.drink(id, kg);

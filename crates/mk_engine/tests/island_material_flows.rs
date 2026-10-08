@@ -491,3 +491,51 @@ fn a_built_shelter_holds_its_carbon_until_it_is_demolished_and_crafting_cannot_c
         Err(MaterialError::CreatesCarbon { .. })
     ));
 }
+
+#[test]
+fn digging_for_water_needs_damp_soil_and_moves_exactly_what_is_taken() {
+    use mk_engine::hydrology::SoilWater;
+    let b = base();
+    let area = b.domain.cell_area_m2(M);
+    let spec = b.domain.storage_spec(M);
+    let cell = b.forest_cell;
+    let (mut m, mut ledger) = (MaterialLedger::new(), Ledger::new());
+    let audit = Audit::start(&m);
+
+    // Parched soil gives nothing.
+    let mut parched = HydrologyState::new(&spec, 0.05);
+    assert_eq!(
+        m.gather_soil_water(1.0, &mut parched, cell, area, &mut ledger),
+        Err(MaterialError::DryCell)
+    );
+
+    // Damp soil gives what is asked and loses exactly that much storage.
+    let mut damp = HydrologyState::new(&spec, 0.5);
+    let before = damp.soil_water.get(cell.0, cell.1).storage_mm;
+    let got = m
+        .gather_soil_water(2.0, &mut damp, cell, area, &mut ledger)
+        .unwrap();
+    assert_eq!(got, 2.0);
+    let after: SoilWater = *damp.soil_water.get(cell.0, cell.1);
+    assert!((before - after.storage_mm - 2.0 / area).abs() < 1e-12);
+    assert!((after.moisture_fraction - after.storage_mm / 300.0).abs() < 1e-12);
+    // The books: the soil gave it, the material stock holds it.
+    assert!((net(&ledger, R::SoilWater, FluxKind::Water) + 2.0).abs() < 1e-12);
+    assert!((m.stock_kg(Material::Water) - 2.0).abs() < 1e-12);
+
+    // It cannot give more than the soil holds.
+    let mut thin = HydrologyState::new(&spec, 0.5);
+    thin.soil_water.set(
+        cell.0,
+        cell.1,
+        SoilWater {
+            moisture_fraction: 0.25,
+            storage_mm: 1.0e-6,
+        },
+    );
+    let got = m
+        .gather_soil_water(1.0e6, &mut thin, cell, area, &mut ledger)
+        .unwrap();
+    assert!((got - 1.0e-6 * area).abs() < 1e-9);
+    audit.close(&m, &ledger);
+}

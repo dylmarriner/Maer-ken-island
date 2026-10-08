@@ -37,7 +37,7 @@ use serde::{Deserialize, Serialize};
 
 use super::ecology::RegionalEcologyState;
 use crate::conservation::O2_PER_CARBON;
-use crate::hydrology::HydrologyState;
+use crate::hydrology::{HydrologyState, SoilWater};
 
 /// Where a material's carbon comes from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -177,6 +177,11 @@ pub fn respired_carbon_kg_per_kcal() -> f64 {
 }
 /// Share of a river's flow a household may draw per day.
 pub const RIVER_WITHDRAWAL_FRACTION: f64 = 0.01;
+/// Soil at least this fraction of field capacity can be dug for water (a seep
+/// or a shallow well). An assumption, not a measured value.
+pub const SOIL_DRINKABLE_FRACTION: f64 = 0.2;
+/// Soil storage at field capacity (mm): `SoilWater::new` stores `moisture * 300`.
+const SOIL_FIELD_CAPACITY_MM: f64 = 300.0;
 
 /// The cells a person tries for food or water, nearest first: the cell they
 /// stand on, then those one cell away, then two, and so on to `radius`, each
@@ -394,6 +399,46 @@ impl MaterialLedger {
             kgc,
         );
         Ok(kg)
+    }
+
+    /// Dig water out of the soil under a cell: the last resort when no
+    /// surface water or river is in reach. Only damp soil (at least
+    /// [`SOIL_DRINKABLE_FRACTION`] of field capacity) yields; the water leaves
+    /// the cell's soil storage and enters the material stock from `SoilWater`.
+    pub fn gather_soil_water(
+        &mut self,
+        kg: f64,
+        hydrology: &mut HydrologyState,
+        cell: (usize, usize),
+        cell_area_m2: f64,
+        ledger: &mut Ledger,
+    ) -> Result<f64, MaterialError> {
+        let soil = *hydrology.soil_water.get(cell.0, cell.1);
+        if soil.moisture_fraction < SOIL_DRINKABLE_FRACTION {
+            return Err(MaterialError::DryCell);
+        }
+        let take = kg.max(0.0).min(soil.storage_mm.max(0.0) * cell_area_m2);
+        if take <= 0.0 {
+            return Err(MaterialError::DryCell);
+        }
+        let storage_mm = soil.storage_mm - take / cell_area_m2;
+        hydrology.soil_water.set(
+            cell.0,
+            cell.1,
+            SoilWater {
+                moisture_fraction: (storage_mm / SOIL_FIELD_CAPACITY_MM).clamp(0.0, 1.0),
+                storage_mm,
+            },
+        );
+        self.add(Material::Water, take);
+        flow(
+            ledger,
+            FluxKind::Water,
+            Reservoir::SoilWater,
+            Reservoir::MaterialWater,
+            take,
+        );
+        Ok(take)
     }
 
     /// Mine coal or quarry limestone: carbon from the crust.
