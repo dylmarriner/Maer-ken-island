@@ -92,6 +92,7 @@ impl IslandProjection {
                 let at = life.positions.0.get(id);
                 json!({
                     "agent_id": id,
+                    "alive": matches!(h.profile.status, mk_core::human::HumanStatus::Alive),
                     "space": at.map(|p| format!("{:?}", p.space)),
                     "position_m": at.map(|p| [p.position_m.0, p.position_m.1]),
                 })
@@ -144,7 +145,9 @@ impl IslandProjection {
             "speed": format!("{:?}", self.speed),
             "achieved_speed": self.achieved_speed,
             "behind": self.behind,
-            "population": self.roster.len(),
+            // The living; the dead stay in the roster (`alive: false`).
+            "population": self.roster.iter().filter(|h| h["alive"] == true).count(),
+            "deaths": self.roster.iter().filter(|h| h["alive"] == false).count(),
             "human_store": self.store,
             "food_shortfalls": self.shortfalls.0,
             "water_shortfalls": self.shortfalls.1,

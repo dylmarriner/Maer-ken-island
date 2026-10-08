@@ -98,3 +98,28 @@ fn who_fails_to_drink_at_the_next_six_hourly_firing() {
     }
     println!("FAIL none within 400 steps");
 }
+
+#[test]
+#[ignore = "diagnostic: needs ISLAND_SNAPSHOT"]
+fn the_ledger_holds_a_body_for_exactly_the_living() {
+    use mk_core::flux::Reservoir;
+    use mk_core::human::HumanStatus;
+    let path = PathBuf::from(std::env::var("ISLAND_SNAPSHOT").expect("set ISLAND_SNAPSHOT"));
+    let w = load_island_snapshot(&path).unwrap();
+    let life = &w.life;
+    let (mut alive, mut dead, mut living_in_ledger, mut dead_in_ledger) = (0, 0, 0, 0);
+    for h in life.humans.registry.iter() {
+        let registered = life.materials.is_registered(h.agent_id());
+        if matches!(h.profile.status, HumanStatus::Alive) {
+            alive += 1;
+            living_in_ledger += usize::from(registered);
+        } else {
+            dead += 1;
+            dead_in_ledger += usize::from(registered);
+        }
+    }
+    println!(
+        "LEDGER alive {alive} (in ledger {living_in_ledger}), dead {dead} (still in ledger {dead_in_ledger}), human carbon {:.1} kg",
+        life.materials.stock_of(Reservoir::HumanCarbon)
+    );
+}

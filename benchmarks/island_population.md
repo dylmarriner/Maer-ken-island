@@ -119,3 +119,20 @@ therefore flat, not leaks. They are also the lever if the capacity above ever ne
 halving both caps would take about a third off a person's memory, at the price of people
 remembering fewer conversations and learning from a shorter window. That is a behaviour change,
 so it has not been made.
+
+## Deaths (run with the burial fix)
+
+A run with the two founders, 20 elderly settlers (78 to 118 years) and 10 young adults (20 to 38),
+flat out on a binary containing the burial fix. By simulated day 276: **5 deaths** (ages 104.7,
+108.4, 114.5, 116.2 and one more), three births, no simulation error, and process memory 404 MB.
+Loading the snapshot: all 31 living people have a body in the materials ledger and none of the 5
+dead do, so each body's carbon went to detritus through the audit (`island_inspect_water.rs`,
+`the_ledger_holds_a_body_for_exactly_the_living`). The expected number of deaths for that age
+mix over that time is roughly seven (Gompertz hazard, `GOMPERTZ_*` in `lifecycle.rs`), so five is
+in the right range.
+
+A correction to earlier notes: the status API's "population" used to count the dead as well (they
+stay in the registry) and so could never fall; "no deaths observed" in earlier runs meant nothing.
+`population` now counts the living, `deaths` the dead, and each roster entry has an `alive` flag.
+The earlier two-founders-plus-24-settlers run (an older binary, without the burial fix) did have a
+death, at 73.8 years, whose carbon stayed in the ledger.

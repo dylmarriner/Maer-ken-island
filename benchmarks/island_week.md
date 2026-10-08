@@ -99,7 +99,7 @@ never runs short of food or water. It does **not** show that the household is re
   with a lighter adult frame is below the median for its age. Backing the stored weights out
   through the curve gives adult weights near 59 kg for the first child (matching its parents) and
   plausible values for the others; the 3.2-year-old at 10.5 kg is a child with a small adult frame.
-- No one died in five years (two adults of 25-30 and three children) and the founders did not
+- No one died in five years (two adults of 25-30 and three children; every person's status was checked, and the founders are protected from natural death anyway) and the founders did not
   have a child with each other's partner beyond Gem-K's three; a decades-long run with deaths and
   a second generation has not been done.
 
