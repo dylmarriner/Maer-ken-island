@@ -20,7 +20,24 @@ const DAY: u64 = 86_400;
 /// scenario (`fixtures/island/default_scenario.json`), identical across
 /// processes. Changing any Phase 1-3 behaviour changes it: update it
 /// deliberately, in the commit that changes the behaviour.
-const WEEK_DIGEST: &str = "e796f9f9a851bd98c1ffbae6a427c3b5dc258dcc38ae79d70e85359299cc5d2a";
+///
+/// Last changed by the sleep gate on `humans::step_dialogue` (D35): family
+/// pairs used to be matched on `alive` alone and so held a conversation on
+/// every tick of every night, and they no longer do. A week of island life
+/// therefore contains different conversations, different relationship
+/// memory and a different digest.
+///
+/// It was changed only after checking that everything this test measures
+/// about the week still holds, because a pinned digest is the easiest
+/// thing in the repository to update for the wrong reason. Deferring this
+/// assertion to the end of the test and running the rest gave: audits
+/// closed 196 against a required 196, food and water shortfalls both zero,
+/// Gem-D at 13.0 kg of body carbon against an expected 13.0 and Gem-K at
+/// 10.4 against 10.4 — inside the 0.98-1.02 band that a fixed portion
+/// (1.05x) and an action-gated harvest (0.90x) both failed — and the
+/// temperate-forest NPP still inside the ecology pack. Nothing physical
+/// moved; only the hash did.
+const WEEK_DIGEST: &str = "860d8035e28c26585b00d094f89e6e25cd81058f9eba143bfde799c53ddb11f6";
 
 fn repo(path: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
