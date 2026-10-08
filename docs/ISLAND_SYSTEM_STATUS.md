@@ -73,10 +73,16 @@ The two reference-pack tests are the ones that matter most when reading a diff l
 they compare a simulated week and a simulated year against recorded values, so they are what
 would catch a change to simulation behaviour that the fast suite cannot see.
 
-`a_new_person_can_be_read_the_moment_they_exist` in `apps/island/tests/serve.rs` **fails about
-one run in three**, and it is not this branch's doing. Measured on this container: 18 tests, one
-failure in three runs; 19 tests, one failure in three. Same test, same deadline, with and without
-the test this branch adds.
+`a_new_person_can_be_read_the_moment_they_exist` in `apps/island/tests/serve.rs` **fails between
+one run in three and every run**, depending on how loaded the machine is, and it is not this
+branch's doing. Measured on this container: 18 tests, one failure in three runs; 19 tests, one
+failure in three; later, on the same commit with no changes at all, two in three and then three
+in three. Same test, same deadline, with and without the test this branch adds.
+
+Take the variance seriously before concluding anything from a run of three. A change was briefly
+believed to have made this worse because it went from one failure in three to three in three —
+the unchanged commit then did the same thing. A suite run takes two minutes, so three runs is a
+small sample of a noisy quantity.
 
 It is a resource timeout, not a defect in what it checks. The test waits up to sixty seconds for
 a `CreateHuman` command to be applied, which takes about a tenth of a second on an idle machine.
@@ -86,8 +92,9 @@ ticks the loop hashes the whole state, walking two 1,152,000-cell grids whatever
 so a test island pays nearly what the real one does. Nineteen of those on four cores starves the
 runtime answering the HTTP poll.
 
-Pacing the test dashboards at `Times(600)` instead of `AsFastAsPossible` thins the digests out
-and helped — it did not fix it. **The real fix is for the suite to stop running nineteen full
+Pacing the test dashboards at `Times(600)` instead of `AsFastAsPossible` thins the digests out,
+and turning the digest off in the tests entirely was tried too. Neither fixed it, and neither
+made it worse; the variance above swamps both. **The real fix is for the suite to stop running nineteen full
 islands at once**, by sharing one between the tests that only read, which is a refactor of that
 file rather than a line of it, and worth doing deliberately rather than smuggling into a
 dashboard branch. Until then: a failure of this one test alone, with the other eighteen passing,

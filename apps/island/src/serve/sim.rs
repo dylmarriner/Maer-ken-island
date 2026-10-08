@@ -172,6 +172,14 @@ pub struct SimHandle {
     commands: Sender<Queued>,
     outcomes: Arc<Mutex<BTreeMap<u64, Outcome>>>,
     next_id: Arc<AtomicU64>,
+    /// How many steps between canonical digests, shared with the loop.
+    ///
+    /// A policy about how the island is *run*, like [`Pacing`], not about
+    /// what it is: the digest is a read of existing state and changing how
+    /// often it is taken cannot change the island. It is tunable for the
+    /// reason given on [`DIGEST_EVERY`] -- at the default the real island
+    /// spends most of its time hashing rather than stepping.
+    digest_every: Arc<AtomicU64>,
     /// Why the replay log last failed to write, if it did.
     ///
     /// The log is what makes a run reproducible, and the timeline the
@@ -200,6 +208,19 @@ impl SimHandle {
     /// Ask the thread to finish its current step and stop.
     pub fn stop(&self) {
         self.stop.store(true, Ordering::Relaxed);
+    }
+
+    /// Take a canonical digest every `steps` steps instead of the default.
+    ///
+    /// Raising it buys simulation speed and loses digest freshness, and
+    /// nothing else: see [`DIGEST_EVERY`]. Zero is treated as the default
+    /// rather than as "every step", because a loop that hashes a quarter of
+    /// a million stems on every iteration is never what anyone meant.
+    pub fn set_digest_every(&self, steps: u64) {
+        self.digest_every.store(
+            if steps == 0 { DIGEST_EVERY } else { steps },
+            Ordering::Relaxed,
+        );
     }
 
     /// Why the replay log last failed to write, if it did. `None` means the
@@ -313,9 +334,32 @@ const SPEED_WINDOW: Duration = Duration::from_secs(5);
 /// Sixty steps is one simulated hour at the default cadence. The digest
 /// still dominates the loop — 13.3 ms amortised per step against 4.3 ms of
 /// actual simulation — which caps the island near 3,400x real time. That is
-/// far above the `RealTime` default and enough for a dashboard; if a faster
-/// headless-style speed is ever wanted here, this is the knob.
+/// far above the `RealTime` default and enough for a dashboard.
+///
+/// This is the default rather than the rule: [`SimHandle::set_digest_every`]
+/// turns the knob this comment has always pointed at, without a recompile.
+/// Raising it buys simulation speed and loses digest freshness, and nothing
+/// else — the digest is a read of existing state, so how often it is taken
+/// cannot change the island. The default is left where it was, because
+/// trading freshness for speed is a decision about what the dashboard is
+/// for rather than a defect to fix.
+///
+/// `apps/island/tests/serve.rs` turns it most of the way off, which is what
+/// that cost means in practice: a dozen test islands hashing two
+/// 1,152,000-cell grids on four cores is enough to starve the runtime
+/// answering their own HTTP requests.
 const DIGEST_EVERY: u64 = 60;
+
+/// Steps between refreshes of the published views -- the people, the
+/// economy and the conversation feed.
+///
+/// One simulated hour, the same as the digest's default, but for a quite
+/// different reason: these are cheap, and the number is about how stale a
+/// dashboard may be rather than about what the loop can afford. They used
+/// to be refreshed inside the digest's cadence check, which coupled "how
+/// fresh is the page" to "how expensive is a hash" and meant that turning
+/// the digest down turned the page stale.
+const VIEWS_EVERY: u64 = 60;
 
 /// Start an island running on its own thread.
 ///
@@ -373,11 +417,13 @@ pub fn spawn_with(
         outcomes: Arc::new(Mutex::new(BTreeMap::new())),
         next_id: Arc::new(AtomicU64::new(1)),
         log_error: Arc::new(Mutex::new(None)),
+        digest_every: Arc::new(AtomicU64::new(DIGEST_EVERY)),
     };
     let stop = Arc::clone(&handle.stop);
     let outcomes = Arc::clone(&handle.outcomes);
     let pacing = Arc::clone(&handle.pacing);
     let log_error = Arc::clone(&handle.log_error);
+    let digest_every = Arc::clone(&handle.digest_every);
 
     std::thread::Builder::new()
         .name("island-sim".into())
@@ -394,6 +440,7 @@ pub fn spawn_with(
                 outcomes,
                 log,
                 log_error,
+                digest_every,
                 snapshots,
             })
         })
@@ -417,6 +464,9 @@ struct Loop {
     /// Shared with the handle, so a failed write reaches the dashboard
     /// rather than only stderr.
     log_error: Arc<Mutex<Option<String>>>,
+    /// Steps between canonical digests, read each iteration so it can be
+    /// changed on a running island.
+    digest_every: Arc<AtomicU64>,
     /// Where `ControlCommand::Snapshot` writes. Without one the command is
     /// *refused*, because the alternative is what this used to do: record
     /// "wrote a snapshot" in the timeline and write nothing.
@@ -555,8 +605,14 @@ fn run(mut it: Loop) {
             owed.steps_owed = owed.steps_owed.saturating_sub(1);
         }
 
-        if it.life.tick.is_multiple_of(DIGEST_EVERY) {
-            it.digest = IslandProjection::digest_now(&it.life);
+        // The views and the digest are on separate cadences, and that is
+        // not tidiness: they were one block until turning the digest off
+        // in the tests silently turned the conversation feed off with it,
+        // because the feed had been refreshed inside the digest's `if`.
+        // They share no cost and no purpose. Reading a handful of totals
+        // and copying at most forty short conversations is cheap; hashing
+        // two 1,152,000-cell grids is 186 steps' worth of work.
+        if it.life.tick.is_multiple_of(VIEWS_EVERY) {
             it.views.records = IslandProjection::records_now(&it.life);
             it.views.records_at_tick = it.life.tick;
             it.views.economy = IslandProjection::economy_now(&it.life);
@@ -584,6 +640,14 @@ fn run(mut it: Loop) {
             // share of a *full* island's 1.7 ms step, not of the fast ones
             // that actually set the loop's pace.
             it.views.conversations = IslandProjection::conversations_now(&it.life);
+        }
+
+        if it
+            .life
+            .tick
+            .is_multiple_of(it.digest_every.load(Ordering::Relaxed).max(1))
+        {
+            it.digest = IslandProjection::digest_now(&it.life);
         }
 
         let now = Instant::now();
