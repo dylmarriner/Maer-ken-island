@@ -80,6 +80,21 @@ running the island; compiling it next to an IDE on 8 GB would not be comfortable
 there should be given a quiet machine. Build with `-j 1` and check the binary's timestamp against the
 commit before launching a long run.
 
+## Deaths
+
+- **The founders Gem-D and Gem-K cannot die of natural causes.** Upstream's governance veto
+  (`crate::governance::check`, the "Reverence Veto") returns early from the lifecycle's death check
+  for protected entities, so a founders-only run can never show an old-age death, however long it
+  runs (the 17-year founders run has had none, and never will). Only settlers and the founders'
+  descendants can die. Violent death through the harm action is a separate path.
+- **A death is now handled on the island** (found 2026-10-09: no one had ever died in any run, and the
+  island never called `MaterialLedger::on_death`). Each step the dead are buried inside the audit
+  (the body's carbon to detritus, its water to the soil, the estate position removed), the household
+  skips them, and they are never re-adopted as newcomers. `tests/island_death.rs` kills a settler
+  through the real natural-age path and checks the ledger, the folder's `died` event and a
+  snapshot round trip. Runs started before this fix would have left a dead person's carbon in the
+  ledger as human carbon forever.
+
 ## Known fidelity limits
 
 Every known departure from reality is in `docs/island/DEVIATIONS.md` (D1-D31). The largest open
