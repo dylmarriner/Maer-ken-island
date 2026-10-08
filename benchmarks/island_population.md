@@ -109,3 +109,13 @@ fixed runs put the settled cost at **about 2 to 7 MB of process memory per perso
 form is larger than the 1.7 MB JSON record). So the honest long-run capacity is **roughly 1,000
 people on 8 GB and 2,000 or more on 16 GB**, not 5,000: the 5,002-person figure is a short-run cost
 only. A long run at that size has not been done.
+
+### What a settled person's record is made of (day 413+, fixed code)
+
+One settler, 1.78 MB as JSON: **conversation history 59%** (1,711 stored exchanges, about 620 bytes
+each, up to its cap), **the learning controller's stored experiences 34%** (2,000, its cap), and
+only 5% for everything else (profile, memory, body, needs). Both big parts are capped and
+therefore flat, not leaks. They are also the lever if the capacity above ever needs raising:
+halving both caps would take about a third off a person's memory, at the price of people
+remembering fewer conversations and learning from a shorter window. That is a behaviour change,
+so it has not been made.
