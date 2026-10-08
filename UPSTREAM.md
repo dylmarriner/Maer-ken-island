@@ -122,7 +122,9 @@ Phase 1 adds the regional island domain and its geophysics. Almost all of it is 
     **Applied on the island:** `Pause`, `Resume`, `Step` (directives, as upstream);
     `ModifyClimate` (all four parameters, against the island's own coarse climate and weather
     grids, with the heat booked from `Reservoir::OperatorIntervention` exactly as upstream books
-    it); `InjectBiomass { Producers }`; `InjectResource { Water }`; `SpawnHuman`; `RemoveHuman`.
+    it); `InjectBiomass { Producers }`; `InjectResource { Water }`; `ConstructStructure` (the island's
+    economy is upstream's `ResourceEconomyState` and the recipes are the same, through the island's
+    own buildability rule — item 28); `SpawnHuman`; `RemoveHuman`.
 
     **`NotSupportedOnIsland`,** with the reason each refusal gives. The list is
     `regional::interventions::refusal` and `every_action_is_supported_or_refused_by_name` holds
@@ -137,7 +139,6 @@ Phase 1 adds the regional island domain and its geophysics. Almost all of it is 
     | `TriggerDisturbance` | The island runs no disturbance system; `crate::disturbance` is planetary state its physical step does not carry. |
     | `ModifyScenario` | The island's scenario is an `IslandScenario`, whose digest every snapshot and replay is checked against. Upstream's three settable parameters are planetary and name nothing in it. |
     | `Scrub`, `Branch`, `Fork` | The island can be saved and loaded (`io::island_snapshot`), but its runner keeps no branch registry for a fork to be rooted in. |
-    | `ConstructStructure` | Upstream's buildability gate (`physics::MAX_CLIMB_HEIGHT_M`) allows an **absolute** 2 m of relief between a cell and each of its four neighbours — nearly flat ground on a planetary grid, and a gradient under 0.1% on the island's 2 km medium cells. Measured against the real island it refuses cell (474, 544): the estate's own cell, where the founders' house stands. The island's economy and recipes *are* upstream's, so this was built and working before that measurement; it is refused rather than offered as an action that works and then turns almost everything down. An island rule wants a **gradient** rather than a height difference, and retuning a constant the planetary world also builds against is its own piece of work. |
 
     Two island differences inside the actions that *are* applied. A `Location` off the domain is
     **refused** rather than clamped: upstream's planet has a cell for every coordinate, and
@@ -157,6 +158,56 @@ Phase 1 adds the regional island domain and its geophysics. Almost all of it is 
     next one. The material injections are different: `MaterialWater` and `MaterialCarbon` are
     audited against the ledger on every household step, so those go through `IslandLife::audited`
     and the audit closes on the tick they land.
+
+
+28. `mk_engine::regional::geophysics::{MAX_BUILD_GRADIENT, is_buildable_cell}` (new) and
+    `mk_engine::resource_economy::ResourceEconomyState::place_structure` (new) — **the island's
+    buildability rule, and the seam it needed.**
+
+    Upstream's `physics::is_buildable` gates on `MAX_CLIMB_HEIGHT_M`: an **absolute** 2 m of
+    relief between a cell and each of its four neighbours, ported from a game with small cells
+    and carrying its own note that it "may need tuning against Maer-Ken's actual elevation
+    scale". That is a statement about a grid's resolution, not about terrain — the same hillside
+    is 2 m per cell on one grid and 200 m per cell on another. On the island's 2 km medium cells
+    it is a gradient of 0.1%, and measured across the default island it admits **0 of 66,116 land
+    cells**. Not almost none: none, the founders' estate at 8.6% included, where the house
+    already stands.
+
+    So the island asks the same question as a gradient. `MAX_BUILD_GRADIENT` is 1 in 3 (about
+    18°), where ground is conventionally classed very steep and building stops being a footing on
+    a slope and becomes engineered terracing. It is a planning threshold, not a physical one —
+    dry soil stands far steeper, its angle of repose nearer 30–35° (a gradient of 0.58–0.70) — so
+    it is about what can be built on cheaply rather than what stands up. Sea neighbours are
+    skipped rather than counted as a drop to the sea floor, which would refuse every coast, and
+    the coast is where people build.
+
+    Measured gradient distribution over the default island's land, which is what the threshold
+    was chosen against rather than guessed at:
+
+    | at or under | share of land |
+    |---|---|
+    | 0.1% (upstream's gate here) | **0.0%** |
+    | 2% | 22.9% |
+    | 5% | 79.6% |
+    | 10% | 95.0% |
+    | 20% | 99.4% |
+    | 30% | 99.9% |
+    | steepest land on the island | 42.5% (849 m over 2 km) |
+
+    **What it cannot do, stated rather than left to be discovered.** At 2 km per cell this is a
+    mean gradient across kilometres, so it cannot judge a building plot: a 15% cell holds flat
+    benches and steep faces and this sees neither. It excludes mountainside, and that is all it
+    claims. It admits 99.9% of this island's land — which is the island being gentle at this
+    scale, not the rule being lax. A gate tightened to look strict would turn down ordinary
+    ground, which is the failure mode it exists to end.
+
+    `place_structure` is `construct_for_operator` with the terrain gate lifted out in front of
+    it: upstream's path is unchanged and still gates, and the island calls the inner one after
+    making its own judgement. The recipe check and the event-log record are shared, so a
+    structure placed by the island is as visible in the economy's books as any agent-built one;
+    the only thing a caller takes on is the terrain judgement. Suitable for upstreaming as a pure
+    refactor, and the gradient rule is a candidate for replacing `MAX_CLIMB_HEIGHT_M` upstream
+    too — the same resolution argument applies to any grid.
 
 
 ## Drift check (2026-10-02)

@@ -227,13 +227,13 @@ what was actually asked for, and an intervened-in run replays to the same digest
 
 Applied: `Pause`/`Resume`/`Step` (directives), `ModifyClimate` (all four parameters, with the
 heat booked from `OperatorIntervention` as upstream books it), `InjectBiomass { Producers }`,
-`InjectResource { Water }`, `SpawnHuman`, `RemoveHuman`. Refused, each
+`InjectResource { Water }`, `ConstructStructure`, `SpawnHuman`, `RemoveHuman`. Refused, each
 naming what is missing: `SculptTerrain`/`SmoothTerrain` (the terrain is canon and hashed into
 the digest), the three animal `InjectBiomass` types (no species at island scale), the four
 non-water `InjectResource` types (the island's stores are named materials), `InjectEnergy` (the
 island's energy is the estate's plant, not a field), `TriggerDisturbance` (no disturbance
-system), `ModifyScenario` (a different scenario type, digest-checked),
-`Scrub`/`Branch`/`Fork` (no branch registry), and `ConstructStructure`. The table is in `UPSTREAM.md` and
+system), `ModifyScenario` (a different scenario type, digest-checked), and
+`Scrub`/`Branch`/`Fork` (no branch registry). The table is in `UPSTREAM.md` and
 `every_action_is_supported_or_refused_by_name` walks every variant to keep the two in step.
 
 Two island differences inside the actions that are applied, both of which would have been
@@ -245,17 +245,54 @@ ledger (out through the boundary, because a removal is not a death), and the two
 accumulators, which are hashed — a ghost in any of them makes two islands that agree about who
 is alive disagree about their digest.
 
-`ConstructStructure` is the one that was built, measured, and then withdrawn. The island's
-economy is upstream's `ResourceEconomyState` and its recipes are the same, so it worked — but
-upstream's buildability gate allows an **absolute** 2 m of relief between a cell and each of its
-four neighbours (`physics::MAX_CLIMB_HEIGHT_M`, whose own comment says the threshold "may need
-tuning against Maer-Ken's actual elevation scale"). On a planetary grid that is nearly flat
-ground; on the island's 2 km cells it is a gradient under 0.1%. Driven against the real island
-it refused cell (474, 544) — the estate's own cell, where the founders' house already stands.
-An action that is offered and then turns down the ground people live on is worse than one that
-says it is not ready, so it is refused with that reason. An island rule wants a gradient rather
-than a height difference, and retuning a constant the planetary world also builds against is not
-something to do quietly in passing.
+`ConstructStructure` needed the island its own buildability rule first, and getting there was
+the most instructive part of this task. The island's economy is upstream's
+`ResourceEconomyState` and the recipes are the same, so the action worked immediately — and then
+refused cell (474, 544), the estate's own cell, where the founders' house already stands.
+
+Upstream's gate is `physics::MAX_CLIMB_HEIGHT_M`: an **absolute** 2 m of relief between a cell
+and each of its four neighbours, carrying its own note that the threshold "may need tuning
+against Maer-Ken's actual elevation scale". That is a statement about a grid's resolution rather
+than about terrain — the same hillside is 2 m per cell on one grid and 200 m per cell on
+another. On the island's 2 km cells it is a gradient of 0.1%. Measuring it rather than assuming
+gave the real figure: it admits **0 of 66,116 land cells**. Not almost none — none.
+
+    at or under  0.1% (upstream's gate here) :   0.0% of land
+    at or under  2%                          :  22.9%
+    at or under  5%                          :  79.6%
+    at or under 10%                          :  95.0%
+    at or under 20%                          :  99.4%
+    at or under 30%                          :  99.9%
+    steepest land on the island              :  42.5%  (849 m over 2 km)
+    the estate's own cell                    :   8.6%
+
+So `regional::geophysics::{MAX_BUILD_GRADIENT, is_buildable_cell}` asks the same question as a
+gradient, at 1 in 3 (about 18°) — where ground is conventionally classed very steep and building
+stops being a footing on a slope and becomes engineered terracing. It is a planning threshold,
+not a physical one: dry soil stands far steeper, its angle of repose nearer 30–35°, a gradient
+of 0.58–0.70. Sea neighbours are skipped rather than counted as a drop to the sea floor, which
+would refuse every coast, and the coast is where people build.
+
+**What that rule cannot do, said here rather than left to be found.** At 2 km per cell it is a
+mean gradient across kilometres, so it cannot judge a building plot: a 15% cell holds flat
+benches and steep faces and it sees neither. It excludes mountainside, and that is the whole of
+its claim. It admits 99.9% of this island's land — the island being gentle at this scale, not
+the rule being lax. Tightening it to look strict would turn down ordinary ground, which is the
+failure it exists to end.
+
+`ResourceEconomyState::place_structure` is the seam: `construct_for_operator` with the terrain
+gate lifted out in front of it. Upstream's path is unchanged and still gates; the island calls
+the inner one after making its own judgement. The recipe check and the event-log record are
+shared, so a structure the island places is as visible in the economy's books as any agent-built
+one. Measured on the real island:
+
+    constructed Wooden Shelter (structure #1) at cell (474, 544)
+    constructed Stone House    (structure #2) at cell (474, 544)
+    refused: cell (229, 348) is in the sea
+
+The mountainside refusal is covered by `the_sea_and_the_mountainside_are_both_refused`, which
+finds the island's own steepest land cell and asserts the limit is actually exceeded there
+before testing it, so it cannot pass vacuously if the terrain changes.
 
 Served at `POST /api/world/interventions`, 202 and a command id like a creation.
 

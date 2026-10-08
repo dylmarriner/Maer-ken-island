@@ -43,13 +43,14 @@
 use mk_core::flux::{FluxKind, Reservoir};
 use mk_interventions::{
     validate_intervention, BiomassType, ClimateParameter, InterventionAction, Location, Region,
-    ResourceType, ValidationResult,
+    ResourceType, StructureKind, ValidationResult,
 };
 use mk_island::DomainLevel;
 
 use super::create_human::{CreateHumanError, CreateLocation, IslandCreateHuman};
 use super::life::IslandLife;
 use super::materials::Material;
+use crate::resource_economy::RecipeId;
 use crate::topology::GridTopology;
 
 /// A run-loop control the island's host must carry out.
@@ -228,26 +229,6 @@ pub fn refusal(action: &InterventionAction) -> Option<&'static str> {
              arrays, batteries), not an energy field over the ground, so there is nowhere a \
              quantity of energy at a coordinate would land",
         ),
-        // Upstream's buildability gate is an **absolute** 2 m of relief
-        // between a cell and each of its four neighbours
-        // (`physics::MAX_CLIMB_HEIGHT_M`, whose own comment says the
-        // threshold "may need tuning against Maer-Ken's actual elevation
-        // scale"). On a planetary grid that is nearly flat ground. On the
-        // island's 2 km medium cells it is a gradient under 0.1%, and
-        // measuring it against the real island refuses cell (474, 544) —
-        // the estate's own cell, where the founders' house already stands.
-        //
-        // So the action is refused rather than offered as one that works
-        // and then turns almost everything down. An island buildability
-        // rule is its own piece of work: it wants a *gradient* rather than
-        // a height difference, and retuning a constant the planetary world
-        // also builds against is not something to do quietly in passing.
-        InterventionAction::ConstructStructure { .. } => Some(
-            "upstream's buildability gate allows 2 m of relief between neighbouring cells, which \
-             on the island's 2 km grid is a gradient under 0.1% — it refuses even the estate's \
-             own cell, where the founders' house stands. An island rule wants a gradient rather \
-             than a height difference, and that is its own piece of work",
-        ),
         // `crate::disturbance` is planetary and the island does not run it.
         InterventionAction::TriggerDisturbance { .. } => Some(
             "the island runs no disturbance system; fire, storm and the rest are planetary \
@@ -311,6 +292,10 @@ impl IslandLife {
             InterventionAction::InjectResource {
                 amount, location, ..
             } => self.inject_water(*amount, location),
+            InterventionAction::ConstructStructure {
+                structure,
+                location,
+            } => self.construct_structure(*structure, location),
             InterventionAction::SpawnHuman {
                 template_id,
                 location,
@@ -323,7 +308,6 @@ impl IslandLife {
             // refusal it was never considered for.
             InterventionAction::SculptTerrain { .. }
             | InterventionAction::SmoothTerrain { .. }
-            | InterventionAction::ConstructStructure { .. }
             | InterventionAction::InjectEnergy { .. }
             | InterventionAction::TriggerDisturbance { .. }
             | InterventionAction::ModifyScenario { .. }
@@ -615,6 +599,95 @@ impl IslandLife {
         .map_err(|e| IslandInterventionError::Audit(e.to_string()))?;
         Ok(mutated(
             format!("put {added} kg of water into the island's stores, asked for at cell ({row}, {col})"),
+            1,
+        ))
+    }
+
+    /// Build one of the resource economy's structures on a land cell.
+    ///
+    /// The island's economy is upstream's `ResourceEconomyState` and the
+    /// recipes are the same, so the structure that appears is the same kind
+    /// of world object an agent builds from gathered materials.
+    ///
+    /// The buildability gate is the island's, not upstream's. Upstream's
+    /// `construct_for_operator` checks `physics::is_buildable`, an absolute
+    /// 2 m of relief between neighbouring cells, which on a 2 km grid is a
+    /// gradient of 0.1% and admits none of the island's 66,116 land cells —
+    /// the estate's own included. So the cell is checked here first against
+    /// [`geophysics::MAX_BUILD_GRADIENT`](super::geophysics::MAX_BUILD_GRADIENT),
+    /// and refused with its real gradient when it is mountainside.
+    ///
+    /// So the economy is entered through `place_structure`, which is
+    /// `construct_for_operator` without that gate in front of it — the
+    /// recipe is still checked and the construction is still recorded in
+    /// the event log, so a structure placed this way is as visible as any
+    /// agent-built one. The only thing the island takes on is the terrain
+    /// judgement, which is the one upstream's constant cannot make here.
+    fn construct_structure(
+        &mut self,
+        structure: StructureKind,
+        location: &Location,
+    ) -> Result<IslandApplied, IslandInterventionError> {
+        let (row, col) = self.cell_for(DomainLevel::Medium, location)?;
+        let blocked = |reason: String| IslandInterventionError::PhysicallyBlocked {
+            action: "ConstructStructure".to_string(),
+            reason,
+        };
+        if !*self.physical.geophysics.land_mask.get(row, col) {
+            return Err(blocked(format!("cell ({row}, {col}) is in the sea")));
+        }
+        let size_m = self.domain.cell_size_m(DomainLevel::Medium);
+        if !super::geophysics::is_buildable_cell(
+            &self.physical.geophysics.elevation_m,
+            &self.physical.geophysics.land_mask,
+            size_m,
+            row,
+            col,
+        ) {
+            let here = *self.physical.geophysics.elevation_m.get(row, col);
+            let steepest = [(0i64, 1i64), (0, -1), (1, 0), (-1, 0)]
+                .iter()
+                .filter_map(|(drow, dcol)| {
+                    let (r, c) = (row as i64 + drow, col as i64 + dcol);
+                    let (rows, cols) = (
+                        self.domain.rows(DomainLevel::Medium) as i64,
+                        self.domain.cols(DomainLevel::Medium) as i64,
+                    );
+                    (r >= 0 && c >= 0 && r < rows && c < cols).then_some((r as usize, c as usize))
+                })
+                .filter(|(r, c)| *self.physical.geophysics.land_mask.get(*r, *c))
+                .map(|(r, c)| {
+                    (here - *self.physical.geophysics.elevation_m.get(r, c)).abs() / size_m
+                })
+                .fold(0.0f64, f64::max);
+            return Err(blocked(format!(
+                "cell ({row}, {col}) falls {:.1}% to a neighbour, and an ordinary footing \
+                 wants no more than {:.1}%",
+                steepest * 100.0,
+                super::geophysics::MAX_BUILD_GRADIENT * 100.0
+            )));
+        }
+        let recipe = match structure {
+            StructureKind::WoodenShelter => RecipeId::WoodenShelter,
+            StructureKind::Workshop => RecipeId::Workshop,
+            StructureKind::Storage => RecipeId::Storage,
+            StructureKind::StoneHouse => RecipeId::StoneHouse,
+        };
+        let tick = self.tick;
+        let id = self
+            .economy
+            .place_structure(
+                "operator",
+                recipe,
+                crate::agents::GridPosition::new(row as i32, col as i32),
+                tick,
+            )
+            .map_err(|reason| blocked(format!("cell ({row}, {col}): {reason}")))?;
+        Ok(mutated(
+            format!(
+                "constructed {} (structure #{id}) at cell ({row}, {col})",
+                structure.display_name()
+            ),
             1,
         ))
     }

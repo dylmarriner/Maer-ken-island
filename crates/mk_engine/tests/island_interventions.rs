@@ -181,7 +181,6 @@ fn one_of_each(life: &IslandLife) -> Vec<InterventionAction> {
 /// sides — becoming supported, or stopping being supported — fails here
 /// and has to be accounted for in `UPSTREAM.md` at the same time.
 const REFUSED: &[&str] = &[
-    "ConstructStructure",
     "Scrub",
     "Branch",
     "Fork",
@@ -766,4 +765,131 @@ fn an_absurd_radius_covers_the_island_rather_than_hanging_the_thread() {
         "it took {:?}, which is the hang this test exists for",
         started.elapsed()
     );
+}
+
+#[test]
+fn a_shelter_goes_up_on_the_ground_people_actually_live_on() {
+    // The island's buildability rule exists because upstream's does not
+    // survive the change of resolution: an absolute 2 m of relief between
+    // neighbouring cells is a gradient of 0.1% on a 2 km grid, and admits
+    // none of this island's 66,116 land cells — the estate's own included,
+    // at 8.6%, where the founders' house already stands. A gate that turns
+    // down the ground people live on is not a gate, it is a bug.
+    let mut life = island();
+    let (row, col) = a_land_cell(&life);
+    let summary = life
+        .intervene(&InterventionAction::ConstructStructure {
+            structure: StructureKind::WoodenShelter,
+            location: at(&life, row, col),
+        })
+        .expect("the estate's own cell is buildable ground")
+        .summary();
+    assert!(summary.contains("Wooden Shelter"), "{summary}");
+    assert_eq!(life.economy.structures.len(), 1, "{summary}");
+
+    // And it is in the economy's books under the operator, as visible as
+    // anything an agent builds, rather than slipped in beside them.
+    assert!(
+        life.economy.events.iter().any(|e| e.agent_id == "operator"),
+        "the construction should be in the event log"
+    );
+}
+
+#[test]
+fn the_sea_and_the_mountainside_are_both_refused() {
+    let mut life = island();
+    let sea = a_sea_cell(&life);
+    match life.intervene(&InterventionAction::ConstructStructure {
+        structure: StructureKind::Storage,
+        location: at(&life, sea.0, sea.1),
+    }) {
+        Err(IslandInterventionError::PhysicallyBlocked { reason, .. }) => {
+            assert!(reason.contains("sea"), "{reason}")
+        }
+        other => panic!("you cannot build on the sea, got {other:?}"),
+    }
+
+    // The steepest land cell on the island, whatever and wherever it is.
+    let size = life.domain.cell_size_m(DomainLevel::Medium);
+    let (rows, cols) = (
+        life.domain.rows(DomainLevel::Medium),
+        life.domain.cols(DomainLevel::Medium),
+    );
+    let elevation = &life.physical.geophysics.elevation_m;
+    let mask = &life.physical.geophysics.land_mask;
+    let steepest = (1..rows - 1)
+        .flat_map(|r| (1..cols - 1).map(move |c| (r, c)))
+        .filter(|(r, c)| *mask.get(*r, *c))
+        .map(|(r, c)| {
+            let here = *elevation.get(r, c);
+            let drop = [(0i64, 1i64), (0, -1), (1, 0), (-1, 0)]
+                .iter()
+                .filter(|(dr, dc)| *mask.get((r as i64 + dr) as usize, (c as i64 + dc) as usize))
+                .map(|(dr, dc)| {
+                    (here - *elevation.get((r as i64 + dr) as usize, (c as i64 + dc) as usize))
+                        .abs()
+                })
+                .fold(0.0f64, f64::max);
+            ((drop / size * 1e9) as u64, (r, c))
+        })
+        .max()
+        .expect("the island has land");
+    let gradient = steepest.0 as f64 / 1e9;
+    assert!(
+        gradient > mk_engine::regional::geophysics::MAX_BUILD_GRADIENT,
+        "this island's steepest land is {:.1}%, under the {:.1}% limit, so there is nothing \
+         here this test can refuse — it would pass vacuously",
+        gradient * 100.0,
+        mk_engine::regional::geophysics::MAX_BUILD_GRADIENT * 100.0
+    );
+    let (r, c) = steepest.1;
+    match life.intervene(&InterventionAction::ConstructStructure {
+        structure: StructureKind::StoneHouse,
+        location: at(&life, r, c),
+    }) {
+        Err(IslandInterventionError::PhysicallyBlocked { reason, .. }) => {
+            assert!(
+                reason.contains('%'),
+                "the refusal should give the gradient: {reason}"
+            )
+        }
+        other => panic!("mountainside is not a building plot, got {other:?}"),
+    }
+}
+
+#[test]
+fn the_buildability_rule_survives_a_change_of_resolution() {
+    use mk_core::grid::{Grid2, GridSpec};
+    use mk_engine::regional::geophysics::{is_buildable_cell, MAX_BUILD_GRADIENT};
+
+    // The same hillside, described by two grids. A rule written as a height
+    // difference calls these two different places; a gradient does not, and
+    // that is the whole reason the island does not use upstream's.
+    let spec = GridSpec::new(3, 3);
+    let mut coarse = Grid2::new(&spec, 0.0);
+    let mut fine = Grid2::new(&spec, 0.0);
+    let land = Grid2::new(&spec, true);
+    // A 10% slope: 200 m over 2 km, and 2 m over 20 m.
+    coarse.set(1, 2, 200.0);
+    fine.set(1, 2, 2.0);
+    assert!(is_buildable_cell(&coarse, &land, 2000.0, 1, 1));
+    assert!(is_buildable_cell(&fine, &land, 20.0, 1, 1));
+
+    // And a 50% slope is refused at either resolution.
+    let mut coarse = Grid2::new(&spec, 0.0);
+    let mut fine = Grid2::new(&spec, 0.0);
+    coarse.set(1, 2, 1000.0);
+    fine.set(1, 2, 10.0);
+    // The 50% slope below only tests anything while it is over the limit.
+    const { assert!(0.5 > MAX_BUILD_GRADIENT) };
+    assert!(!is_buildable_cell(&coarse, &land, 2000.0, 1, 1));
+    assert!(!is_buildable_cell(&fine, &land, 20.0, 1, 1));
+
+    // The coast is buildable: a sea neighbour is not a drop to the sea
+    // floor, and treating it as one would make every shoreline refuse.
+    let mut shore = Grid2::new(&spec, 5.0);
+    shore.set(1, 2, -800.0);
+    let mut mask = Grid2::new(&spec, true);
+    mask.set(1, 2, false);
+    assert!(is_buildable_cell(&shore, &mask, 2000.0, 1, 1));
 }
