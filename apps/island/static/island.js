@@ -195,6 +195,16 @@ async function showEconomy() {
 async function showTimeline() {
   const data = await getJson("/api/timeline");
   notes.timeline.textContent = data.note;
+  // The timeline is served from the island's memory, so it looks healthy
+  // whether or not the replay log is reaching disk. If it is not, say so
+  // here: a record nobody can replay is the one thing this page must not
+  // show silently.
+  if (data.log_error) {
+    notes.timeline.append(
+      el("strong", " The replay log is not being written: ", { class: "warn" }),
+      document.createTextNode(data.log_error),
+    );
+  }
   if (!data.entries.length) {
     bodies.timeline.replaceChildren(
       emptyState(

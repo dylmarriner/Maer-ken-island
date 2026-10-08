@@ -957,6 +957,69 @@ async fn a_paused_island_still_hears_the_queue() {
 /// each one serves something the island actually holds, and says plainly
 /// what it does not.
 #[tokio::test]
+async fn a_replay_log_that_cannot_be_written_is_said_on_the_page() {
+    // The timeline is served from the island's own memory, so it reads the
+    // same whether or not the log reached disk. Until this, a failed write
+    // went to stderr and nowhere else: the page went on showing commands
+    // that were not recorded anywhere, and said nothing. A full disk is not
+    // hypothetical — it happened twice while this branch was written.
+    use island::serve::sim::{spawn_with, SimSpeed};
+    use std::path::PathBuf;
+
+    let repo = |path: &str| {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .join(path)
+    };
+    let mut scenario =
+        mk_island::IslandScenario::load(&repo("fixtures/island/default_scenario.json")).unwrap();
+    scenario.estate_patch.tree_cap = 50;
+    let canon =
+        Arc::new(mk_core::canon::CanonLocked::load(&repo("fixtures/island/canon.json")).unwrap());
+    let life = mk_engine::regional::life::IslandLife::bootstrap(scenario, canon).unwrap();
+
+    // A directory that does not exist, so every save fails for a reason
+    // the operating system supplies rather than one this test invents.
+    let unwritable = PathBuf::from("/nonexistent-by-design/replay.json");
+    // Paced rather than flat out, unlike its neighbours. This test needs
+    // one command applied, not accumulated ticks, and every test in this
+    // file holds an island on its own sim thread: one more spinning a core
+    // at `AsFastAsPossible` is what pushed `a_new_person_can_be_read_the_
+    // moment_they_exist` past its deadline when the whole workspace runs
+    // at once. At `Times(600)` the loop sleeps between 60-second steps,
+    // waking ten times a second -- far inside the deadline below, and
+    // costing almost nothing while it waits.
+    let world = spawn_with(life, SimSpeed::Times(600), Some(unwritable), None);
+
+    // Nothing has been applied yet, so nothing has been written: no error.
+    assert_eq!(world.replay_log_error(), None);
+
+    // A command makes the loop try to save, and fail.
+    world.send(mk_engine::regional::commands::IslandCommand::Control(
+        mk_engine::regional::commands::ControlCommand::Pause,
+    ));
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    let said = loop {
+        if let Some(said) = world.replay_log_error() {
+            break said;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "a failing replay log was never reported"
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    };
+    assert!(
+        said.contains("replay.json"),
+        "the message names the path it could not write: {said}"
+    );
+    // Shown as text, so it must read as prose rather than markdown.
+    assert!(!said.contains('`'), "shown on the page as text: {said}");
+
+    world.stop();
+}
+
+#[tokio::test]
 async fn properties_economy_and_timeline_serve_what_the_island_really_holds() {
     let (world, port, server) = a_running_dashboard().await;
 

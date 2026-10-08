@@ -172,6 +172,15 @@ pub struct SimHandle {
     commands: Sender<Queued>,
     outcomes: Arc<Mutex<BTreeMap<u64, Outcome>>>,
     next_id: Arc<AtomicU64>,
+    /// Why the replay log last failed to write, if it did.
+    ///
+    /// The log is what makes a run reproducible, and the timeline the
+    /// dashboard serves is read from the copy in memory — so when writing
+    /// stops working the page goes on showing commands that are not on
+    /// disk, and says nothing. This used to go to stderr alone, which in a
+    /// server process is nowhere. A full disk is not hypothetical: it
+    /// happened twice while this branch was being written.
+    log_error: Arc<Mutex<Option<String>>>,
 }
 
 impl SimHandle {
@@ -191,6 +200,15 @@ impl SimHandle {
     /// Ask the thread to finish its current step and stop.
     pub fn stop(&self) {
         self.stop.store(true, Ordering::Relaxed);
+    }
+
+    /// Why the replay log last failed to write, if it did. `None` means the
+    /// last attempt succeeded, or that no log was asked for.
+    pub fn replay_log_error(&self) -> Option<String> {
+        match self.log_error.lock() {
+            Ok(it) => it.clone(),
+            Err(poisoned) => poisoned.into_inner().clone(),
+        }
     }
 
     /// How the island is being run right now.
@@ -354,10 +372,12 @@ pub fn spawn_with(
         commands,
         outcomes: Arc::new(Mutex::new(BTreeMap::new())),
         next_id: Arc::new(AtomicU64::new(1)),
+        log_error: Arc::new(Mutex::new(None)),
     };
     let stop = Arc::clone(&handle.stop);
     let outcomes = Arc::clone(&handle.outcomes);
     let pacing = Arc::clone(&handle.pacing);
+    let log_error = Arc::clone(&handle.log_error);
 
     std::thread::Builder::new()
         .name("island-sim".into())
@@ -373,6 +393,7 @@ pub fn spawn_with(
                 inbox,
                 outcomes,
                 log,
+                log_error,
                 snapshots,
             })
         })
@@ -393,6 +414,9 @@ struct Loop {
     inbox: Receiver<Queued>,
     outcomes: Arc<Mutex<BTreeMap<u64, Outcome>>>,
     log: Option<PathBuf>,
+    /// Shared with the handle, so a failed write reaches the dashboard
+    /// rather than only stderr.
+    log_error: Arc<Mutex<Option<String>>>,
     /// Where `ControlCommand::Snapshot` writes. Without one the command is
     /// *refused*, because the alternative is what this used to do: record
     /// "wrote a snapshot" in the timeline and write nothing.
@@ -444,13 +468,25 @@ fn run(mut it: Loop) {
         let stepping = !pacing.paused || pacing.steps_owed > 0;
         if applied_anything {
             if let Some(path) = &it.log {
-                // A failure here loses the record, not the world: say so
-                // and carry on, as the folders do.
-                if let Err(e) = it.life.replay_log().save(path) {
-                    eprintln!(
-                        "the replay log could not be written to {}: {e}",
-                        path.display()
-                    );
+                // A failure here loses the record, not the world: carry on,
+                // as the folders do — but say so somewhere a person will
+                // look. The island keeps running and the timeline keeps
+                // serving from memory, so without this the page shows
+                // commands that are not on disk and gives no sign.
+                let outcome = match it.life.replay_log().save(path) {
+                    Ok(()) => None,
+                    Err(e) => {
+                        let said = format!(
+                            "the replay log could not be written to {}: {e}",
+                            path.display()
+                        );
+                        eprintln!("{said}");
+                        Some(said)
+                    }
+                };
+                match it.log_error.lock() {
+                    Ok(mut slot) => *slot = outcome,
+                    Err(poisoned) => *poisoned.into_inner() = outcome,
                 }
             }
         }

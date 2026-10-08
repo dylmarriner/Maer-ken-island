@@ -593,3 +593,6 @@ button.link {
 .talk-rel { color: var(--muted); font-size: 0.82rem; font-style: italic; }
 .talk-line { margin: 0 0 0.3rem; line-height: 1.45; }
 .talk-who { font-weight: 600; }
+
+/* A server-side failure the page must not show silently. */
+.panel-note .warn { color: var(--warn-ink); font-weight: 600; }

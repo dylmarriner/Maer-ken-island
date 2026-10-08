@@ -754,12 +754,18 @@ pub fn routes_with_world(
             ),
             Some(world) => {
                 let current = world.projection();
+                // Said here rather than only on stderr. This list is read
+                // from the copy in memory, so if writing the log has
+                // started failing the page would otherwise show a record
+                // that is not on disk and give no sign of it.
+                let log_error = world.replay_log_error();
                 json(
                     StatusCode::OK,
                     &serde_json::json!({
                         "entries": *current.timeline,
                         "tick": current.clock.tick,
                         "note": TIMELINE_IS_EXTERNAL,
+                        "log_error": log_error,
                     }),
                 )
             }
