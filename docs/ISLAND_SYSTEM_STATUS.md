@@ -61,12 +61,17 @@ Run it with `--no-fail-fast`. Without it cargo stops at the first failing binary
 before this one reported "50 passed" across four binaries — a partial result that reads exactly
 like a whole-workspace one.
 
-The **slow tier passed** — `cargo test --workspace --release -- --ignored slow_`, 10 tests,
-0 failures, on `a198ed5`: a simulated week on the island against the reference packs (64 s), a
-simulated year of weather, ten thousand years of seismicity, a full-size island through a file,
-the human runtime to five thousand people, and the Phase 4 cost benchmark. Two of those tests
-have changed since: the human-runtime benchmark below, re-measured on the current head, and a
-new `conversation_cost` benchmark. The other eight have not been re-run on this head.
+The **slow tier passes** — `cargo test --workspace --release --no-fail-fast -- --ignored slow_`,
+**12 tests, 0 failures**, on `8564846`: a simulated week on the island against the reference
+packs, a simulated year of weather against them too, ten thousand years of seismicity, a
+full-size island through a file, a day in one step against 1,440 minute steps, the human runtime
+to five thousand people, Phase 4's cost and its long-horizon evolution, the share of a human step
+that predictive processing takes, the cost of a crowded cell, and what publishing conversations
+costs.
+
+The two reference-pack tests are the ones that matter most when reading a diff like this one:
+they compare a simulated week and a simulated year against recorded values, so they are what
+would catch a change to simulation behaviour that the fast suite cannot see.
 
 `slow_the_human_runtime_stays_small_and_roughly_linear_to_five_thousand_people` used to fail on
 a bad draw, and no longer does. It asserts `cost(5000) <= 4 x cost(200)` — a ratio against the
