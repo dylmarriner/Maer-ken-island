@@ -69,6 +69,17 @@ population scale test, the year of drinking-water physics) are run by hand, see 
 The memory-heavy tests need several GB: on a small machine build with `-j 1`, run with
 `--test-threads 2`, and keep `/tmp` (often RAM-backed) clear of large files.
 
+## Memory pressure on a shared machine (observed)
+
+The simulation itself is small (250-550 MB with up to 32 people; 1 GB at 5,000), but on the 16 GB
+development machine, which also runs an IDE (`rust-analyzer` alone was 5-5.6 GB) and a Rust compile
+(`rustc` up to 4.3 GB), the system's early-OOM killer (`earlyoom`) took out processes of mine three
+times in one evening: a compile (leaving a stale binary behind, which briefly produced a misleading
+result), and once a 470 MB simulation server mid-run. So "runs smoothly on 8-16 GB" holds for
+running the island; compiling it next to an IDE on 8 GB would not be comfortable, and a long run
+there should be given a quiet machine. Build with `-j 1` and check the binary's timestamp against the
+commit before launching a long run.
+
 ## Known fidelity limits
 
 Every known departure from reality is in `docs/island/DEVIATIONS.md` (D1-D31). The largest open
