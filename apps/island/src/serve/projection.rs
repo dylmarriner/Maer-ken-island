@@ -222,6 +222,42 @@ impl Views {
     }
 }
 
+/// What a recipe is called, for somebody reading rather than parsing.
+///
+/// `StructureKind::display_name` already exists for exactly this, and the
+/// four buildable recipes are the four structure kinds, so a page shows
+/// "Wooden Shelter" rather than the enum's `WoodenShelter`. Anything that
+/// is not one of those four falls back to its own name, which is still
+/// better than nothing and does not pretend to a nicety it has not got.
+fn recipe_name(recipe: mk_engine::resource_economy::RecipeId) -> String {
+    use mk_engine::resource_economy::RecipeId;
+    use mk_interventions::StructureKind;
+    match recipe {
+        RecipeId::WoodenShelter => StructureKind::WoodenShelter.display_name().to_string(),
+        RecipeId::Workshop => StructureKind::Workshop.display_name().to_string(),
+        RecipeId::Storage => StructureKind::Storage.display_name().to_string(),
+        RecipeId::StoneHouse => StructureKind::StoneHouse.display_name().to_string(),
+        other => format!("{other:?}"),
+    }
+}
+
+/// An economy event's subject, named the way the rest of the page names it.
+///
+/// `subject` is free text the economy writes for itself, and for a
+/// construction it is a `RecipeId` through `{:?}`. Left alone, the same
+/// building read "Stone House" in the structures table and "StoneHouse" one
+/// table below it, which is the sort of thing that makes a reader wonder
+/// whether they are looking at two different things. Only the four
+/// buildable structures are renamed, and only for display: the event
+/// itself is untouched.
+fn readable_subject(subject: &str) -> String {
+    mk_interventions::StructureKind::ALL
+        .iter()
+        .find(|kind| format!("{kind:?}") == subject)
+        .map(|kind| kind.display_name().to_string())
+        .unwrap_or_else(|| subject.to_string())
+}
+
 /// A property on the island, or belonging to it.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct Property {
@@ -403,7 +439,7 @@ impl IslandProjection {
                 .map(|s| Structure {
                     id: s.id,
                     cell: (s.position.row, s.position.col),
-                    recipe: format!("{:?}", s.recipe),
+                    recipe: recipe_name(s.recipe),
                     material_cost: s.material_cost,
                 })
                 .collect(),
@@ -415,7 +451,7 @@ impl IslandProjection {
                     tick: e.tick,
                     by: e.agent_id.clone(),
                     kind: format!("{:?}", e.kind),
-                    subject: e.subject.clone(),
+                    subject: readable_subject(&e.subject),
                     quantity: e.quantity,
                 })
                 .collect(),

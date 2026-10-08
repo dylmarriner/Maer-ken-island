@@ -487,3 +487,95 @@ button.link {
 .facts { margin: 0 0 1rem; }
 .facts dt { color: var(--muted); font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.06em; }
 .facts dd { margin: 0.1rem 0 0.7rem; font-family: var(--mono); font-size: 0.85rem; overflow-wrap: anywhere; }
+
+/* The Island page: properties, what has been built, and what has been done.
+   Cards for the properties because each is a thing with its own contents;
+   plain tables for the structures, the economy's own record and the
+   timeline, because those are rows that want comparing down a column. */
+.card-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+}
+
+.card {
+  background: var(--panel-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.95rem 1.05rem;
+  min-width: 0;
+}
+
+.card > h3 {
+  margin: 0 0 0.2rem;
+  font-size: 1.02rem;
+}
+
+.pair {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.3rem 0;
+  border-top: 1px solid var(--line);
+}
+
+.pair-label {
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.pair-value {
+  text-align: right;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.card details {
+  margin-top: 0.6rem;
+  font-size: 0.9rem;
+}
+
+.card summary {
+  cursor: pointer;
+  color: var(--accent);
+  padding: 0.2rem 0;
+}
+
+.plain-list {
+  margin: 0.4rem 0 0.2rem;
+  padding-left: 1.1rem;
+  color: var(--ink-soft);
+}
+
+.plain-list li { padding: 0.1rem 0; }
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+  margin: 0.5rem 0 1rem;
+  /* Long names wrap rather than forcing the whole panel to scroll. */
+  table-layout: auto;
+}
+
+.data-table th,
+.data-table td {
+  text-align: left;
+  padding: 0.4rem 0.6rem 0.4rem 0;
+  border-bottom: 1px solid var(--line);
+  overflow-wrap: anywhere;
+}
+
+.data-table th {
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.data-table tbody tr:last-child td { border-bottom: none; }
+
+/* The numeric columns read better right-aligned against each other. */
+.data-table td:first-child,
+.data-table th:first-child { white-space: nowrap; }

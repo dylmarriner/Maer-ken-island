@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The island · Maer-Ken Island</title>
+<meta name="description" content="What stands on the island, what has been built, and everything that has been done to it.">
+<link rel="stylesheet" href="/static/style.css">
+<link rel="icon" href="data:,">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="inner">
+    <a class="brand" href="/"><span class="mark" aria-hidden="true">◈</span> Maer-Ken Island <span class="sub">dashboard</span></a>
+    <nav class="site-nav" aria-label="Main">
+      <a href="/">Overview</a>
+      <a href="/people">People</a>
+      <a href="/island" aria-current="page">The island</a>
+      <a href="/creator">Create a human</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+  <div class="intro">
+    <p class="eyebrow">The island</p>
+    <h1>What stands here, and what has been done to it</h1>
+    <p class="lead" id="island-lead">The estate and its contents, the structures that have been built, and a record of everything that has reached the island from outside it.</p>
+  </div>
+
+  <p class="banner is-error" id="offline" hidden>
+    <strong>The dashboard cannot reach the island server.</strong>
+    <span id="offline-detail">Check that <code>island serve</code> is still running, then reload.</span>
+  </p>
+
+  <p class="banner" id="no-world" hidden>
+    <strong>No island is running.</strong>
+    <span>This dashboard was started without <code>--scenario</code>, so there is no world to describe. The People page still works: it shows the stored population.</span>
+  </p>
+
+  <section class="panel" aria-labelledby="properties-heading" id="properties-panel" hidden>
+    <h2 id="properties-heading">Properties</h2>
+    <p class="panel-note" id="properties-note"></p>
+    <div id="properties"></div>
+  </section>
+
+  <section class="panel" aria-labelledby="economy-heading" id="economy-panel" hidden>
+    <h2 id="economy-heading">What has been built</h2>
+    <p class="panel-note" id="economy-note"></p>
+    <div id="economy"></div>
+  </section>
+
+  <section class="panel" aria-labelledby="timeline-heading" id="timeline-panel" hidden>
+    <h2 id="timeline-heading">What has been done to the island</h2>
+    <p class="panel-note" id="timeline-note"></p>
+    <div id="timeline"></div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="inner">
+    <p>Maer-Ken Island dashboard <span id="version"></span></p>
+    <p class="spacer"></p>
+    <p id="footer-writes">Reading is open to anyone who can reach this page.</p>
+  </div>
+</footer>
+
+<script type="module" src="/static/island.js"></script>
+</body>
+</html>

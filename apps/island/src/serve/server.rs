@@ -400,17 +400,21 @@ struct ActivityQuery {
 
 /// Said in `/api/economy` rather than left for a reader to infer from three
 /// empty lists.
+///
+/// Plain prose with no markup: the dashboard puts it on the page with
+/// `textContent`, as it does everything from the server, so a backtick
+/// would be a backtick on screen rather than code formatting.
 const NO_RESOURCE_NODES: &str =
-    "The island seeds no resource nodes from its biomes, the way a planetary world does, so \
-     `resource_nodes` is always 0. Structures and events are real: they are what has actually \
+    "The island seeds no resource nodes from its biomes, the way a planetary world does, so the \
+     count of them is always zero. Structures and events are real: they are what has actually \
      been built here and what the economy recorded doing it, which is nothing until somebody \
      builds something.";
 
 /// Said in `/api/timeline` for the same reason.
 const TIMELINE_IS_EXTERNAL: &str =
     "Everything that has reached this island from outside, in the order it applied — the same \
-     record `island replay` reads, so this cannot disagree with it. It is not a history of what \
-     the islanders did: nothing here is a person going to bed or felling a tree.";
+     record the replay runner reads, so this cannot disagree with it. It is not a history of \
+     what the islanders did: nothing here is a person going to bed or felling a tree.";
 
 /// Headers every response carries. The pages load nothing from anywhere but
 /// this server, so the policy can say exactly that: no third-party script,

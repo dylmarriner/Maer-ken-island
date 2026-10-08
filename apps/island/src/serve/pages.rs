@@ -6,6 +6,7 @@ use warp::{Filter, Reply};
 
 const OVERVIEW: &str = include_str!("../../static/index.html");
 const PEOPLE: &str = include_str!("../../static/people.html");
+const ISLAND: &str = include_str!("../../static/island.html");
 const CREATOR: &str = include_str!("../../static/creator.html");
 const NOT_FOUND: &str = include_str!("../../static/not-found.html");
 
@@ -15,11 +16,12 @@ const CSS: &str = "text/css; charset=utf-8";
 
 /// The files under `/static/`. Keeping them in one table means a new asset is
 /// one line here rather than a new route.
-pub const ASSETS: [(&str, &str, &str); 5] = [
+pub const ASSETS: [(&str, &str, &str); 6] = [
     ("style.css", include_str!("../../static/style.css"), CSS),
     ("app.js", include_str!("../../static/app.js"), JS),
     ("overview.js", include_str!("../../static/overview.js"), JS),
     ("people.js", include_str!("../../static/people.js"), JS),
+    ("island.js", include_str!("../../static/island.js"), JS),
     ("creator.js", include_str!("../../static/creator.js"), JS),
 ];
 
@@ -44,6 +46,7 @@ fn page(body: &'static str) -> impl warp::Reply {
 pub fn routes() -> impl Filter<Extract = (impl Reply,), Error = std::convert::Infallible> + Clone {
     let overview = warp::path::end().and(read()).map(|| page(OVERVIEW));
     let people = warp::path!("people").and(read()).map(|| page(PEOPLE));
+    let island = warp::path!("island").and(read()).map(|| page(ISLAND));
     let creator = warp::path!("creator").and(read()).map(|| page(CREATOR));
     let assets = warp::path!("static" / String)
         .and(read())
@@ -66,6 +69,7 @@ pub fn routes() -> impl Filter<Extract = (impl Reply,), Error = std::convert::In
 
     overview
         .or(people)
+        .or(island)
         .or(creator)
         .or(assets)
         .or(missing)

@@ -993,11 +993,17 @@ async fn properties_economy_and_timeline_serve_what_the_island_really_holds() {
     let body: serde_json::Value = serde_json::from_str(body_of(&response)).unwrap();
     assert_eq!(body["resource_nodes"], 0);
     assert_eq!(body["structures"].as_array().map(|s| s.len()), Some(0));
+    let note = body["note"].as_str().expect("a note");
     assert!(
-        body["note"]
-            .as_str()
-            .is_some_and(|n| n.contains("seeds no resource nodes")),
+        note.contains("seeds no resource nodes"),
         "an empty economy has to say it is empty on purpose: {body}"
+    );
+    // The dashboard puts these on the page with `textContent`, like
+    // everything from the server, so a backtick would be a backtick on
+    // screen rather than code formatting.
+    assert!(
+        !note.contains('`'),
+        "a note read by a person carries no markup: {note}"
     );
 
     // Timeline: nothing has reached this island yet.
@@ -1036,7 +1042,16 @@ async fn properties_economy_and_timeline_serve_what_the_island_really_holds() {
         let body: serde_json::Value = serde_json::from_str(body_of(&response)).unwrap();
         if body["structures"].as_array().is_some_and(|s| s.len() == 1) {
             let built = &body["structures"][0];
-            assert_eq!(built["recipe"], "WoodenShelter", "{body}");
+            // The display name, not the enum's `{:?}`: this is read by a
+            // person, and `StructureKind::display_name` exists for it.
+            assert_eq!(built["recipe"], "Wooden Shelter", "{body}");
+            // And the economy's own record of it names it the same way, so
+            // the two tables on the page do not disagree about one thing.
+            let recorded = body["events"]
+                .as_array()
+                .and_then(|e| e.first())
+                .expect("the economy recorded the construction");
+            assert_eq!(recorded["subject"], "Wooden Shelter", "{body}");
             break;
         }
         assert!(
