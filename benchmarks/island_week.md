@@ -22,7 +22,7 @@ Cadences: humans 60 s, physics hourly, ecology and households 6-hourly.
 | Stock audits (material carbon, body carbon, water) | 196, all closed |
 | Founders | both alive, both in the estate |
 | Food and water shortfalls | 0 |
-| State digest, two separate processes | identical (`f97c4ca2...1f52`), re-pinned after the command state joined the digest |
+| State digest, two separate processes | identical (`0e2da25f...f98e`), re-pinned after the command state joined the digest |
 
 Not in this number: Phases 4, 4b and 5 (persistence, replay, the app, a larger population, the
 refinery and town). The population is two humans; `benchmarks/humans_population.md` measures the
@@ -84,7 +84,7 @@ What this does and does not show. It does show that a household of founders runs
 simulated years inside a flat 250-320 MB, gains three children born on the WHO growth curves, and
 never runs short of food or water. It does **not** show that the household is realistic:
 
-- **The materials ledger is not place-based; the needs model is.** A person's hunger and thirst
+- **(True of this run; fixed afterwards, see below.) The materials ledger was not place-based; the needs model is.** A person's hunger and thirst
   come from the observation at their own cell (surface water, runoff, rain and soil moisture for
   water, NPP for forage), so the family 44 km north of the estate was fed by the land where it
   stood. But the household's *material bookkeeping* (the carbon and water drawn from the world
@@ -100,3 +100,15 @@ never runs short of food or water. It does **not** show that the household is re
 - No one died in five years (two adults of 25-30 and three children) and the founders did not
   have a child with each other's partner beyond Gem-K's three; a decades-long run with deaths and
   a second generation has not been done.
+
+### Meals and drinks are now booked where people stand
+
+After the five-year run the household bookkeeping was changed: a person eats from the plants on
+the cell they stand on (else the nearest cell around it that has any), and drinks from the nearest
+wet cell within two cells of where they stand (near the estate also its stream, or the wet cell
+beside it); someone with nothing in reach is a counted shortfall. `tests/island_foraging.rs`: a
+traveller placed 40+ cells from the estate has their meal taken from the plants around them, and
+finds water. The week digest changed for that reason, to `0e2da25f...f98e` (two separate
+processes agree); the founders still have no shortfalls. The five-year run above was **not**
+repeated on the new code, so its end state (where the people are, who is alive) describes the
+earlier bookkeeping.

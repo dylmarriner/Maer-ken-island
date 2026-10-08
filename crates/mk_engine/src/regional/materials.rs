@@ -178,21 +178,36 @@ pub fn respired_carbon_kg_per_kcal() -> f64 {
 /// Share of a river's flow a household may draw per day.
 pub const RIVER_WITHDRAWAL_FRACTION: f64 = 0.01;
 
-/// The cells a person tries for a drink, in order: the usual cell, then its
-/// eight neighbours in row-major order (a stream cell can be dry for a day
-/// while the next one holds water). Cells off the grid are left out.
-pub fn water_search_cells(cell: (usize, usize), rows: usize, cols: usize) -> Vec<(usize, usize)> {
+/// The cells a person tries for food or water, nearest first: the cell they
+/// stand on, then those one cell away, then two, and so on to `radius`, each
+/// ring in row-major order (so the order is fixed). Cells off the grid are
+/// left out. A stream cell can be dry for a day while the next one holds water.
+pub fn cells_around(
+    cell: (usize, usize),
+    radius: usize,
+    rows: usize,
+    cols: usize,
+) -> Vec<(usize, usize)> {
     let mut cells = vec![cell];
-    for dr in -1i64..=1 {
-        for dc in -1i64..=1 {
-            let (r, c) = (cell.0 as i64 + dr, cell.1 as i64 + dc);
-            if (dr, dc) != (0, 0) && (0..rows as i64).contains(&r) && (0..cols as i64).contains(&c)
-            {
-                cells.push((r as usize, c as usize));
+    for ring in 1..=radius as i64 {
+        for dr in -ring..=ring {
+            for dc in -ring..=ring {
+                if dr.abs().max(dc.abs()) != ring {
+                    continue;
+                }
+                let (r, c) = (cell.0 as i64 + dr, cell.1 as i64 + dc);
+                if (0..rows as i64).contains(&r) && (0..cols as i64).contains(&c) {
+                    cells.push((r as usize, c as usize));
+                }
             }
         }
     }
     cells
+}
+
+/// The usual cell then its eight neighbours (`cells_around` with radius 1).
+pub fn water_search_cells(cell: (usize, usize), rows: usize, cols: usize) -> Vec<(usize, usize)> {
+    cells_around(cell, 1, rows, cols)
 }
 
 /// Water a cell offers a drinker right now: standing water plus the river's

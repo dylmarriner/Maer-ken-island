@@ -23,7 +23,7 @@ fidelity limits. The project is **not complete**: see "Not done".
 | World composition, scheduler, snapshot, commands and replay (Phase 4 Tasks 1-4) | Done | `regional/{world,scheduler,commands,replay}.rs`, `io/island_snapshot.rs`, `tests/island_{world_bootstrap,scheduler,snapshot,replay}.rs` |
 | Per-human folders through upstream storage, written in rotating shards (Phase 4 Task 3b) | Done | `regional/store.rs`, `tests/island_human_store.rs` |
 | Births on the island: newborn age and WHO growth, adoption into the household books (mother's carbon, mother's position), body-mass rations, under-fives stay with their mother | Done; a year run shows the child as a 5 kg infant at 3 months | `humans/growth.rs`, `regional/life.rs` (`adopt_newborns`), `tests/island_newborn.rs`, UPSTREAM.md #27, `benchmarks/island_week.md` |
-| Drinking water: stream cell or the next wet neighbour | Done; a year of physics shows no dry draw | `regional/materials.rs` (`water_search_cells`), `tests/island_water_supply.rs` (slow) |
+| Meals and drinks booked where the person stands (plants on their cell or around it; water within two cells, or the household stream near home) | Done; a year of physics shows no dry draw for the household | `regional/life.rs` (`six_hourly`), `regional/materials.rs` (`cells_around`), `tests/island_foraging.rs`, `tests/island_water_supply.rs` (slow) |
 | Headless runner and run inspection (Phase 4 Task 5) | Done except nothing pending | `apps/island/src/runner.rs`, `tests/island_runtime_acceptance.rs`, `apps/island/tests/runner_cli.rs` |
 | Live island server, pacing, creator with authored people and locations (Phase 4 Task 6) | Nearly done; see "Not done" | `apps/island/src/serve/island_{sim,api}.rs`, `regional/pacing.rs`, `tests/island_{pacing,create_human}.rs` |
 
@@ -88,7 +88,7 @@ Phase 3 Tasks 3 and 4b (D10, D13).
   tectonics model to spin up, and ecology already starts at its equilibrium (plan, Task 2b).
 - Phase 4 Task 6, remainder: a map picker for island cells,
   and `agent_id` slugging from a display name. The page's read path was checked in headless Chrome; its Add form was not clicked in a browser.
-- **The household's material bookkeeping is not place-based.** What people can eat and drink in the needs model comes from their own cell, but the carbon and water drawn from the world when they eat and drink are booked at the estate's fixed food and water cells. In the five-year run the mother and her three children were 44 km from the estate, fed by the land where they stood, while their meals were booked against the estate. The books close; the depletion is in the wrong place. Booking at the person's own cell is the unfinished economy wiring.
+- The five-year run was made before meals and drinks were booked where people stand; it has not been repeated on the new bookkeeping, so its end state describes the earlier one.
 - Children: they are small, grow on the WHO curves, take a body-mass share of food and water, and under five years old stay with their mother. Older children still choose their own actions like adults, and what a child does in the economy (gathering, working) is not restricted by age; a child whose mother has died is not cared for; schooling and play are not modelled.
 - Phase 4b: energy, industry, town, economy beyond the estate.
 - Phase 5: pruning, lifetime-scale runs (births, deaths and growth over decades), final

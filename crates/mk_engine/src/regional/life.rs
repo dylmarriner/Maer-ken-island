@@ -37,7 +37,7 @@ use super::humans::{
 use super::hydrology::discharge_m3_s;
 use super::labour::{LabourBody, LabourError, LabourTable};
 use super::local_vegetation::{seed_local_vegetation, LocalVegetationError, LocalVegetationPatch};
-use super::materials::{water_search_cells, Material, MaterialError, MaterialLedger};
+use super::materials::{cells_around, water_search_cells, Material, MaterialError, MaterialLedger};
 use super::physical::{PhysicalSnapshot, RegionalPhysicalError, RegionalPhysicalState};
 use super::property::{place_regional_estate, PlaceEstateError, PlacedEstate};
 use super::scheduler::IslandScheduler;
@@ -59,6 +59,12 @@ const FULL_RATION_WEIGHT_KG: f64 = 55.0;
 /// Children younger than this stay with their mother: they do not choose
 /// where to go (they are carried, then toddle behind her).
 const DEPENDENT_AGE_YEARS: f64 = 5.0;
+/// How far from where they stand a person looks for plants to eat (cells).
+const FORAGE_RADIUS_CELLS: usize = 1;
+/// How far from where they stand a person looks for liquid water (cells).
+const WATER_RADIUS_CELLS: usize = 2;
+/// Within this many cells of the household's stream a person also uses it (cells).
+const HOME_RANGE_CELLS: usize = 3;
 
 /// Wall-clock time spent in each major part of the island step. Runtime-only
 /// instrumentation: never hashed, saved or read by the simulation.
@@ -470,44 +476,67 @@ impl IslandLife {
         let founders = self.founders();
         let area = self.domain.cell_area_m2(DomainLevel::Medium);
         self.audited(|life, ledger| {
+            let (rows, cols) = (
+                life.domain.rows(DomainLevel::Medium),
+                life.domain.cols(DomainLevel::Medium),
+            );
             for (id, _) in &founders {
-                let ration = life
-                    .humans
-                    .registry
-                    .get_human(id)
-                    .map_or(1.0, |h| ration_factor(h.body.weight_kg));
-                match life.materials.gather_biotic(
-                    Material::PlantFood,
-                    FOOD_KG_PER_MEAL * ration,
-                    &mut life.ecology,
-                    life.food_cell,
-                    area,
-                    ledger,
-                ) {
+                // Food and water are taken where the person stands.
+                let (ration, stands) =
+                    life.humans
+                        .registry
+                        .get_human(id)
+                        .map_or((1.0, life.food_cell), |h| {
+                            (
+                                ration_factor(h.body.weight_kg),
+                                (
+                                    h.position.row.clamp(0, rows as i32 - 1) as usize,
+                                    h.position.col.clamp(0, cols as i32 - 1) as usize,
+                                ),
+                            )
+                        });
+                // Food: the cell they stand on, else the nearest one around
+                // it that has plants.
+                let mut ate = Err(MaterialError::NothingToHarvest);
+                for cell in cells_around(stands, FORAGE_RADIUS_CELLS, rows, cols) {
+                    ate = life.materials.gather_biotic(
+                        Material::PlantFood,
+                        FOOD_KG_PER_MEAL * ration,
+                        &mut life.ecology,
+                        cell,
+                        area,
+                        ledger,
+                    );
+                    if ate.is_ok() {
+                        break;
+                    }
+                }
+                match ate {
                     Ok(kg) => {
                         let _ = life.materials.eat(id, Material::PlantFood, kg, ledger);
                     }
-                    Err(MaterialError::NothingToHarvest) => life.shortfalls.food += 1,
                     Err(_) => life.shortfalls.food += 1,
                 }
-                // The usual stream cell, or the next wet one beside it.
+                // Water: the nearest wet cell within reach; near home, also
+                // the household's stream (or the wet cell beside it).
+                let mut candidates = cells_around(stands, WATER_RADIUS_CELLS, rows, cols);
+                if let Some(home) = life.water_cell {
+                    if stands.0.abs_diff(home.0).max(stands.1.abs_diff(home.1)) <= HOME_RANGE_CELLS
+                    {
+                        candidates.extend(water_search_cells(home, rows, cols));
+                    }
+                }
                 let mut drawn = Err(MaterialError::DryCell);
-                if let Some(cell) = life.water_cell {
-                    let (rows, cols) = (
-                        life.domain.rows(DomainLevel::Medium),
-                        life.domain.cols(DomainLevel::Medium),
+                for cell in candidates {
+                    drawn = life.materials.gather_water(
+                        WATER_KG_PER_DRINK * ration,
+                        &mut life.physical.hydrology,
+                        cell,
+                        area,
+                        ledger,
                     );
-                    for candidate in water_search_cells(cell, rows, cols) {
-                        drawn = life.materials.gather_water(
-                            WATER_KG_PER_DRINK * ration,
-                            &mut life.physical.hydrology,
-                            candidate,
-                            area,
-                            ledger,
-                        );
-                        if drawn.is_ok() {
-                            break;
-                        }
+                    if drawn.is_ok() {
+                        break;
                     }
                 }
                 match drawn {
