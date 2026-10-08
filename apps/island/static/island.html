@@ -39,6 +39,53 @@
     <span>This dashboard was started without <code>--scenario</code>, so there is no world to describe. The People page still works: it shows the stored population.</span>
   </p>
 
+  <section class="panel" aria-labelledby="intervene-heading" id="intervene-panel" hidden>
+    <h2 id="intervene-heading">Reach into the world</h2>
+    <p class="panel-note">
+      An operator intervention, in the engine's own vocabulary. Each one applies between steps,
+      on the thread that owns the island, and goes into the record below with the tick it landed
+      on. Several of these have no meaning on this island and will say so rather than quietly
+      doing nothing.
+    </p>
+    <form id="intervene-form" class="field-grid" novalidate>
+      <label for="action">What to do</label>
+      <select id="action" name="action">
+        <option value="InjectResource">Put water into the island's stores</option>
+        <option value="InjectBiomass">Add standing plant carbon</option>
+        <option value="ModifyClimate">Set the surface temperature</option>
+        <option value="ConstructStructure">Build something</option>
+        <option value="RemoveHuman">Remove somebody from the world</option>
+        <option value="SculptTerrain">Raise the land (the island refuses this)</option>
+      </select>
+
+      <label for="structure" id="structure-label">What to build</label>
+      <select id="structure" name="structure">
+        <option value="WoodenShelter">Wooden Shelter</option>
+        <option value="Workshop">Workshop</option>
+        <option value="Storage">Storage</option>
+        <option value="StoneHouse">Stone House</option>
+      </select>
+
+      <label for="amount" id="amount-label">How much</label>
+      <input id="amount" name="amount" type="number" step="any" min="0" value="100" inputmode="decimal">
+
+      <label for="person" id="person-label">Who</label>
+      <select id="person" name="person"></select>
+
+      <label for="radius" id="radius-label">Within (km)</label>
+      <input id="radius" name="radius" type="number" step="any" min="0.1" value="5" inputmode="decimal">
+
+      <label for="where" id="where-label">Where</label>
+      <select id="where" name="where"></select>
+
+      <p class="hint" id="intervene-hint"></p>
+      <div class="actions">
+        <button type="submit" id="intervene-go">Do it</button>
+      </div>
+    </form>
+    <p class="banner" id="intervene-result" hidden></p>
+  </section>
+
   <section class="panel" aria-labelledby="properties-heading" id="properties-panel" hidden>
     <h2 id="properties-heading">Properties</h2>
     <p class="panel-note" id="properties-note"></p>

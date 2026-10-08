@@ -14,6 +14,7 @@ import {
   fillChrome,
   getJson,
   message,
+  postJson,
   reportOffline,
 } from "/static/app.js";
 
@@ -226,7 +227,13 @@ async function load() {
       return;
     }
     noWorldEl.hidden = true;
-    await Promise.all([showProperties(), showEconomy(), showTimeline()]);
+    document.getElementById("intervene-panel").hidden = false;
+    await Promise.all([
+      showProperties(),
+      showEconomy(),
+      showTimeline(),
+      fillPlacesAndPeople(),
+    ]);
   } catch (error) {
     if (error && error.status === 404) {
       noWorldEl.hidden = false;
@@ -245,3 +252,180 @@ load();
 setInterval(() => {
   load().catch(() => {});
 }, 5000);
+
+// --- Reaching into the world -------------------------------------------
+//
+// The intervention endpoint had no UI at all: it was reachable only by
+// curl, which is not a control surface. This offers the actions the island
+// can honour, plus one it cannot, because an operator should be able to see
+// a refusal as easily as a success — the refusals are the part of this
+// feature that is easy to claim and hard to believe.
+
+const form = document.getElementById("intervene-form");
+const actionEl = document.getElementById("action");
+const resultEl = document.getElementById("intervene-result");
+const hintEl = document.getElementById("intervene-hint");
+const whereEl = document.getElementById("where");
+const personEl = document.getElementById("person");
+
+/// Which fields each action needs, and what the amount means for it.
+const SHAPES = {
+  InjectResource: {
+    fields: ["amount", "where"],
+    amount: ["How much water (kg)", "Water is the one material the island and upstream both name."],
+  },
+  InjectBiomass: {
+    fields: ["amount", "radius", "where"],
+    amount: [
+      "How much plant carbon (kgC)",
+      "Spread evenly over the land in the region. The sea gets none.",
+    ],
+  },
+  ModifyClimate: {
+    fields: ["amount", "radius", "where"],
+    amount: [
+      "Surface temperature (K)",
+      "An absolute target, not an offset. 288 K is about 15 °C. The heat is booked as coming " +
+        "from outside the island, and relaxes on the climate's own timescale.",
+    ],
+  },
+  ConstructStructure: {
+    fields: ["structure", "where"],
+    amount: null,
+  },
+  RemoveHuman: {
+    fields: ["person"],
+    amount: null,
+  },
+  SculptTerrain: {
+    fields: ["amount", "radius", "where"],
+    amount: [
+      "Metres of relief",
+      "The island will refuse this: its terrain comes from the canon-locked scenario and is " +
+        "hashed into the state digest, so editing it would put the island out of agreement " +
+        "with its own canon. It is here so a refusal can be seen rather than taken on trust.",
+    ],
+  },
+};
+
+const FIELD_IDS = ["structure", "amount", "person", "radius", "where"];
+
+function shapeForm() {
+  const shape = SHAPES[actionEl.value];
+  for (const id of FIELD_IDS) {
+    const field = document.getElementById(id);
+    const label = document.getElementById(`${id}-label`);
+    const wanted = shape.fields.includes(id);
+    // Both the control and its label, because a label with nothing under it
+    // is a control that does nothing — which this dashboard has shipped
+    // once already.
+    if (field) field.hidden = !wanted;
+    if (label) label.hidden = !wanted;
+  }
+  if (shape.amount) {
+    document.getElementById("amount-label").textContent = shape.amount[0];
+    hintEl.textContent = shape.amount[1];
+  } else {
+    hintEl.textContent =
+      actionEl.value === "RemoveHuman"
+        ? "They leave the registry, the estate, the material ledger and the running tallies. " +
+          "A removal is not a death: their body leaves the island rather than becoming soil."
+        : "";
+  }
+}
+
+/// The request body, in the engine's own vocabulary.
+function requestFor(place) {
+  const amount = Number(document.getElementById("amount").value);
+  const radius = Number(document.getElementById("radius").value);
+  const location = { latitude: place.latitude, longitude: place.longitude, altitude: null };
+  const region = { center: location, radius_km: radius };
+  switch (actionEl.value) {
+    case "InjectResource":
+      return { InjectResource: { resource_type: "Water", amount, location } };
+    case "InjectBiomass":
+      return { InjectBiomass: { biomass_type: "Producers", amount, region } };
+    case "ModifyClimate":
+      return { ModifyClimate: { parameter: "Temperature", value: amount, region } };
+    case "ConstructStructure":
+      return {
+        ConstructStructure: { structure: document.getElementById("structure").value, location },
+      };
+    case "RemoveHuman":
+      return { RemoveHuman: { human_id: personEl.value } };
+    case "SculptTerrain":
+      return { SculptTerrain: { elevation_delta_m: amount, region } };
+    default:
+      return null;
+  }
+}
+
+let places = [];
+
+async function fillPlacesAndPeople() {
+  const world = await getJson("/api/world");
+  places = [
+    {
+      label: `The estate — cell ${world.estate.cell[0]}, ${world.estate.cell[1]}`,
+      latitude: world.estate.latitude,
+      longitude: world.estate.longitude,
+    },
+  ];
+  whereEl.replaceChildren(
+    ...places.map((p, i) => el("option", p.label, { value: String(i) })),
+  );
+  personEl.replaceChildren(
+    ...world.people.map((p) => el("option", p.agent_id, { value: p.agent_id })),
+  );
+}
+
+/// Poll a queued command until the island has answered it.
+async function settle(id) {
+  const deadline = Date.now() + 60_000;
+  for (;;) {
+    const answer = await getJson(`/api/world/commands/${id}`);
+    if (answer.state !== "queued") return answer;
+    if (Date.now() > deadline) return { state: "unknown" };
+    await new Promise((resume) => setTimeout(resume, 400));
+  }
+}
+
+function show(text, kind) {
+  resultEl.hidden = false;
+  resultEl.className = `banner${kind ? " " + kind : ""}`;
+  resultEl.textContent = text;
+}
+
+if (form) {
+  actionEl.addEventListener("change", shapeForm);
+  shapeForm();
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const place = places[Number(whereEl.value) || 0];
+    if (!place && SHAPES[actionEl.value].fields.includes("where")) {
+      show("There is nowhere to aim this: the island has not been read yet.", "is-error");
+      return;
+    }
+    const body = requestFor(place || {});
+    show("Asking the island…");
+    const { status, body: answer } = await postJson("/api/world/interventions", body, "");
+    if (status !== 202) {
+      show(
+        (answer.errors && answer.errors.join(" ")) || `The island answered ${status}.`,
+        "is-error",
+      );
+      return;
+    }
+    const outcome = await settle(answer.command);
+    if (outcome.state === "intervened") {
+      show(outcome.summary, "is-ok");
+      await load();
+    } else if (outcome.state === "refused") {
+      // A refusal is the island saying what it is, not an error on the way
+      // in, so it reads as a statement rather than a failure.
+      show(outcome.problems.join(" "), "is-warn");
+    } else {
+      show("The island did not answer in time.", "is-error");
+    }
+  });
+}

@@ -146,6 +146,16 @@ pub struct Person {
 pub struct Estate {
     /// Medium-grid cell of the estate's block.
     pub cell: (usize, usize),
+    /// Where that cell is on the planet, in **degrees**.
+    ///
+    /// Here because an intervention is aimed with an upstream `Location`,
+    /// which is a latitude and longitude, and a page that could only name
+    /// cells had no way to ask for anywhere at all. Degrees, not radians:
+    /// `IslandDomain::lat_lon_at_m` answers in radians because its other
+    /// caller does trigonometry with the result, and passing those through
+    /// as degrees is a mistake this code has already made once.
+    pub latitude: f64,
+    pub longitude: f64,
     pub buildings: usize,
     pub items: usize,
     /// Every space somebody can be put in, by the layout's own id and
@@ -545,8 +555,18 @@ fn space_name(life: &IslandLife, space: Space) -> String {
 
 fn estate(life: &IslandLife) -> Estate {
     let energy = &life.energy;
+    let (latitude, longitude) = {
+        let size = life.domain.cell_size_m(mk_island::DomainLevel::Medium);
+        let (row, col) = life.placed.location;
+        let (lat, lon) = life
+            .domain
+            .lat_lon_at_m((col as f64 + 0.5) * size, (row as f64 + 0.5) * size);
+        (lat.to_degrees(), lon.to_degrees())
+    };
     Estate {
         cell: life.placed.location,
+        latitude,
+        longitude,
         buildings: life.placed.layout.buildings.len(),
         items: life.placed.layout.items.len(),
         battery_charge_kwh: energy.batteries.iter().map(|b| b.charge_kwh).sum(),

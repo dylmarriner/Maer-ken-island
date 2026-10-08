@@ -208,6 +208,12 @@ main {
 .banner strong { font-weight: 650; }
 .banner.is-error { border-color: var(--err); background: var(--err-bg); color: var(--err); }
 .banner.is-quiet { border-color: var(--line); background: var(--bg-sunk); color: var(--ink-soft); }
+/* An intervention the island carried out, and one it declined. A refusal is
+   the island saying what it is, not a failure on the way in, so it is a
+   warning rather than an error: the request was fine, the island simply has
+   no meaning for it. */
+.banner.is-ok { border-color: var(--ok); background: var(--accent-soft); color: var(--ok); }
+.banner.is-warn { border-color: var(--warn-line); background: var(--warn-bg); color: var(--warn-ink); }
 .banner[hidden] { display: none; }
 
 /* --- cards and panels ----------------------------------------------- */
