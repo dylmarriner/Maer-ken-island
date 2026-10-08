@@ -725,6 +725,31 @@ pub fn routes_with_world(
             }
         });
 
+    // What is at one cell, for a click on the map.
+    //
+    // The map is one pixel per medium cell, so the page can work out which
+    // cell was clicked and ask about that one. Answering per click rather
+    // than shipping the whole grid keeps this to a few reads: the grid is
+    // 1,152,000 cells, which is megabytes nobody asked for.
+    let get_cell = warp::path!("api" / "cell" / usize / usize)
+        .and(read())
+        .and(with(world.clone()))
+        .map(|row: usize, col: usize, world: Option<SimHandle>| match world {
+            None => json(
+                StatusCode::NOT_FOUND,
+                &serde_json::json!({ "errors": ["No island is running. Start the server with --scenario."] }),
+            ),
+            Some(world) => match world.cell(row, col) {
+                None => json(
+                    StatusCode::NOT_FOUND,
+                    &serde_json::json!({
+                        "errors": [format!("No cell at row {row}, column {col}: the island's medium grid is smaller than that.")]
+                    }),
+                ),
+                Some(cell) => json(StatusCode::OK, &serde_json::json!({ "cell": cell })),
+            },
+        });
+
     // The island, drawn. Everything else this dashboard serves describes
     // the world in words and tables; this is the one endpoint that shows
     // it. The picture is rendered once at startup and handed out as an
@@ -1054,7 +1079,7 @@ pub fn routes_with_world(
             }
             json(
                 StatusCode::NOT_FOUND,
-                &serde_json::json!({ "errors": ["No such endpoint. The dashboard serves /api/status, /api/world, /api/world/<estate|vegetation|materials|clock>, /api/world/humans, /api/world/humans/<agent-id>, /api/world/interventions, /api/world/commands/<id>, /api/properties, /api/economy, /api/timeline, /api/conversations, /api/map.png, /api/control, /api/health, /api/humans, /api/humans/<agent-id>, /api/activity and /api/creator/options."] }),
+                &serde_json::json!({ "errors": ["No such endpoint. The dashboard serves /api/status, /api/world, /api/world/<estate|vegetation|materials|clock>, /api/world/humans, /api/world/humans/<agent-id>, /api/world/interventions, /api/world/commands/<id>, /api/properties, /api/economy, /api/timeline, /api/conversations, /api/map.png, /api/cell/<row>/<col>, /api/control, /api/health, /api/humans, /api/humans/<agent-id>, /api/activity and /api/creator/options."] }),
             )
         });
 
@@ -1064,6 +1089,7 @@ pub fn routes_with_world(
         .or(get_timeline)
         .or(get_conversations)
         .or(get_map)
+        .or(get_cell)
         .or(get_world)
         .or(post_world_human)
         .or(post_world_intervention)

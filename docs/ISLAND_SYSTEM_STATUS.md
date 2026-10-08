@@ -164,12 +164,19 @@ the estate's electrical system is still free (D13).
   materials, time and energy of actions, acceptance.
 - Phase 4 is **done**: world composition, the cadence scheduler, the island snapshot, a folder
   per human, external commands and replay, operator interventions, the headless runner, and the
-  dashboard with a world behind it. **The map it lacked is drawn**: `/api/map.png` serves the
-  elevation render `island_preview` already made for the headless galleries, and `/island` shows
-  it. Verified in Chromium against the real island — 1200x960, no console errors, no failed
-  requests. What remains of a map proper is interaction: nothing on it is clickable, so the
-  Creator's location picker still cannot use it, and nothing is drawn *on* it — no people, no
-  structures, no estate.
+  dashboard with a world behind it. **The map it lacked is drawn, and it is clickable**:
+  `/api/map.png` serves the elevation render `island_preview` already made for the headless
+  galleries, `/api/cell/<row>/<col>` answers for one cell, and `/island` shows the picture and
+  reads the cell you click. A click names the cell, its coordinates, whether it is land or sea,
+  its elevation and whether anything could be built there, and offers it to the intervention
+  form — which until now could target **only the estate**, leaving the rest of the island
+  unreachable from the page. Verified in Chromium against the real island: clicking the top of
+  the picture gives row 941 at 38.2° S and the bottom row 20 at 43.8° S, and an intervention
+  aimed at a clicked cell came back "put 100 kg of water into the island's stores, asked for at
+  cell (624, 575)".
+
+  Still missing from a map proper: nothing is drawn *on* it — no people, no structures, no
+  estate — and the Creator page does not use it yet, only the intervention form.
 - Phase 4b: energy, industry, town, economy. **Blocked at its own first step, and the block is
   the network rather than the work.** Task 1 Step 1 is "assemble cited reference values" --
   turbine efficiency curves by type and head range, Darcy-Weisbach penstock friction, oil

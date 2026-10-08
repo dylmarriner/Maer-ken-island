@@ -599,3 +599,7 @@ button.link {
 
 /* The island's map. */
 #map { display: block; max-width: 100%; height: auto; border: 1px solid var(--line); border-radius: 6px; }
+#map { cursor: crosshair; }
+#map-cell { margin-top: 0.6rem; min-height: 3rem; }
+#map-cell .cell-where { margin: 0 0 0.2rem; font-variant-numeric: tabular-nums; }
+#map-cell .cell-what { margin: 0; color: var(--ink-soft); }

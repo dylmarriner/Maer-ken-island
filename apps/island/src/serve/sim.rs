@@ -172,6 +172,13 @@ pub struct SimHandle {
     commands: Sender<Queued>,
     outcomes: Arc<Mutex<BTreeMap<u64, Outcome>>>,
     next_id: Arc<AtomicU64>,
+    /// The island's terrain, copied once at startup.
+    ///
+    /// Terrain cannot change: the island refuses `SculptTerrain` and
+    /// `SmoothTerrain`. So the grids are copied here once and a click on
+    /// the map is answered from them, without the sim thread ever being
+    /// asked.
+    terrain: Arc<crate::serve::projection::Terrain>,
     /// The island's elevation map, rendered once as a PNG.
     ///
     /// Terrain does not move: the island refuses `SculptTerrain` and
@@ -207,6 +214,17 @@ impl SimHandle {
     /// Ask the thread to finish its current step and stop.
     pub fn stop(&self) {
         self.stop.store(true, Ordering::Relaxed);
+    }
+
+    /// What is at one medium-grid cell, or `None` off the island.
+    ///
+    /// Answered from the terrain snapshot taken at startup, never from the
+    /// island: the sim thread owns that and nothing else may touch it. A
+    /// first attempt at this reached for a `life` field on the handle,
+    /// which does not exist and should not -- that separation is the whole
+    /// point of the projection.
+    pub fn cell(&self, row: usize, col: usize) -> Option<crate::serve::projection::Cell> {
+        crate::serve::projection::cell_of(&self.terrain, row, col)
     }
 
     /// The island's elevation map as a PNG, rendered once at startup.
@@ -386,6 +404,7 @@ pub fn spawn_with(
     // picture for the headless galleries.
     let map_png =
         Arc::new(island_preview::elevation_image(&life.domain, &life.physical.geophysics).png());
+    let terrain = Arc::new(crate::serve::projection::Terrain::of(&life));
     let first = IslandProjection::digest_now(&life);
     let views = Views::of(&life);
     let projection = Arc::new(RwLock::new(IslandProjection::of(
@@ -409,6 +428,7 @@ pub fn spawn_with(
         next_id: Arc::new(AtomicU64::new(1)),
         log_error: Arc::new(Mutex::new(None)),
         map_png,
+        terrain,
     };
     let stop = Arc::clone(&handle.stop);
     let outcomes = Arc::clone(&handle.outcomes);

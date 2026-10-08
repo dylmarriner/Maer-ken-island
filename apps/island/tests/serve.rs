@@ -1198,6 +1198,63 @@ async fn a_replay_log_that_cannot_be_written_is_said_on_the_page() {
 }
 
 #[tokio::test]
+async fn a_cell_of_the_island_can_be_asked_about_by_row_and_column() {
+    let (world, port, server) = a_running_dashboard().await;
+
+    // The estate's cell, read two independent ways. `/api/world` derives
+    // the estate's coordinates from its position in metres; `/api/cell`
+    // derives them from the grid. If they disagree, one of them is doing
+    // the radians-to-degrees conversion differently -- which is exactly
+    // the bug that put a birth 0.716 degrees from the equator.
+    let (status, response) = get(port, "/api/world").await;
+    assert_eq!(status, 200, "{response}");
+    let world_json: serde_json::Value = serde_json::from_str(body_of(&response)).unwrap();
+    let estate = &world_json["estate"];
+    let (row, col) = (
+        estate["cell"][0].as_u64().expect("an estate row"),
+        estate["cell"][1].as_u64().expect("an estate column"),
+    );
+
+    let (status, response) = get(port, &format!("/api/cell/{row}/{col}")).await;
+    assert_eq!(status, 200, "{response}");
+    let body: serde_json::Value = serde_json::from_str(body_of(&response)).unwrap();
+    let cell = &body["cell"];
+
+    for (name, from_world, from_cell) in [
+        ("latitude", &estate["latitude"], &cell["latitude"]),
+        ("longitude", &estate["longitude"], &cell["longitude"]),
+    ] {
+        let (a, b) = (
+            from_world.as_f64().expect("a number"),
+            from_cell.as_f64().expect("a number"),
+        );
+        // Within half a cell: the estate sits somewhere inside its cell and
+        // the cell answers for its centre, so they need not be identical --
+        // but they must be the same place, not the same number of radians.
+        assert!(
+            (a - b).abs() < 0.05,
+            "{name} disagrees between /api/world ({a}) and /api/cell ({b})"
+        );
+    }
+
+    // The estate is on land and buildable; that is where the founders live.
+    assert_eq!(cell["land"], true, "{cell}");
+    assert_eq!(cell["buildable"], true, "{cell}");
+
+    // Off the grid is a 404 with a reason, not a panic or a zeroed cell.
+    let (status, response) = get(port, "/api/cell/99999/99999").await;
+    assert_eq!(status, 404, "{response}");
+    assert!(
+        body_of(&response).contains("medium grid"),
+        "says why: {}",
+        body_of(&response)
+    );
+
+    world.stop();
+    server.abort();
+}
+
+#[tokio::test]
 async fn the_island_is_served_as_a_picture_of_itself() {
     let (world, port, server) = a_running_dashboard().await;
 

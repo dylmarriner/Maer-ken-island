@@ -416,6 +416,76 @@ fn relationship_name(relationship: ConversationRelationship) -> &'static str {
     }
 }
 
+/// The island's terrain, copied once so a click can be answered without
+/// disturbing the simulation.
+///
+/// Terrain is the one part of the world that cannot change -- the island
+/// refuses `SculptTerrain` and `SmoothTerrain` -- which is what makes a
+/// copy safe. Everything else the dashboard shows goes through the
+/// published projection precisely because it does change.
+#[derive(Debug)]
+pub struct Terrain {
+    pub domain: mk_island::IslandDomain,
+    pub elevation_m: mk_core::grid::Grid2<f64>,
+    pub land_mask: mk_core::grid::Grid2<bool>,
+}
+
+impl Terrain {
+    /// Copy the island's terrain. Called once, at startup.
+    pub fn of(life: &IslandLife) -> Self {
+        Self {
+            domain: life.domain.clone(),
+            elevation_m: life.physical.geophysics.elevation_m.clone(),
+            land_mask: life.physical.geophysics.land_mask.clone(),
+        }
+    }
+}
+
+/// What is at one medium-grid cell, or `None` if it is off the island.
+pub fn cell_of(terrain: &Terrain, row: usize, col: usize) -> Option<Cell> {
+    use mk_island::DomainLevel::Medium;
+    let (rows, cols) = (terrain.domain.rows(Medium), terrain.domain.cols(Medium));
+    if row >= rows || col >= cols {
+        return None;
+    }
+    let (x_m, y_m) = terrain.domain.cell_center_m(Medium, row, col);
+    // `lat_lon_at_m` answers in radians -- it is the function that put a
+    // birth 0.716 degrees from the equator earlier in this branch.
+    let (latitude, longitude) = terrain.domain.lat_lon_at_m(x_m, y_m);
+    Some(Cell {
+        row,
+        col,
+        latitude: latitude.to_degrees(),
+        longitude: longitude.to_degrees(),
+        land: *terrain.land_mask.get(row, col),
+        elevation_m: *terrain.elevation_m.get(row, col),
+        buildable: mk_engine::regional::geophysics::is_buildable_cell(
+            &terrain.elevation_m,
+            &terrain.land_mask,
+            terrain.domain.cell_size_m(Medium),
+            row,
+            col,
+        ),
+    })
+}
+
+/// One cell of the island, for somebody who clicked on the map.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct Cell {
+    pub row: usize,
+    pub col: usize,
+    /// Degrees, the same units the intervention and creation forms take,
+    /// so a click can fill them in directly.
+    pub latitude: f64,
+    pub longitude: f64,
+    pub land: bool,
+    pub elevation_m: f64,
+    /// Whether a structure could stand here, by the island's own rule
+    /// (`MAX_BUILD_GRADIENT`) rather than upstream's, which admits nothing
+    /// on a 2 km grid. Sea is never buildable.
+    pub buildable: bool,
+}
+
 impl IslandProjection {
     /// Describe an island, carrying `digest` forward from an earlier step.
     ///

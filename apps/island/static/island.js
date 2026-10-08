@@ -196,14 +196,69 @@ async function showEconomy() {
 // words and tables; `docs/ISLAND_SYSTEM_STATUS.md` has called the missing
 // picture what Task 6 still lacks. It is the same elevation render
 // `island_preview` makes for the headless galleries, not a second one.
+// Which medium-grid cell a click landed on.
+//
+// The picture is one pixel per cell, so this is a scale and a flip. The
+// flip is the part that would be wrong silently: `island_preview`'s
+// `grid_image` writes row `r` to image row `rows - 1 - r`, so the top of
+// the picture is the *last* row of the grid. Without the flip every click
+// would select a cell mirrored about the equator -- the north coast would
+// answer for the south, and nothing on screen would look wrong.
+function cellAt(img, event) {
+  const box = img.getBoundingClientRect();
+  const x = (event.clientX - box.left) * (img.naturalWidth / box.width);
+  const y = (event.clientY - box.top) * (img.naturalHeight / box.height);
+  const col = Math.floor(x);
+  const row = img.naturalHeight - 1 - Math.floor(y);
+  if (col < 0 || row < 0 || col >= img.naturalWidth || row >= img.naturalHeight) return null;
+  return { row, col };
+}
+
+async function onMapClick(event) {
+  const img = document.getElementById("map");
+  const at = cellAt(img, event);
+  const out = document.getElementById("map-cell");
+  if (!at) return;
+  try {
+    const data = await getJson(`/api/cell/${at.row}/${at.col}`);
+    const c = data.cell;
+    out.replaceChildren(
+      el("p", `Row ${c.row}, column ${c.col} — ${c.latitude.toFixed(4)}°, ${c.longitude.toFixed(4)}°`, { class: "cell-where" }),
+      el(
+        "p",
+        c.land
+          ? `Land, ${c.elevation_m.toFixed(0)} m above sea level. ${c.buildable ? "A structure could stand here." : "Too steep to build on."}`
+          : `Sea, ${(-c.elevation_m).toFixed(0)} m deep. Nobody can be created here and nothing can be built.`,
+        { class: "cell-what" },
+      ),
+    );
+    // The point of clicking. Before this the intervention form offered
+    // exactly one place -- the estate -- so the whole rest of the island
+    // was unreachable from the page. A clicked cell becomes a place, and
+    // is selected.
+    clickedPlace = {
+      label: `Clicked — cell ${c.row}, ${c.col}${c.land ? "" : " (sea)"}`,
+      latitude: c.latitude,
+      longitude: c.longitude,
+    };
+    await fillPlacesAndPeople();
+    whereEl.value = String(places.findIndex((p) => p === clickedPlace));
+  } catch (error) {
+    out.replaceChildren(el("p", explain(error), { class: "cell-what" }));
+  }
+}
+
 function showMap() {
   const img = document.getElementById("map");
   // Rendered once at startup from terrain that cannot change -- the island
   // refuses `SculptTerrain` and `SmoothTerrain` -- so there is nothing to
   // refresh and no cache to bust.
-  if (!img.getAttribute("src")) img.setAttribute("src", "/api/map.png");
+  if (!img.getAttribute("src")) {
+    img.setAttribute("src", "/api/map.png");
+    img.addEventListener("click", onMapClick);
+  }
   document.getElementById("map-note").textContent =
-    "Elevation, with the coastline and the domain's edge buffer. Drawn once from the terrain this island was generated with, which nothing can change: the island refuses requests to sculpt or smooth it.";
+    "Elevation, with the coastline and the domain's edge buffer. Click anywhere to read that cell and fill the intervention form's coordinates. Drawn once from the terrain this island was generated with, which nothing can change: the island refuses requests to sculpt or smooth it.";
   document.getElementById("map-panel").hidden = false;
 }
 async function showTimeline() {
@@ -445,13 +500,27 @@ let places = [];
 /// changed, and the chosen value is put back afterwards when it still
 /// exists.
 function fillSelect(select, options) {
-    const wanted = options.map((o) => o.value).join("\u0000");
-    const have = [...select.options].map((o) => o.value).join("\u0000");
+    // Compared by value *and* label. Values alone is not enough: the
+    // clicked-cell place keeps index 1 while its label changes with every
+    // click, so a value-only comparison skipped the rebuild and left the
+    // dropdown naming the cell before last. It took two clicks to see --
+    // one click looked perfect.
+    const key = (value, label) => `${value}\u0001${label}`;
+    const wanted = options.map((o) => key(o.value, o.label)).join("\u0000");
+    const have = [...select.options].map((o) => key(o.value, o.text)).join("\u0000");
     if (wanted === have) return;
     const chosen = select.value;
     select.replaceChildren(...options.map((o) => el("option", o.label, { value: o.value })));
     if (options.some((o) => o.value === chosen)) select.value = chosen;
 }
+
+/// The cell the operator last clicked on the map, if any.
+///
+/// Held outside `places` because `fillPlacesAndPeople` runs every five
+/// seconds and rebuilds that list from the island. Without this, a click
+/// would be forgotten within five seconds -- the same shape of bug as the
+/// select that reset its own selection on refresh.
+let clickedPlace = null;
 
 async function fillPlacesAndPeople() {
   const world = await getJson("/api/world");
@@ -462,6 +531,7 @@ async function fillPlacesAndPeople() {
       longitude: world.estate.longitude,
     },
   ];
+  if (clickedPlace) places.push(clickedPlace);
   fillSelect(
     whereEl,
     places.map((p, i) => ({ value: String(i), label: p.label })),
