@@ -270,16 +270,22 @@ const SPEED_WINDOW: Duration = Duration::from_secs(5);
 
 /// How often the canonical digest is recomputed, in steps.
 ///
-/// Measured by `slow_what_a_step_and_a_digest_cost`: a step is 1.2 ms and a
-/// digest is **800 ms** — 650 times more — because hashing walks both
-/// 1,152,000-cell grids and every human's canonical JSON. (It is not the
-/// stems: that measurement is on a 50-tree patch.) Hashing every step made
-/// the island run hundreds of times slower than it needed to, for a number
-/// nobody reads that often.
+/// A digest is **800 ms**, because hashing walks both 1,152,000-cell grids
+/// and every human's canonical JSON. It is not the stems, which is why
+/// `slow_what_a_step_and_a_digest_cost` can measure it on a 50-tree patch.
 ///
-/// Sixty steps is one simulated hour at the default cadence. It still
-/// dominates the loop — about 15 ms amortised per step against 1.4 ms of
-/// actual simulation — which caps the island near 3,500x real time. That is
+/// **The step it is compared against must not be measured there.** That
+/// test's step figure is 1.2 ms on its fifty trees; the real island, with
+/// 199,997 of them, steps at **4.3 ms** (`benchmarks/phase4_cost.md`), and
+/// `benchmarks/island_week.md` implied it all along at 49 s for 10,080
+/// steps. An earlier version of this comment said "650 times more" from
+/// the toy step. On the real island a digest is about **186x** a step —
+/// still enough that hashing every one made the island run far slower than
+/// it needed to, for a number nobody reads that often.
+///
+/// Sixty steps is one simulated hour at the default cadence. The digest
+/// still dominates the loop — 13.3 ms amortised per step against 4.3 ms of
+/// actual simulation — which caps the island near 3,400x real time. That is
 /// far above the `RealTime` default and enough for a dashboard; if a faster
 /// headless-style speed is ever wanted here, this is the knob.
 const DIGEST_EVERY: u64 = 60;

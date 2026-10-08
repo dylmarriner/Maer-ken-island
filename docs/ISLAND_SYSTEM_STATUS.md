@@ -37,7 +37,8 @@ fidelity limits. The project is **not complete**: see "Not done".
 | Human runtime, 5,000 people | 23 us/human-step, 153 MB peak | `benchmarks/humans_population.md` |
 | **Combined island, one simulated week** (physics, ecology, estate, 200,000 trees, 2 founders, energy, materials) | 49 s, **307 MB peak** | `benchmarks/island_week.md` |
 | Complete island snapshot, one day in | **44 MB** on disk (338 MB before deflate) | `tests/island_snapshot.rs::slow_a_full_island_survives_a_trip_through_a_file` |
-| One island step, and what the dashboard publishes after it | step **1.2 ms**, projection **3.6 ms**, every human's full record **336 us** (two people), canonical digest **800 ms** — 650x the step, and it is the two 1,152,000-cell grids and the humans' JSON rather than the stems | `serve/sim.rs::slow_what_a_step_and_a_digest_cost` |
+| One island step, and what the dashboard publishes after it | On a **50-tree** test island: step 1.2 ms, projection **3.6 ms**, every human's full record **336 us** (two people), canonical digest **800 ms**. The digest is the two 1,152,000-cell grids and the humans' JSON rather than the stems, so it carries over; **the step does not**. This row previously gave 1.2 ms as the island's step and called the digest "650x" it | `serve/sim.rs::slow_what_a_step_and_a_digest_cost` |
+| One step of the **real** island (199,997 stems) | **4.3 ms**, so a digest is about **186x** a step, not 650x. A folder per human adds **+732 us (+17%)** for two people; a command an hour adds 251 us; a snapshot save **stalls the simulation thread for 27 s** for 43.5 MB, and loads in 3.7 s. Every one of those leaves the canonical digest identical | `tests/island_phase4_cost.rs::slow_what_phase_4_costs`, `benchmarks/phase4_cost.md` |
 
 The combined island (without persistence, the scheduler, a larger population, the refinery/town and the app) is measured above; those remain unmeasured until Phases 4, 4b and 5.
 

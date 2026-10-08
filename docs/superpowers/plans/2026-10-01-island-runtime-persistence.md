@@ -504,7 +504,8 @@ stepped them yet", so that swaps too.
 Full records are published on the digest's hourly cadence rather than every step, and
 additionally the moment a creation lands — `a_new_person_can_be_read_the_moment_they_exist` pins
 that. The cadence is a choice about scale rather than a present necessity: measured, copying
-every record costs 336 µs for the two founders against a 1.2 ms step, which is cheap, but at
+every record costs 336 µs for the two founders against a 4.3 ms step on the real island (the
+1.2 ms once quoted was a 50-tree test patch; `benchmarks/phase4_cost.md`), which is cheap, but at
 Phase 4b's town it would be tens of milliseconds per step for records nobody is reading.
 
 Correcting the measurements while here: a digest is **800 ms**, not the 932 ms recorded earlier,

@@ -39,7 +39,9 @@ pub struct IslandProjection {
     /// Refreshed on the digest's cadence rather than every step, and that
     /// is a choice about scale rather than a present necessity: measured,
     /// copying every record costs 336 µs for the two founders — about
-    /// 170 µs each — against a 1.2 ms step. Cheap now; at the town-sized
+    /// 170 µs each — against a **4.3 ms** step on the real island
+    /// (`benchmarks/phase4_cost.md`; the 1.2 ms once quoted here was
+    /// measured on a 50-tree patch). Cheap now; at the town-sized
     /// population of Phase 4b it would be tens of milliseconds per step for
     /// records nobody is reading. `records_at_tick` says how old they are
     /// and the page says so too, so the cadence can change later without
