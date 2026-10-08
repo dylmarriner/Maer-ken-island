@@ -346,12 +346,23 @@ Verified in Chromium end to end: filled the creator form, picked a room, and wat
 appear in the running island with body carbon beside the founders — "hine awake · Gem-D's
 Bedroom · 30 years old · 19.2 kg of body carbon". No console errors, no failed requests.
 
-**Still not built:** `/api/properties`, `/api/estate`, `/api/vegetation`, `/api/economy` and
-`/api/timeline` as separate endpoints (the projection carries the estate, the patch and the
-stocks, so the data is served, just not split that way); `--import-0b`; `POST /api/control` and
-the speed control it would carry (speed is a start-up flag); an island-map picker for
-`IslandCell` (the API takes row and col, the page offers only estate spaces); and the replay log,
-which waits on Task 4. The roster is the world's. `GET /api/world/humans` and
+**Control and the world's parts (2026-10-08).** `POST /api/control` takes `pause`, `resume` and
+`set_speed`, and the overview carries buttons for them. Pacing is read by the loop each
+iteration rather than captured at startup, so it changes without restarting the island — and
+changes nothing about the island: a pause leaves exactly the state it was paused in, and a speed
+decides only how often a fixed step happens. Measured in Chromium: pause held the clock dead
+still at tick 1080 across a second of real time, resume moved it again, and `60x` took effect.
+Control commands are applied at once rather than queued, since there is no world state for them
+to race with, and are then recorded in the replay log for the account of what the operator did.
+
+`GET /api/world/{estate|vegetation|materials|clock}` serves each part on its own path, from the
+same projection, and an unknown part is refused by name.
+
+**Still not built:** `--import-0b`, and an island-map picker for `IslandCell` — the API takes row
+and col and the engine validates them against the land mask, but the creator page offers only
+estate spaces. `/api/properties`, `/api/economy` and `/api/timeline` are not served: the
+projection does not carry a property list, an economy summary or a timeline, so serving them
+would mean inventing the data rather than re-slicing it. The roster is the world's. `GET /api/world/humans` and
 `/api/world/humans/{id}` serve the island's own people in the shape the People page already
 draws — the same ten per-person sections — plus where they are and whether they are asleep,
 which the stored roster has no way to know. With a world running the page uses them, and says

@@ -11,6 +11,7 @@ import {
   fillChrome,
   getJson,
   message,
+  postJson,
   reportOffline,
 } from "/static/app.js";
 
@@ -20,6 +21,9 @@ const worldPanel = document.getElementById("world-panel");
 const worldNote = document.getElementById("world-note");
 const worldStats = document.getElementById("world-stats");
 const worldPeople = document.getElementById("world-people");
+const worldControls = document.getElementById("world-controls");
+const worldControlNote = document.getElementById("world-control-note");
+const pauseEl = document.getElementById("pause");
 const introHeading = document.getElementById("intro-heading");
 const introLead = document.getElementById("intro-lead");
 const timeClaim = document.getElementById("time-claim");
@@ -192,6 +196,41 @@ function tellTheTruthAboutTime(running) {
   );
 }
 
+/// Ask the island to run differently. Nothing it does changes the world —
+/// speed decides how often a fixed step happens, and a pause leaves exactly
+/// the state it was paused in — so these are safe to press.
+async function control(body) {
+  worldControlNote.hidden = false;
+  worldControlNote.textContent = "Asking the island…";
+  try {
+    const { status, body: answer } = await postJson("/api/control", body, "");
+    if (status === 200) {
+      worldControlNote.textContent = answer.paused
+        ? "Paused. The island is exactly where it stopped."
+        : `Running at ${answer.speed}.`;
+      paused = answer.paused;
+      pauseEl.textContent = paused ? "Resume" : "Pause";
+    } else if (status === 401) {
+      worldControlNote.textContent =
+        (answer.errors && answer.errors[0]) || "This dashboard may not control the island.";
+    } else {
+      worldControlNote.textContent =
+        (answer.errors && answer.errors[0]) || `The island answered ${status}.`;
+    }
+  } catch (error) {
+    worldControlNote.textContent = `The request did not get through: ${error.message}`;
+  }
+}
+
+let paused = false;
+
+pauseEl.addEventListener("click", () => control({ command: paused ? "resume" : "pause" }));
+for (const button of document.querySelectorAll("#world-controls [data-speed]")) {
+  button.addEventListener("click", () =>
+    control({ command: "set_speed", speed: button.dataset.speed }),
+  );
+}
+
 function showWorld(world) {
   if (!world || world.running !== true) {
     // No world is the ordinary case for a dashboard started without
@@ -202,6 +241,7 @@ function showWorld(world) {
   }
   tellTheTruthAboutTime(true);
   worldPanel.hidden = false;
+  worldControls.hidden = false;
   worldNote.textContent =
     `${clockWords(world.clock)}. ${speedWords(world.clock)}. ${digestWords(world)}`.trim();
 

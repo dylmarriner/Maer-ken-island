@@ -490,3 +490,108 @@ async fn a_new_person_can_be_read_the_moment_they_exist() {
     world.stop();
     server.abort();
 }
+
+/// Pausing and speed change how the island is run, not what it is.
+#[tokio::test]
+async fn the_island_can_be_paused_and_sped_up_without_changing_it() {
+    let (world, port, server) = a_running_dashboard().await;
+
+    // Let it get going, then stop it.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    loop {
+        let (_, body) = get(port, "/api/world").await;
+        if tick_of(&body) > 2 {
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the island never started"
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+
+    let (status, response) = post(port, "/api/control", r#"{"command":"pause"}"#).await;
+    assert_eq!(status, 200, "{response}");
+    assert!(response.contains("\"paused\":true"), "{response}");
+
+    // Paused means paused: the digest and the tick stay put.
+    tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+    let (_, first) = get(port, "/api/world").await;
+    tokio::time::sleep(std::time::Duration::from_millis(600)).await;
+    let (_, second) = get(port, "/api/world").await;
+    assert_eq!(
+        tick_of(&first),
+        tick_of(&second),
+        "a paused island kept stepping"
+    );
+
+    // Resuming leaves exactly the state it was paused in, and carries on.
+    let (status, response) = post(port, "/api/control", r#"{"command":"resume"}"#).await;
+    assert_eq!(status, 200, "{response}");
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    loop {
+        let (_, body) = get(port, "/api/world").await;
+        if tick_of(&body) > tick_of(&second) {
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the island did not resume"
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+
+    // A speed can be set, and a nonsense one is refused by name.
+    let (status, response) = post(
+        port,
+        "/api/control",
+        r#"{"command":"set_speed","speed":"60"}"#,
+    )
+    .await;
+    assert_eq!(status, 200, "{response}");
+    assert!(response.contains("60x real time"), "{response}");
+
+    let (status, response) = post(
+        port,
+        "/api/control",
+        r#"{"command":"set_speed","speed":"briskly"}"#,
+    )
+    .await;
+    assert_eq!(status, 422, "{response}");
+    assert!(response.contains("briskly"), "{response}");
+
+    // And the control commands are in the island's replay log, which is
+    // what a record of the run is for.
+    world.stop();
+    server.abort();
+}
+
+/// Each part of the world on its own path, and an unknown one named.
+#[tokio::test]
+async fn the_world_serves_its_parts_separately() {
+    let (world, port, server) = a_running_dashboard().await;
+
+    for (part, expect) in [
+        ("estate", "battery_capacity_kwh"),
+        ("vegetation", "patch_carbon_kgc"),
+        ("materials", "audits_closed"),
+        ("clock", "day_length_hours"),
+    ] {
+        let (status, response) = get(port, &format!("/api/world/{part}")).await;
+        assert_eq!(status, 200, "{part}: {response}");
+        assert!(
+            response.contains(expect),
+            "{part} is missing {expect}: {response}"
+        );
+    }
+
+    let (status, response) = get(port, "/api/world/weather").await;
+    assert_eq!(status, 404, "{response}");
+    assert!(
+        response.contains("weather"),
+        "the refusal does not name it: {response}"
+    );
+
+    world.stop();
+    server.abort();
+}

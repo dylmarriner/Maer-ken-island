@@ -120,6 +120,16 @@ impl std::str::FromStr for SimSpeed {
     }
 }
 
+/// How the island is being run, as against what it is.
+///
+/// Nothing here reaches simulation state: pausing leaves exactly the state
+/// it was paused in, and a speed decides only how often a fixed step runs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Pacing {
+    pub speed: SimSpeed,
+    pub paused: bool,
+}
+
 /// How many command outcomes are remembered.
 ///
 /// Long enough that a page polling every couple of seconds will always find
@@ -132,6 +142,11 @@ const OUTCOMES_KEPT: usize = 256;
 pub struct SimHandle {
     projection: Arc<RwLock<IslandProjection>>,
     stop: Arc<AtomicBool>,
+    /// How fast to run, and whether to run at all. Read by the loop each
+    /// iteration rather than captured at startup, so an operator can change
+    /// speed or pause without restarting the island — and neither changes
+    /// the world, only how often a fixed step happens.
+    pacing: Arc<Mutex<Pacing>>,
     commands: Sender<Queued>,
     outcomes: Arc<Mutex<BTreeMap<u64, Outcome>>>,
     next_id: Arc<AtomicU64>,
@@ -154,6 +169,29 @@ impl SimHandle {
     /// Ask the thread to finish its current step and stop.
     pub fn stop(&self) {
         self.stop.store(true, Ordering::Relaxed);
+    }
+
+    /// How the island is being run right now.
+    pub fn pacing(&self) -> Pacing {
+        *self.locked_pacing()
+    }
+
+    /// Run at a different speed from the next step on.
+    pub fn set_speed(&self, speed: SimSpeed) {
+        self.locked_pacing().speed = speed;
+    }
+
+    /// Stop stepping, or start again. The world does not move while paused
+    /// and is exactly as it was when it resumes.
+    pub fn set_paused(&self, paused: bool) {
+        self.locked_pacing().paused = paused;
+    }
+
+    fn locked_pacing(&self) -> std::sync::MutexGuard<'_, Pacing> {
+        match self.pacing.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        }
     }
 
     /// Queue a command and give back the id it will be answered under.
@@ -255,19 +293,24 @@ pub fn spawn_logging(life: IslandLife, speed: SimSpeed, log: Option<PathBuf>) ->
     let handle = SimHandle {
         projection: Arc::clone(&projection),
         stop: Arc::new(AtomicBool::new(false)),
+        pacing: Arc::new(Mutex::new(Pacing {
+            speed,
+            paused: false,
+        })),
         commands,
         outcomes: Arc::new(Mutex::new(BTreeMap::new())),
         next_id: Arc::new(AtomicU64::new(1)),
     };
     let stop = Arc::clone(&handle.stop);
     let outcomes = Arc::clone(&handle.outcomes);
+    let pacing = Arc::clone(&handle.pacing);
 
     std::thread::Builder::new()
         .name("island-sim".into())
         .spawn(move || {
             run(Loop {
                 life,
-                speed,
+                pacing,
                 step_seconds,
                 projection,
                 stop,
@@ -287,7 +330,7 @@ pub fn spawn_logging(life: IslandLife, speed: SimSpeed, log: Option<PathBuf>) ->
 /// Everything the thread owns.
 struct Loop {
     life: IslandLife,
-    speed: SimSpeed,
+    pacing: Arc<Mutex<Pacing>>,
     step_seconds: u64,
     projection: Arc<RwLock<IslandProjection>>,
     stop: Arc<AtomicBool>,
@@ -307,6 +350,21 @@ fn run(mut it: Loop) {
     let mut recent: std::collections::VecDeque<(Instant, u64)> = std::collections::VecDeque::new();
 
     while !it.stop.load(Ordering::Relaxed) {
+        // Read fresh each iteration: an operator may have changed the speed
+        // or paused since the last one.
+        let pacing = *match it.pacing.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        if pacing.paused {
+            // Nothing moves, and the projection is left exactly as it was,
+            // which is the truth: the island is where it was paused. The
+            // speed window is cleared so that resuming does not report a
+            // speed measured across the pause.
+            recent.clear();
+            std::thread::sleep(Duration::from_millis(50));
+            continue;
+        }
         // Timed around the whole iteration, not just the step. Publishing
         // and applying commands are real work the island has to do before
         // it can step again, and a readout that left them out would have
@@ -375,7 +433,7 @@ fn run(mut it: Loop) {
         publish(
             &it.projection,
             &it.life,
-            &it.speed,
+            &pacing.speed,
             achieved_speed(&recent),
             it.digest.clone(),
             Arc::clone(&it.records),
@@ -387,7 +445,7 @@ fn run(mut it: Loop) {
         // Only ever sleep off time that is left over. A step that overran
         // its budget is not slept on at all, so the island catches up where
         // it can rather than falling further behind.
-        if let Some(budget) = it.speed.budget(it.step_seconds) {
+        if let Some(budget) = pacing.speed.budget(it.step_seconds) {
             if let Some(spare) = budget.checked_sub(took) {
                 // Woken often enough that a stop is acted on promptly even
                 // at real time, where a budget is a whole minute.

@@ -4,9 +4,10 @@
 use super::auth::ControlAuth;
 use super::pages;
 use super::read;
-use super::sim::{IslandCommand, SimHandle};
+use super::sim::{IslandCommand, SimHandle, SimSpeed};
 use super::view;
 use island_humans::{CreateHumanError, CreateHumanRequest, IslandHumanPopulation};
+use mk_engine::regional::commands::ControlCommand;
 use mk_engine::regional::create_human::{CreateLocation, IslandCreateHuman};
 use mk_engine::regional::estate_layout::SpaceId;
 use std::sync::{Arc, Mutex};
@@ -348,6 +349,39 @@ impl WorldCreateRequest {
     }
 }
 
+/// Running the island: pause it, resume it, or change its speed.
+#[derive(Debug, serde::Deserialize)]
+#[serde(tag = "command", rename_all = "snake_case")]
+enum ControlRequest {
+    Pause,
+    Resume,
+    /// `real`, `max`, or a multiplier like `60`.
+    SetSpeed {
+        speed: String,
+    },
+}
+
+impl ControlRequest {
+    /// Apply it, and give back the command to record.
+    fn apply(&self, world: &SimHandle) -> Result<ControlCommand, String> {
+        match self {
+            Self::Pause => {
+                world.set_paused(true);
+                Ok(ControlCommand::Pause)
+            }
+            Self::Resume => {
+                world.set_paused(false);
+                Ok(ControlCommand::Resume)
+            }
+            Self::SetSpeed { speed } => {
+                let parsed: SimSpeed = speed.parse()?;
+                world.set_speed(parsed);
+                Ok(ControlCommand::SetSpeed(speed.clone()))
+            }
+        }
+    }
+}
+
 #[derive(Debug, serde::Deserialize)]
 struct ActivityQuery {
     limit: Option<usize>,
@@ -625,6 +659,102 @@ pub fn routes_with_world(
             }
         });
 
+    // Running the island, as against changing it. Pausing and speed move
+    // nothing in the world — they decide only how often a fixed step
+    // happens — so these apply at once rather than being queued, and are
+    // recorded in the replay log for the account of what the operator did.
+    let post_control = warp::path!("api" / "control")
+        .and(warp::post())
+        .and(warp::header::optional::<String>("authorization"))
+        .and(warp::body::content_length_limit(MAX_CREATE_BODY))
+        .and(warp::body::bytes())
+        .and(with(world.clone()))
+        .and(with(auth.clone()))
+        .map(
+            |authorization: Option<String>,
+             body: bytes::Bytes,
+             world: Option<SimHandle>,
+             auth: ControlAuth| {
+                let Some(world) = world else {
+                    return json(
+                        StatusCode::CONFLICT,
+                        &serde_json::json!({ "errors": ["No island is running. Start the server with --scenario."] }),
+                    );
+                };
+                if !auth.permits(authorization.as_deref()) {
+                    return json(
+                        StatusCode::UNAUTHORIZED,
+                        &serde_json::json!({
+                            "errors": ["This dashboard is not allowed to control the island."],
+                            "writes": auth.describe(),
+                            "writes_mode": auth.mode(),
+                        }),
+                    );
+                }
+                let request: ControlRequest = match serde_json::from_slice(&body) {
+                    Ok(request) => request,
+                    Err(err) => {
+                        return json(
+                            StatusCode::BAD_REQUEST,
+                            &serde_json::json!({ "errors": [format!(
+                                "That request body is not the JSON this endpoint expects: {err}."
+                            )] }),
+                        )
+                    }
+                };
+                match request.apply(&world) {
+                    Err(problem) => json(
+                        StatusCode::UNPROCESSABLE_ENTITY,
+                        &serde_json::json!({ "errors": [problem] }),
+                    ),
+                    Ok(control) => {
+                        // Queued only for the record: the pacing already
+                        // changed, and the log should say that it did.
+                        world.send(IslandCommand::Control(control));
+                        let pacing = world.pacing();
+                        json(
+                            StatusCode::OK,
+                            &serde_json::json!({
+                                "speed": pacing.speed.describe(),
+                                "paused": pacing.paused,
+                            }),
+                        )
+                    }
+                }
+            },
+        );
+
+    // The parts of the world, each on its own path. The same data the
+    // projection carries, split the way somebody asking for one of them
+    // would expect to find it.
+    let world_part = warp::path!("api" / "world" / String)
+        .and(read())
+        .and(with(world.clone()))
+        .map(|part: String, world: Option<SimHandle>| {
+            let Some(world) = world else {
+                return json(
+                    StatusCode::NOT_FOUND,
+                    &serde_json::json!({ "errors": ["No island is running."] }),
+                );
+            };
+            let current = world.projection();
+            let body = match part.as_str() {
+                "estate" => serde_json::to_value(&current.estate),
+                "vegetation" => serde_json::to_value(&current.land),
+                "materials" => serde_json::to_value(&current.stocks),
+                "clock" => serde_json::to_value(&current.clock),
+                other => {
+                    return json(
+                        StatusCode::NOT_FOUND,
+                        &serde_json::json!({ "errors": [format!(
+                            "The island has no part called {other:?}. It serves estate, vegetation, materials and clock."
+                        )] }),
+                    )
+                }
+            };
+            json(StatusCode::OK, &body.unwrap_or_default())
+        });
+
     let get_command = warp::path!("api" / "world" / "commands" / u64)
         .and(read())
         .and(with(world.clone()))
@@ -667,7 +797,7 @@ pub fn routes_with_world(
             }
             json(
                 StatusCode::NOT_FOUND,
-                &serde_json::json!({ "errors": ["No such endpoint. The dashboard serves /api/status, /api/world, /api/world/humans, /api/world/humans/<agent-id>, /api/world/commands/<id>, /api/health, /api/humans, /api/humans/<agent-id>, /api/activity and /api/creator/options."] }),
+                &serde_json::json!({ "errors": ["No such endpoint. The dashboard serves /api/status, /api/world, /api/world/<estate|vegetation|materials|clock>, /api/world/humans, /api/world/humans/<agent-id>, /api/world/commands/<id>, /api/control, /api/health, /api/humans, /api/humans/<agent-id>, /api/activity and /api/creator/options."] }),
             )
         });
 
@@ -677,6 +807,8 @@ pub fn routes_with_world(
         .or(get_world_human)
         .or(get_world_humans)
         .or(get_command)
+        .or(post_control)
+        .or(world_part)
         .or(get_health)
         .or(get_options)
         .or(get_activity)
