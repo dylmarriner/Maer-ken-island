@@ -316,5 +316,24 @@ Bedroom · 30 years old · 19.2 kg of body carbon". No console errors, no failed
 stocks, so the data is served, just not split that way); `--import-0b`; `POST /api/control` and
 the speed control it would carry (speed is a start-up flag); an island-map picker for
 `IslandCell` (the API takes row and col, the page offers only estate spaces); and the replay log,
-which waits on Task 4. `/api/humans` still serves the stored population rather than the world's,
-so the roster page and the world panel are two different lists.
+which waits on Task 4. The roster is the world's. `GET /api/world/humans` and
+`/api/world/humans/{id}` serve the island's own people in the shape the People page already
+draws — the same ten per-person sections — plus where they are and whether they are asleep,
+which the stored roster has no way to know. With a world running the page uses them, and says
+what it is showing: "2 people living on the island. Their full records were read 59 steps ago;
+where they are and whether they are asleep is current." Its standing copy claimed "nothing has
+stepped them yet", so that swaps too.
+
+Full records are published on the digest's hourly cadence rather than every step, and
+additionally the moment a creation lands — `a_new_person_can_be_read_the_moment_they_exist` pins
+that. The cadence is a choice about scale rather than a present necessity: measured, copying
+every record costs 336 µs for the two founders against a 1.2 ms step, which is cheap, but at
+Phase 4b's town it would be tens of milliseconds per step for records nobody is reading.
+
+Correcting the measurements while here: a digest is **800 ms**, not the 932 ms recorded earlier,
+and a projection without one is 3.6 ms. The earlier figure came from a timing block where an
+inserted line had left "one projection" printing the wrong timer — clippy caught the shadowed
+variable, and the numbers above are from the fixed block.
+
+`/api/humans` still serves the stored population, which is right: a dashboard started without
+`--scenario` has no world, and that endpoint is what it has.

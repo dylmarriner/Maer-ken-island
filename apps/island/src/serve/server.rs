@@ -128,6 +128,47 @@ pub fn detail(population: &IslandHumanPopulation, agent_id: &str) -> Option<serd
     }))
 }
 
+/// One islander, in the same shape the stored roster uses.
+///
+/// `view::sections` wants a `HumanSummary`, which the stored population
+/// builds from its own side-table of typed-in names. A person in the world
+/// has no such table — an `agent_id` is all they are called — so the
+/// summary is built from the record itself and the name *is* the id. That
+/// is the honest answer rather than a prettier invented one.
+pub fn world_detail(
+    human: &mk_engine::humans::HumanBeing,
+    current: &super::projection::IslandProjection,
+) -> serde_json::Value {
+    let summary = island_humans::HumanSummary {
+        agent_id: human.agent_id().to_string(),
+        name: human.agent_id().to_string(),
+        human_id: human.profile.human_id.to_string(),
+        biological_sex: format!("{:?}", human.biological_sex()),
+        status: format!("{:?}", human.profile.status),
+        age_years: human.development.age_years,
+    };
+    let here = current
+        .people
+        .iter()
+        .find(|p| p.agent_id == summary.agent_id);
+    serde_json::json!({
+        "summary": summary,
+        "folder": serde_json::Value::Null,
+        "sections": view::sections(human, &summary, None),
+        "human": serde_json::to_value(human).unwrap_or(serde_json::Value::Null),
+        // Where they are now, which the stored roster has no answer for.
+        "where": here.map(|p| serde_json::json!({
+            "space": p.space,
+            "asleep": p.asleep,
+            "body_carbon_kg": p.body_carbon_kg,
+        })),
+        // Records are refreshed on the hour, so the page can say how old
+        // this reading is rather than implying it is live.
+        "records_at_tick": current.records_at_tick,
+        "tick": current.clock.tick,
+    })
+}
+
 /// The creation log, newest first: who has been added to the island and by
 /// which door (the dashboard, the CLI, a test).
 pub fn activity(population: &IslandHumanPopulation, limit: usize) -> serde_json::Value {
@@ -537,6 +578,53 @@ pub fn routes_with_world(
             },
         );
 
+    // The world's roster, and one islander in full. The same per-person
+    // sections the stored roster uses, built from the world's own people —
+    // so a dashboard with an island running has one set of people rather
+    // than two different lists.
+    let get_world_humans = warp::path!("api" / "world" / "humans")
+        .and(read())
+        .and(with(world.clone()))
+        .map(|world: Option<SimHandle>| match world {
+            None => json(
+                StatusCode::NOT_FOUND,
+                &serde_json::json!({ "errors": ["No island is running."] }),
+            ),
+            Some(world) => {
+                let current = world.projection();
+                json(
+                    StatusCode::OK,
+                    &serde_json::json!({
+                        "people": current.people,
+                        "records_at_tick": current.records_at_tick,
+                        "tick": current.clock.tick,
+                    }),
+                )
+            }
+        });
+
+    let get_world_human = warp::path!("api" / "world" / "humans" / String)
+        .and(read())
+        .and(with(world.clone()))
+        .map(|agent_id: String, world: Option<SimHandle>| {
+            let Some(world) = world else {
+                return json(
+                    StatusCode::NOT_FOUND,
+                    &serde_json::json!({ "errors": ["No island is running."] }),
+                );
+            };
+            let current = world.projection();
+            match current.records.get(&agent_id) {
+                Some(human) => json(StatusCode::OK, &world_detail(human, &current)),
+                None => json(
+                    StatusCode::NOT_FOUND,
+                    &serde_json::json!({ "errors": [format!(
+                        "Nobody on the island has the id {agent_id:?}."
+                    )] }),
+                ),
+            }
+        });
+
     let get_command = warp::path!("api" / "world" / "commands" / u64)
         .and(read())
         .and(with(world.clone()))
@@ -579,13 +667,15 @@ pub fn routes_with_world(
             }
             json(
                 StatusCode::NOT_FOUND,
-                &serde_json::json!({ "errors": ["No such endpoint. The dashboard serves /api/status, /api/world, /api/world/humans, /api/world/commands/<id>, /api/health, /api/humans, /api/humans/<agent-id>, /api/activity and /api/creator/options."] }),
+                &serde_json::json!({ "errors": ["No such endpoint. The dashboard serves /api/status, /api/world, /api/world/humans, /api/world/humans/<agent-id>, /api/world/commands/<id>, /api/health, /api/humans, /api/humans/<agent-id>, /api/activity and /api/creator/options."] }),
             )
         });
 
     let api = get_status
         .or(get_world)
         .or(post_world_human)
+        .or(get_world_human)
+        .or(get_world_humans)
         .or(get_command)
         .or(get_health)
         .or(get_options)

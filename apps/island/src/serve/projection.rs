@@ -10,6 +10,10 @@
 //! is far too large to publish on every step (a quarter of a million stems
 //! alone), so the vegetation is a count and a mass, not a list of trees.
 
+use std::collections::BTreeMap;
+use std::sync::Arc;
+
+use mk_engine::humans::HumanBeing;
 use mk_engine::regional::estate_layout::Space;
 use mk_engine::regional::life::IslandLife;
 use serde::Serialize;
@@ -25,6 +29,27 @@ pub struct IslandProjection {
     pub estate: Estate,
     pub land: Land,
     pub stocks: Stocks,
+    /// Every islander's full canonical record, by agent id.
+    ///
+    /// Not in the JSON: this is what the per-person page reads, one at a
+    /// time, and dumping a whole population into every `/api/world` reply
+    /// would be absurd. Behind an `Arc` because a projection is cloned on
+    /// every read and these are large.
+    ///
+    /// Refreshed on the digest's cadence rather than every step, and that
+    /// is a choice about scale rather than a present necessity: measured,
+    /// copying every record costs 336 µs for the two founders — about
+    /// 170 µs each — against a 1.2 ms step. Cheap now; at the town-sized
+    /// population of Phase 4b it would be tens of milliseconds per step for
+    /// records nobody is reading. `records_at_tick` says how old they are
+    /// and the page says so too, so the cadence can change later without
+    /// anything having been claimed that was not true.
+    ///
+    /// A creation refreshes them immediately regardless, because creating
+    /// somebody and then being told they do not exist would be absurd.
+    #[serde(skip)]
+    pub records: Arc<BTreeMap<String, HumanBeing>>,
+    pub records_at_tick: u64,
     /// The canonical state digest, and the tick it was taken at.
     ///
     /// Two islands showing the same digest at the same tick are the same
@@ -145,6 +170,8 @@ impl IslandProjection {
         requested_speed: &str,
         achieved_speed: Option<f64>,
         digest: Digest,
+        records: Arc<BTreeMap<String, HumanBeing>>,
+        records_at_tick: u64,
     ) -> Self {
         let day_s = life.canon.rotation_period_s;
         Self {
@@ -162,11 +189,24 @@ impl IslandProjection {
             estate: estate(life),
             land: land(life),
             stocks: stocks(life),
+            records,
+            records_at_tick,
             digest: Digest {
                 current: digest.at_tick == life.tick,
                 ..digest
             },
         }
+    }
+
+    /// Copy every islander's record. Expensive — see [`IslandProjection`].
+    pub fn records_now(life: &IslandLife) -> Arc<BTreeMap<String, HumanBeing>> {
+        Arc::new(
+            life.humans
+                .registry
+                .iter()
+                .map(|human| (human.agent_id().to_string(), human.clone()))
+                .collect(),
+        )
     }
 
     /// Hash the island now. Expensive — see [`Digest`].

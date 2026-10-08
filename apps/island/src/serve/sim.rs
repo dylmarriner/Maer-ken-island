@@ -202,8 +202,8 @@ const SPEED_WINDOW: Duration = Duration::from_secs(5);
 
 /// How often the canonical digest is recomputed, in steps.
 ///
-/// Measured by `slow_what_a_step_and_a_digest_cost`: a step is 1.4 ms and a
-/// digest is **932 ms** — 650 times more — because hashing walks both
+/// Measured by `slow_what_a_step_and_a_digest_cost`: a step is 1.2 ms and a
+/// digest is **800 ms** — 650 times more — because hashing walks both
 /// 1,152,000-cell grids and every human's canonical JSON. (It is not the
 /// stems: that measurement is on a 50-tree patch.) Hashing every step made
 /// the island run hundreds of times slower than it needed to, for a number
@@ -227,11 +227,14 @@ pub fn spawn(life: IslandLife, speed: SimSpeed) -> SimHandle {
     // about 930 ms against a 1.4 ms step, so the thread is handed this one
     // rather than computing its own.
     let first = IslandProjection::digest_now(&life);
+    let records = IslandProjection::records_now(&life);
     let projection = Arc::new(RwLock::new(IslandProjection::of(
         &life,
         &speed.describe(),
         None,
         first.clone(),
+        Arc::clone(&records),
+        life.tick,
     )));
     let (commands, inbox) = channel();
     let handle = SimHandle {
@@ -254,6 +257,8 @@ pub fn spawn(life: IslandLife, speed: SimSpeed) -> SimHandle {
                 projection,
                 stop,
                 digest: first,
+                records,
+                records_at_tick: 0,
                 inbox,
                 outcomes,
             })
@@ -271,6 +276,8 @@ struct Loop {
     projection: Arc<RwLock<IslandProjection>>,
     stop: Arc<AtomicBool>,
     digest: Digest,
+    records: Arc<BTreeMap<String, mk_engine::humans::HumanBeing>>,
+    records_at_tick: u64,
     inbox: Receiver<Queued>,
     outcomes: Arc<Mutex<BTreeMap<u64, Outcome>>>,
 }
@@ -292,9 +299,18 @@ fn run(mut it: Loop) {
         // Commands first: a creation applies at the tick it was queued for,
         // before the step that then moves that person along with everybody
         // else.
+        let mut created_somebody = false;
         while let Ok(Queued { id, command }) = it.inbox.try_recv() {
             let outcome = apply(&mut it.life, command);
+            created_somebody |= matches!(outcome, Outcome::Created { .. });
             record(&it.outcomes, id, outcome);
+        }
+        if created_somebody {
+            // Somebody who has just been created should be readable now,
+            // not at the next hourly refresh. Waiting would mean creating a
+            // person and then being told they do not exist.
+            it.records = IslandProjection::records_now(&it.life);
+            it.records_at_tick = it.life.tick;
         }
 
         if let Err(e) = it.life.advance(it.step_seconds) {
@@ -312,6 +328,8 @@ fn run(mut it: Loop) {
 
         if it.life.tick.is_multiple_of(DIGEST_EVERY) {
             it.digest = IslandProjection::digest_now(&it.life);
+            it.records = IslandProjection::records_now(&it.life);
+            it.records_at_tick = it.life.tick;
         }
 
         let now = Instant::now();
@@ -329,6 +347,8 @@ fn run(mut it: Loop) {
             &it.speed,
             achieved_speed(&recent),
             it.digest.clone(),
+            Arc::clone(&it.records),
+            it.records_at_tick,
         );
 
         let took = started.elapsed();
@@ -402,14 +422,24 @@ fn achieved_speed(recent: &std::collections::VecDeque<(Instant, u64)>) -> Option
     Some(last_sim.saturating_sub(first_sim) as f64 / real)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn publish(
     projection: &RwLock<IslandProjection>,
     life: &IslandLife,
     speed: &SimSpeed,
     achieved: Option<f64>,
     digest: Digest,
+    records: Arc<BTreeMap<String, mk_engine::humans::HumanBeing>>,
+    records_at_tick: u64,
 ) {
-    let next = IslandProjection::of(life, &speed.describe(), achieved, digest);
+    let next = IslandProjection::of(
+        life,
+        &speed.describe(),
+        achieved,
+        digest,
+        records,
+        records_at_tick,
+    );
     match projection.write() {
         Ok(mut slot) => *slot = next,
         Err(poisoned) => *poisoned.into_inner() = next,
@@ -587,8 +617,11 @@ mod timing {
         let _ = IslandProjection::digest_now(&life);
         println!("one digest    : {:?}", t.elapsed());
         let t = Instant::now();
-        let _ = IslandProjection::of(&life, "x", None, Default::default());
+        let _ = IslandProjection::of(&life, "x", None, Default::default(), Default::default(), 0);
         println!("one projection: {:?}", t.elapsed());
+        let t = Instant::now();
+        let _ = IslandProjection::records_now(&life);
+        println!("every record  : {:?}", t.elapsed());
         let t = Instant::now();
         for _ in 0..20 {
             life.advance(step).unwrap();

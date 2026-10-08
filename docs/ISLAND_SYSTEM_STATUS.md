@@ -23,7 +23,7 @@ fidelity limits. The project is **not complete**: see "Not done".
 | Complete island snapshot: save, restore, tamper and canon rejection (Phase 4 Task 3) | Done. A full island — a dozen 1,152,000-cell grids, 200,000 stems, the founders and the RNG streams — writes atomically to one deflated, digest-prefixed file and restores to the same state digest, then runs on identically. The domain, grid topology and labour table are derived again on load rather than trusted from the file | `io/island_snapshot.rs`, `regional/life.rs`, `tests/island_snapshot.rs` |
 | A folder for every human, under a run of its own (Phase 4 Task 3b) | Done. `enable_human_store` claims a run id from a counter in the save root, writes a folder per person, and syncs on the store cadence, at every snapshot save and the moment somebody dies. Failed writes are counted and reported, never discarded. The state digest is identical with the store on, off, or failing | `regional/human_store.rs`, `regional/life.rs`, `tests/island_human_store.rs` |
 | Headless runner and Phase-4 acceptance (Phase 4 Task 5) | Done, less the replay command that waits on Task 4. `island run` advances a scenario or a saved island and prints the canonical digest; `island inspect` describes a snapshot without running it. Two runs of one scenario and seed agree, and stopping at 60 steps and resuming reaches the same digest as 120 straight through, measured on the full island from the command line | `apps/island/src/run.rs`, `tests/island_runtime_acceptance.rs` |
-| The island behind the dashboard, read and write (Phase 4 Task 6) | Mostly done. `island serve --scenario` runs `IslandLife` on its own thread and publishes a projection after every step; `GET /api/world` and the overview read it. `POST /api/world/humans` queues a creation applied between steps, and the creator page picks a room from the estate's own layout. A person created there is in the world and breathing. Not done: the separate property/vegetation/economy/timeline endpoints, `--import-0b`, `POST /api/control`, an island-map picker, and `/api/humans` still serving the stored population rather than the world's | `serve/sim.rs`, `serve/projection.rs`, `regional/create_human.rs`, `tests/island_create_human.rs` |
+| The island behind the dashboard, read and write (Phase 4 Task 6) | Mostly done. `island serve --scenario` runs `IslandLife` on its own thread and publishes a projection after every step; `GET /api/world` and the overview read it. `POST /api/world/humans` queues a creation applied between steps, and the creator page picks a room from the estate's own layout. A person created there is in the world and breathing. The roster page shows the island's own people with their full records and where they are. Not done: the separate property/vegetation/economy/timeline endpoints, `--import-0b`, `POST /api/control`, and an island-map picker for a cell rather than a room | `serve/sim.rs`, `serve/projection.rs`, `regional/create_human.rs`, `tests/island_create_human.rs` |
 | Web dashboard: overview, roster with a readable per-person record, Human Creator, JSON API (`island serve`) | Done for the human-only bootstrap; the Phase 5 desktop app is separate | `apps/island/src/serve/`, `apps/island/static/` |
 
 ## Measured (release build, development machine)
@@ -34,7 +34,7 @@ fidelity limits. The project is **not complete**: see "Not done".
 | Human runtime, 5,000 people | 23 us/human-step, 153 MB peak | `benchmarks/humans_population.md` |
 | **Combined island, one simulated week** (physics, ecology, estate, 200,000 trees, 2 founders, energy, materials) | 49 s, **307 MB peak** | `benchmarks/island_week.md` |
 | Complete island snapshot, one day in | **44 MB** on disk (338 MB before deflate) | `tests/island_snapshot.rs::slow_a_full_island_survives_a_trip_through_a_file` |
-| One island step, and one canonical digest | step **1.4 ms**, digest **932 ms** (650x the step; it is the two 1,152,000-cell grids and the humans' JSON, not the stems) | `serve/sim.rs::slow_what_a_step_and_a_digest_cost` |
+| One island step, and what the dashboard publishes after it | step **1.2 ms**, projection **3.6 ms**, every human's full record **336 us** (two people), canonical digest **800 ms** — 650x the step, and it is the two 1,152,000-cell grids and the humans' JSON rather than the stems | `serve/sim.rs::slow_what_a_step_and_a_digest_cost` |
 
 The combined island (without persistence, the scheduler, a larger population, the refinery/town and the app) is measured above; those remain unmeasured until Phases 4, 4b and 5.
 
@@ -72,8 +72,8 @@ the estate's electrical system is still free (D13).
   created from the creator page is placed in a room of the estate, breathes and ages with the
   founders. Still to come: Task 4 (external commands and deterministic replay), which the replay
   log and `island replay` wait on, and Task 6's remainder — the separate property, vegetation,
-  economy and timeline endpoints, `POST /api/control`, an island-map picker, `--import-0b`, and
-  moving `/api/humans` and the roster page onto the world's people rather than the stored ones.
+  economy and timeline endpoints, `POST /api/control`, an island-map picker for a cell rather than
+  a room, and `--import-0b`.
 - Phase 4b: energy, industry, town, economy.
 - Phase 5: the desktop app (`island-ui`, Bevy) replacing the human-only bootstrap, performance
   work, pruning, final benchmarks. The `island serve` web dashboard covers the human-only

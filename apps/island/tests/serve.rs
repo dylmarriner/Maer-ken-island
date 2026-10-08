@@ -407,3 +407,86 @@ fn body_of(response: &str) -> &str {
         .expect("a body after the headers")
         .trim()
 }
+
+/// The roster page's data, from the world rather than from the disk.
+#[tokio::test]
+async fn the_world_has_its_own_roster_and_its_own_person_pages() {
+    let (world, port, server) = a_running_dashboard().await;
+
+    let (status, response) = get(port, "/api/world/humans").await;
+    assert_eq!(status, 200, "{response}");
+    let roster: serde_json::Value = serde_json::from_str(body_of(&response)).unwrap();
+    let people = roster["people"].as_array().expect("a roster");
+    assert_eq!(people.len(), 2, "the founders are not both there: {roster}");
+
+    let id = people[0]["agent_id"].as_str().unwrap().to_string();
+    let (status, response) = get(port, &format!("/api/world/humans/{id}")).await;
+    assert_eq!(status, 200, "{response}");
+    let person: serde_json::Value = serde_json::from_str(body_of(&response)).unwrap();
+
+    // The same shape the stored roster serves, so the page draws both the
+    // same way — and the world's own answer to where they are, which the
+    // stored roster has no way to know.
+    assert_eq!(person["summary"]["agent_id"], id.as_str());
+    let sections = person["sections"].as_array().expect("sections");
+    assert_eq!(
+        sections.len(),
+        10,
+        "the ten per-person sections are not there"
+    );
+    assert!(person["where"]["space"].is_string(), "{person}");
+    assert!(person["where"]["body_carbon_kg"].is_number(), "{person}");
+    // How old the record is, so a page never implies it is live.
+    assert!(person["records_at_tick"].is_number());
+    assert!(person["tick"].is_number());
+
+    let (status, response) = get(port, "/api/world/humans/nobody-at-all").await;
+    assert_eq!(status, 404, "{response}");
+    assert!(response.contains("nobody-at-all"), "{response}");
+
+    world.stop();
+    server.abort();
+}
+
+/// Somebody created is readable at once, not at the next hourly refresh.
+#[tokio::test]
+async fn a_new_person_can_be_read_the_moment_they_exist() {
+    let (world, port, server) = a_running_dashboard().await;
+
+    let body = r#"{"name":"Ata","biological_sex":"female","birth_timestamp":"1999-09-09T09:09:09Z",
+        "age_years":22,"height_cm":165,"build":"average","hair_color":"black","eye_color":"brown",
+        "skin_tone":"olive","space":1}"#;
+    let (status, response) = post(port, "/api/world/humans", body).await;
+    assert_eq!(status, 202, "{response}");
+    let id = serde_json::from_str::<serde_json::Value>(body_of(&response)).unwrap()["command"]
+        .as_u64()
+        .unwrap();
+
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    let agent_id = loop {
+        let (_, response) = get(port, &format!("/api/world/commands/{id}")).await;
+        let value: serde_json::Value = serde_json::from_str(body_of(&response)).unwrap();
+        if value["state"] == "created" {
+            break value["agent_id"].as_str().unwrap().to_string();
+        }
+        assert_ne!(value["state"], "refused", "{value}");
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the command never resolved"
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    };
+
+    // Without the refresh on creation this would 404 until the next hourly
+    // one — creating somebody and then being told they do not exist.
+    let (status, response) = get(port, &format!("/api/world/humans/{agent_id}")).await;
+    assert_eq!(
+        status, 200,
+        "a person who was just created cannot be read: {response}"
+    );
+    let person: serde_json::Value = serde_json::from_str(body_of(&response)).unwrap();
+    assert_eq!(person["summary"]["agent_id"], agent_id.as_str());
+
+    world.stop();
+    server.abort();
+}
