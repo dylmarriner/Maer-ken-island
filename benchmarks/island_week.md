@@ -64,3 +64,34 @@ millimetres over a 4 km2 cell on a typical day, 10^7 kg) but reads exactly zero
 for one continuous day (days 202.75-203.75, five 6-hourly draws). People now try the
 eight neighbouring cells when the usual one is dry; with that, the household had
 water at every one of 1,460 draws in the year (lowest supply 372 tonnes).
+
+## Five simulated years, two founders (`island run --steps 2628000`)
+
+Run on a copy of the release binary at commit `303bf0c`, memory sampled every minute from outside
+(`target/longrun/y5.rss`).
+
+| Quantity | Result |
+|---|---|
+| Simulated span | 1,825 days (2,628,000 human steps) |
+| Wall clock | about 164 min (about 11 simulated days per real minute, on a shared machine) |
+| Peak resident memory | 321 MB (252 MB for the first simulated year, 310 MB after the first step up at about 1.1 years, 313 MB for the next three, 321 MB at the end, which includes the snapshot save): no growth trend |
+| Snapshot | 53 MB (compressed) |
+| People at the end | 5, all alive: Gem-D and Gem-K at 30.0 years; three children of Gem-K at 4.3, 3.2 and 2.0 years (18.0, 10.5 and 11.8 kg; 105, 92 and 77 cm), the oldest a Child, the youngest an Infant |
+| Food and water shortfalls | 0 and 0 |
+| State hash | `f2484f1d...b8ad` (one run, not repeated in a second process) |
+
+What this does and does not show. It does show that a household of founders runs for five
+simulated years inside a flat 250-320 MB, gains three children born on the WHO growth curves, and
+never runs short of food or water. It does **not** show that the household is realistic:
+
+- **Where people stand does not matter for food or water.** The household eats and drinks at the
+  estate's fixed cells wherever its members are. At the end Gem-D was 2 cells (4 km) from the
+  estate, but Gem-K and all three children were 22 cells (44 km) north of it, still "Nourished"
+  with no shortfall. People wander (upstream autonomy) and nothing yet ties eating to place.
+  This is the unfinished economy wiring (Phase 3 Tasks 3, 3b and 9).
+- The children are slightly small for age (3.2 years at 10.5 kg is well under the WHO median of
+  about 14 kg); the model grows each child toward a sampled adult body, so a small-framed child
+  stays small. Not investigated further.
+- No one died in five years (two adults of 25-30 and three children) and the founders did not
+  have a child with each other's partner beyond Gem-K's three; a decades-long run with deaths and
+  a second generation has not been done.

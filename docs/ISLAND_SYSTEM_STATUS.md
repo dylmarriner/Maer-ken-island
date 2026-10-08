@@ -38,7 +38,8 @@ fidelity limits. The project is **not complete**: see "Not done".
 | Island with 1,002 / 5,002 people (360 / 120 minute-steps) | 594 MB / 1,017 MB peak; 115 / 511 ms per step | `benchmarks/island_population.md` |
 | Snapshot of 5,002 people | 923 MB file before compression, 30 s save, 10 s load, 1.7 GB peak (was OOM-killed at 3.6 GB before the streaming fix); snapshots are now compressed about 7x | `benchmarks/island_population.md` |
 | **Regional baseline** (`island_bench`, two founders, 1,000 steps) | 12.9 simulated days per real minute, 3.2 ms per step, 466 MB peak, snapshot 49 MB (save 1.9 s, load 2.2 s); no speedup from more cores (0.96x) | `benchmarks/2026-10-08-regional-baseline.json`, `benchmarks/README.md` |
-| Two founders, one simulated year | about 33 min wall clock, 713 MB peak including the final snapshot; a birth occurred | `benchmarks/island_week.md` |
+| Two founders, one simulated year | about 32 min wall clock, 397 MB peak including the final snapshot; a birth occurred | `benchmarks/island_week.md` |
+| **Two founders, five simulated years** | about 164 min wall clock, **321 MB peak, no growth trend** (sampled every minute); 5 people alive at the end (the founders and three children born on the WHO curves); 0 food and 0 water shortfalls | `benchmarks/island_week.md` |
 
 Limits of this evidence: populated runs are short (six hours or less) and add no births, deaths or
 growth; the year run has only the founders and its household outcomes were not inspected in
@@ -87,6 +88,7 @@ Phase 3 Tasks 3 and 4b (D10, D13).
   tectonics model to spin up, and ecology already starts at its equilibrium (plan, Task 2b).
 - Phase 4 Task 6, remainder: a map picker for island cells,
   and `agent_id` slugging from a display name. The page's read path was checked in headless Chrome; its Add form was not clicked in a browser.
+- **Place does not yet matter for food and water**: the household eats and drinks at the estate's cells wherever its members stand. In the five-year run the mother and her three children were 44 km from the estate and still fed. Foraging at the person's own cell (and the shortfalls, hunger and deaths that would follow) is the unfinished economy wiring.
 - Children: they are small, grow on the WHO curves, take a body-mass share of food and water, and under five years old stay with their mother. Older children still choose their own actions like adults, and what a child does in the economy (gathering, working) is not restricted by age; a child whose mother has died is not cared for; schooling and play are not modelled.
 - Phase 4b: energy, industry, town, economy beyond the estate.
 - Phase 5: pruning, lifetime-scale runs (births, deaths and growth over decades), final
