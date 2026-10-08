@@ -433,7 +433,24 @@ impl HumanSystem {
         let alive = |i: usize| matches!(humans[i].profile.status, HumanStatus::Alive);
         let approaching =
             |h: &HumanBeing| matches!(h.economy_action.kind, ActionKind::SocialApproach);
-        let living: Vec<usize> = (0..humans.len()).filter(|&i| alive(i)).collect();
+        // Awake, not merely alive.
+        //
+        // Family pairs used to be matched on `alive` alone, so the founders
+        // held a conversation on every tick of every night: watched on a
+        // running island, both asleep from tick 1799, they generated forty
+        // exchanges across ticks 2001-2040. Nobody was awake for any of
+        // them, and each one fed both participants' relationship memory and
+        // social state.
+        //
+        // `circadian.asleep` is the sleep gate's own output, computed every
+        // tick from the Forger-Jewett-Kronauer pacemaker, so this adds no
+        // state and invents nothing: it stops reading a person as available
+        // to talk while the model already says they are asleep. The
+        // remaining half of D35 — that waking pairs still converse on every
+        // single tick, once a simulated minute — is a question about what
+        // the rate should be, and is left open.
+        let available = |i: usize| alive(i) && !humans[i].circadian.asleep;
+        let living: Vec<usize> = (0..humans.len()).filter(|&i| available(i)).collect();
 
         // Deterministic per-tick tie-break, independent of registry order.
         let tick_hash = |a: usize, b: usize| -> u64 {
@@ -481,7 +498,7 @@ impl HumanSystem {
             self.registry.position_of("Gem-D"),
             self.registry.position_of("Gem-K"),
         ) {
-            if alive(d) && alive(k) {
+            if available(d) && available(k) {
                 add_edge(d, k, Relationship::Founders, false);
             }
         }
@@ -495,7 +512,7 @@ impl HumanSystem {
             };
             for parent_id in [father_id, mother_id] {
                 if let Some(parent) = self.registry.position_of(&parent_id) {
-                    if parent != child && alive(parent) {
+                    if parent != child && available(parent) {
                         add_edge(child, parent, Relationship::ParentChild, false);
                     }
                 }
@@ -2511,17 +2528,12 @@ mod tests {
     }
 
     #[test]
-    fn two_sleeping_people_still_hold_a_conversation_every_tick() {
-        // Pins down D35, which was found by looking at the dashboard rather
-        // than by any test: on a running island the founders converse on
-        // every single tick, at every hour, including while both of them
-        // are asleep. 40 conversations at ticks 2001-2040 -- every
-        // consecutive tick -- were generated while `circadian.asleep` was
-        // true for both.
-        //
-        // Asserting the behaviour as it is, not as it should be. Family
-        // pairs are matched on `alive` alone: no sleep test, no check of
-        // what either person is doing.
+    fn two_sleeping_people_hold_no_conversation() {
+        // Half of D35, fixed. Family pairs used to be matched on `alive`
+        // alone, so on a running island both founders, asleep from tick
+        // 1799, generated forty exchanges across ticks 2001-2040. This
+        // asserted that behaviour before the gate went in; it now asserts
+        // its absence.
         let mut system = HumanSystem::new();
         system
             .registry
@@ -2542,23 +2554,57 @@ mod tests {
         for tick in 0..3 {
             system.step_dialogue(&rng, tick);
         }
-
         assert_eq!(
             system.conversation_log().count(),
-            3,
-            "one conversation per tick, asleep throughout"
+            0,
+            "nobody talks in their sleep"
         );
-        for human in ["Gem-D", "Gem-K"] {
-            assert!(
-                system
-                    .registry
-                    .get_human(human)
-                    .expect("a founder")
-                    .circadian
-                    .asleep,
-                "{human} stayed asleep the whole time"
-            );
+
+        // And they talk again on waking, so this is a gate and not a ban:
+        // the pair is otherwise exactly the one that conversed before.
+        for id in ["Gem-D", "Gem-K"] {
+            system
+                .registry
+                .get_human_mut(id)
+                .expect("a founder")
+                .circadian
+                .asleep = false;
         }
+        system.step_dialogue(&rng, 3);
+        assert_eq!(system.conversation_log().count(), 1);
+    }
+
+    #[test]
+    fn one_sleeper_is_enough_to_stop_a_conversation() {
+        // It takes two people awake. A conversation with a sleeping partner
+        // would be no more real for the speaker being awake, and it would
+        // still write into the sleeper's relationship memory.
+        let mut system = HumanSystem::new();
+        system
+            .registry
+            .add_human_no_storage(HumanBeing::gem_d_founder());
+        system
+            .registry
+            .add_human_no_storage(HumanBeing::gem_k_founder());
+        system
+            .registry
+            .get_human_mut("Gem-K")
+            .expect("a founder")
+            .circadian
+            .asleep = true;
+
+        system.step_dialogue(&mk_core::rng::RngRegistry::new([22u8; 32]), 0);
+
+        assert_eq!(system.conversation_log().count(), 0);
+        assert!(
+            system
+                .registry
+                .get_human("Gem-D")
+                .expect("a founder")
+                .conversation_history
+                .is_empty(),
+            "the waking founder remembers no conversation either"
+        );
     }
 
     fn crowd(size: usize, cells: usize) -> HumanSystem {
