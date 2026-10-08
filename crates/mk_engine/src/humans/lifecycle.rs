@@ -269,6 +269,12 @@ pub fn is_reproductively_eligible(human: &HumanBeing) -> bool {
         && reproductive_timeline(human).fecundity(human.development.age_years) > 0.0
 }
 
+/// Wall-clock nanoseconds spent in `formal_predictive_processing::step` since
+/// the process started (feature `construction-counters`; profiling only).
+#[cfg(feature = "construction-counters")]
+pub static FORMAL_PREDICTIVE_NANOS: std::sync::atomic::AtomicU64 =
+    std::sync::atomic::AtomicU64::new(0);
+
 /// Process lifecycle for a human being: aging, needs, and death (Gompertz
 /// age mortality up to a hard biological maximum, unmet survival needs —
 /// starvation, dehydration — or lethal core temperature from exposure).
@@ -487,6 +493,8 @@ pub fn step_lifecycle(
         &human.development,
         dt_years,
     );
+    #[cfg(feature = "construction-counters")]
+    let fpp_started = std::time::Instant::now();
     human.formal_predictive_processing = human.formal_predictive_processing.step(
         human.profile.human_id,
         tick,
@@ -495,6 +503,11 @@ pub fn step_lifecycle(
         &human.core_systems,
         rng_registry,
         dt_years,
+    );
+    #[cfg(feature = "construction-counters")]
+    FORMAL_PREDICTIVE_NANOS.fetch_add(
+        fpp_started.elapsed().as_nanos() as u64,
+        std::sync::atomic::Ordering::Relaxed,
     );
     human.mesoscale_brain = super::mesoscale_brain::MesoscaleBrainSnapshot::from_layers(
         &human.profile,
