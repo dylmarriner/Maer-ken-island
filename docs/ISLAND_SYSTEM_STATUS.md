@@ -61,29 +61,39 @@ Run it with `--no-fail-fast`. Without it cargo stops at the first failing binary
 before this one reported "50 passed" across four binaries — a partial result that reads exactly
 like a whole-workspace one.
 
-The **slow tier passes too** — `cargo test --workspace --release -- --ignored slow_`, 10 tests,
+The **slow tier passed** — `cargo test --workspace --release -- --ignored slow_`, 10 tests,
 0 failures, on `a198ed5`: a simulated week on the island against the reference packs (64 s), a
 simulated year of weather, ten thousand years of seismicity, a full-size island through a file,
-the human runtime to five thousand people, and the Phase 4 cost benchmark.
+the human runtime to five thousand people, and the Phase 4 cost benchmark. Two of those tests
+have changed since: the human-runtime benchmark below, re-measured on the current head, and a
+new `conversation_cost` benchmark. The other eight have not been re-run on this head.
 
-One caveat worth knowing before it bites somebody.
-`slow_the_human_runtime_stays_small_and_roughly_linear_to_five_thousand_people` asserts
-`cost(5000) <= 4 x cost(200)` — a ratio against the smallest and noisiest sample. Two hundred
-humans fit in cache and five thousand do not, so per-head cost genuinely grows and the 4x is the
-tolerance for that. On a container where the 200-human run came in at 17 us instead of its usual
-23-25, the bar dropped to 68.6 us and a perfectly ordinary 77 us failed it. Three reruns on the
-same commit passed (69, 75, 72 us) and `main` measures the same ~70 us at five thousand, so it
-was the assertion's denominator rather than the code.
+`slow_the_human_runtime_stays_small_and_roughly_linear_to_five_thousand_people` used to fail on
+a bad draw, and no longer does. It asserts `cost(5000) <= 4 x cost(200)` — a ratio against the
+smallest and noisiest sample. Two hundred humans fit in cache and five thousand do not, so
+per-head cost genuinely grows and the 4x is the tolerance for that. On a container where the
+200-human run came in at 17 us instead of its usual 23-25, the bar dropped to 68.6 us and a
+perfectly ordinary 77 us failed it.
 
-The test now takes one untimed step before starting the clock, so what it measures is a warm run
-rather than the allocator touching five thousand humans for the first time. That did help, and
-measurably: the five-thousand figure reads 60, 61, 60 us over three runs where before the
-warm-up it ranged 69-77. **It does not make the test unflakeable.** The ratio is still taken
-against the 200-human sample, which still moves (18, 25, 26 us in those same three runs), so a
-low reading there can still drop the bar under a normal measurement at five thousand. The
-remaining fix is to stop dividing by a single noisy sample — compare against a fixed budget, or
-average several runs — and that is a change to what the test claims, not a tidy-up, so it is
-left for whoever decides what the budget should be.
+**The fix is a median of nine runs per population**, and it corrects something this page used to
+say. The earlier text claimed that averaging several runs "is a change to what the test claims,
+not a tidy-up, so it is left for whoever decides what the budget should be." That was wrong. A
+median changes nothing about what is compared: each run is still the same four steps on the same
+population, so `HumanSystem::step`'s fixed per-call cost still lands on every population equally.
+It only stops a single unlucky sample from setting the bar. Measured over three consecutive runs
+the ratio came out at **1.69, 1.86 and 1.71** against a bar of 4, where single samples had
+produced 3.2 and a failure. A warm-up step before the clock starts was a real but partial
+improvement on the way here, and is still in place.
+
+Printing every run rather than only the median turned up something a single figure hid: **the
+runs climb, monotonically, every time.** A typical 200-human row reads 17, 25, 35, 41, 49, 65,
+69, 71, 79. That is a trend, not jitter, and the likeliest reason is that these humans accumulate
+state as they live — conversation history, memory, relationships — so a later step genuinely
+costs more than an early one. It is why the medians rose when the repeat count went from five to
+nine, and it means the absolute microsecond figures here are only comparable at a fixed
+`REPEATS`. The ratio is unharmed, because every population is measured over the same history.
+Whether that growth is acceptable at a lifetime's scale is a real question about the human
+runtime, and nothing here answers it.
 
 One thing not to try: scaling the step count inversely with population so each size does equal
 total work. It was tried here and is wrong. `HumanSystem::step` has per-call cost that does not
