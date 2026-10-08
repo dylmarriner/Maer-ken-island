@@ -2423,6 +2423,93 @@ mod tests {
         assert_eq!(parent_conversations, 1);
     }
 
+    #[test]
+    fn a_parent_and_child_converse_from_opposite_ends_of_the_island() {
+        // Pins down D34. Siblings must be adjacent to talk; parent and
+        // child have no distance test at all, so this pair converses with
+        // 400 cells -- 800 km on the island's 2 km grid -- between them.
+        // Asserting the real behaviour rather than the desired one, so
+        // that whoever gives the pair a distance rule has to come here
+        // and say so.
+        let mut system = HumanSystem::new();
+        let mut parent = HumanBeing::new("far-parent".to_string(), BiologicalSex::Female);
+        let mut child = HumanBeing::new("far-child".to_string(), BiologicalSex::Male);
+
+        for h in [&mut parent, &mut child] {
+            if h.profile.canonical_schema.is_none() {
+                h.profile.canonical_schema = Some(HumanSchema::canonical_minimal(h.agent_id()));
+            }
+        }
+        child
+            .profile
+            .canonical_schema
+            .as_mut()
+            .unwrap()
+            .reproductive_systems
+            .genetics_system
+            .birth_records
+            .push(mk_core::human::schema::BirthRecordSchema {
+                birth_id: "birth_far-child".to_string(),
+                genotype_id: "genotype_far-child".to_string(),
+                father_id: "unknown-father".to_string(),
+                mother_id: "far-parent".to_string(),
+                birth_timestamp: "tick-0".to_string(),
+                agent_id: "far-child".to_string(),
+                mutations: vec![],
+            });
+
+        parent.set_runtime_position(GridPosition::new(0, 0));
+        child.set_runtime_position(GridPosition::new(0, 400));
+        system.registry.add_human_no_storage(parent);
+        system.registry.add_human_no_storage(child);
+
+        system.step_dialogue(&mk_core::rng::RngRegistry::new([11u8; 32]), 2);
+
+        let events: Vec<_> = system.conversation_log().collect();
+        assert_eq!(
+            events.len(),
+            1,
+            "distance does not stop a parent and child conversing"
+        );
+        assert_eq!(
+            events[0].relationship,
+            dialogue::ConversationRelationship::ParentChild
+        );
+    }
+
+    #[test]
+    fn siblings_that_far_apart_do_not_converse() {
+        // The other half of D34, and the reason it is an inconsistency
+        // rather than a blanket choice: the same distance that leaves a
+        // parent and child talking silences two siblings.
+        let mut system = HumanSystem::new();
+        for (name, col) in [("far-sib-a", 0), ("far-sib-b", 400)] {
+            let mut human = HumanBeing::new(name.to_string(), BiologicalSex::Female);
+            human
+                .profile
+                .canonical_schema
+                .get_or_insert_with(|| HumanSchema::canonical_minimal(name))
+                .reproductive_systems
+                .genetics_system
+                .birth_records
+                .push(mk_core::human::schema::BirthRecordSchema {
+                    birth_id: format!("birth_{name}"),
+                    genotype_id: format!("genotype_{name}"),
+                    father_id: "shared-father".to_string(),
+                    mother_id: "shared-mother".to_string(),
+                    birth_timestamp: "tick-0".to_string(),
+                    agent_id: name.to_string(),
+                    mutations: vec![],
+                });
+            human.set_runtime_position(GridPosition::new(0, col));
+            system.registry.add_human_no_storage(human);
+        }
+
+        system.step_dialogue(&mk_core::rng::RngRegistry::new([11u8; 32]), 2);
+
+        assert_eq!(system.conversation_log().count(), 0);
+    }
+
     fn crowd(size: usize, cells: usize) -> HumanSystem {
         let mut system = HumanSystem::new();
         for n in 0..size {
