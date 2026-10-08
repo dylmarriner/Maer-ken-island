@@ -17,6 +17,9 @@ island_preview = { path = "../island_preview" }
 mk_core = { path = "../../crates/mk_core" }
 mk_engine = { path = "../../crates/mk_engine" }
 mk_island = { path = "../../crates/mk_island" }
+# The wire schema. One definition of every shape that crosses the
+# network, shared with every frontend that reads it.
+mk_island_api = { path = "../../crates/mk_island_api" }
 mk_interventions = { path = "../../crates/mk_interventions" }
 bytes = "1"
 serde.workspace = true

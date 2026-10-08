@@ -40,41 +40,11 @@ use super::projection::{Digest, IslandProjection, Views};
 pub use mk_engine::regional::commands::IslandCommand;
 
 /// What became of a command.
-#[derive(Debug, Clone, serde::Serialize)]
-#[serde(tag = "state", rename_all = "snake_case")]
-pub enum Outcome {
-    /// Accepted and waiting for the next step to apply it.
-    Queued,
-    Created {
-        agent_id: String,
-        space: Option<String>,
-        cell: (usize, usize),
-        tick: u64,
-        /// A folder that could not be written. The person exists anyway.
-        storage_error: Option<String>,
-    },
-    Refused {
-        problems: Vec<String>,
-    },
-    /// An intervention the island carried out, or a directive it carried
-    /// out on the loop.
-    Intervened {
-        summary: String,
-        touched: usize,
-        tick: u64,
-    },
-    /// A snapshot was written, and what it cost. The duration is reported
-    /// because it is long enough that an operator deserves to be told
-    /// rather than left watching a stopped clock.
-    Saved {
-        path: String,
-        bytes: u64,
-        took_ms: u64,
-        tick: u64,
-    },
-    /// A control command: recorded, and nothing in the world moved.
-    Noted,
-}
+///
+/// Defined in `mk_island_api` and re-exported, so the desktop client polling
+/// `/api/world/commands/<id>` across a network matches on exactly the
+/// variants this loop writes.
+pub use mk_island_api::Outcome;
 
 /// A queued command and the id it will be answered under.
 struct Queued {

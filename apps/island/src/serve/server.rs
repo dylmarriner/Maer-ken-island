@@ -10,6 +10,11 @@ use island_humans::{CreateHumanError, CreateHumanRequest, IslandHumanPopulation}
 use mk_engine::regional::commands::ControlCommand;
 use mk_engine::regional::create_human::{CreateLocation, IslandCreateHuman};
 use mk_engine::regional::estate_layout::SpaceId;
+// The write shapes, from the schema every frontend compiles against. The
+// island's own validation stays here: whether that room exists and whether
+// that cell is in the sea are questions only the live world can answer, and
+// a request type on somebody else's laptop must not pretend to know them.
+use mk_island_api::{ControlRequest, CreateHumanRequest as WorldCreateRequest};
 use std::sync::{Arc, Mutex};
 use warp::http::StatusCode;
 use warp::Filter;
@@ -254,152 +259,85 @@ pub fn create(
     }
 }
 
-/// A request to create somebody *in the world*.
+/// Turn the wire shape into a command, or say what is wrong with it.
 ///
-/// The dashboard's stored-person fields, plus where on the island they
-/// start. `space` names a room of the estate by its layout id; `row`/`col`
-/// put them on a cell. Exactly one is required, because "somewhere" is not
-/// a place and guessing one would put a person where nobody asked.
-#[derive(Debug, serde::Deserialize)]
-struct WorldCreateRequest {
-    name: String,
-    biological_sex: String,
-    birth_timestamp: String,
-    age_years: f64,
-    height_cm: f64,
-    build: String,
-    hair_color: String,
-    eye_color: String,
-    skin_tone: String,
-    space: Option<u32>,
-    row: Option<usize>,
-    col: Option<usize>,
-    /// Default true: somebody created on the island was, as a rule, born
-    /// there. A creator who means otherwise says so and gives coordinates.
-    #[serde(default = "yes")]
-    birthplace_here: bool,
-    #[serde(default)]
-    birth_latitude: f64,
-    #[serde(default)]
-    birth_longitude: f64,
-}
-
-fn yes() -> bool {
-    true
-}
-
-impl WorldCreateRequest {
-    /// Turn the wire shape into a command, or say what is wrong with it.
-    ///
-    /// Only the parts the engine cannot check are checked here: the sex
-    /// word and the choice of location. Everything else — the age, the
-    /// height, whether that room exists, whether that cell is in the sea —
-    /// belongs to the island and is checked on its own thread against the
-    /// live world, which is the only place those answers are true.
-    fn into_command(self) -> Result<IslandCreateHuman, Vec<String>> {
-        let mut problems = Vec::new();
-        let sex = match self.biological_sex.trim().to_ascii_lowercase().as_str() {
-            "male" => Some(mk_core::human::BiologicalSex::Male),
-            "female" => Some(mk_core::human::BiologicalSex::Female),
-            other => {
-                problems.push(format!(
-                    "biological_sex: {other:?} is not one the spawn templates support; use male or female."
-                ));
-                None
-            }
-        };
-        let location = match (self.space, self.row, self.col) {
-            (Some(id), None, None) => Some(CreateLocation::EstateSpace(SpaceId(id))),
-            (None, Some(row), Some(col)) => Some(CreateLocation::IslandCell { row, col }),
-            (None, None, None) => {
-                problems.push(
-                    "location: say where they start — `space` for a room of the estate, or `row` and `col` for a cell of the island."
-                        .to_string(),
-                );
-                None
-            }
-            _ => {
-                problems.push(
-                    "location: give either `space` or both `row` and `col`, not a mixture."
-                        .to_string(),
-                );
-                None
-            }
-        };
-        match (sex, location) {
-            (Some(biological_sex), Some(location)) if problems.is_empty() => {
-                Ok(IslandCreateHuman {
-                    name: self.name,
-                    biological_sex,
-                    birth_timestamp: self.birth_timestamp,
-                    age_years: self.age_years,
-                    height_cm: self.height_cm,
-                    build: self.build,
-                    hair_color: self.hair_color,
-                    eye_color: self.eye_color,
-                    skin_tone: self.skin_tone,
-                    location,
-                    birthplace_here: self.birthplace_here,
-                    birth_latitude: self.birth_latitude,
-                    birth_longitude: self.birth_longitude,
-                })
-            }
-            _ => Err(problems),
+/// Only the parts the engine cannot check are checked here: the sex
+/// word and the choice of location. Everything else — the age, the
+/// height, whether that room exists, whether that cell is in the sea —
+/// belongs to the island and is checked on its own thread against the
+/// live world, which is the only place those answers are true.
+fn into_command(request: WorldCreateRequest) -> Result<IslandCreateHuman, Vec<String>> {
+    let mut problems = Vec::new();
+    let sex = match request.biological_sex.trim().to_ascii_lowercase().as_str() {
+        "male" => Some(mk_core::human::BiologicalSex::Male),
+        "female" => Some(mk_core::human::BiologicalSex::Female),
+        other => {
+            problems.push(format!(
+                "biological_sex: {other:?} is not one the spawn templates support; use male or female."
+            ));
+            None
         }
+    };
+    let location = match (request.space, request.row, request.col) {
+        (Some(id), None, None) => Some(CreateLocation::EstateSpace(SpaceId(id))),
+        (None, Some(row), Some(col)) => Some(CreateLocation::IslandCell { row, col }),
+        (None, None, None) => {
+            problems.push(
+                "location: say where they start — `space` for a room of the estate, or `row` and `col` for a cell of the island."
+                    .to_string(),
+            );
+            None
+        }
+        _ => {
+            problems.push(
+                "location: give either `space` or both `row` and `col`, not a mixture.".to_string(),
+            );
+            None
+        }
+    };
+    match (sex, location) {
+        (Some(biological_sex), Some(location)) if problems.is_empty() => Ok(IslandCreateHuman {
+            name: request.name,
+            biological_sex,
+            birth_timestamp: request.birth_timestamp,
+            age_years: request.age_years,
+            height_cm: request.height_cm,
+            build: request.build,
+            hair_color: request.hair_color,
+            eye_color: request.eye_color,
+            skin_tone: request.skin_tone,
+            location,
+            birthplace_here: request.birthplace_here,
+            birth_latitude: request.birth_latitude,
+            birth_longitude: request.birth_longitude,
+        }),
+        _ => Err(problems),
     }
 }
 
-/// Running the island: pause it, resume it, step it, or change its speed.
-#[derive(Debug, serde::Deserialize)]
-#[serde(tag = "command", rename_all = "snake_case")]
-enum ControlRequest {
-    Pause,
-    Resume,
-    /// Advance exactly this many steps and then hold. `ControlCommand::Step`
-    /// has been in the island's vocabulary since Task 4 with nothing behind
-    /// it; this is the loop's step budget, which is also what an upstream
-    /// `InterventionAction::Step` now drives.
-    Step {
-        ticks: u64,
-    },
-    /// Write the whole island to the directory the server was started with.
-    ///
-    /// Slow enough that it is worth saying so: about half a minute on the
-    /// full island, during which the simulation thread is writing rather
-    /// than stepping. It is queued like any other command, so the reply is
-    /// a command id and the outcome carries what it cost.
-    Snapshot,
-    /// `real`, `max`, or a multiplier like `60`.
-    SetSpeed {
-        speed: String,
-    },
-}
-
-impl ControlRequest {
-    /// Apply it, and give back the command to record.
-    fn apply(&self, world: &SimHandle) -> Result<ControlCommand, String> {
-        match self {
-            Self::Pause => {
-                world.set_paused(true);
-                Ok(ControlCommand::Pause)
-            }
-            Self::Resume => {
-                world.set_paused(false);
-                Ok(ControlCommand::Resume)
-            }
-            Self::Step { ticks } => {
-                world.step_for(*ticks);
-                Ok(ControlCommand::Step(*ticks))
-            }
-            // Unlike the others this one is not applied here: it has to
-            // happen on the thread that owns the island, between steps,
-            // like anything else that touches the world or its files.
-            Self::Snapshot => Ok(ControlCommand::Snapshot),
-            Self::SetSpeed { speed } => {
-                let parsed: SimSpeed = speed.parse()?;
-                world.set_speed(parsed);
-                Ok(ControlCommand::SetSpeed(speed.clone()))
-            }
+/// Apply a control request, and give back the command to record.
+fn apply_control(request: &ControlRequest, world: &SimHandle) -> Result<ControlCommand, String> {
+    match request {
+        ControlRequest::Pause => {
+            world.set_paused(true);
+            Ok(ControlCommand::Pause)
+        }
+        ControlRequest::Resume => {
+            world.set_paused(false);
+            Ok(ControlCommand::Resume)
+        }
+        ControlRequest::Step { ticks } => {
+            world.step_for(*ticks);
+            Ok(ControlCommand::Step(*ticks))
+        }
+        // Unlike the others this one is not applied here: it has to
+        // happen on the thread that owns the island, between steps,
+        // like anything else that touches the world or its files.
+        ControlRequest::Snapshot => Ok(ControlCommand::Snapshot),
+        ControlRequest::SetSpeed { speed } => {
+            let parsed: SimSpeed = speed.parse()?;
+            world.set_speed(parsed);
+            Ok(ControlCommand::SetSpeed(speed.clone()))
         }
     }
 }
@@ -722,7 +660,7 @@ pub fn routes_with_world(
                         )
                     }
                 };
-                match request.into_command() {
+                match into_command(request) {
                     Err(problems) => json(
                         StatusCode::UNPROCESSABLE_ENTITY,
                         &serde_json::json!({ "errors": problems }),
@@ -1105,7 +1043,7 @@ pub fn routes_with_world(
                         )
                     }
                 };
-                match request.apply(&world) {
+                match apply_control(&request, &world) {
                     Err(problem) => json(
                         StatusCode::UNPROCESSABLE_ENTITY,
                         &serde_json::json!({ "errors": [problem] }),

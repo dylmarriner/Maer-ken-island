@@ -19,6 +19,21 @@ use mk_engine::regional::estate_layout::Space;
 use mk_engine::regional::life::IslandLife;
 use serde::Serialize;
 
+/// Every shape that crosses the network is defined once, in
+/// `mk_island_api`, and re-exported here so this module's callers are
+/// unchanged by the move. The server writes them; the web app and the
+/// desktop application read them; none of the three can drift from the
+/// others without failing to compile.
+///
+/// What stays here is what cannot cross a network as it stands:
+/// [`IslandProjection`] and [`Views`] hold engine state behind `Arc`s, and
+/// [`Terrain`] holds two of the island's own grids.
+pub use mk_island_api::{
+    Building, Cell, Clock, Conversation, ConversationLine, Digest, Economy, EconomyEntry, Estate,
+    Item, Land, Person, Property, SpaceChoice, Stocks, Structure, TimelineEntry, Tree, Trees,
+    World,
+};
+
 /// How many of the island's recent conversations the dashboard shows.
 ///
 /// `HumanSystem` keeps 500. Serving all of them would be a wall of text
@@ -117,133 +132,6 @@ pub struct IslandProjection {
     pub digest: Digest,
 }
 
-/// A state digest and the moment it describes.
-#[derive(Debug, Clone, Default, Serialize)]
-pub struct Digest {
-    pub value: String,
-    pub at_tick: u64,
-    /// True when this is the island as it is now rather than as it was at
-    /// the last refresh, so a page never implies the digest is live when
-    /// it is a few steps behind.
-    pub current: bool,
-}
-
-/// Simulated time. The island's day is the canon's rotation period — 36
-/// hours — so a clock that counted in 24s would be wrong here.
-#[derive(Debug, Clone, Default, Serialize)]
-pub struct Clock {
-    pub sim_time_s: u64,
-    pub tick: u64,
-    pub days: f64,
-    /// Hours into the local day, 0 up to the day's own length.
-    pub hour_of_day: f64,
-    pub day_length_hours: f64,
-    /// How many simulated seconds are passing per real second, measured
-    /// over recent steps. `None` until enough steps have run to say.
-    pub achieved_speed: Option<f64>,
-    /// What was asked for, so a page can show that the island is not
-    /// keeping up rather than quietly running slow.
-    pub requested_speed: String,
-}
-
-/// One person, at the level of detail a roster shows.
-///
-/// There is no `name`: a human in the world has an `agent_id` and nothing
-/// else to be called. The dashboard's own creator keeps a side-table of
-/// typed-in names for the people it made, but the island's founders were
-/// never typed in, and inventing a display name here would be exactly the
-/// fabricated state `HUMAN_SCOPE.md` says not to add to make a page look
-/// finished. The id is what there is, so the id is what is shown.
-#[derive(Debug, Clone, Serialize)]
-pub struct Person {
-    pub agent_id: String,
-    pub alive: bool,
-    pub asleep: bool,
-    pub age_years: f64,
-    /// Where they are on the estate, by the layout's own label for the
-    /// space — "Bedroom", "Workshop" — rather than a space id. Absent when
-    /// they are off the estate patch entirely.
-    pub space: Option<String>,
-    pub position_m: Option<(f64, f64)>,
-    /// The medium-grid cell they stand on, so the map can draw them.
-    ///
-    /// Served rather than derived on the page: turning metres into a cell
-    /// is the server's arithmetic, and the one time this branch let a
-    /// coordinate conversion happen somewhere it did not belong, a birth
-    /// came out 0.716 degrees from the equator.
-    pub cell: Option<(usize, usize)>,
-    /// Carbon in the body (kg), which is the measure the island's own
-    /// acceptance test holds the founders to.
-    pub body_carbon_kg: Option<f64>,
-}
-
-/// The founders' estate.
-#[derive(Debug, Clone, Default, Serialize)]
-pub struct Estate {
-    /// Medium-grid cell of the estate's block.
-    pub cell: (usize, usize),
-    /// Where that cell is on the planet, in **degrees**.
-    ///
-    /// Here because an intervention is aimed with an upstream `Location`,
-    /// which is a latitude and longitude, and a page that could only name
-    /// cells had no way to ask for anywhere at all. Degrees, not radians:
-    /// `IslandDomain::lat_lon_at_m` answers in radians because its other
-    /// caller does trigonometry with the result, and passing those through
-    /// as degrees is a mistake this code has already made once.
-    pub latitude: f64,
-    pub longitude: f64,
-    pub buildings: usize,
-    pub items: usize,
-    /// Every space somebody can be put in, by the layout's own id and
-    /// label. The creator page offers exactly these, so it can never ask
-    /// for a room the island will refuse.
-    pub spaces: Vec<SpaceChoice>,
-    pub battery_charge_kwh: f64,
-    pub battery_capacity_kwh: f64,
-    pub fuel_litres: f64,
-}
-
-/// A place on the estate a person can be created in.
-#[derive(Debug, Clone, Serialize)]
-pub struct SpaceChoice {
-    pub id: u32,
-    pub label: String,
-    pub kind: String,
-}
-
-/// The ground the estate stands on, and the island around it.
-#[derive(Debug, Clone, Default, Serialize)]
-pub struct Land {
-    pub trees: usize,
-    pub patch_carbon_kgc: f64,
-    pub island_biomass_kgc: f64,
-    /// The medium grid's shape, so a page offering a cell can say what the
-    /// numbers may be rather than letting somebody guess and be refused.
-    pub rows: usize,
-    pub cols: usize,
-    /// How many of those cells are land. The rest are sea, and nobody can
-    /// be created there.
-    pub land_cells: usize,
-    /// How wide one of those cells is, in metres.
-    ///
-    /// Here so the viewer can turn domain metres into picture pixels. The
-    /// map is one pixel per cell and the trees are in metres, and without
-    /// this the page would have to hold a copy of the engine's 2 km and
-    /// hope it never changes.
-    pub cell_size_m: f64,
-}
-
-/// What the household has moved, and whether its books closed.
-#[derive(Debug, Clone, Default, Serialize)]
-pub struct Stocks {
-    pub human_carbon_kg: f64,
-    pub material_carbon_kg: f64,
-    pub material_water_kg: f64,
-    pub audits_closed: u64,
-    pub food_shortfalls: u64,
-    pub water_shortfalls: u64,
-}
-
 /// The parts of a projection that are refreshed on their own schedule
 /// rather than rebuilt every step.
 ///
@@ -315,72 +203,6 @@ fn readable_subject(subject: &str) -> String {
         .unwrap_or_else(|| subject.to_string())
 }
 
-/// A property on the island, or belonging to it.
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct Property {
-    pub name: String,
-    pub owners: Vec<String>,
-    /// The medium cell it stands on, when it has a fixed place.
-    pub cell: Option<(usize, usize)>,
-    /// Whether it stands on this island's estate cell. The inventory
-    /// carries an unowned homestead template with no location, and saying
-    /// which is which is cheaper than leaving a reader to work it out.
-    pub on_this_island: bool,
-    pub buildings: Vec<Building>,
-    pub items: Vec<Item>,
-}
-
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct Building {
-    pub name: String,
-    pub kind: String,
-}
-
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct Item {
-    pub name: String,
-    pub kind: String,
-}
-
-/// The resource economy, as far as the island has one.
-///
-/// `resource_nodes` is a count rather than a list because it is always
-/// zero: the island does not seed resource nodes from its biomes the way a
-/// planetary world does, so there is nothing to list. It is reported rather
-/// than hidden, because "no nodes" is a fact about the island and leaving
-/// the field out would make an empty economy look like a missing endpoint.
-#[derive(Debug, Clone, Default, serde::Serialize)]
-pub struct Economy {
-    pub resource_nodes: usize,
-    pub structures: Vec<Structure>,
-    pub events: Vec<EconomyEntry>,
-}
-
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct Structure {
-    pub id: u64,
-    pub cell: (i32, i32),
-    pub recipe: String,
-    pub material_cost: u32,
-}
-
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct EconomyEntry {
-    pub tick: u64,
-    pub by: String,
-    pub kind: String,
-    pub subject: String,
-    pub quantity: u32,
-}
-
-/// One thing that reached the island from outside.
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct TimelineEntry {
-    pub tick: u64,
-    pub sequence: u64,
-    pub what: String,
-}
-
 /// A command in a line, for a timeline a person reads.
 fn describe(command: &mk_engine::regional::commands::IslandCommand) -> String {
     use mk_engine::regional::commands::{ControlCommand, IslandCommand};
@@ -403,32 +225,6 @@ fn describe(command: &mk_engine::regional::commands::IslandCommand) -> String {
             ControlCommand::SetSpeed(speed) => format!("set the speed to {speed}"),
         },
     }
-}
-
-/// One thing a person said, in a conversation somebody can read.
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct ConversationLine {
-    pub speaker_id: String,
-    pub speaker_name: String,
-    pub text: String,
-}
-
-/// A conversation between two islanders, as it happened.
-///
-/// The engine generates these from state it has already computed — the
-/// speaker's real emotion, their actual internal monologue, what the
-/// listener said to them last time — and never from a language model. The
-/// page shows the lines as the engine wrote them, for the same reason the
-/// server notes are shown rather than paraphrased: a conversation
-/// rewritten on the way to the screen is no longer evidence of what the
-/// simulation did.
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct Conversation {
-    pub tick: u64,
-    /// `founders`, `parent and child`, `siblings` or `neighbours` — the
-    /// register the engine picked, in words rather than an enum name.
-    pub relationship: String,
-    pub lines: Vec<ConversationLine>,
 }
 
 /// How the two speakers are related, for somebody reading rather than
@@ -619,67 +415,6 @@ pub fn cell_of(terrain: &Terrain, row: usize, col: usize) -> Option<Cell> {
             col,
         ),
     })
-}
-
-/// One tree, as the map draws it.
-///
-/// Position is domain metres, the same frame everything else on the map
-/// uses. `kind` is `Tree`, `Shrub` or `Grass` and **not a species**: the
-/// engine's `TreeInstance` carries no species, and the species system in
-/// `organisms/runtime.rs` is not wired into the island's vegetation.
-/// Island-scale species is Phase 3 Task 1b, still open.
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct Tree {
-    pub id: u64,
-    pub kind: String,
-    pub x_m: f64,
-    pub y_m: f64,
-    pub height_m: f64,
-    pub stem_diameter_m: f64,
-}
-
-/// Where individual trees exist, and how many are in view.
-///
-/// The island does not model every tree. Within `individual_radius_m` of
-/// `centre_m` the engine holds a `TreeInstance` per stem above a minimum
-/// diameter; outside it — including the rest of the 4 km patch and the
-/// whole island beyond — vegetation is stand cover and biomass per cell.
-/// A viewer that did not say so would let somebody read an empty island
-/// as a treeless one.
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct Trees {
-    pub trees: Vec<Tree>,
-    /// How many stood in the requested box, before the cap.
-    pub in_box: usize,
-    /// How many are being returned.
-    pub shown: usize,
-    /// The whole patch: south-west corner and size, in domain metres.
-    pub patch: (f64, f64, f64, f64),
-    /// Centre and radius of the individually-modelled area, domain metres.
-    pub individual_centre_m: (f64, f64),
-    pub individual_radius_m: f64,
-    /// The estate's yard, west, south, east and north in domain metres: a
-    /// cleared rectangle the engine places no stem inside.
-    pub yard: (f64, f64, f64, f64),
-    /// Every individual stem the island holds, in or out of view.
-    pub total: usize,
-}
-
-/// One cell of the island, for somebody who clicked on the map.
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct Cell {
-    pub row: usize,
-    pub col: usize,
-    /// Degrees, the same units the intervention and creation forms take,
-    /// so a click can fill them in directly.
-    pub latitude: f64,
-    pub longitude: f64,
-    pub land: bool,
-    pub elevation_m: f64,
-    /// Whether a structure could stand here, by the island's own rule
-    /// (`MAX_BUILD_GRADIENT`) rather than upstream's, which admits nothing
-    /// on a 2 km grid. Sea is never buildable.
-    pub buildable: bool,
 }
 
 impl IslandProjection {

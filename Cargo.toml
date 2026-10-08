@@ -4,6 +4,7 @@ members = [
     "crates/mk_engine",
     "crates/mk_interventions",
     "crates/mk_island",
+    "crates/mk_island_api",
     "apps/island_humans",
     "apps/island",
     "apps/island_preview",
