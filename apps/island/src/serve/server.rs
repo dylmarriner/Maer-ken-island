@@ -362,6 +362,13 @@ enum ControlRequest {
     Step {
         ticks: u64,
     },
+    /// Write the whole island to the directory the server was started with.
+    ///
+    /// Slow enough that it is worth saying so: about half a minute on the
+    /// full island, during which the simulation thread is writing rather
+    /// than stepping. It is queued like any other command, so the reply is
+    /// a command id and the outcome carries what it cost.
+    Snapshot,
     /// `real`, `max`, or a multiplier like `60`.
     SetSpeed {
         speed: String,
@@ -384,6 +391,10 @@ impl ControlRequest {
                 world.step_for(*ticks);
                 Ok(ControlCommand::Step(*ticks))
             }
+            // Unlike the others this one is not applied here: it has to
+            // happen on the thread that owns the island, between steps,
+            // like anything else that touches the world or its files.
+            Self::Snapshot => Ok(ControlCommand::Snapshot),
             Self::SetSpeed { speed } => {
                 let parsed: SimSpeed = speed.parse()?;
                 world.set_speed(parsed);
@@ -888,15 +899,22 @@ pub fn routes_with_world(
                         &serde_json::json!({ "errors": [problem] }),
                     ),
                     Ok(control) => {
-                        // Queued only for the record: the pacing already
-                        // changed, and the log should say that it did.
-                        world.send(IslandCommand::Control(control));
+                        // Pause, resume, step and speed have already taken
+                        // effect and are queued only so the log says they
+                        // did. `Snapshot` is the exception: nothing has
+                        // happened yet, and it is the queue that will do
+                        // it. So the command id comes back for all of them
+                        // — harmless for the four, and the only way to
+                        // learn how a snapshot went for the fifth.
+                        let queued = world.send(IslandCommand::Control(control));
                         let pacing = world.pacing();
                         json(
                             StatusCode::OK,
                             &serde_json::json!({
                                 "speed": pacing.speed.describe(),
                                 "paused": pacing.paused,
+                                "command": queued,
+                                "poll": queued.map(|id| format!("/api/world/commands/{id}")),
                             }),
                         )
                     }

@@ -350,6 +350,10 @@ fn describe(command: &mk_engine::regional::commands::IslandCommand) -> String {
             ControlCommand::Pause => "paused".to_string(),
             ControlCommand::Resume => "resumed".to_string(),
             ControlCommand::Step(n) => format!("stepped {n}"),
+            // Only recorded once a snapshot has actually been written
+            // (`sim::apply` saves first and records second), so the past
+            // tense is earned. It did not used to be: this line read the
+            // same while nothing anywhere wrote a snapshot.
             ControlCommand::Snapshot => "wrote a snapshot".to_string(),
             ControlCommand::SetSpeed(speed) => format!("set the speed to {speed}"),
         },

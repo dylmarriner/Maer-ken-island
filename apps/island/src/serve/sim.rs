@@ -20,7 +20,7 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
-use mk_engine::regional::commands::{Applied, CommandError};
+use mk_engine::regional::commands::{Applied, CommandError, ControlCommand};
 use mk_engine::regional::create_human::{CreateHumanError, CreatedIslander};
 use mk_engine::regional::interventions::{IslandApplied, IslandDirective};
 use mk_engine::regional::life::IslandLife;
@@ -61,6 +61,15 @@ pub enum Outcome {
     Intervened {
         summary: String,
         touched: usize,
+        tick: u64,
+    },
+    /// A snapshot was written, and what it cost. The duration is reported
+    /// because it is long enough that an operator deserves to be told
+    /// rather than left watching a stopped clock.
+    Saved {
+        path: String,
+        bytes: u64,
+        took_ms: u64,
         tick: u64,
     },
     /// A control command: recorded, and nothing in the world moved.
@@ -306,6 +315,17 @@ pub fn spawn(life: IslandLife, speed: SimSpeed) -> SimHandle {
 /// in memory would be lost by the thing a log is for, which is a run that
 /// stopped unexpectedly.
 pub fn spawn_logging(life: IslandLife, speed: SimSpeed, log: Option<PathBuf>) -> SimHandle {
+    spawn_with(life, speed, log, None)
+}
+
+/// As [`spawn_logging`], and `snapshots` is the directory
+/// `ControlCommand::Snapshot` writes into.
+pub fn spawn_with(
+    life: IslandLife,
+    speed: SimSpeed,
+    log: Option<PathBuf>,
+    snapshots: Option<PathBuf>,
+) -> SimHandle {
     let step_seconds = life.scenario.cadences.human_seconds;
     // The starting island is hashed once — and only once: hashing costs
     // about 930 ms against a 1.4 ms step, so the thread is handed this one
@@ -350,6 +370,7 @@ pub fn spawn_logging(life: IslandLife, speed: SimSpeed, log: Option<PathBuf>) ->
                 inbox,
                 outcomes,
                 log,
+                snapshots,
             })
         })
         .expect("the simulation thread starts");
@@ -369,6 +390,10 @@ struct Loop {
     inbox: Receiver<Queued>,
     outcomes: Arc<Mutex<BTreeMap<u64, Outcome>>>,
     log: Option<PathBuf>,
+    /// Where `ControlCommand::Snapshot` writes. Without one the command is
+    /// *refused*, because the alternative is what this used to do: record
+    /// "wrote a snapshot" in the timeline and write nothing.
+    snapshots: Option<PathBuf>,
 }
 
 /// The loop itself: apply what was asked, step, publish, wait if there is
@@ -399,7 +424,7 @@ fn run(mut it: Loop) {
         let mut created_somebody = false;
         let mut applied_anything = false;
         while let Ok(Queued { id, command }) = it.inbox.try_recv() {
-            let outcome = apply(&mut it.life, &it.pacing, command);
+            let outcome = apply(&mut it.life, &it.pacing, it.snapshots.as_ref(), command);
             created_somebody |= matches!(outcome, Outcome::Created { .. });
             applied_anything |= !matches!(outcome, Outcome::Refused { .. });
             record(&it.outcomes, id, outcome);
@@ -545,7 +570,57 @@ fn run(mut it: Loop) {
 /// carry out, and this is the host: a directive that were only reported
 /// and not acted on would be a dashboard that accepted a pause and kept
 /// running.
-fn apply(life: &mut IslandLife, pacing: &Mutex<Pacing>, command: IslandCommand) -> Outcome {
+fn apply(
+    life: &mut IslandLife,
+    pacing: &Mutex<Pacing>,
+    snapshots: Option<&PathBuf>,
+    command: IslandCommand,
+) -> Outcome {
+    // `Snapshot` is the one control that does touch the world's surroundings,
+    // so it is carried out here rather than left to `apply_command`, which
+    // records every control as having moved nothing. Before this it *was*
+    // left there: the timeline said "wrote a snapshot" and no snapshot was
+    // written, which is worse than the command not existing.
+    if let IslandCommand::Control(ControlCommand::Snapshot) = &command {
+        let Some(dir) = snapshots else {
+            return Outcome::Refused {
+                problems: vec![
+                    "This dashboard has nowhere to write a snapshot. Start the server with \
+                     --snapshot-dir <dir>."
+                        .to_string(),
+                ],
+            };
+        };
+        let path = dir.join(format!("island-{:08}.mks", life.tick));
+        if let Err(e) = std::fs::create_dir_all(dir) {
+            return Outcome::Refused {
+                problems: vec![format!("{} could not be made: {e}", dir.display())],
+            };
+        }
+        // Timed, because it is slow enough to matter: measured at 27 s for
+        // the full island (`benchmarks/phase4_cost.md`), during which this
+        // thread is not stepping. The duration goes back to whoever asked,
+        // so a stopped clock has an explanation.
+        let started = Instant::now();
+        let saved = mk_engine::io::island_snapshot::save_island_snapshot(life, &path);
+        let took = started.elapsed();
+        return match saved {
+            Err(e) => Outcome::Refused {
+                problems: vec![format!("the snapshot was not written: {e}")],
+            },
+            Ok(()) => {
+                let bytes = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+                // Recorded only now that it happened.
+                let _ = life.apply_command(command);
+                Outcome::Saved {
+                    path: path.display().to_string(),
+                    bytes,
+                    took_ms: took.as_millis() as u64,
+                    tick: life.tick,
+                }
+            }
+        };
+    }
     match life.apply_command(command) {
         Ok(Applied::Created(CreatedIslander {
             agent_id,

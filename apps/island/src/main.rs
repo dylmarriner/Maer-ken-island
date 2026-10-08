@@ -33,6 +33,10 @@ serve    the dashboard: the overview at /, the roster at /people and the Human
                    any speed.
   --log PATH       record every command this dashboard applies, so the
                    session can be replayed with `island replay`
+  --snapshot-dir D where a snapshot asked for from the dashboard is written.
+                   Without it that request is refused rather than silently
+                   doing nothing. Writing one takes about half a minute on
+                   the full island and the island does not step meanwhile
   --import-0b DIR  carry the people stored in a Phase-0b data directory into
                    the world, once, as creations at the first step
 
@@ -189,7 +193,8 @@ fn main() {
             // Read again below, where the world is opened; named here so
             // they are accepted rather than falling through to the usage
             // message as unknown flags.
-            "--scenario" | "--snapshot" | "--speed" | "--log" | "--import-0b" => {}
+            "--scenario" | "--snapshot" | "--speed" | "--log" | "--import-0b"
+            | "--snapshot-dir" => {}
             _ => usage(),
         }
     }
@@ -227,7 +232,15 @@ fn main() {
             if let Some(path) = &log {
                 println!("Recording commands to {}.", path.display());
             }
-            let world = serve::sim::spawn_logging(life, speed, log);
+            let snapshots = flag(rest, "--snapshot-dir").map(PathBuf::from);
+            if let Some(dir) = &snapshots {
+                println!(
+                    "Snapshots on request go to {}. Writing one takes about half a minute on \
+                     the full island, and the clock stops while it does.",
+                    dir.display()
+                );
+            }
+            let world = serve::sim::spawn_with(life, speed, log, snapshots);
             // Carried in as ordinary commands, so they are recorded in the
             // replay log and reproduced by a replay exactly like anybody
             // created later. The estate's General zone is where they land:

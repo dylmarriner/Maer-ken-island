@@ -1094,3 +1094,49 @@ async fn the_three_views_need_an_island() {
     }
     server.abort();
 }
+
+/// `ControlCommand::Snapshot` was in the vocabulary, the timeline rendered
+/// it as "wrote a snapshot", and nothing anywhere wrote one — the page
+/// would have said a thing that had not happened. These hold both halves:
+/// it is refused when there is nowhere to write, and when there is
+/// somewhere, a file actually appears.
+#[tokio::test]
+async fn asking_for_a_snapshot_with_nowhere_to_put_it_is_refused() {
+    let (world, port, server) = a_running_dashboard().await;
+
+    let (status, response) = post(port, "/api/control", r#"{"command":"snapshot"}"#).await;
+    assert_eq!(status, 200, "{response}");
+    let id = serde_json::from_str::<serde_json::Value>(body_of(&response)).unwrap()["command"]
+        .as_u64()
+        .expect("a command id, so the outcome can be read");
+
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    let outcome = loop {
+        let (_, response) = get(port, &format!("/api/world/commands/{id}")).await;
+        let value: serde_json::Value = serde_json::from_str(body_of(&response)).unwrap();
+        if value["state"] != "queued" {
+            break value;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the command never resolved"
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    };
+    assert_eq!(outcome["state"], "refused", "{outcome}");
+    assert!(
+        outcome["problems"].to_string().contains("--snapshot-dir"),
+        "the refusal should say what is missing: {outcome}"
+    );
+
+    // And nothing claimed otherwise in the record of what was done.
+    let (_, response) = get(port, "/api/timeline").await;
+    let body: serde_json::Value = serde_json::from_str(body_of(&response)).unwrap();
+    assert!(
+        !body["entries"].to_string().contains("wrote a snapshot"),
+        "a refused snapshot must not be recorded as written: {body}"
+    );
+
+    world.stop();
+    server.abort();
+}
