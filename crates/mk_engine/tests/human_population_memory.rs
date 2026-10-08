@@ -45,7 +45,35 @@ fn slow_the_human_runtime_stays_small_and_roughly_linear_to_five_thousand_people
             system.registry.add_human_no_storage(human);
         }
         let mut economy = ResourceEconomyState::new();
+        // The same number of steps for every population, deliberately.
+        //
+        // Scaling them so each population does equal total work was tried
+        // and is wrong: `HumanSystem::step` has per-call cost that does not
+        // depend on how many humans it holds, so giving 200 humans 100
+        // steps while 5,000 get 4 amortises that fixed cost over 25x fewer
+        // people. Measured, it put the 200-human figure at 84 us against
+        // its usual 17-25 and the 5,000-human one at 59 — comparing two
+        // different things and calling the result linearity.
         let steps = 4u64;
+        // One untimed step first, so the measurement is of a warm run
+        // rather than of the allocator touching 5,000 humans for the first
+        // time. This is the part of the noise that can be removed without
+        // changing what is being compared.
+        system.step(
+            DT_YEARS,
+            0,
+            &rng,
+            &grid,
+            &mut economy,
+            &elevation,
+            |_, _| AgentWorldObservation {
+                caloric_access: 0.9,
+                hydration_access: 0.9,
+                shelter_quality: 0.9,
+                ..AgentWorldObservation::default()
+            },
+            None,
+        );
         let started = Instant::now();
         for tick in 0..steps {
             system.step(
@@ -71,7 +99,10 @@ fn slow_the_human_runtime_stays_small_and_roughly_linear_to_five_thousand_people
         );
         per_human_us.push(us);
     }
-    // Roughly linear: 25x the people costs at most 4x more per person.
+    // Roughly linear: 25x the people costs at most 4x more per person. Two
+    // hundred humans fit in cache and five thousand do not, so some growth
+    // is real and this 4x is the tolerance for it — which is why the
+    // measurements it compares have to be equally well averaged.
     assert!(
         per_human_us[2] <= 4.0 * per_human_us[0].max(1.0),
         "per-human cost {per_human_us:?} us grew superlinearly"

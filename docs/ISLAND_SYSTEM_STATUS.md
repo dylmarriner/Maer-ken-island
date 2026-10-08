@@ -68,9 +68,24 @@ One caveat worth knowing before it bites somebody.
 humans fit in cache and five thousand do not, so per-head cost genuinely grows and the 4x is the
 tolerance for that. On a container where the 200-human run came in at 17 us instead of its usual
 23-25, the bar dropped to 68.6 us and a perfectly ordinary 77 us failed it. Three reruns on the
-same commit passed (69, 75, 72 us) and `main` measures the same ~70 us at five thousand, so it is
-the assertion's denominator rather than the code. Comparing against a warmed baseline rather than
-the first sample would settle it.
+same commit passed (69, 75, 72 us) and `main` measures the same ~70 us at five thousand, so it
+was the assertion's denominator rather than the code.
+
+The test now takes one untimed step before starting the clock, so what it measures is a warm run
+rather than the allocator touching five thousand humans for the first time. That did help, and
+measurably: the five-thousand figure reads 60, 61, 60 us over three runs where before the
+warm-up it ranged 69-77. **It does not make the test unflakeable.** The ratio is still taken
+against the 200-human sample, which still moves (18, 25, 26 us in those same three runs), so a
+low reading there can still drop the bar under a normal measurement at five thousand. The
+remaining fix is to stop dividing by a single noisy sample — compare against a fixed budget, or
+average several runs — and that is a change to what the test claims, not a tidy-up, so it is
+left for whoever decides what the budget should be.
+
+One thing not to try: scaling the step count inversely with population so each size does equal
+total work. It was tried here and is wrong. `HumanSystem::step` has per-call cost that does not
+depend on how many humans it holds, so giving 200 humans 100 steps while 5,000 get 4 amortises
+that fixed cost over 25x fewer people — measured, it put the 200-human figure at 84 us against
+its usual 17-25 and made the test compare two different things.
 
 CI has not run any of it: every
 job since 2026-10-06 completes in 1-4 seconds with `runner_id: 0`, an empty `runner_name` and no
