@@ -88,7 +88,7 @@ Phase 3 Tasks 3 and 4b (D10, D13).
   tectonics model to spin up, and ecology already starts at its equilibrium (plan, Task 2b).
 - Phase 4 Task 6, remainder: a map picker for island cells,
   and `agent_id` slugging from a display name. The page's read path was checked in headless Chrome; its Add form was not clicked in a browser.
-- **Place does not yet matter for food and water**: the household eats and drinks at the estate's cells wherever its members stand. In the five-year run the mother and her three children were 44 km from the estate and still fed. Foraging at the person's own cell (and the shortfalls, hunger and deaths that would follow) is the unfinished economy wiring.
+- **The household's material bookkeeping is not place-based.** What people can eat and drink in the needs model comes from their own cell, but the carbon and water drawn from the world when they eat and drink are booked at the estate's fixed food and water cells. In the five-year run the mother and her three children were 44 km from the estate, fed by the land where they stood, while their meals were booked against the estate. The books close; the depletion is in the wrong place. Booking at the person's own cell is the unfinished economy wiring.
 - Children: they are small, grow on the WHO curves, take a body-mass share of food and water, and under five years old stay with their mother. Older children still choose their own actions like adults, and what a child does in the economy (gathering, working) is not restricted by age; a child whose mother has died is not cared for; schooling and play are not modelled.
 - Phase 4b: energy, industry, town, economy beyond the estate.
 - Phase 5: pruning, lifetime-scale runs (births, deaths and growth over decades), final

@@ -84,11 +84,16 @@ What this does and does not show. It does show that a household of founders runs
 simulated years inside a flat 250-320 MB, gains three children born on the WHO growth curves, and
 never runs short of food or water. It does **not** show that the household is realistic:
 
-- **Where people stand does not matter for food or water.** The household eats and drinks at the
-  estate's fixed cells wherever its members are. At the end Gem-D was 2 cells (4 km) from the
-  estate, but Gem-K and all three children were 22 cells (44 km) north of it, still "Nourished"
-  with no shortfall. People wander (upstream autonomy) and nothing yet ties eating to place.
-  This is the unfinished economy wiring (Phase 3 Tasks 3, 3b and 9).
+- **The materials ledger is not place-based; the needs model is.** A person's hunger and thirst
+  come from the observation at their own cell (surface water, runoff, rain and soil moisture for
+  water, NPP for forage), so the family 44 km north of the estate was fed by the land where it
+  stood. But the household's *material bookkeeping* (the carbon and water drawn from the world
+  when someone eats or drinks) is debited at the estate's fixed food and water cells wherever the
+  person is. At the end Gem-D was 4 km from the estate and Gem-K and her three children were 44
+  km away, yet all meals and drinks were booked against the estate cells. The books close (carbon
+  and water are conserved) but the depletion is in the wrong place, and the ledger's shortfall
+  counters say nothing about people far from the estate. Booking at the person's own cell is
+  the remaining part of the economy wiring (Phase 3 Tasks 3, 3b and 9).
 - The children are slightly small for age (3.2 years at 10.5 kg is well under the WHO median of
   about 14 kg); the model grows each child toward a sampled adult body, so a small-framed child
   stays small. Not investigated further.
