@@ -88,7 +88,7 @@ An 8 GB machine is comfortable for the founders and for thousands of people. Com
 
 Five simulated years of the two founders ran in a flat 250-320 MB and ended with five people alive (three children), (that run predates booking each person's meals and drinks at the cell where they stand).
 
-Limits worth knowing (full list in [`docs/ISLAND_SYSTEM_STATUS.md`](docs/ISLAND_SYSTEM_STATUS.md)): people work and eat through a simplified household model, not yet through timed, energy-costed tasks; children grow along WHO curves, eat by body size and stay with their mother until five, but older children still act like adults; there is no refinery, town or deep-time spin-up yet; populated runs have been measured for hours, not for generations.
+Limits worth knowing (full list in [`docs/ISLAND_SYSTEM_STATUS.md`](docs/ISLAND_SYSTEM_STATUS.md)): people work and eat through a simplified household model, not yet through timed, energy-costed tasks; children grow along WHO curves, eat by body size and stay with their mother until five, and children do not do adult work or the mature actions (round-number age limits), but they still choose their own other actions; there is no refinery, town or deep-time spin-up yet; populated runs have been measured for hours, not for generations.
 
 ## Source authority
 

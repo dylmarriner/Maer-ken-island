@@ -36,6 +36,34 @@ const ACTIONS: [ActionKind; 18] = [
     ActionKind::WebSearch,
     ActionKind::SendEmail,
 ];
+/// Below this age a child does not do an adult's work or use a computer.
+pub const WORK_AGE_YEARS: f64 = 12.0;
+/// Below this age a child does not take part in sexual or violent actions.
+pub const MATURE_ACTION_AGE_YEARS: f64 = 16.0;
+
+/// What a child of `age_years` does instead of `kind`, if `kind` is not for
+/// their age: work-like and computer actions under [`WORK_AGE_YEARS`]
+/// become exploring, violent or sexual ones under [`MATURE_ACTION_AGE_YEARS`]
+/// become approaching someone (play). `None` means the action stands.
+pub fn age_substitute(kind: ActionKind, age_years: f64) -> Option<ActionKind> {
+    match kind {
+        ActionKind::Mine
+        | ActionKind::Build
+        | ActionKind::Craft
+        | ActionKind::Code
+        | ActionKind::SendEmail
+        | ActionKind::WebSearch
+            if age_years < WORK_AGE_YEARS =>
+        {
+            Some(ActionKind::Explore)
+        }
+        ActionKind::Harm | ActionKind::Intimacy if age_years < MATURE_ACTION_AGE_YEARS => {
+            Some(ActionKind::SocialApproach)
+        }
+        _ => None,
+    }
+}
+
 const MAX_EXPERIENCES: usize = 2_000;
 const AUTONOMY_EPOCH: u32 = 0x4155_544F;
 
@@ -532,6 +560,42 @@ fn intensity_for(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn children_do_not_do_adult_actions() {
+        use ActionKind::*;
+        // Babies and small children: no work, no computer, no violence, no sex.
+        for kind in [Mine, Build, Craft, Code, SendEmail, WebSearch] {
+            assert_eq!(age_substitute(kind, 6.0), Some(Explore), "{kind:?}");
+        }
+        for kind in [Harm, Intimacy] {
+            assert_eq!(age_substitute(kind, 6.0), Some(SocialApproach), "{kind:?}");
+        }
+        // Teenagers may work and use a computer but not the mature actions.
+        assert_eq!(age_substitute(Build, 13.0), None);
+        assert_eq!(age_substitute(Code, 14.0), None);
+        assert_eq!(age_substitute(Harm, 15.9), Some(SocialApproach));
+        assert_eq!(age_substitute(Intimacy, 15.9), Some(SocialApproach));
+        // Adults and everyday child actions are untouched.
+        for kind in [Mine, Build, Harm, Intimacy, Code, WebSearch, SendEmail] {
+            assert_eq!(age_substitute(kind, 16.0), None, "{kind:?}");
+            assert_eq!(age_substitute(kind, 40.0), None, "{kind:?}");
+        }
+        for kind in [
+            Idle,
+            Rest,
+            SeekWater,
+            SeekFood,
+            SeekShelter,
+            SocialApproach,
+            Explore,
+            Gather,
+            Move,
+            Transfer,
+        ] {
+            assert_eq!(age_substitute(kind, 3.0), None, "{kind:?}");
+        }
+    }
+
     use super::*;
     use mk_core::human::{HumanId, HumanProfile, HumanSchema};
 

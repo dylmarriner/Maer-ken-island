@@ -89,7 +89,7 @@ Phase 3 Tasks 3 and 4b (D10, D13).
 - Phase 4 Task 6, remainder: a map picker for island cells,
   and `agent_id` slugging from a display name. The page's read path was checked in headless Chrome; its Add form was not clicked in a browser.
 - The five-year run was made before meals and drinks were booked where people stand; it has not been repeated on the new bookkeeping, so its end state describes the earlier one.
-- Children: they are small, grow on the WHO curves, take a body-mass share of food and water, and under five years old stay with their mother. Older children still choose their own actions like adults, and what a child does in the economy (gathering, working) is not restricted by age; a child whose mother has died is not cared for; schooling and play are not modelled.
+- Children: they are small, grow on the WHO curves, take a body-mass share of food and water, and under five years old stay with their mother. Older children choose their own actions, but not an adult's: under 12 they do not mine, build, craft, code or use email and search, and under 16 they take no part in harm or intimacy (`humans/autonomy.rs` `age_substitute`; the thresholds are round numbers, not sourced); a child whose mother has died is not cared for; schooling and play are not modelled.
 - Phase 4b: energy, industry, town, economy beyond the estate.
 - Phase 5: pruning, lifetime-scale runs (births, deaths and growth over decades), final
   benchmarks, README.

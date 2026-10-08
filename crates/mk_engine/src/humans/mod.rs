@@ -749,6 +749,13 @@ impl HumanSystem {
                 human.economy_action.kind = ActionKind::SocialApproach;
                 human.autonomous_mind.last_action.kind = ActionKind::SocialApproach;
             }
+            // A child does not do an adult's work or the mature actions.
+            if let Some(kind) =
+                autonomy::age_substitute(human.economy_action.kind, human.development.age_years)
+            {
+                human.economy_action.kind = kind;
+                human.autonomous_mind.last_action.kind = kind;
+            }
             let position_before_movement = human.position;
             // Walking covers only part of a grid cell in one step: the
             // chance of reaching a neighbouring cell is the distance walked
