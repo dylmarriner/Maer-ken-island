@@ -82,6 +82,13 @@ function lockForm(reason) {
 const placeFieldset = document.getElementById("place-fieldset");
 const placeEl = document.getElementById("place");
 const placeHint = document.getElementById("place-hint");
+const whereEl = document.getElementById("where");
+const placeField = document.getElementById("place-field");
+const rowField = document.getElementById("row-field");
+const colField = document.getElementById("col-field");
+const rowEl = document.getElementById("row");
+const colEl = document.getElementById("col");
+const cellHint = document.getElementById("cell-hint");
 
 /// Whether a world is running, and which rooms it offers. Decided once at
 /// load: a dashboard does not gain or lose its island while a form is open.
@@ -93,6 +100,7 @@ function offerPlaces(w) {
   world = w && w.running === true ? w : null;
   placeFieldset.hidden = world === null;
   if (!world) return;
+  showPlaceMode();
   const spaces = (world.estate && world.estate.spaces) || [];
   placeEl.replaceChildren(
     ...spaces.map((space) => {
@@ -106,7 +114,41 @@ function offerPlaces(w) {
   placeHint.textContent =
     "The island is running, so this person is put into it and starts living " +
     "from the next step. They are placed in this space on the founders' estate.";
+
+  // A cell of the island, for somebody who does not start at the estate.
+  // The bounds come from the world rather than being assumed, and the
+  // estate's own cell is offered as a starting point because it is the one
+  // cell anybody can name without a map.
+  const land = world.land || {};
+  rowEl.max = Math.max(0, (land.rows || 1) - 1);
+  colEl.max = Math.max(0, (land.cols || 1) - 1);
+  const estate = world.estate && world.estate.cell;
+  if (estate) {
+    rowEl.value = String(estate[0]);
+    colEl.value = String(estate[1]);
+  }
+  cellHint.textContent =
+    `Rows 0 to ${rowEl.max}, columns 0 to ${colEl.max}. ` +
+    `${figure(land.land_cells || 0)} of those cells are land; the rest are sea, and the island ` +
+    `will refuse a creation there. The estate is at ${estate ? estate.join(", ") : "?"}, ` +
+    "which is a good place to start from.";
 }
+
+/// A number with thousands separators.
+function figure(value) {
+  return typeof value === "number" && isFinite(value) ? value.toLocaleString() : "—";
+}
+
+/// Show the fields for the chosen kind of place.
+function showPlaceMode() {
+  const onEstate = whereEl.value === "estate";
+  placeField.hidden = !onEstate;
+  rowField.hidden = onEstate;
+  colField.hidden = onEstate;
+  cellHint.hidden = onEstate;
+}
+
+whereEl.addEventListener("change", showPlaceMode);
 
 async function setup() {
   form.token.value = storedToken();
@@ -234,7 +276,7 @@ async function followCommand(queued, name) {
       box.append(el("h3", `${name} is on the island.`));
       const where = outcome.space
         ? `They are in ${outcome.space}, as ${outcome.agent_id}, and from the next step they live there with everyone else.`
-        : `They are at cell ${outcome.cell[0]}, ${outcome.cell[1]}, as ${outcome.agent_id}.`;
+        : `They are on the island at row ${outcome.cell[0]}, column ${outcome.cell[1]}, as ${outcome.agent_id}, and from the next step they live there.`;
       box.append(el("p", where));
       if (outcome.storage_error) {
         // Never swallowed: a person whose folder would not write still
@@ -289,7 +331,16 @@ form.addEventListener("submit", async (event) => {
     // to follow rather than a person. Without one, they are stored as
     // before.
     const path = world ? "/api/world/humans" : "/api/humans";
-    if (world) body.space = Number(placeEl.value);
+    if (world) {
+      // Exactly one kind of place, because "somewhere" is not a place and
+      // the island refuses a mixture.
+      if (whereEl.value === "estate") {
+        body.space = Number(placeEl.value);
+      } else {
+        body.row = Number(rowEl.value);
+        body.col = Number(colEl.value);
+      }
+    }
     const { status, body: answer } = await postJson(path, body, token);
     if (status === 202) {
       await followCommand(answer, body.name);

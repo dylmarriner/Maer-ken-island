@@ -139,12 +139,19 @@ pub struct SpaceChoice {
     pub kind: String,
 }
 
-/// The ground the estate stands on.
+/// The ground the estate stands on, and the island around it.
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct Land {
     pub trees: usize,
     pub patch_carbon_kgc: f64,
     pub island_biomass_kgc: f64,
+    /// The medium grid's shape, so a page offering a cell can say what the
+    /// numbers may be rather than letting somebody guess and be refused.
+    pub rows: usize,
+    pub cols: usize,
+    /// How many of those cells are land. The rest are sea, and nobody can
+    /// be created there.
+    pub land_cells: usize,
 }
 
 /// What the household has moved, and whether its books closed.
@@ -287,10 +294,21 @@ fn estate(life: &IslandLife) -> Estate {
 }
 
 fn land(life: &IslandLife) -> Land {
+    use mk_island::DomainLevel::Medium;
     Land {
         trees: life.vegetation.trees.len(),
         patch_carbon_kgc: life.vegetation.total_carbon_kgc(),
         island_biomass_kgc: life.ecology.total_biomass_kgc(&life.domain),
+        rows: life.domain.rows(Medium),
+        cols: life.domain.cols(Medium),
+        land_cells: life
+            .physical
+            .geophysics
+            .land_mask
+            .data()
+            .iter()
+            .filter(|&&land| land)
+            .count(),
     }
 }
 

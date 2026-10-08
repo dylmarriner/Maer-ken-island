@@ -33,6 +33,8 @@ serve    the dashboard: the overview at /, the roster at /people and the Human
                    any speed.
   --log PATH       record every command this dashboard applies, so the
                    session can be replayed with `island replay`
+  --import-0b DIR  carry the people stored in a Phase-0b data directory into
+                   the world, once, as creations at the first step
 
 run      the simulated island, headless, printing its canonical state digest.
          Two runs of one scenario and seed print the same digest.
@@ -187,7 +189,7 @@ fn main() {
             // Read again below, where the world is opened; named here so
             // they are accepted rather than falling through to the usage
             // message as unknown flags.
-            "--scenario" | "--snapshot" | "--speed" | "--log" => {}
+            "--scenario" | "--snapshot" | "--speed" | "--log" | "--import-0b" => {}
             _ => usage(),
         }
     }
@@ -225,7 +227,37 @@ fn main() {
             if let Some(path) = &log {
                 println!("Recording commands to {}.", path.display());
             }
-            Some(serve::sim::spawn_logging(life, speed, log))
+            let world = serve::sim::spawn_logging(life, speed, log);
+            // Carried in as ordinary commands, so they are recorded in the
+            // replay log and reproduced by a replay exactly like anybody
+            // created later. The estate's General zone is where they land:
+            // a stored person has no island location, because there was no
+            // island when they were made.
+            if let Some(dir) = flag(rest, "--import-0b") {
+                let dir = PathBuf::from(dir);
+                let commands = headless::commands_from_phase_0b(
+                    &dir,
+                    mk_engine::regional::estate_layout::SpaceId(0),
+                )
+                .unwrap_or_else(|e| {
+                    eprintln!("{e}");
+                    std::process::exit(1);
+                });
+                println!(
+                    "Carrying {} stored {} from {} into the world.",
+                    commands.len(),
+                    if commands.len() == 1 {
+                        "person"
+                    } else {
+                        "people"
+                    },
+                    dir.display()
+                );
+                for command in commands {
+                    world.send(command);
+                }
+            }
+            Some(world)
         }
     };
 

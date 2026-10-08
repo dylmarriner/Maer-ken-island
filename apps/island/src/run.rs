@@ -132,6 +132,56 @@ pub fn run(args: RunArgs) -> Result<(), String> {
     Ok(())
 }
 
+/// Turn a Phase-0b data directory's creation log into island commands.
+///
+/// The dashboard stored people before there was a world to put them in.
+/// This reads that log and asks the island to create each of them, in the
+/// order they were first created, so a population built before Phase 4 can
+/// be carried into the world rather than abandoned.
+///
+/// They are placed in the estate space given, because a stored person has
+/// no island location — there was no island. Their birthplace is the one
+/// they were created with, not the estate's, since that is a fact about
+/// them rather than about where they now stand.
+pub fn commands_from_phase_0b(
+    data_dir: &Path,
+    space: mk_engine::regional::estate_layout::SpaceId,
+) -> Result<Vec<mk_engine::regional::commands::IslandCommand>, String> {
+    use mk_engine::regional::commands::IslandCommand;
+    use mk_engine::regional::create_human::{CreateLocation, IslandCreateHuman};
+
+    let mut creations = island_humans::read_creations(data_dir)
+        .map_err(|e| format!("cannot read {}: {e}", data_dir.display()))?;
+    creations.sort_by_key(|record| record.counter);
+
+    Ok(creations
+        .into_iter()
+        .map(|record| {
+            let r = record.request;
+            IslandCommand::CreateHuman(Box::new(IslandCreateHuman {
+                name: r.name,
+                biological_sex: match r.biological_sex.trim().to_ascii_lowercase().as_str() {
+                    "male" => mk_core::human::BiologicalSex::Male,
+                    _ => mk_core::human::BiologicalSex::Female,
+                },
+                birth_timestamp: r.birth_timestamp,
+                age_years: r.age_years,
+                height_cm: r.height_cm,
+                build: r.build,
+                hair_color: r.hair_color,
+                eye_color: r.eye_color,
+                skin_tone: r.skin_tone,
+                location: CreateLocation::EstateSpace(space),
+                // The birthplace they were created with is theirs; it is
+                // not where they now stand.
+                birthplace_here: false,
+                birth_latitude: r.birth_latitude,
+                birth_longitude: r.birth_longitude,
+            }))
+        })
+        .collect())
+}
+
 /// Run a scenario again from its log, and print where it got to.
 ///
 /// The point of the digest it prints is that it should equal the one the

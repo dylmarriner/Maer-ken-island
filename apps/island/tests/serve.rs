@@ -595,3 +595,150 @@ async fn the_world_serves_its_parts_separately() {
     world.stop();
     server.abort();
 }
+
+/// People stored before there was a world can be carried into one.
+///
+/// Phase 0b's dashboard stored complete people with nowhere to be. They are
+/// carried in as ordinary creations — recorded in the replay log, reproduced
+/// by a replay — rather than by a second path that would drift from the
+/// one everybody else goes through.
+#[tokio::test]
+async fn a_phase_0b_population_can_be_carried_into_the_world() {
+    use island::run::commands_from_phase_0b;
+    use island::serve::sim::{spawn, SimSpeed};
+    use mk_engine::regional::estate_layout::SpaceId;
+    use std::path::PathBuf;
+
+    // A stored population, made the way the Phase-0b dashboard makes one.
+    let data_dir = tempfile::tempdir().unwrap();
+    let (mut stored, _) =
+        island_humans::IslandHumanPopulation::open(data_dir.path(), [13u8; 32]).unwrap();
+    for name in ["Rawiri", "Ngaire"] {
+        stored
+            .create_human(
+                island_humans::CreateHumanRequest {
+                    name: name.to_string(),
+                    biological_sex: "female".to_string(),
+                    birth_timestamp: "1990-01-01T00:00:00Z".to_string(),
+                    birth_latitude: -41.3,
+                    birth_longitude: 174.8,
+                    age_years: 34.0,
+                    height_cm: 168.0,
+                    build: "average".to_string(),
+                    hair_color: "black".to_string(),
+                    eye_color: "brown".to_string(),
+                    skin_tone: "olive".to_string(),
+                },
+                "test",
+            )
+            .expect("the stored person is created");
+    }
+
+    let repo = |path: &str| {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .join(path)
+    };
+    let mut scenario =
+        mk_island::IslandScenario::load(&repo("fixtures/island/default_scenario.json")).unwrap();
+    scenario.estate_patch.tree_cap = 50;
+    let canon =
+        Arc::new(mk_core::canon::CanonLocked::load(&repo("fixtures/island/canon.json")).unwrap());
+    let life = mk_engine::regional::life::IslandLife::bootstrap(scenario, canon).unwrap();
+    let world = spawn(life, SimSpeed::AsFastAsPossible);
+
+    let commands = commands_from_phase_0b(data_dir.path(), SpaceId(0)).expect("the log reads");
+    assert_eq!(commands.len(), 2, "both stored people should be carried");
+    for command in commands {
+        world.send(command);
+    }
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let (population, _) =
+        island_humans::IslandHumanPopulation::open(data_dir.path(), [13u8; 32]).unwrap();
+    let routes = server::routes_with_world(
+        Arc::new(Mutex::new(population)),
+        ControlAuth::LoopbackOnly,
+        Some(world.clone()),
+    );
+    let server = tokio::spawn(async move { warp::serve(routes).incoming(listener).run().await });
+
+    // Both turn up in the world, keeping the birthplace they were made
+    // with rather than being given the estate's.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    loop {
+        let (_, body) = get(port, "/api/world/humans").await;
+        let roster: serde_json::Value = serde_json::from_str(body_of(&body)).unwrap();
+        let people = roster["people"].as_array().unwrap();
+        if people.len() == 4 {
+            let ids: Vec<&str> = people
+                .iter()
+                .map(|p| p["agent_id"].as_str().unwrap())
+                .collect();
+            assert!(ids.contains(&"rawiri"), "{ids:?}");
+            assert!(ids.contains(&"ngaire"), "{ids:?}");
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "only {} people reached the world",
+            people.len()
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+
+    world.stop();
+    server.abort();
+}
+
+/// Somebody can be put on a cell of the island, and not in the sea.
+#[tokio::test]
+async fn a_person_can_be_created_on_a_cell_of_the_island() {
+    let (world, port, server) = a_running_dashboard().await;
+
+    // The page is told the grid's shape, so it can offer a cell at all.
+    let (_, body) = get(port, "/api/world/vegetation").await;
+    let land: serde_json::Value = serde_json::from_str(body_of(&body)).unwrap();
+    let rows = land["rows"].as_u64().expect("the grid's rows");
+    assert!(rows > 100, "the island is {rows} rows tall");
+    assert!(land["land_cells"].as_u64().unwrap() > 0, "no land at all");
+
+    // The estate's own cell is land, so somebody can start there.
+    let (_, body) = get(port, "/api/world/estate").await;
+    let estate: serde_json::Value = serde_json::from_str(body_of(&body)).unwrap();
+    let cell = estate["cell"].as_array().unwrap();
+    let (row, col) = (cell[0].as_u64().unwrap(), cell[1].as_u64().unwrap());
+
+    let body = format!(
+        r#"{{"name":"Hemi","biological_sex":"male","birth_timestamp":"1995-05-05T05:05:05Z",
+        "age_years":31,"height_cm":178,"build":"average","hair_color":"black","eye_color":"brown",
+        "skin_tone":"olive","row":{row},"col":{col}}}"#
+    );
+    let (status, response) = post(port, "/api/world/humans", &body).await;
+    assert_eq!(status, 202, "{response}");
+    let id = serde_json::from_str::<serde_json::Value>(body_of(&response)).unwrap()["command"]
+        .as_u64()
+        .unwrap();
+
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    let outcome = loop {
+        let (_, response) = get(port, &format!("/api/world/commands/{id}")).await;
+        let value: serde_json::Value = serde_json::from_str(body_of(&response)).unwrap();
+        if value["state"] != "queued" {
+            break value;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the command never resolved"
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    };
+    assert_eq!(outcome["state"], "created", "{outcome}");
+    assert_eq!(outcome["cell"][0], row, "{outcome}");
+    // On a cell rather than in a room, so no estate space.
+    assert!(outcome["space"].is_null(), "{outcome}");
+
+    world.stop();
+    server.abort();
+}

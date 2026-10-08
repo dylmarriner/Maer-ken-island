@@ -358,11 +358,29 @@ to race with, and are then recorded in the replay log for the account of what th
 `GET /api/world/{estate|vegetation|materials|clock}` serves each part on its own path, from the
 same projection, and an unknown part is refused by name.
 
-**Still not built:** `--import-0b`, and an island-map picker for `IslandCell` — the API takes row
-and col and the engine validates them against the land mask, but the creator page offers only
-estate spaces. `/api/properties`, `/api/economy` and `/api/timeline` are not served: the
-projection does not carry a property list, an economy summary or a timeline, so serving them
-would mean inventing the data rather than re-slicing it. The roster is the world's. `GET /api/world/humans` and
+**Placing somebody on the island, and carrying Phase 0b in (2026-10-08).** The creator page can
+put a person in a room of the estate or on a cell of the island, and the bounds come from the
+world rather than being assumed: "Rows 0 to 959, columns 0 to 1199. 66,116 of those cells are
+land; the rest are sea, and the island will refuse a creation there. The estate is at 474, 544."
+Driven in Chromium: a person created at the estate's cell reported "on the island at row 474,
+column 544", and cell (0, 0) came back "location: cell (0, 0) is in the sea" rather than being
+quietly moved somewhere that works.
+
+That check also found a real defect no test had: switching to a cell left the room dropdown on
+screen beside the row and column fields, offering a choice that did nothing. `label { display:
+flex }` is an author rule, so it beats the browser's own `[hidden] { display: none }` — the same
+reason `.banner[hidden]` already needed its own rule. The API branch was correct, so every test
+passed while the page showed a dead control.
+
+`island serve --import-0b <dir>` carries a Phase-0b stored population into the world, as ordinary
+`CreateHuman` commands at the first step, so they are recorded in the replay log and reproduced by
+a replay exactly like anybody created later rather than through a second path that would drift.
+Each keeps the birthplace they were created with — that is a fact about them — and lands in the
+estate's General zone, because a person stored before there was an island has no island location.
+
+**Still not served, and not faked:** `/api/properties`, `/api/economy` and `/api/timeline`. The
+projection carries no property list, economy summary or timeline, so adding those paths would mean
+inventing the data rather than re-slicing it. The roster is the world's. `GET /api/world/humans` and
 `/api/world/humans/{id}` serve the island's own people in the shape the People page already
 draws — the same ten per-person sections — plus where they are and whether they are asleep,
 which the stored roster has no way to know. With a world running the page uses them, and says
