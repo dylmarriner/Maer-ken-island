@@ -91,7 +91,8 @@ Phase 3 Tasks 3 and 4b (D10, D13).
 
 ## Not done
 
-- Phase 3 Task 1b (island-scale species) and Task 2 (the full resource and material catalogue),
+- **The island has no animals.** The running world has plants (biomes, NPP, biomass, 200,000 estate trees) and people, but no herbivores, predators, fish or birds: the hunting and meat model in `regional/materials.rs` (`AnimalPopulation`, `hunt`) is tested but nothing in `IslandLife` creates or steps a fauna, so nobody can hunt and nothing grazes. This is Phase 3 Task 1b in full. A credible version needs carrying capacities tied to NPP, growth, predation and carbon flows through the ledger, with parameters from sourced references; it has not been started.
+- Phase 3 Task 1b (island-scale species, above) and Task 2 (the full resource and material catalogue),
   and the economy/lifecycle wiring of Tasks 3 and 3b (so people do timed, energy-costed work
   through the materials model; today the models exist and are tested but do not drive the
   household economy).
