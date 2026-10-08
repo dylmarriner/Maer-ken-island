@@ -192,6 +192,20 @@ async function showEconomy() {
   panels.economy.hidden = false;
 }
 
+// The island, drawn. Everything else on this page describes the world in
+// words and tables; `docs/ISLAND_SYSTEM_STATUS.md` has called the missing
+// picture what Task 6 still lacks. It is the same elevation render
+// `island_preview` makes for the headless galleries, not a second one.
+function showMap() {
+  const img = document.getElementById("map");
+  // Rendered once at startup from terrain that cannot change -- the island
+  // refuses `SculptTerrain` and `SmoothTerrain` -- so there is nothing to
+  // refresh and no cache to bust.
+  if (!img.getAttribute("src")) img.setAttribute("src", "/api/map.png");
+  document.getElementById("map-note").textContent =
+    "Elevation, with the coastline and the domain's edge buffer. Drawn once from the terrain this island was generated with, which nothing can change: the island refuses requests to sculpt or smooth it.";
+  document.getElementById("map-panel").hidden = false;
+}
 async function showTimeline() {
   const data = await getJson("/api/timeline");
   notes.timeline.textContent = data.note;
@@ -227,7 +241,7 @@ async function showTimeline() {
 /// they hold was true once and is not now, and leaving a write form up for
 /// a stopped island invites an operator to act on it.
 function hidePanels() {
-  for (const id of ["intervene-panel", "properties-panel", "economy-panel", "timeline-panel"]) {
+  for (const id of ["intervene-panel", "map-panel", "properties-panel", "economy-panel", "timeline-panel"]) {
     const panel = document.getElementById(id);
     if (panel) panel.hidden = true;
   }
@@ -283,6 +297,7 @@ async function load() {
     }
     noWorldEl.hidden = true;
     document.getElementById("intervene-panel").hidden = false;
+    showMap();
     await Promise.all([
       showProperties(),
       showEconomy(),

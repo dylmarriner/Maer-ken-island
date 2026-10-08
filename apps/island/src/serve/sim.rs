@@ -172,6 +172,13 @@ pub struct SimHandle {
     commands: Sender<Queued>,
     outcomes: Arc<Mutex<BTreeMap<u64, Outcome>>>,
     next_id: Arc<AtomicU64>,
+    /// The island's elevation map, rendered once as a PNG.
+    ///
+    /// Terrain does not move: the island refuses `SculptTerrain` and
+    /// `SmoothTerrain`, so the picture taken at startup stays true for the
+    /// life of the process. Rendering it once and handing out an `Arc`
+    /// keeps it off the sim thread's path entirely.
+    map_png: Arc<Vec<u8>>,
     /// Why the replay log last failed to write, if it did.
     ///
     /// The log is what makes a run reproducible, and the timeline the
@@ -200,6 +207,11 @@ impl SimHandle {
     /// Ask the thread to finish its current step and stop.
     pub fn stop(&self) {
         self.stop.store(true, Ordering::Relaxed);
+    }
+
+    /// The island's elevation map as a PNG, rendered once at startup.
+    pub fn map_png(&self) -> Arc<Vec<u8>> {
+        Arc::clone(&self.map_png)
     }
 
     /// Why the replay log last failed to write, if it did. `None` means the
@@ -369,6 +381,11 @@ pub fn spawn_with(
     // rather than computing its own. This comment said "930 ms against a
     // 1.4 ms step" until a reviewer caught it: both figures were ones I had
     // already corrected elsewhere in this branch and missed here.
+    // Drawn once, here, while this thread still owns the island and before
+    // the sim thread takes it. `island_preview` already paints this exact
+    // picture for the headless galleries.
+    let map_png =
+        Arc::new(island_preview::elevation_image(&life.domain, &life.physical.geophysics).png());
     let first = IslandProjection::digest_now(&life);
     let views = Views::of(&life);
     let projection = Arc::new(RwLock::new(IslandProjection::of(
@@ -391,6 +408,7 @@ pub fn spawn_with(
         outcomes: Arc::new(Mutex::new(BTreeMap::new())),
         next_id: Arc::new(AtomicU64::new(1)),
         log_error: Arc::new(Mutex::new(None)),
+        map_png,
     };
     let stop = Arc::clone(&handle.stop);
     let outcomes = Arc::clone(&handle.outcomes);

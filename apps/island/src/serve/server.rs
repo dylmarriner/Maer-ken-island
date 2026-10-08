@@ -725,6 +725,24 @@ pub fn routes_with_world(
             }
         });
 
+    // The island, drawn. Everything else this dashboard serves describes
+    // the world in words and tables; this is the one endpoint that shows
+    // it. The picture is rendered once at startup and handed out as an
+    // `Arc`, so serving it costs a clone and never touches the sim thread.
+    let get_map = warp::path!("api" / "map.png")
+        .and(read())
+        .and(with(world.clone()))
+        .map(|world: Option<SimHandle>| match world {
+            None => warp::reply::with_status(
+                warp::reply::with_header(Vec::new(), "content-type", "text/plain; charset=utf-8"),
+                StatusCode::NOT_FOUND,
+            ),
+            Some(world) => warp::reply::with_status(
+                warp::reply::with_header(world.map_png().to_vec(), "content-type", "image/png"),
+                StatusCode::OK,
+            ),
+        });
+
     let get_conversations = warp::path!("api" / "conversations")
         .and(read())
         .and(with(world.clone()))
@@ -1036,7 +1054,7 @@ pub fn routes_with_world(
             }
             json(
                 StatusCode::NOT_FOUND,
-                &serde_json::json!({ "errors": ["No such endpoint. The dashboard serves /api/status, /api/world, /api/world/<estate|vegetation|materials|clock>, /api/world/humans, /api/world/humans/<agent-id>, /api/world/interventions, /api/world/commands/<id>, /api/properties, /api/economy, /api/timeline, /api/conversations, /api/control, /api/health, /api/humans, /api/humans/<agent-id>, /api/activity and /api/creator/options."] }),
+                &serde_json::json!({ "errors": ["No such endpoint. The dashboard serves /api/status, /api/world, /api/world/<estate|vegetation|materials|clock>, /api/world/humans, /api/world/humans/<agent-id>, /api/world/interventions, /api/world/commands/<id>, /api/properties, /api/economy, /api/timeline, /api/conversations, /api/map.png, /api/control, /api/health, /api/humans, /api/humans/<agent-id>, /api/activity and /api/creator/options."] }),
             )
         });
 
@@ -1045,6 +1063,7 @@ pub fn routes_with_world(
         .or(get_economy)
         .or(get_timeline)
         .or(get_conversations)
+        .or(get_map)
         .or(get_world)
         .or(post_world_human)
         .or(post_world_intervention)

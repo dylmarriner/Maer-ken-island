@@ -164,8 +164,12 @@ the estate's electrical system is still free (D13).
   materials, time and energy of actions, acceptance.
 - Phase 4 is **done**: world composition, the cadence scheduler, the island snapshot, a folder
   per human, external commands and replay, operator interventions, the headless runner, and the
-  dashboard with a world behind it. What Task 6 still lacks is a map: the island page describes
-  the world in words and tables, and nothing draws it.
+  dashboard with a world behind it. **The map it lacked is drawn**: `/api/map.png` serves the
+  elevation render `island_preview` already made for the headless galleries, and `/island` shows
+  it. Verified in Chromium against the real island — 1200x960, no console errors, no failed
+  requests. What remains of a map proper is interaction: nothing on it is clickable, so the
+  Creator's location picker still cannot use it, and nothing is drawn *on* it — no people, no
+  structures, no estate.
 - Phase 4b: energy, industry, town, economy. **Blocked at its own first step, and the block is
   the network rather than the work.** Task 1 Step 1 is "assemble cited reference values" --
   turbine efficiency curves by type and head range, Darcy-Weisbach penstock friction, oil

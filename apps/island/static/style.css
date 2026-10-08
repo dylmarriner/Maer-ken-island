@@ -596,3 +596,6 @@ button.link {
 
 /* A server-side failure the page must not show silently. */
 .panel-note .warn { color: var(--warn-ink); font-weight: 600; }
+
+/* The island's map. */
+#map { display: block; max-width: 100%; height: auto; border: 1px solid var(--line); border-radius: 6px; }

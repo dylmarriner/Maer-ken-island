@@ -6,6 +6,46 @@ use island::serve::auth::ControlAuth;
 use island::serve::server;
 use std::sync::{Arc, Mutex};
 
+/// As [`get`], but keeping the body as bytes.
+///
+/// `get` reads the whole response through `String::from_utf8_lossy`, which
+/// is right for JSON and destroys anything else: every byte outside UTF-8
+/// becomes a replacement character. The map is a PNG, so testing it through
+/// `get` checks a corrupted copy -- which is how the first version of the
+/// map test failed, on a response that was perfectly good. Returns the
+/// headers as text and the body as it arrived.
+async fn get_bytes(port: u16, path: &str) -> (u16, String, Vec<u8>) {
+    let stream = tokio::net::TcpStream::connect(("127.0.0.1", port))
+        .await
+        .expect("the dashboard is listening");
+    let (mut reader, mut writer) = stream.into_split();
+    let request = format!(
+        "GET {path} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\nAccept: */*\r\n\r\n"
+    );
+    {
+        use tokio::io::AsyncWriteExt;
+        writer.write_all(request.as_bytes()).await.unwrap();
+        writer.flush().await.unwrap();
+    }
+    let mut response = Vec::new();
+    {
+        use tokio::io::AsyncReadExt;
+        reader.read_to_end(&mut response).await.unwrap();
+    }
+    let split = response
+        .windows(4)
+        .position(|w| w == b"\r\n\r\n")
+        .expect("a header/body boundary");
+    let head = String::from_utf8_lossy(&response[..split]).into_owned();
+    let status = head
+        .lines()
+        .next()
+        .and_then(|l| l.split_whitespace().nth(1))
+        .and_then(|c| c.parse().ok())
+        .expect("a status line");
+    (status, head, response[split + 4..].to_vec())
+}
+
 /// Ask for one path and give back the status and body.
 async fn get(port: u16, path: &str) -> (u16, String) {
     let stream = tokio::net::TcpStream::connect(("127.0.0.1", port))
@@ -1155,6 +1195,37 @@ async fn a_replay_log_that_cannot_be_written_is_said_on_the_page() {
     assert!(!said.contains('`'), "shown on the page as text: {said}");
 
     world.stop();
+}
+
+#[tokio::test]
+async fn the_island_is_served_as_a_picture_of_itself() {
+    let (world, port, server) = a_running_dashboard().await;
+
+    let (status, head, body) = get_bytes(port, "/api/map.png").await;
+    assert_eq!(status, 200, "{head}");
+    assert!(
+        head.to_ascii_lowercase()
+            .contains("content-type: image/png"),
+        "served as a PNG, since a browser decides what to do by the type: {}",
+        head.lines().take(8).collect::<Vec<_>>().join(" | ")
+    );
+
+    // A real PNG of this island, not an empty body with a hopeful header.
+    let body = body.as_slice();
+    assert!(
+        body.starts_with(&[0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a]),
+        "the body begins with the PNG signature"
+    );
+    // The default test island is 240 x 192 medium cells, and the renderer
+    // paints a pixel per cell, so a few hundred bytes would mean a blank.
+    assert!(
+        body.len() > 2_000,
+        "a drawn island, not a blank one: {} bytes",
+        body.len()
+    );
+
+    world.stop();
+    server.abort();
 }
 
 #[tokio::test]

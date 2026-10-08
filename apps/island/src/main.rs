@@ -289,6 +289,12 @@ fn main() {
     println!("Maer-Ken Island dashboard is up.");
     println!("  Overview        http://{bind}/");
     println!("  People          http://{bind}/people");
+    // Listed only when there is a world: without `--scenario` the page
+    // exists but has nothing to show, and sending an operator to it would
+    // be sending them to a banner saying so.
+    if world.is_some() {
+        println!("  The island      http://{bind}/island");
+    }
     println!("  Create a human  http://{bind}/creator");
     println!(
         "{} on the island. Creating people: {}.",
