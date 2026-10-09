@@ -218,6 +218,10 @@ fn main() {
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
                 title: format!("Maer-Ken Island — {}", island.address()),
+                // Wider than Bevy's 1280x720 default, because two side
+                // panels and a map between them is what this draws, and
+                // at 1280 the map is the narrowest of the three.
+                resolution: bevy::window::WindowResolution::new(1600, 1000),
                 ..default()
             }),
             ..default()

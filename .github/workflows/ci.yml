@@ -69,10 +69,19 @@ jobs:
       - name: Install pinned toolchain
         run: rustup show
       - uses: Swatinem/rust-cache@v2
-      # Bevy's default features need alsa and libudev. This crate turns
-      # both off -- there is no sound and there are no gamepads on this
-      # island -- so nothing is installed here, and that is the point: if
-      # this job ever needs a system package, a feature has crept back in.
+      # Nothing is installed to *build* this. Bevy's default features
+      # need alsa and libudev; this crate turns both off -- there is no
+      # sound and there are no gamepads on this island -- so if the build
+      # step ever needs a system package, a feature has crept back in.
+      #
+      # The packages below are for *running* it, which is a different
+      # question and one this job also answers: a virtual screen, a
+      # software Vulkan driver, and something to photograph a frame with.
+      - name: Install what a headless render needs
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            xvfb imagemagick mesa-vulkan-drivers libxkbcommon-x11-0
       - name: Clippy
         run: cargo clippy -p island_ui --all-targets --locked -- -D warnings
       - name: Build
@@ -83,6 +92,25 @@ jobs:
       # that leaves unverified.
       - name: Tests
         run: cargo test -p island_ui --locked
+      # Does it actually draw the island? Built in release, because
+      # software rasterising 285 chunks in a debug build is slower than
+      # the job's patience.
+      #
+      # This step is why the two defects in the first frame this
+      # application ever rendered -- every triangle backface-culled, and
+      # egui with no font data -- cannot come back silently. Neither was
+      # visible to any unit test, and both are visible to this.
+      - name: It draws the island
+        run: |
+          cargo build --release -p island_ui --locked
+          ./scripts/render-smoke.sh target/release/island-ui frame.png
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: island-ui-frame
+          path: frame.png
+          if-no-files-found: warn
+
       # The headless binary must stay buildable on a machine with no
       # graphics packages at all, which means it must not acquire Bevy
       # through a dependency.

@@ -90,12 +90,12 @@ island-ui --server https://island.example --token "$ISLAND_READ_TOKEN"
 each is for, CORS, TLS, the systemd unit and the container, and how to
 check a deployment.
 
-**Read `docs/island/RENDER_STACK.md` before relying on `island-ui`.**
-Everything that is not the renderer is tested and both its command-line
-paths have been run against a live island, but no window has ever been
-opened by that binary — the machine it was written on has no display, no
-Vulkan driver and no EGL. Somebody has to run it on a machine with a
-screen.
+`island-ui` draws the island, and CI proves it: `scripts/render-smoke.sh`
+runs it on a virtual screen against a real island, photographs a frame and
+asserts the picture is of something — the frame is uploaded as an
+artifact. What that does not answer is how it feels with a mouse or what
+it costs on a GPU, because every frame so far was rasterised on the CPU.
+`docs/island/RENDER_STACK.md` is the full account.
 
 ### The JSON behind it all
 

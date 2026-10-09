@@ -133,12 +133,21 @@ pub fn chunk(terrain: &Terrain, chunk_row: usize, chunk_col: usize) -> Option<Ch
             let right = i + 1;
             let up = i + width as u32;
             let up_right = up + 1;
-            // Counter-clockwise seen from above, which is what puts the
-            // front face upward in a right-handed, y-up frame. Wound the
-            // other way the island is lit from underneath and looks
-            // inside out.
-            indices.extend_from_slice(&[i, up, right]);
-            indices.extend_from_slice(&[right, up, up_right]);
+            // Wound so the geometric normal points **up**, which in this
+            // frame is not the order that looks right in source. x runs
+            // east and z runs *south*, so "counter-clockwise from above"
+            // in screen terms is clockwise in the xz-plane, and the
+            // obvious `[i, up, right]` gives a normal of -y: every
+            // triangle of the island faces the sea floor and is
+            // backface-culled from any camera above it.
+            //
+            // That is exactly what happened. The first frame this
+            // application ever drew was a nearly black screen with a few
+            // fragments in it, and this was why.
+            // `every_triangle_faces_the_sky` is the test that would have
+            // caught it, written after the picture did.
+            indices.extend_from_slice(&[i, right, up]);
+            indices.extend_from_slice(&[right, up_right, up]);
         }
     }
 
@@ -279,6 +288,49 @@ mod tests {
         // 65 x 65 vertices, 64 x 64 quads, two triangles each.
         assert_eq!(chunk.positions.len(), 65 * 65);
         assert_eq!(chunk.indices.len(), 64 * 64 * 6);
+    }
+
+    /// The normal a rasteriser computes from the vertex order, which is
+    /// the one that decides whether a triangle is drawn at all. Not the
+    /// shading normal in `Chunk::normals` -- those were right while every
+    /// triangle was still facing downward.
+    fn geometric_normal(a: Point, b: Point, c: Point) -> [f32; 3] {
+        let (u, v) = (
+            [b.x - a.x, b.y - a.y, b.z - a.z],
+            [c.x - a.x, c.y - a.y, c.z - a.z],
+        );
+        [
+            u[1] * v[2] - u[2] * v[1],
+            u[2] * v[0] - u[0] * v[2],
+            u[0] * v[1] - u[1] * v[0],
+        ]
+    }
+
+    #[test]
+    fn every_triangle_faces_the_sky() {
+        // Backface culling throws away triangles whose geometric normal
+        // points away from the camera, and a camera looking at this
+        // island is above it. Wound the other way, every one of these is
+        // discarded and the island renders as nothing at all -- which is
+        // what the first frame this application drew actually looked
+        // like.
+        //
+        // This is about vertex *order*, not about the normals in
+        // `Chunk::normals`: those were already correct, and did not save
+        // it.
+        let terrain = flat(80, 80);
+        let chunk = chunk(&terrain, 0, 0).unwrap();
+        for (n, tri) in chunk.indices.chunks_exact(3).enumerate() {
+            let normal = geometric_normal(
+                chunk.positions[tri[0] as usize],
+                chunk.positions[tri[1] as usize],
+                chunk.positions[tri[2] as usize],
+            );
+            assert!(
+                normal[1] > 0.0,
+                "triangle {n} ({tri:?}) faces downward: geometric normal {normal:?}"
+            );
+        }
     }
 
     #[test]

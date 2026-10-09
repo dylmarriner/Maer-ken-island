@@ -168,14 +168,16 @@ Or with an island in its own process:
 island-ui --scenario fixtures/island/default_scenario.json --speed 60
 ```
 
-**Read `docs/island/RENDER_STACK.md` before relying on this.** Everything
-that is not the renderer is tested, and both command-line paths have been
-run against a live island — but **no window has ever been opened by this
-binary**, because the machine it was written on has no display, no Vulkan
-driver and no EGL. Somebody has to run it on a machine with a screen.
+It draws the island, and CI checks that on every push by rendering a
+frame on a virtual screen and asserting the picture is of something. What
+has **not** been established is how it feels with a mouse, or what it
+costs on a GPU: every frame so far was rasterised by lavapipe on the CPU,
+and no frame-rate figure is claimed. `docs/island/RENDER_STACK.md` is the
+full account.
 
-It knows that about itself: with no `DISPLAY` it says so in a sentence and
-exits 1, after telling you whether the backend was reachable.
+On a machine with no screen it says so in a sentence and exits 1, after
+telling you whether the backend was reachable — so a headless operator
+still gets an answer about the connection.
 
 ## The computer service (opt-in, and off)
 

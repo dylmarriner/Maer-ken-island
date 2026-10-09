@@ -80,66 +80,93 @@ Chunks share a row and a column of **vertices** with their neighbours. That
 is not waste: chunks that stopped at their own last cell would leave a
 crack of missing triangles right through the island.
 
-## What has been verified, and what has not
+## What has been verified
 
-This is the important section, and it is short because the division is
-clean.
+### It draws the island
 
-**Verified, by tests that run on a machine with no graphics at all:**
+`scripts/render-smoke.sh` runs the application on a virtual screen
+against an island it starts itself, photographs a frame and asserts the
+picture is of something. It runs in CI on every push and the frame is
+uploaded as an artifact.
+
+That check exists because of what it found. **The first frame this
+application ever drew was nearly black**, and two real defects were in it,
+neither of which any unit test could have seen:
+
+- **Every terrain triangle was wound so its geometric normal pointed
+  down.** x runs east and z runs *south* in this frame, so the obvious
+  `[i, up, right]` — which reads as counter-clockwise — gives a normal of
+  −y. All 285 chunks were backface-culled from any camera above them. The
+  shading normals in `Chunk::normals` were correct throughout and did not
+  help, because culling is decided by vertex order.
+  `every_triangle_faces_the_sky` now holds it.
+- **`bevy_egui` was taken with `default-features = false`,** which drops
+  `default_fonts`. egui had no font data, so every panel drew as an empty
+  grey box. The feature is back and named with a comment saying why.
+
+Measured, the frames either side of those fixes:
+
+| frame | colours | land | sea | light text |
+|---|---|---|---|---|
+| broken | 497 | 0.0% | 0.0% | 0.00% |
+| drawing | 3,964 | 1.1% | 14.8% | 0.08% |
+| drawing, embedded island | 4,904 | 2.1% | 29.6% | 0.10% |
+
+The smoke test's thresholds sit between those columns and well away from
+both: 1,500 colours, 0.2% land, 5% sea, 0.02% text. Reverting the winding
+alone fails it with three named reasons, which was checked rather than
+assumed.
+
+What a rendered frame shows, against the full 1,200 × 960 island: the
+landmass with its relief, the sea floor around it with the trench and the
+outer rise, the domain's edge buffer, both egui panels with the clock, the
+digest, the speed controls and the founders' roster, and the simulation
+running — 59.9× of the 60× asked for in the remote case, 926.5× with
+`--scenario` flat out.
+
+### Everything that is not the renderer
+
+Tested on a machine with no graphics at all, which is most of the
+application:
 
 - The projection, both frames and the transform between them (`scene.rs`).
-- Chunking: coverage, shared edges, winding, normals on flat ground and on
-  a slope, land/sea from the mask rather than from a height, and that the
-  same island gives the same chunks every time (`terrain.rs`).
-- The camera: distance, pitch limits, multiplicative zoom, pan scaling with
-  zoom, clip planes that follow it (`camera.rs`).
+- Chunking: coverage, shared edges, **winding**, normals on flat ground
+  and on a slope, land/sea from the mask rather than from a height, and
+  determinism (`terrain.rs`).
+- The camera: distance, pitch limits, multiplicative zoom, pan scaling
+  with zoom, clip planes that follow it (`camera.rs`).
 - The model table: every building kind and item kind answered, every model
   it names present in `assets/`, the four machines in the computer room
-  distinct, and a created human marked as wearing a founder's face
-  (`property.rs`).
-- Reading a real island end to end, both ways the application can:
-  `tests/reading_an_island.rs` starts a real backend, reads it through the
-  real client, meshes the real terrain, places the real founders and finds
-  the real computers.
-- Both command-line paths in the real binary, against a live island:
-  `--server` against a token-gated backend on another port, and
-  `--scenario` with an island in-process on a loopback port.
+  distinct (`property.rs`).
+- Reading a real island end to end, both ways:
+  `tests/reading_an_island.rs`.
 
-**Not verified here, and this container cannot verify it:**
+### Still not verified
 
-- **Anything a GPU does.** No window has ever been opened by this binary on
-  the machine it was written on. That is not an oversight and not a
-  shortcut — the container has no display, no Vulkan driver (there is no
-  ICD at all, and `mesa-vulkan-drivers` is not installable), and no EGL, so
-  `wgpu` cannot obtain an adapter by any path. There is no software
-  rasterizer to fall back to.
+- **How it feels.** Nobody has used this with a mouse. The camera's
+  sensitivities, the panel layout at other window sizes and whether the
+  controls are pleasant are unanswered, and a screenshot cannot answer
+  them.
+- **Frame rate on real hardware.** Everything above was rendered by
+  **lavapipe**, a software rasteriser, which Bevy warns about on startup
+  and which is slower than any GPU by orders of magnitude. That it draws
+  at all on a CPU is a good sign for a GPU; it is not a measurement of
+  one, and no frame-rate figure is claimed here.
+- **Anything beyond the first frame under interaction.** The smoke test
+  photographs a settled frame; it does not drag, zoom or click.
 
-  What that leaves unproven: that the meshes look right, that the materials
-  are sensible, that the egui panels lay out, that the camera controls feel
-  like anything, and that the frame rate is acceptable. Every one of those
-  is a real question and none of them is answered.
+### A correction worth recording
 
-The binary knows this about itself. Run with no `DISPLAY` or
-`WAYLAND_DISPLAY` it says so in a sentence and exits 1, rather than letting
-winit panic with a sixteen-frame backtrace about an event loop — which is
-what it did at first, measured on this machine. It checks *after* reading
-the island, so a headless operator still finds out whether the backend is
-reachable and has a world:
+An earlier version of this document said the container could not render at
+all: no display, no Vulkan driver, no EGL, nothing installable. The first
+two were true and the third was not. `apt-cache policy` reported no
+candidate for `mesa-vulkan-drivers` because **the package lists were
+stale** — a plain `apt-get update` made lavapipe, `libegl1` and
+`libxkbcommon-x11-0` all available, and Xvfb was installed the whole time.
 
-```
-$ island-ui --server http://127.0.0.1:8101 --token rd
-Reading the island at http://127.0.0.1:8101.
-island-ui draws a window and this machine has no display: neither DISPLAY nor
-WAYLAND_DISPLAY is set. The island at http://127.0.0.1:8101 is reachable and
-has a world -- it is only the drawing that cannot happen here. Run this where
-there is a desktop, or read the same island in a browser:
-`island serve --frontend-only --backend http://127.0.0.1:8101`.
-```
-
-**Before this is relied on as a desktop application, somebody has to run it
-on a machine with a screen.** The web dashboard has been driven in Chromium
-against a split deployment and the island draws; this has not, and nothing
-in this repository should be read as claiming otherwise.
+The conclusion was reported honestly from what was checked, and what was
+checked was not enough. "This cannot be verified here" deserves the same
+scepticism as any other claim, and it got it one step too late.
 
 ## One way in
 
@@ -155,8 +182,15 @@ message above suggests.
 
 ## CI
 
-`apps/island_ui` is built, and its tests run, in the `desktop` job of
-`.github/workflows/ci.yml`. **No windowed test runs in CI**, for the same
-reason none runs here. The job also asserts `cargo tree -p island` contains
-no `bevy`, so the headless binary stays buildable on a machine with no
-graphics packages.
+`apps/island_ui` is built, linted, tested **and rendered** in the
+`desktop` job of `.github/workflows/ci.yml`. The render step installs
+Xvfb, ImageMagick and `mesa-vulkan-drivers`, runs
+`scripts/render-smoke.sh`, and uploads the frame as an artifact whether it
+passed or failed — a picture is the fastest way to see what went wrong
+with a picture.
+
+Nothing is installed to *build* it. That is a separate claim and the job
+keeps them separate: if the build step ever needs a system package, a
+Bevy feature has crept back in. The job also asserts `cargo tree -p island`
+contains no `bevy`, so the headless backend stays buildable on a machine
+with no graphics packages at all.

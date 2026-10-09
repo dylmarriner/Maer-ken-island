@@ -7,10 +7,12 @@ The island stopped being one program on 2026-10-09. It is now a backend that sim
 serves, and frontends that read it: a web dashboard that can be hosted on any machine, and a
 desktop application. `docs/island/DEPLOYMENT.md` is how to run them apart.
 
-One line of that is more important than the rest, so it is here as well as there: **the desktop
-application has never drawn a frame.** It builds, it reads a live island both ways, and every
-part of it that is not the renderer is tested — on a machine with no display, no Vulkan driver
-and no EGL, which is the only kind of machine it has run on. See `docs/island/RENDER_STACK.md`.
+The desktop application **draws the island**, verified by a frame rather than by argument:
+`scripts/render-smoke.sh` runs it on a virtual screen against a real island, photographs a frame
+and asserts the picture is of something. It runs in CI. What it still cannot say is how the
+thing feels to use or what it costs on a real GPU — every frame so far was rasterised on the
+CPU. See `docs/island/RENDER_STACK.md`, which also records that an earlier version of this
+document was wrong about whether rendering here was possible at all.
 
 ## Implemented
 
@@ -41,7 +43,7 @@ and no EGL, which is the only kind of machine it has run on. See `docs/island/RE
 | **One wire schema, shared** | Done. Every shape that crosses the network is defined once, in a crate that depends on `serde` and nothing else, so a client links it without building the island. Two tests keep it honest: one compares the key sets both ways (the silent direction is a field added to the server's projection and not to the schema, which would reach no frontend and look like a server that never sent it — verified to bite), and one puts every intervention constructor through the real `InterventionAction` | `crates/mk_island_api/`, `apps/island/tests/schema.rs` |
 | **A typed client** | Done. `mk_island_client` draws the four distinctions a frontend needs and HTTP's status codes do not: nobody answered, somebody answered and said no, this server is a different version, and the answer was unreadable. Tested against the real backend rather than a mock, which found three field-name disagreements and one real gap in the server | `crates/mk_island_client/`, `apps/island/tests/client.rs` |
 | **The web dashboard, hosted away from its island** | Done. `island serve --frontend-only --backend URL` serves the pages for an island elsewhere; `island export --to DIR` writes the same bytes for any web server. Driven in Chromium against two processes and again against `npx http-server`: every page loads with no console errors and no failed requests, arriving with no token shows the island's own words and opens the token field, and the map draws the real island — 4,604 distinct colours over 2,401 km — from both | `apps/island/static/app.js`, `serve/pages.rs` |
-| **The desktop application (Phase 5)** | Built and tested, **never drawn**. `island-ui` on Bevy 0.19 reads an island over HTTP, remote or embedded, through one code path. Its projection, terrain chunking, camera, model table and whole data path are tested headlessly, and both command-line paths have been run against a live island. **No window has ever been opened by this binary**: this container has no display, no Vulkan ICD and no EGL, so `wgpu` cannot obtain an adapter by any path. Whether the meshes look right, the panels lay out or it is pleasant to use is unanswered | `apps/island_ui/`, `docs/island/RENDER_STACK.md` |
+| **The desktop application (Phase 5)** | Draws the island. `island-ui` on Bevy 0.19 reads an island over HTTP, remote or embedded, through one code path; its projection, terrain chunking, camera, model table and data path are tested headlessly, and `scripts/render-smoke.sh` renders a frame on a virtual screen and asserts the picture is of something (CI runs it and uploads the frame). A rendered frame shows the landmass and its relief, the sea floor with the trench and the outer rise, both panels, and the clock running at 59.9x of the 60x asked for. **Two defects were in the first frame it ever drew** and neither was visible to any unit test: every terrain triangle was wound to face downward and so was backface-culled, and `bevy_egui` without `default_fonts` had no font data, so every panel drew as an empty box. Unverified still: how it feels with a mouse, and what it costs on a real GPU -- every frame so far was rasterised by lavapipe on the CPU | `apps/island_ui/`, `scripts/render-smoke.sh`, `docs/island/RENDER_STACK.md` |
 | **The opt-in computer service** | Done, and off. A founder at their own machine in a powered computer room can search the web and send email for real, through a vendored Node service, when `COMPUTER_ACTIONS_ENABLED=1`. It makes the island irreproducible on purpose, which is why `run`, `replay` and `inspect` never attach it. Off, and on-but-failing, both leave the state digest identical — the costs are charged on success only | `services/computer-service/`, `crates/mk_engine/tests/island_computer_service.rs` |
 
 ## Measured (release build, development machine)
@@ -268,19 +270,14 @@ the estate's electrical system is still free (D13).
   `REALISM.md` exists to prevent. Everything downstream (sizing, staffing, the town) hangs off
   that table, so the phase waits on reachable sources or on the values being supplied.
 - Phase 5, partly. `island-ui` exists, builds on Bevy 0.19 with no system graphics packages
-  (9 min 19 s from cold, 392 crates, 1.9 GB of target directory), reads an island remotely or
-  embedded through one code path, and has its projection, terrain chunking, camera, model table
-  and data path tested headlessly. Both command-line paths have been run against a live island.
+  (9 min 19 s from cold, 392 crates), reads an island remotely or embedded through one code
+  path, and **draws it** -- verified by a photographed frame in CI rather than by argument.
 
-  **What is not done is the part a GPU does, and no amount of care here substitutes for it.**
-  No window has ever been opened by that binary. This container has no display, no Vulkan ICD
-  (`mesa-vulkan-drivers` is not installable) and no EGL, so `wgpu` cannot obtain an adapter by
-  any path and there is no software rasterizer to fall back to. Unproven: that the meshes look
-  right, that the materials are sensible, that the egui panels lay out, that the camera controls
-  feel like anything, and what the frame rate is. `docs/island/RENDER_STACK.md` says which half
-  is which. **Somebody has to run it on a machine with a screen before it is relied on.**
+  What rendering has **not** answered: how it feels with a mouse, at other window sizes, under
+  a drag or a zoom; and what it costs on a GPU, because every frame so far was rasterised by
+  lavapipe on the CPU. No frame-rate figure is claimed anywhere.
 
-  Also still open from that phase's plan: the estate's interiors drawn from `EstateLayout`
+  Still open from that phase's plan: the estate's interiors drawn from `EstateLayout`
   footprints, individual stems rendered in 3D (the web map draws them; the desktop application
   does not yet), the human inspector's full detail sections, the foundry panel, the resolution
   gate and its benchmark, `island_bench`, the allocation-bound test, retiring `apps/island_humans`,
