@@ -172,6 +172,14 @@ pub struct SimHandle {
     /// ground at a height and cannot read metres back out of a colour.
     elevation_bin: Arc<Vec<u8>>,
     elevation_gz: Arc<Vec<u8>>,
+    /// Whether a real bridge to the outside is attached, so a frontend
+    /// can say that this island's humans may reach the internet.
+    ///
+    /// Read from the island itself at startup rather than from the
+    /// environment, so it says what is true rather than what was asked
+    /// for: `HttpComputerBridge::from_env` can decline, and a capability
+    /// that reported the request would be wrong exactly when it mattered.
+    has_computer_bridge: bool,
     /// Whether a snapshot directory was configured, so a frontend can
     /// offer the button or say why it is not there, rather than offering
     /// it and having the island refuse.
@@ -238,6 +246,11 @@ impl SimHandle {
     /// being refused for want of somewhere to put it.
     pub fn can_snapshot(&self) -> bool {
         self.can_snapshot
+    }
+
+    /// Whether this island's humans have a way out to the internet.
+    pub fn has_computer_bridge(&self) -> bool {
+        self.has_computer_bridge
     }
 
     /// The island's terrain, for anything that has to ask the grids a
@@ -515,6 +528,7 @@ pub fn spawn_with(
         elevation_bin,
         elevation_gz,
         can_snapshot: snapshots.is_some(),
+        has_computer_bridge: life.has_computer_bridge(),
         vegetation_png,
         patch_png,
     };

@@ -272,7 +272,18 @@ impl LocalBackend {
         use island::serve::server::ServeConfig;
         use std::sync::Mutex as StdMutex;
 
-        let life = island::run::open_world(scenario, snapshot)?;
+        let mut life = island::run::open_world(scenario, snapshot)?;
+        // Opt-in and off unless an operator set COMPUTER_ACTIONS_ENABLED,
+        // exactly as `island serve` does it -- this is the same backend.
+        if let Some(bridge) = mk_engine::humans::computer_bridge::HttpComputerBridge::from_env() {
+            life.attach_computer_bridge(
+                mk_engine::humans::computer_bridge::ComputerBridgeHandle::new(bridge),
+            );
+            eprintln!(
+                "The computer service is attached: this island's founders may reach the real \
+                 internet, and it is no longer reproducible."
+            );
+        }
         let world = island::serve::sim::spawn(life, speed);
 
         let (population, warnings) =

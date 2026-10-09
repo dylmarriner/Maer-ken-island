@@ -454,16 +454,6 @@ fn elevation_reply(bytes: Option<std::sync::Arc<Vec<u8>>>, gzip: bool) -> impl w
     )
 }
 
-/// Whether a real computer bridge is attached to this process.
-///
-/// Read from the environment rather than from the world, because that is
-/// where it is decided: `HttpComputerBridge::from_env` attaches only when
-/// `COMPUTER_ACTIONS_ENABLED=1`, and nothing downstream of that decision
-/// is allowed to change the island's deterministic state.
-fn computer_service_attached() -> bool {
-    std::env::var("COMPUTER_ACTIONS_ENABLED").as_deref() == Ok("1")
-}
-
 /// Said in `/api/trees`, because a viewer that drew an empty island and
 /// said nothing would be read as a treeless one.
 const TREES_ARE_LOCAL: &str =
@@ -1428,7 +1418,7 @@ pub fn routes_with_config(
                         reads_need_token,
                         allowed_origins: origins.clone(),
                         elevation: world.is_some(),
-                        computer_service: computer_service_attached(),
+                        computer_service: world.as_ref().is_some_and(|w| w.has_computer_bridge()),
                         snapshots: world.as_ref().is_some_and(|w| w.can_snapshot()),
                     },
                 };

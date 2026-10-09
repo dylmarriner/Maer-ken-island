@@ -158,6 +158,21 @@ pub struct IslandLife {
     /// world draws from them (`create_human`), and a creation keyed on
     /// anything else would not replay.
     pub(crate) rng: RngRegistry,
+    /// A real bridge to the outside, when an operator attached one.
+    ///
+    /// Like the folders and the replay log, it is not in the snapshot and
+    /// not in the state digest -- but unlike them it is not merely a
+    /// record, and the difference matters. With one attached, a human may
+    /// reach the real internet, and what comes back is not reproducible.
+    /// That is the whole point of the feature and the whole reason it is
+    /// opt-in: an island that did it would stop being an island two runs
+    /// of which agree.
+    ///
+    /// `replay` and `inspect` never attach one, so a log replays the same
+    /// way whether or not a live human sent real email in the run that
+    /// produced it. A search's *results* enter only through this bridge;
+    /// nothing else in the island can see out.
+    computer_bridge: Option<crate::humans::computer_bridge::ComputerBridgeHandle>,
     /// This run's folder tree, once somebody asks for one. Records rather
     /// than state: it is absent from the snapshot and from the state digest,
     /// and an island with one behaves exactly like an island without.
@@ -284,6 +299,7 @@ impl IslandLife {
             sleep_seconds: BTreeMap::new(),
             scheduler: IslandScheduler::new(scenario_cadences),
             labour: LabourTable::load_default().map_err(IslandLifeError::Labour)?,
+            computer_bridge: None,
             human_store: None,
             // Filled in below: the digest needs the built island.
             replay_log: super::replay::IslandReplayLog::new(String::new()),
@@ -385,6 +401,7 @@ impl IslandLife {
             // A restored island keeps no records until someone attaches
             // some: the folders belong to the run that wrote them, and a
             // reload is a new run.
+            computer_bridge: None,
             human_store: None,
             // A restored island starts a fresh log: the commands that got
             // it here are in the log beside the snapshot, not in the file.
@@ -409,6 +426,37 @@ impl IslandLife {
     /// state digest after any number of steps is the same as without it, and
     /// the same again if every write fails. The folders are a record of the
     /// run, not an input to it.
+    /// Attach a real bridge to the outside, so a human at their own
+    /// machine in a powered computer room can search the web or send an
+    /// email for real.
+    ///
+    /// **This makes the island irreproducible, on purpose.** Nothing else
+    /// in it can see out; what comes back through here is whatever the
+    /// internet said at that moment, and two runs of the same seed will
+    /// not agree once a human has used it. That is the feature, and it is
+    /// why nothing attaches this unless an operator sets
+    /// `COMPUTER_ACTIONS_ENABLED=1`, and why `replay` and `inspect` never
+    /// attach it at all: a log replays identically whether or not a live
+    /// human sent real email in the run that produced it.
+    ///
+    /// Attaching it alone changes nothing. Until a human actually
+    /// succeeds at one of the two actions, the state digest is the same as
+    /// an island with no bridge -- including when the service is
+    /// unreachable, because the costs are charged on success only.
+    /// `tests/island_computer_service.rs` holds all three cases.
+    pub fn attach_computer_bridge(
+        &mut self,
+        bridge: crate::humans::computer_bridge::ComputerBridgeHandle,
+    ) {
+        self.computer_bridge = Some(bridge);
+    }
+
+    /// Whether a bridge is attached, for a dashboard saying what this
+    /// island can do.
+    pub fn has_computer_bridge(&self) -> bool {
+        self.computer_bridge.is_some()
+    }
+
     pub fn enable_human_store(&mut self, save_root: &Path) -> Result<RunId, HumanStoreError> {
         let (mut store, storage) =
             open_run(save_root, &self.scenario_digest(), &self.scenario.seed)?;
@@ -684,6 +732,7 @@ impl IslandLife {
             {
                 let energy = self.energy.clone();
                 let ctx = RegionalHumanContext {
+                    computer_bridge: self.computer_bridge.as_ref().map(|h| h.as_bridge()),
                     property: &self.placed.property,
                     layout: &self.placed.layout,
                     physical: &self.physical,

@@ -394,7 +394,7 @@ fn main() {
                     usage()
                 }),
             };
-            let life = headless::open_world(
+            let mut life = headless::open_world(
                 scenario.map(PathBuf::from).as_deref(),
                 snapshot.map(PathBuf::from).as_deref(),
             )
@@ -402,6 +402,26 @@ fn main() {
                 eprintln!("{e}");
                 std::process::exit(1);
             });
+            // The one thing on this island that can see out, and only
+            // when an operator asked for it: `from_env` returns `None`
+            // unless COMPUTER_ACTIONS_ENABLED=1.
+            //
+            // `serve` only. `run`, `replay` and `inspect` never attach
+            // one, which is what makes a log replay identically whether
+            // or not a live human sent real email in the run that
+            // produced it -- and what keeps `run`'s whole purpose, a
+            // digest two runs agree on, intact.
+            if let Some(bridge) = mk_engine::humans::computer_bridge::HttpComputerBridge::from_env()
+            {
+                life.attach_computer_bridge(
+                    mk_engine::humans::computer_bridge::ComputerBridgeHandle::new(bridge),
+                );
+                println!(
+                    "The computer service is attached: a founder at their own machine in a \
+                     powered computer room may search the web and send email for real. This \
+                     island is no longer reproducible, which is what that feature is."
+                );
+            }
             println!(
                 "Simulating the island at {}. Its state is at /api/world.",
                 speed.describe()
