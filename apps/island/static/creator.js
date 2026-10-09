@@ -3,6 +3,7 @@
 "use strict";
 
 import {
+  mountServerChrome,
   clearOffline,
   el,
   fillChrome,
@@ -356,4 +357,7 @@ form.addEventListener("submit", async (event) => {
   }
 });
 
+// Before anything is asked for, so the control is there to type a
+// token into when the first request comes back 401.
+mountServerChrome();
 setup();

@@ -242,7 +242,7 @@ async fn a_client_without_the_token_is_told_which_one_it_needs() {
     let config = ServeConfig {
         control: ControlAuth::BearerToken("control".to_string()),
         reads: ReadAuth::BearerToken("reading".to_string()),
-        allowed_origins: Vec::new(),
+        ..ServeConfig::local(ControlAuth::Disabled)
     };
     let (world, port, server) = a_remote_backend(config).await;
     let base = at(port);

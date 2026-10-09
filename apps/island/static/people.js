@@ -2,6 +2,8 @@
 "use strict";
 
 import {
+  explain,
+  mountServerChrome,
   ageWords,
   clearOffline,
   count,
@@ -307,7 +309,7 @@ async function load() {
   } catch (error) {
     reportOffline(error);
     statusEl.textContent = "The roster could not be loaded.";
-    message(detailEl, "Nothing can be read while the island server is unreachable.", "hint");
+    message(detailEl, `Nothing can be read: ${explain(error)}`, "hint");
   }
 }
 
@@ -320,6 +322,9 @@ addEventListener("popstate", () => {
   if (wanted && wanted !== selected) select(wanted);
 });
 
+// Before anything is asked for, so the control is there to type a
+// token into when the first request comes back 401.
+mountServerChrome();
 load();
 
 // ---------------------------------------------------------------------------

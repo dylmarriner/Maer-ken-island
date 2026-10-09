@@ -7,11 +7,13 @@
 "use strict";
 
 import {
+  mountServerChrome,
   clearOffline,
   count,
   el,
   emptyState,
   fillChrome,
+  getImage,
   getJson,
   message,
   postJson,
@@ -530,13 +532,31 @@ function draw() {
 // are served `no-cache`, so the browser revalidates them rather than
 // holding the island's first forest for ever; this loads each once a
 // session and leaves freshness to that header.
-function loadLayer(layer) {
-  layer.image = new Image();
-  layer.image.addEventListener("load", () => {
-    layer.ready = true;
-    draw();
-  });
-  layer.image.src = layer.src;
+async function loadLayer(layer) {
+  // Fetched rather than assigned to `src`, because a browser sends no
+  // `Authorization` header on an image loaded that way. Against a backend
+  // with a read token every layer came back 401 and the island drew as
+  // nothing at all; against one on another host the same assignment is a
+  // cross-origin image load, which a canvas may not then read back.
+  try {
+    const url = await getImage(layer.src);
+    const image = new Image();
+    image.addEventListener("load", () => {
+      layer.ready = true;
+      // The blob has been decoded into the image; the URL is no longer
+      // needed and holds the bytes alive until it is released.
+      URL.revokeObjectURL(url);
+      draw();
+    });
+    image.addEventListener("error", () => URL.revokeObjectURL(url));
+    image.src = url;
+    layer.image = image;
+  } catch (error) {
+    // Said rather than swallowed: a map that is simply blank is the one
+    // failure a reader cannot tell from an island with nothing on it.
+    layer.failed = error;
+    reportOffline(error);
+  }
 }
 
 // What the map is, in a sentence, following whichever layer is on. The
@@ -928,6 +948,9 @@ async function load() {
   }
 }
 
+// Before anything is asked for, so the control is there to type a
+// token into when the first request comes back 401.
+mountServerChrome();
 load();
 // The economy and the timeline change when somebody does something, so the
 // page follows along rather than needing a reload.

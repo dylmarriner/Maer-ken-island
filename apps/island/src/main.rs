@@ -15,7 +15,9 @@ use std::sync::{Arc, Mutex};
 const USAGE: &str = "\
 island serve   [--data-dir ./island-data] [--seed <64 hex>] [--bind 127.0.0.1:8080]
                [--scenario <path> | --snapshot <path>] [--speed real|max|<n>] [--log <path>]
-               [--allow-origin <url>]...
+               [--allow-origin <url>]... [--backend <url>] [--allow-backend <url>]...
+island serve   --frontend-only --backend <url> [--bind 0.0.0.0:3000]
+island export  --to <dir> [--backend <url>]
 island run     (--scenario <path> | --snapshot <path>) [--steps <n>] [--dt <seconds>]
                [--save <path>] [--save-root <dir>]
 island replay  --scenario <path> --log <path> [--until <tick>]
@@ -48,6 +50,20 @@ serve    the dashboard: the overview at /, the roster at /people, the island
                    Repeat it for more than one. Without any, a browser may
                    only call this server from pages it served itself, which
                    is what you want when they are the same machine.
+  --backend URL    the pages this server sends read *that* island instead
+                   of this one. This is the other half of --allow-origin:
+                   run one process with --frontend-only --backend
+                   https://island.example on the machine people open, and
+                   the island itself with --allow-origin pointing back.
+  --allow-backend U another island the pages may be pointed at by hand,
+                   through the server control at the foot of every page.
+                   The backend given above is always allowed; this is for
+                   offering a choice. A browser refuses any island the page
+                   does not name, which is what keeps a script that gets
+                   onto the page from posting the island somewhere else.
+  --frontend-only  serve the pages and nothing else: no API, no island, no
+                   stored population. Needs --backend. This is a web server
+                   for the dashboard, and it can sit anywhere.
 
 run      the simulated island, headless, printing its canonical state digest.
          Two runs of one scenario and seed print the same digest.
@@ -65,6 +81,15 @@ replay   a recorded run, printing the digest it reaches. It should be the
   --scenario PATH  the scenario the log was recorded against
   --log PATH       the log to replay
   --until TICK     stop at this tick (default: the log's last command)
+
+export   write the dashboard out as plain files, for any web server. The
+         pages, the stylesheet, the scripts and a config.js naming the
+         island they read. Nothing in it needs this binary afterwards.
+  --to DIR         where to write them. Created if it is not there; files
+                   already in it with these names are overwritten
+  --backend URL    the island those pages read. Without it they read
+                   whatever server ends up hosting them, which is right
+                   only if that server is also the island
 
 inspect  what is in a saved island, without running it.
   --snapshot PATH  the file to describe
@@ -91,6 +116,31 @@ fn help() -> ! {
 fn usage() -> ! {
     eprintln!("{USAGE}");
     std::process::exit(2);
+}
+
+/// Whether an island was asked for, so `--frontend-only` can refuse to be
+/// both halves at once.
+fn world_asked(args: &[String]) -> bool {
+    flag(args, "--scenario").is_some() || flag(args, "--snapshot").is_some()
+}
+
+/// An origin as a browser sends it: scheme, host and port, nothing else.
+///
+/// Checked rather than taken as given, because every one of these ends up
+/// in a header a browser compares byte for byte, and a trailing slash or a
+/// path on the end of one is a rule that silently never matches.
+fn origin(value: &str, flag: &str) -> String {
+    let tidy = value.trim_end_matches('/');
+    let is_origin =
+        (tidy.starts_with("http://") || tidy.starts_with("https://")) && !tidy[8..].contains('/');
+    if !is_origin {
+        eprintln!(
+            "{flag} {value:?} is not an origin. A browser sends scheme, host and port and \
+             nothing else: https://island.example or http://192.168.1.20:3000.\n"
+        );
+        usage()
+    }
+    tidy.to_string()
 }
 
 /// The value after `name`, if it was given.
@@ -154,6 +204,48 @@ fn headless_replay(args: &[String]) {
     ));
 }
 
+/// Write the dashboard out as files, for a web server that is not this one.
+///
+/// `--frontend-only` is the same frontend served by this binary; this is
+/// the same frontend as bytes on disk, for the many places that already
+/// have a way to host static files and no reason to run a Rust process to
+/// do it. Both put the island's address in `config.js` rather than in the
+/// pages, so the pages are identical either way.
+fn export_frontend(args: &[String]) {
+    if args.iter().any(|a| matches!(a.as_str(), "--help" | "-h")) {
+        help();
+    }
+    let Some(to) = flag(args, "--to") else {
+        eprintln!("export needs --to, a directory to write the dashboard into.\n");
+        usage()
+    };
+    let backend = flag(args, "--backend").map(|value| origin(&value, "--backend"));
+    let to = PathBuf::from(to);
+    match serve::pages::export(&to, backend.clone()) {
+        Err(err) => {
+            eprintln!("could not write the dashboard to {}: {err}", to.display());
+            std::process::exit(1);
+        }
+        Ok(written) => {
+            println!(
+                "Wrote {written} files to {}. Serve that directory from anything.",
+                to.display()
+            );
+            match &backend {
+                Some(backend) => println!(
+                    "Those pages read {backend}, which has to have been started with \
+                     --allow-origin naming the address people will open this from, or a browser \
+                     will refuse every request they make."
+                ),
+                None => println!(
+                    "No --backend, so those pages read whichever server hosts them. That is \
+                     right only if that server is also the island."
+                ),
+            }
+        }
+    }
+}
+
 fn headless_inspect(args: &[String]) {
     if args.iter().any(|a| matches!(a.as_str(), "--help" | "-h")) {
         help();
@@ -179,10 +271,13 @@ fn main() {
     match command.as_str() {
         "serve" => {}
         "run" => return headless_run(rest),
+        "export" => return export_frontend(rest),
         "replay" => return headless_replay(rest),
         "inspect" => return headless_inspect(rest),
         other => {
-            eprintln!("island has `serve`, `run` and `inspect`, not `{other}`.\n");
+            eprintln!(
+                "island has `serve`, `run`, `replay`, `inspect` and `export`, not `{other}`.\n"
+            );
             usage();
         }
     }
@@ -190,10 +285,16 @@ fn main() {
     let mut seed = island_humans::DEFAULT_SEED;
     let mut bind: std::net::SocketAddr = "127.0.0.1:8080".parse().expect("valid default");
     let mut allowed_origins: Vec<String> = Vec::new();
+    let mut backend: Option<String> = None;
+    let mut allow_backends: Vec<String> = Vec::new();
+    let frontend_only = rest.iter().any(|a| a == "--frontend-only");
     let mut iter = rest.iter();
     while let Some(flag) = iter.next() {
         if matches!(flag.as_str(), "--help" | "-h") {
             help();
+        }
+        if flag == "--frontend-only" {
+            continue;
         }
         let value = iter.next().unwrap_or_else(|| {
             eprintln!("{flag} needs a value.\n");
@@ -206,18 +307,9 @@ fn main() {
                 seed = bytes.try_into().unwrap_or_else(|_| usage());
             }
             "--bind" => bind = value.parse().unwrap_or_else(|_| usage()),
-            "--allow-origin" => {
-                let origin = value.trim_end_matches('/').to_string();
-                if !origin.starts_with("http://") && !origin.starts_with("https://") {
-                    eprintln!(
-                        "--allow-origin {value:?} is not an origin. A browser sends scheme, host \
-                         and port and nothing else: https://island.example or \
-                         http://192.168.1.20:3000.\n"
-                    );
-                    usage()
-                }
-                allowed_origins.push(origin);
-            }
+            "--allow-origin" => allowed_origins.push(origin(value, "--allow-origin")),
+            "--backend" => backend = Some(origin(value, "--backend")),
+            "--allow-backend" => allow_backends.push(origin(value, "--allow-backend")),
             // Read again below, where the world is opened; named here so
             // they are accepted rather than falling through to the usage
             // message as unknown flags.
@@ -225,6 +317,62 @@ fn main() {
             | "--snapshot-dir" => {}
             _ => usage(),
         }
+    }
+
+    let connect_origins = {
+        let mut origins = allow_backends.clone();
+        if let Some(backend) = &backend {
+            if !origins.contains(backend) {
+                origins.push(backend.clone());
+            }
+        }
+        origins
+    };
+
+    // A frontend and nothing else: the pages, pointed at an island on
+    // another machine. It opens no data directory and bootstraps no world,
+    // because it has neither and should not pretend to.
+    if frontend_only {
+        let Some(backend) = backend.clone() else {
+            eprintln!(
+                "--frontend-only serves the pages for an island somewhere else, so it needs \
+                 --backend to say which one.\n"
+            );
+            usage()
+        };
+        if world_asked(rest) {
+            eprintln!(
+                "--frontend-only serves pages and nothing else, so it cannot also run an \
+                 island. Run the island in its own process and point this at it.\n"
+            );
+            usage()
+        }
+        println!("Maer-Ken Island frontend is up, serving the dashboard for {backend}.");
+        println!("  Overview        http://{bind}/");
+        println!("  People          http://{bind}/people");
+        println!("  The island      http://{bind}/island");
+        println!("  Create a human  http://{bind}/creator");
+        println!(
+            "No island and no stored people here: every request these pages make goes to \
+             {backend}, which has to have been started with --allow-origin http://{bind} (or \
+             whatever address people actually open) or a browser will refuse them."
+        );
+        println!("Press Ctrl-C to stop.");
+        let runtime = tokio::runtime::Runtime::new().expect("tokio runtime");
+        if let Err(err) = runtime.block_on(serve::server::run_frontend(
+            bind,
+            ServeConfig {
+                control: ControlAuth::Disabled,
+                reads: ReadAuth::Open,
+                allowed_origins,
+                backend: Some(backend),
+                connect_origins,
+            },
+        )) {
+            eprintln!("could not serve on {bind}: {err}");
+            std::process::exit(1);
+        }
+        return;
     }
 
     // The world, when one was asked for. It starts before the listener so a
@@ -368,6 +516,8 @@ fn main() {
             control: auth,
             reads,
             allowed_origins,
+            backend,
+            connect_origins,
         },
     )) {
         eprintln!("could not serve on {bind}: {err}");

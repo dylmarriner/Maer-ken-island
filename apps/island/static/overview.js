@@ -3,6 +3,8 @@
 "use strict";
 
 import {
+  explain,
+  mountServerChrome,
   ageWords,
   clearOffline,
   count,
@@ -321,10 +323,13 @@ async function load() {
     showWorld(world);
   } catch (error) {
     reportOffline(error);
-    message(activityEl, "The creation log could not be read while the server is unreachable.", "hint");
+    message(activityEl, `The creation log could not be read: ${explain(error)}`, "hint");
   }
 }
 
+// Before anything is asked for, so the control is there to type a
+// token into when the first request comes back 401.
+mountServerChrome();
 load();
 
 // A running island changes while the page is open, so the world panel

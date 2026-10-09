@@ -534,9 +534,31 @@ const CONVERSATIONS_ARE_COMPOSED: &str =
 /// this server, so the policy can say exactly that: no third-party script,
 /// style, image or connection, no framing, and no form posting its own way
 /// out if a script fails to load.
-const CONTENT_SECURITY_POLICY: &str = "default-src 'self'; script-src 'self'; style-src 'self'; \
-     img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'; \
-     frame-ancestors 'none'";
+/// The policy these pages are served under.
+///
+/// `connect-src` and `img-src` have to name every island the pages may
+/// read, because a frontend hosted away from its backend calls another
+/// origin and a browser will not let it unless the page it is on says so.
+/// `self` stays in both: the ordinary case is still the island serving its
+/// own dashboard.
+///
+/// This is the one header that has to grow when a backend is configured,
+/// and it is worth saying why it is not simply relaxed to `*`. The page's
+/// own policy is what stops a script that got onto it from sending the
+/// island's contents somewhere else. Listing the islands an operator
+/// actually named keeps that, and costs them one flag.
+fn content_security_policy(connect: &[String]) -> String {
+    let extra = if connect.is_empty() {
+        String::new()
+    } else {
+        format!(" {}", connect.join(" "))
+    };
+    format!(
+        "default-src 'self'; script-src 'self'; style-src 'self'; \
+         img-src 'self' data: blob:{extra}; connect-src 'self'{extra}; base-uri 'none'; \
+         form-action 'none'; frame-ancestors 'none'"
+    )
+}
 
 /// One line per request on stdout, the way a server log reads. Set
 /// `ISLAND_ACCESS_LOG=off` to keep the terminal quiet.
@@ -579,6 +601,19 @@ pub struct ServeConfig {
     /// Nothing but a browser is affected either way — a desktop client and
     /// `curl` do not send an `Origin` and are not bound by one.
     pub allowed_origins: Vec<String>,
+    /// Which island the pages this server sends should read. `None` -- the
+    /// ordinary case -- means the server that sent them.
+    ///
+    /// Set, this server is a *frontend*: it hands out the dashboard and
+    /// the island is somewhere else. `--frontend-only` is that with the
+    /// API left off entirely, which is how the two halves end up on
+    /// different machines.
+    pub backend: Option<String>,
+    /// Islands the pages are permitted to call, for the `connect-src` and
+    /// `img-src` a browser enforces on them. The configured backend is
+    /// always one of these; more can be named so a reader can point the
+    /// server control at another island without the browser refusing.
+    pub connect_origins: Vec<String>,
 }
 
 impl ServeConfig {
@@ -589,6 +624,8 @@ impl ServeConfig {
             control,
             reads: ReadAuth::Open,
             allowed_origins: Vec::new(),
+            backend: None,
+            connect_origins: Vec::new(),
         }
     }
 }
@@ -703,6 +740,8 @@ pub fn routes_with_config(
     config: ServeConfig,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = std::convert::Infallible> + Clone {
     let auth = config.control.clone();
+    let policy = content_security_policy(&config.connect_origins);
+    let backend = config.backend.clone();
     let get_world = warp::path!("api" / "world")
         .and(read())
         .and(with(world.clone()))
@@ -1438,11 +1477,22 @@ pub fn routes_with_config(
     // Everything else goes through the read gate, which passes freely when
     // no read token is configured -- the default, and what every existing
     // caller sees.
-    let gated = read_gate(config.reads.clone(), auth.clone()).and(api.or(pages::routes()));
+    let gated =
+        read_gate(config.reads.clone(), auth.clone()).and(api.or(pages::routes_for(backend)));
 
+    // Recovered here, *inside* the CORS wrapper below, and that ordering
+    // is the whole point. A refusal produced outside it carries no
+    // `access-control-allow-origin`, so a browser cannot read the body --
+    // it reports a CORS failure and the page shows "could not reach the
+    // island" for a server that answered perfectly clearly that it wanted
+    // a token. Measured in Chromium against a split deployment: every
+    // unauthenticated read failed as `net::ERR_FAILED` with no way to find
+    // out why, until this moved.
     let served = open
         .map(|reply| Box::new(reply) as Box<dyn warp::Reply>)
         .or(gated.map(|reply| Box::new(reply) as Box<dyn warp::Reply>))
+        .unify()
+        .recover(refusals)
         .unify();
 
     // Cross-origin headers only when an operator named an origin. Sending
@@ -1472,13 +1522,16 @@ pub fn routes_with_config(
                 .boxed()
         };
 
+    // Twice, and both are needed. The first (above, inside the CORS
+    // wrapper) turns the read gate's refusal into an ordinary reply, so
+    // it comes back with the cross-origin header a browser needs to read
+    // it. This one catches what the CORS wrapper itself raises -- a
+    // blocked origin -- and the `Rejection` that boxing puts back into
+    // the type regardless.
     served
         .recover(refusals)
         .unify()
-        .with(warp::reply::with::header(
-            "content-security-policy",
-            CONTENT_SECURITY_POLICY,
-        ))
+        .with(warp::reply::with::header("content-security-policy", policy))
         .with(warp::reply::with::header(
             "x-content-type-options",
             "nosniff",
@@ -1509,6 +1562,37 @@ pub async fn run_with_world(
     world: Option<SimHandle>,
 ) -> std::io::Result<()> {
     run_with_config(population, bind, world, ServeConfig::local(auth)).await
+}
+
+/// Serve the pages alone, for an island on another machine.
+///
+/// No population, no world, no API: a web server for the dashboard, which
+/// can sit anywhere a browser can reach. Every request these pages make
+/// goes to the backend named in the config.
+pub async fn run_frontend(bind: std::net::SocketAddr, config: ServeConfig) -> std::io::Result<()> {
+    let policy = content_security_policy(&config.connect_origins);
+    let listener = tokio::net::TcpListener::bind(bind).await?;
+    let routes = pages::routes_for(config.backend.clone())
+        .with(warp::reply::with::header("content-security-policy", policy))
+        .with(warp::reply::with::header(
+            "x-content-type-options",
+            "nosniff",
+        ))
+        .with(warp::reply::with::header("x-frame-options", "DENY"))
+        .with(warp::reply::with::header("referrer-policy", "no-referrer"))
+        .with(warp::reply::with::header(
+            "permissions-policy",
+            "geolocation=(), camera=(), microphone=()",
+        ))
+        .with(access_log());
+    warp::serve(routes)
+        .incoming(listener)
+        .graceful(async {
+            let _ = tokio::signal::ctrl_c().await;
+        })
+        .run()
+        .await;
+    Ok(())
 }
 
 /// Serve as an operator configured it: the backend a frontend on another
@@ -1896,6 +1980,7 @@ mod remote_tests {
             control: ControlAuth::resolve(Some("control".into()), LAN),
             reads,
             allowed_origins: origins.iter().map(|o| o.to_string()).collect(),
+            ..ServeConfig::local(ControlAuth::Disabled)
         }
     }
 
@@ -2126,5 +2211,61 @@ mod remote_tests {
             body["errors"][0].as_str().unwrap().contains("--scenario"),
             "{body}"
         );
+    }
+}
+
+#[cfg(test)]
+mod cors_refusal_tests {
+    //! A refusal a browser can actually read.
+    //!
+    //! This is the one thing in the backend that only a browser could
+    //! have found, and it is worth a test of its own because it is
+    //! invisible to every other client: `curl` reads a 401 whether or not
+    //! it carries `access-control-allow-origin`, and a browser does not.
+    //! Without the header the fetch fails as a CORS error, the body is
+    //! unreadable, and a page that could have said "this island needs a
+    //! token" says "could not reach the island" instead.
+
+    use super::*;
+    use std::net::{IpAddr, Ipv4Addr};
+
+    const LAN: IpAddr = IpAddr::V4(Ipv4Addr::new(192, 168, 1, 20));
+    const PAGE: &str = "https://island.example";
+
+    #[tokio::test]
+    async fn a_refusal_carries_the_header_a_browser_needs_to_read_it() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (population, _) = IslandHumanPopulation::open(tmp.path(), [3u8; 32]).unwrap();
+        let filter = routes_with_config(
+            Arc::new(Mutex::new(population)),
+            None,
+            ServeConfig {
+                control: ControlAuth::resolve(Some("control".into()), LAN),
+                reads: ReadAuth::resolve(Some("read".into())),
+                allowed_origins: vec![PAGE.to_string()],
+                backend: None,
+                connect_origins: Vec::new(),
+            },
+        );
+
+        for path in ["/api/status", "/api/world", "/api/humans"] {
+            let response = warp::test::request()
+                .path(path)
+                .header("origin", PAGE)
+                .reply(&filter)
+                .await;
+            assert_eq!(response.status(), 401, "{path}");
+            assert_eq!(
+                response
+                    .headers()
+                    .get("access-control-allow-origin")
+                    .map(|v| v.to_str().unwrap()),
+                Some(PAGE),
+                "{path}: a browser will discard this refusal unread, and the page will blame \
+                 the network for a server that answered perfectly clearly"
+            );
+            let body: serde_json::Value = serde_json::from_slice(response.body()).unwrap();
+            assert_eq!(body["reads"], "token", "{path}");
+        }
     }
 }
