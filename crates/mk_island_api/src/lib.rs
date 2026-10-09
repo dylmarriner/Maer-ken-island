@@ -18,6 +18,7 @@
 #![forbid(unsafe_code)]
 
 pub mod request;
+pub mod terrain;
 pub mod version;
 pub mod wire;
 
@@ -25,6 +26,7 @@ pub use request::{
     Accepted, ControlRequest, CreateHumanRequest, InterventionRequest, InterventionTarget, Outcome,
     Refusal,
 };
+pub use terrain::{Terrain, TerrainError};
 pub use version::{Capabilities, ServerVersion, API_VERSION};
 pub use wire::{
     Building, Cell, Clock, Conversation, ConversationLine, Digest, Economy, EconomyEntry, Estate,

@@ -20,6 +20,9 @@ mk_island = { path = "../../crates/mk_island" }
 # The wire schema. One definition of every shape that crosses the
 # network, shared with every frontend that reads it.
 mk_island_api = { path = "../../crates/mk_island_api" }
+# The client is tested against this server rather than against a mock:
+# every bug worth catching is a disagreement between the two.
+mk_island_client = { path = "../../crates/mk_island_client" }
 mk_interventions = { path = "../../crates/mk_interventions" }
 bytes = "1"
 # Terrain for a 3D client is 5.8 MB of grid; it deflates hard and is
@@ -34,6 +37,9 @@ tokio.workspace = true
 [dev-dependencies]
 warp = { workspace = true, features = ["test"] }
 mk_island_api = { path = "../../crates/mk_island_api" }
+# The client is tested against this server rather than against a mock:
+# every bug worth catching is a disagreement between the two.
+mk_island_client = { path = "../../crates/mk_island_client" }
 tempfile = "3"
 
 [lints]

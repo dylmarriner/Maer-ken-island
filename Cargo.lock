@@ -2628,6 +2628,7 @@ dependencies = [
  "mk_interventions",
  "mk_island",
  "mk_island_api",
+ "mk_island_client",
  "serde",
  "serde_json",
  "tempfile",
@@ -3048,6 +3049,16 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "mk_island_client"
+version = "0.1.0"
+dependencies = [
+ "mk_island_api",
+ "serde",
+ "serde_json",
+ "ureq",
 ]
 
 [[package]]

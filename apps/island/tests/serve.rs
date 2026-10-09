@@ -2,6 +2,8 @@
 //! serving a real data directory. The unit tests exercise the filters; this
 //! one proves `island serve` itself answers.
 
+mod common;
+use common::a_running_dashboard;
 use island::serve::auth::ControlAuth;
 use island::serve::server;
 use std::sync::{Arc, Mutex};
@@ -452,74 +454,6 @@ async fn estate_degrees(port: u16) -> (f64, f64) {
         estate["latitude"].as_f64().expect("an estate latitude"),
         estate["longitude"].as_f64().expect("an estate longitude"),
     )
-}
-/// A dashboard with a small island running on it, and its port.
-async fn a_running_dashboard() -> (
-    island::serve::sim::SimHandle,
-    u16,
-    tokio::task::JoinHandle<()>,
-) {
-    use island::serve::sim::{spawn, SimSpeed};
-    use std::path::PathBuf;
-
-    let repo = |path: &str| {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../..")
-            .join(path)
-    };
-    let mut scenario =
-        mk_island::IslandScenario::load(&repo("fixtures/island/default_scenario.json")).unwrap();
-    scenario.estate_patch.tree_cap = 50;
-    // A small island: 240 x 192 medium cells against the default's
-    // 1,200 x 960, 25x fewer. The grids are what load this suite, not the
-    // trees -- `tree_cap` shrinks the vegetation and leaves two
-    // 1,152,000-cell grids to build on every bootstrap and hash on every
-    // digest, a dozen times over, on four cores.
-    //
-    // The seed changes with the profile because it has to. `IslandLife`
-    // validates the coastline it generates against the profile's shape
-    // rules, and the default scenario's seed makes a small island with
-    // "0 major headlands, need 3". Seed 16 is simply the first that does
-    // not: found by trying 0, 1, 2 ... through
-    // `RegionalPhysicalState::bootstrap`, which runs that check before the
-    // expensive spin-up, so bad seeds cost nothing. It took 17 tries and
-    // 1.3 seconds.
-    scenario.profile = mk_island::IslandProfile::test_small();
-    let mut small_seed = [0u8; 32];
-    small_seed[..4].copy_from_slice(&16u32.to_le_bytes());
-    scenario.seed = small_seed;
-    let canon =
-        Arc::new(mk_core::canon::CanonLocked::load(&repo("fixtures/island/canon.json")).unwrap());
-    let life = mk_engine::regional::life::IslandLife::bootstrap(scenario, canon).unwrap();
-    // Paced, not flat out. This container has four cores and this file
-    // holds eighteen islands, each on its own sim thread: at
-    // `AsFastAsPossible` every one of them pegs a core and the tokio
-    // runtime serving the HTTP requests is starved, so
-    // `a_new_person_can_be_read_the_moment_they_exist` misses its
-    // sixty-second deadline. Measured, that was about a coin flip --
-    // 19 passed twice, then failed twice, on the same commit.
-    //
-    // The dominant cost is not the stepping, it is `DIGEST_EVERY`: every
-    // 60 ticks the loop hashes the whole state, and that walks two
-    // 1,152,000-cell grids whatever `tree_cap` is, so a test island pays
-    // nearly what the real one does. Slowing the ticks is what thins the
-    // digests out. `Times(600)` runs a 60-second step every 100 ms, so a
-    // digest lands every six seconds rather than every half one, and a
-    // test needing sixty ticks still gets them well inside its deadline.
-    let world = spawn(life, SimSpeed::Times(600));
-
-    let data_dir = Box::leak(Box::new(tempfile::tempdir().unwrap()));
-    let (population, _) =
-        island_humans::IslandHumanPopulation::open(data_dir.path(), [11u8; 32]).unwrap();
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let port = listener.local_addr().unwrap().port();
-    let routes = server::routes_with_world(
-        Arc::new(Mutex::new(population)),
-        ControlAuth::LoopbackOnly,
-        Some(world.clone()),
-    );
-    let server = tokio::spawn(async move { warp::serve(routes).incoming(listener).run().await });
-    (world, port, server)
 }
 
 /// The body of an HTTP response, after the headers.

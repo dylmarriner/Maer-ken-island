@@ -411,14 +411,21 @@ fn png_reply(bytes: Option<std::sync::Arc<Vec<u8>>>) -> impl warp::Reply {
 /// cannot change while the process lives. A client across a network
 /// fetches 5.8 MB once and never again.
 fn elevation_reply(bytes: Option<std::sync::Arc<Vec<u8>>>, gzip: bool) -> impl warp::Reply {
+    // The refusal is JSON and says `--scenario`, like every other endpoint
+    // that has no island to answer about. This used to be an empty body
+    // with a 404, which is the one answer a client cannot do anything
+    // with: it cannot tell "this backend is not simulating an island"
+    // from "something between us ate the response".
+    const NO_ISLAND: &str = "{\"errors\":[\"No island is running, so it has no terrain. Start \
+                             the server with --scenario.\"]}";
     let (status, body) = match bytes {
-        None => (StatusCode::NOT_FOUND, Vec::new()),
+        None => (StatusCode::NOT_FOUND, NO_ISLAND.as_bytes().to_vec()),
         Some(bytes) => (StatusCode::OK, bytes.to_vec()),
     };
     let kind = if status == StatusCode::OK {
         "application/octet-stream"
     } else {
-        "text/plain; charset=utf-8"
+        "application/json"
     };
     let encoding = if gzip && status == StatusCode::OK {
         "gzip"
@@ -433,7 +440,15 @@ fn elevation_reply(bytes: Option<std::sync::Arc<Vec<u8>>>, gzip: bool) -> impl w
                 encoding,
             ),
             "cache-control",
-            "public, max-age=31536000, immutable",
+            // Immutable only when there is terrain: the island refuses
+            // every terrain edit, so those bytes cannot change while the
+            // process lives. A refusal is not immutable -- the island it
+            // is refusing about may well be started next.
+            if status == StatusCode::OK {
+                "public, max-age=31536000, immutable"
+            } else {
+                "no-store"
+            },
         ),
         status,
     )
@@ -2105,6 +2120,11 @@ mod remote_tests {
             .reply(&filter)
             .await;
         assert_eq!(response.status(), 404);
-        assert!(response.body().is_empty());
+        let body: serde_json::Value = serde_json::from_slice(response.body())
+            .expect("a refusal is JSON, like every other endpoint's");
+        assert!(
+            body["errors"][0].as_str().unwrap().contains("--scenario"),
+            "{body}"
+        );
     }
 }

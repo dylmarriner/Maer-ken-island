@@ -5,6 +5,7 @@ members = [
     "crates/mk_interventions",
     "crates/mk_island",
     "crates/mk_island_api",
+    "crates/mk_island_client",
     "apps/island_humans",
     "apps/island",
     "apps/island_preview",
