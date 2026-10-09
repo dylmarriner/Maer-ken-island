@@ -7,13 +7,15 @@
 
 use island::run as headless;
 use island::serve;
-use island::serve::auth::{ControlAuth, TOKEN_ENV};
+use island::serve::auth::{ControlAuth, ReadAuth, READ_TOKEN_ENV, TOKEN_ENV};
+use island::serve::server::ServeConfig;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 const USAGE: &str = "\
 island serve   [--data-dir ./island-data] [--seed <64 hex>] [--bind 127.0.0.1:8080]
                [--scenario <path> | --snapshot <path>] [--speed real|max|<n>] [--log <path>]
+               [--allow-origin <url>]...
 island run     (--scenario <path> | --snapshot <path>) [--steps <n>] [--dt <seconds>]
                [--save <path>] [--save-root <dir>]
 island replay  --scenario <path> --log <path> [--until <tick>]
@@ -40,6 +42,12 @@ serve    the dashboard: the overview at /, the roster at /people, the island
                    the full island and the island does not step meanwhile
   --import-0b DIR  carry the people stored in a Phase-0b data directory into
                    the world, once, as creations at the first step
+  --allow-origin U a web frontend served from this address may call this
+                   backend. Give it exactly as a browser sends it --
+                   scheme, host and port, no path: https://island.example.
+                   Repeat it for more than one. Without any, a browser may
+                   only call this server from pages it served itself, which
+                   is what you want when they are the same machine.
 
 run      the simulated island, headless, printing its canonical state digest.
          Two runs of one scenario and seed print the same digest.
@@ -63,9 +71,15 @@ inspect  what is in a saved island, without running it.
   --scenario PATH  which canon it was written under (default the island
                    fixture canon)
 
-Reading never needs a token. Creating people needs ISLAND_CONTROL_TOKEN as a
-bearer token when it is set; without one, only a loopback bind accepts
-creations. Set ISLAND_ACCESS_LOG=off to silence the request log.";
+Two tokens, answering two questions. ISLAND_CONTROL_TOKEN decides who may
+change the island: set it and every write needs `Authorization: Bearer
+<token>`; without it only a loopback bind accepts writes at all.
+ISLAND_READ_TOKEN decides who may look. Reads are open without it, which is
+right on a loopback bind and a decision anywhere else -- a backend bound to
+0.0.0.0 with neither token is readable by anyone who can reach the port, and
+this says so on startup rather than leaving it to be discovered.
+
+Set ISLAND_ACCESS_LOG=off to silence the request log.";
 
 /// Printed when someone asks for help: that is not an error, so it goes to
 /// stdout and exits cleanly.
@@ -175,6 +189,7 @@ fn main() {
     let mut data_dir = PathBuf::from("island-data");
     let mut seed = island_humans::DEFAULT_SEED;
     let mut bind: std::net::SocketAddr = "127.0.0.1:8080".parse().expect("valid default");
+    let mut allowed_origins: Vec<String> = Vec::new();
     let mut iter = rest.iter();
     while let Some(flag) = iter.next() {
         if matches!(flag.as_str(), "--help" | "-h") {
@@ -191,6 +206,18 @@ fn main() {
                 seed = bytes.try_into().unwrap_or_else(|_| usage());
             }
             "--bind" => bind = value.parse().unwrap_or_else(|_| usage()),
+            "--allow-origin" => {
+                let origin = value.trim_end_matches('/').to_string();
+                if !origin.starts_with("http://") && !origin.starts_with("https://") {
+                    eprintln!(
+                        "--allow-origin {value:?} is not an origin. A browser sends scheme, host \
+                         and port and nothing else: https://island.example or \
+                         http://192.168.1.20:3000.\n"
+                    );
+                    usage()
+                }
+                allowed_origins.push(origin);
+            }
             // Read again below, where the world is opened; named here so
             // they are accepted rather than falling through to the usage
             // message as unknown flags.
@@ -286,6 +313,7 @@ fn main() {
         eprintln!("warning: {warning}");
     }
     let auth = ControlAuth::resolve(std::env::var(TOKEN_ENV).ok(), bind.ip());
+    let reads = ReadAuth::resolve(std::env::var(READ_TOKEN_ENV).ok());
     println!("Maer-Ken Island dashboard is up.");
     println!("  Overview        http://{bind}/");
     println!("  People          http://{bind}/people");
@@ -309,14 +337,38 @@ fn main() {
          yourself — without it the records cannot be read again.",
         data_dir.display()
     );
+    println!("Reading: {}.", reads.describe());
+    if !allowed_origins.is_empty() {
+        println!(
+            "A web frontend served from {} may call this backend.",
+            allowed_origins.join(", ")
+        );
+    }
+    // Said once, loudly, on the one configuration where it matters. A
+    // backend reachable from another machine with neither token is open to
+    // everyone who can reach the port, and that should be a choice rather
+    // than something discovered later.
+    if !bind.ip().is_loopback() && !reads.needs_token() {
+        println!();
+        println!(
+            "  This backend is bound to {bind}, so anyone who can reach that port can read \
+             everything on this island: every person's full record included. Set \
+             {READ_TOKEN_ENV} before exposing it to a network you do not control."
+        );
+        println!();
+    }
     println!("Press Ctrl-C to stop. Set ISLAND_ACCESS_LOG=off to silence the request log.");
 
     let runtime = tokio::runtime::Runtime::new().expect("tokio runtime");
-    if let Err(err) = runtime.block_on(serve::server::run_with_world(
+    if let Err(err) = runtime.block_on(serve::server::run_with_config(
         Arc::new(Mutex::new(population)),
-        auth,
         bind,
         world,
+        ServeConfig {
+            control: auth,
+            reads,
+            allowed_origins,
+        },
     )) {
         eprintln!("could not serve on {bind}: {err}");
         std::process::exit(1);

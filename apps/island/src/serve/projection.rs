@@ -729,3 +729,95 @@ fn stocks(life: &IslandLife) -> Stocks {
         water_shortfalls: life.shortfalls.water,
     }
 }
+
+/// The four bytes that start [`elevation_bin`]: "Maer-Ken Island
+/// Elevation". A client that reads something else has been handed the
+/// wrong file, and should say so rather than render noise.
+pub const ELEVATION_MAGIC: [u8; 4] = *b"MKIE";
+
+/// The layout version of [`elevation_bin`], bumped if the bytes after the
+/// header ever mean something different.
+pub const ELEVATION_FORMAT: u16 = 1;
+
+/// Bytes of header before the grids begin.
+pub const ELEVATION_HEADER_BYTES: usize = 4 + 2 + 4 + 4 + 4;
+
+/// The island's terrain as numbers, for a client that builds a mesh out of
+/// it rather than looking at a picture of it.
+///
+/// `/api/map.png` is a render: a colour per cell, decided here, which is
+/// the right answer for a page showing the island and the wrong one for a
+/// desktop application that has to put the ground at a height. It cannot
+/// recover metres from a colour ramp, and should not try.
+///
+/// So this is the same grid as numbers. Little-endian throughout, because
+/// every machine that will read it is, and saying so is cheaper than a
+/// byte-order mark nobody checks:
+///
+/// | Bytes | Meaning |
+/// |---|---|
+/// | 0..4 | [`ELEVATION_MAGIC`] |
+/// | 4..6 | `u16` [`ELEVATION_FORMAT`] |
+/// | 6..10 | `u32` rows |
+/// | 10..14 | `u32` cols |
+/// | 14..18 | `f32` cell size, metres |
+/// | 18.. | `rows * cols` `f32` elevations, metres |
+/// | then | `rows * cols` `u8` land mask, 1 for land |
+///
+/// Row 0 is south and column 0 is west, as everywhere else in the domain,
+/// and a cell's centre is `((col + 0.5) * cell_size, (row + 0.5) *
+/// cell_size)` — the domain's origin is its own south-west corner, so
+/// there is no origin to carry.
+///
+/// `f32` rather than `f64` halves it and loses nothing that matters: the
+/// island's relief is a few thousand metres and `f32` holds that to well
+/// under a millimetre. This is for drawing, and it is never hashed — the
+/// canonical digest reads the `f64` grid the simulation owns.
+///
+/// The mask is a byte per cell rather than a bitfield. It compresses to
+/// almost nothing beside the elevations, and a bitfield would make every
+/// client that reads this write a shift and a mask correctly.
+pub fn elevation_bin(terrain: &Terrain) -> Vec<u8> {
+    use mk_island::DomainLevel::Medium;
+    let rows = terrain.domain.rows(Medium);
+    let cols = terrain.domain.cols(Medium);
+    let cells = rows * cols;
+
+    let mut out = Vec::with_capacity(ELEVATION_HEADER_BYTES + cells * 5);
+    out.extend_from_slice(&ELEVATION_MAGIC);
+    out.extend_from_slice(&ELEVATION_FORMAT.to_le_bytes());
+    out.extend_from_slice(&(rows as u32).to_le_bytes());
+    out.extend_from_slice(&(cols as u32).to_le_bytes());
+    out.extend_from_slice(&(terrain.domain.cell_size_m(Medium) as f32).to_le_bytes());
+    for row in 0..rows {
+        for col in 0..cols {
+            out.extend_from_slice(&(*terrain.elevation_m.get(row, col) as f32).to_le_bytes());
+        }
+    }
+    for row in 0..rows {
+        for col in 0..cols {
+            out.push(u8::from(*terrain.land_mask.get(row, col)));
+        }
+    }
+    out
+}
+
+/// [`elevation_bin`] gzipped, for `Content-Encoding: gzip`.
+///
+/// Worth the once-at-startup cost: the island's medium grid is 1,152,000
+/// cells, so the raw bytes are about 5.8 MB, and a desktop client on the
+/// other side of a network pays that before it can draw anything. The
+/// grid is mostly smoothly varying numbers and sea, which deflates hard.
+///
+/// Both forms are kept. A client that says `Accept-Encoding: identity`
+/// gets the raw bytes rather than being handed gzip it did not ask for,
+/// which is the one way this could break a caller that is behaving
+/// correctly.
+pub fn gzipped(bytes: &[u8]) -> Vec<u8> {
+    use std::io::Write;
+    let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+    // Writing to a `Vec` cannot fail, and `finish` only propagates what
+    // the write did, so this is infallible in fact as well as in practice.
+    let _ = encoder.write_all(bytes);
+    encoder.finish().unwrap_or_default()
+}

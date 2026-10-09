@@ -22,6 +22,9 @@ mk_island = { path = "../../crates/mk_island" }
 mk_island_api = { path = "../../crates/mk_island_api" }
 mk_interventions = { path = "../../crates/mk_interventions" }
 bytes = "1"
+# Terrain for a 3D client is 5.8 MB of grid; it deflates hard and is
+# built once, so the backend holds it gzipped as well as raw.
+flate2.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 hex.workspace = true
@@ -30,6 +33,7 @@ tokio.workspace = true
 
 [dev-dependencies]
 warp = { workspace = true, features = ["test"] }
+mk_island_api = { path = "../../crates/mk_island_api" }
 tempfile = "3"
 
 [lints]

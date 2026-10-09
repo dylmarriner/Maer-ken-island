@@ -164,6 +164,18 @@ pub struct SimHandle {
     /// nobody but the sim thread may touch the island.
     vegetation_png: Arc<RwLock<Arc<Vec<u8>>>>,
     patch_png: Arc<RwLock<Arc<Vec<u8>>>>,
+    /// The island's terrain as numbers, raw and gzipped.
+    ///
+    /// Built once beside `map_png`, and for the same reason: terrain
+    /// cannot change, so this stays true for the life of the process. The
+    /// picture is for a page; these are for a client that has to put the
+    /// ground at a height and cannot read metres back out of a colour.
+    elevation_bin: Arc<Vec<u8>>,
+    elevation_gz: Arc<Vec<u8>>,
+    /// Whether a snapshot directory was configured, so a frontend can
+    /// offer the button or say why it is not there, rather than offering
+    /// it and having the island refuse.
+    can_snapshot: bool,
     /// Why the replay log last failed to write, if it did.
     ///
     /// The log is what makes a run reproducible, and the timeline the
@@ -208,6 +220,30 @@ impl SimHandle {
     /// The island's elevation map as a PNG, rendered once at startup.
     pub fn map_png(&self) -> Arc<Vec<u8>> {
         Arc::clone(&self.map_png)
+    }
+
+    /// The island's terrain as numbers: see
+    /// [`crate::serve::projection::elevation_bin`] for the layout.
+    /// `gzip` picks the gzipped copy, for a caller that said it would
+    /// take one.
+    pub fn elevation_bin(&self, gzip: bool) -> Arc<Vec<u8>> {
+        if gzip {
+            Arc::clone(&self.elevation_gz)
+        } else {
+            Arc::clone(&self.elevation_bin)
+        }
+    }
+
+    /// Whether `ControlCommand::Snapshot` will write a file rather than
+    /// being refused for want of somewhere to put it.
+    pub fn can_snapshot(&self) -> bool {
+        self.can_snapshot
+    }
+
+    /// The island's terrain, for anything that has to ask the grids a
+    /// question the projection does not answer.
+    pub fn terrain(&self) -> &crate::serve::projection::Terrain {
+        &self.terrain
     }
 
     /// The island's standing vegetation as a PNG, at one pixel per medium
@@ -437,6 +473,11 @@ pub fn spawn_with(
     let map_png =
         Arc::new(island_preview::elevation_image(&life.domain, &life.physical.geophysics).png());
     let terrain = Arc::new(crate::serve::projection::Terrain::of(&life));
+    // The same grids as numbers, for a client that builds a mesh. Both
+    // forms are kept so a caller asking for `identity` is not handed gzip
+    // it did not ask for.
+    let elevation_bin = Arc::new(crate::serve::projection::elevation_bin(&terrain));
+    let elevation_gz = Arc::new(crate::serve::projection::gzipped(&elevation_bin));
     // The vegetation layers, likewise drawn here and then redrawn by the
     // thread on the stems' cadence. Unlike the elevation they move:
     // biomass grows, and a page that drew the island's vegetation once at
@@ -471,6 +512,9 @@ pub fn spawn_with(
         log_error: Arc::new(Mutex::new(None)),
         map_png,
         terrain,
+        elevation_bin,
+        elevation_gz,
+        can_snapshot: snapshots.is_some(),
         vegetation_png,
         patch_png,
     };

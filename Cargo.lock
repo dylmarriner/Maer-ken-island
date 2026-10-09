@@ -2619,6 +2619,7 @@ name = "island"
 version = "0.1.0"
 dependencies = [
  "bytes",
+ "flate2",
  "hex",
  "island_humans",
  "island_preview",

@@ -1737,3 +1737,172 @@ async fn asking_for_a_snapshot_with_nowhere_to_put_it_is_refused() {
     world.stop();
     server.abort();
 }
+
+/// As [`get_bytes`], with one extra request header.
+async fn get_bytes_with(port: u16, path: &str, header: &str) -> (u16, String, Vec<u8>) {
+    let stream = tokio::net::TcpStream::connect(("127.0.0.1", port))
+        .await
+        .expect("the dashboard is listening");
+    let (mut reader, mut writer) = stream.into_split();
+    let request = format!(
+        "GET {path} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\nAccept: */*\r\n\
+         {header}\r\n\r\n"
+    );
+    {
+        use tokio::io::AsyncWriteExt;
+        writer.write_all(request.as_bytes()).await.unwrap();
+        writer.flush().await.unwrap();
+    }
+    let mut response = Vec::new();
+    {
+        use tokio::io::AsyncReadExt;
+        reader.read_to_end(&mut response).await.unwrap();
+    }
+    let split = response
+        .windows(4)
+        .position(|w| w == b"\r\n\r\n")
+        .expect("a header/body boundary");
+    let head = String::from_utf8_lossy(&response[..split]).into_owned();
+    let status = head
+        .lines()
+        .next()
+        .and_then(|l| l.split_whitespace().nth(1))
+        .and_then(|c| c.parse().ok())
+        .expect("a status line");
+    (status, head, response[split + 4..].to_vec())
+}
+
+#[tokio::test]
+async fn the_terrain_is_served_as_numbers_a_renderer_can_use() {
+    // A desktop client builds a mesh out of the island. It cannot do that
+    // from `/api/map.png`: a colour ramp is not a height. This is the same
+    // grid as numbers, and this test reads it back the way that client
+    // will -- including against the island's own `/api/world`, so a
+    // mismatch between the two is caught here rather than as terrain that
+    // is subtly the wrong size.
+    let (world, port, server) = a_running_dashboard().await;
+
+    let (status, head, body) = get_bytes(port, "/api/elevation.bin").await;
+    assert_eq!(status, 200, "{head}");
+    assert!(
+        head.to_ascii_lowercase()
+            .contains("content-type: application/octet-stream"),
+        "{head}"
+    );
+    assert!(
+        head.to_ascii_lowercase().contains("immutable"),
+        "terrain cannot change while the process lives, and should say so: {head}"
+    );
+
+    assert_eq!(&body[0..4], b"MKIE", "the magic a client checks");
+    let format = u16::from_le_bytes(body[4..6].try_into().unwrap());
+    assert_eq!(format, island::serve::projection::ELEVATION_FORMAT);
+    let rows = u32::from_le_bytes(body[6..10].try_into().unwrap()) as usize;
+    let cols = u32::from_le_bytes(body[10..14].try_into().unwrap()) as usize;
+    let cell_size_m = f32::from_le_bytes(body[14..18].try_into().unwrap());
+
+    // The shape has to agree with what `/api/world` tells the same client
+    // about the same island, or it will draw the right numbers at the
+    // wrong scale.
+    let (_, world_body) = get(port, "/api/world").await;
+    let published: serde_json::Value = serde_json::from_str(body_of(&world_body)).unwrap();
+    assert_eq!(rows, published["land"]["rows"].as_u64().unwrap() as usize);
+    assert_eq!(cols, published["land"]["cols"].as_u64().unwrap() as usize);
+    assert_eq!(
+        f64::from(cell_size_m),
+        published["land"]["cell_size_m"].as_f64().unwrap()
+    );
+
+    let header = island::serve::projection::ELEVATION_HEADER_BYTES;
+    assert_eq!(
+        body.len(),
+        header + rows * cols * 5,
+        "{rows}x{cols}: four bytes of elevation and one of mask per cell"
+    );
+
+    // The numbers themselves: every land cell's elevation, and the count
+    // of land cells, have to match what the island says they are.
+    let mut land = 0usize;
+    let mut highest = f32::MIN;
+    for i in 0..rows * cols {
+        let at = header + i * 4;
+        let elevation = f32::from_le_bytes(body[at..at + 4].try_into().unwrap());
+        assert!(elevation.is_finite(), "cell {i} is {elevation}");
+        let is_land = body[header + rows * cols * 4 + i] == 1;
+        if is_land {
+            land += 1;
+            highest = highest.max(elevation);
+        }
+    }
+    assert_eq!(
+        land,
+        published["land"]["land_cells"].as_u64().unwrap() as usize,
+        "the mask and the island disagree about how much of it is land"
+    );
+    assert!(highest > 0.0, "no land cell is above sea level");
+
+    // And one cell read both ways. `/api/cell` answers from the same
+    // grids; if these disagree, one of the two is lying about the island.
+    let (_, cell_body) = get(port, &format!("/api/cell/{}/{}", rows / 2, cols / 2)).await;
+    // `/api/cell` wraps its answer in a `cell` object.
+    let cell =
+        serde_json::from_str::<serde_json::Value>(body_of(&cell_body)).unwrap()["cell"].clone();
+    let i = (rows / 2) * cols + cols / 2;
+    let at = header + i * 4;
+    let elevation = f32::from_le_bytes(body[at..at + 4].try_into().unwrap());
+    assert!(
+        (f64::from(elevation) - cell["elevation_m"].as_f64().unwrap()).abs() < 0.5,
+        "the binary grid says {elevation} and /api/cell says {}",
+        cell["elevation_m"]
+    );
+    assert_eq!(
+        body[header + rows * cols * 4 + i] == 1,
+        cell["land"].as_bool().unwrap()
+    );
+
+    // Gzip when it is offered, and the same bytes underneath.
+    let (status, head, gz) =
+        get_bytes_with(port, "/api/elevation.bin", "Accept-Encoding: gzip").await;
+    assert_eq!(status, 200, "{head}");
+    assert!(
+        head.to_ascii_lowercase().contains("content-encoding: gzip"),
+        "{head}"
+    );
+    assert!(
+        gz.len() < body.len(),
+        "gzip made it bigger: {} against {}",
+        gz.len(),
+        body.len()
+    );
+    let mut inflated = Vec::new();
+    {
+        use std::io::Read;
+        flate2::read::GzDecoder::new(&gz[..])
+            .read_to_end(&mut inflated)
+            .expect("the gzip stream is well formed");
+    }
+    assert_eq!(inflated, body, "the two encodings are not the same island");
+
+    world.stop();
+    server.abort();
+}
+
+#[tokio::test]
+async fn a_client_is_told_what_this_backend_can_do_before_it_asks_for_anything() {
+    let (world, port, server) = a_running_dashboard().await;
+    let (status, response) = get(port, "/api/version").await;
+    assert_eq!(status, 200);
+    let version: mk_island_api::ServerVersion =
+        serde_json::from_str(body_of(&response)).expect("the shared schema reads it");
+    assert!(version.compatibility(mk_island_api::API_VERSION).is_ok());
+    assert!(version.capabilities.world, "an island is running");
+    assert!(version.capabilities.elevation);
+    assert!(!version.capabilities.reads_need_token);
+    assert!(
+        !version.capabilities.snapshots,
+        "this fixture was started with no snapshot directory, and saying it \
+         could write one would send an operator to a button that refuses"
+    );
+    world.stop();
+    server.abort();
+}

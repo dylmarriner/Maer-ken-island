@@ -1,7 +1,7 @@
 //! The dashboard's HTTP API and pages. Reads never change anything; the one
 //! write, `POST /api/humans`, is gated by [`ControlAuth`].
 
-use super::auth::ControlAuth;
+use super::auth::{ControlAuth, ReadAuth};
 use super::pages;
 use super::read;
 use super::sim::{IslandCommand, SimHandle, SimSpeed};
@@ -228,25 +228,38 @@ pub fn options() -> serde_json::Value {
     })
 }
 
+/// The answer to a write this caller may not make.
+///
+/// One place, because three routes were each writing their own copy of it
+/// and a frontend has to be able to tell "your token is wrong" from "this
+/// server takes no writes from off-host at all" -- which is what
+/// `writes_mode` is for, and why it has to be the same word everywhere.
+///
+/// `what` completes "This dashboard is not allowed to ...".
+fn may_not_write(auth: &ControlAuth, what: &str) -> warp::reply::WithStatus<warp::reply::Json> {
+    json(
+        StatusCode::UNAUTHORIZED,
+        &serde_json::json!({
+            "errors": [match auth.mode() {
+                "token" => "That control token was not accepted.".to_string(),
+                _ => format!("This dashboard is not allowed to {what}."),
+            }],
+            "writes": auth.describe(),
+            "writes_mode": auth.mode(),
+        }),
+    )
+}
+
 pub fn create(
     population: &mut IslandHumanPopulation,
     auth: &ControlAuth,
     authorization: Option<&str>,
     request: CreateHumanRequest,
 ) -> (StatusCode, serde_json::Value) {
-    if !auth.permits(authorization) {
-        return (
-            StatusCode::UNAUTHORIZED,
-            serde_json::json!({
-                "errors": [match auth.mode() {
-                    "token" => "That control token was not accepted.",
-                    _ => "This dashboard is not allowed to create people.",
-                }],
-                "writes": auth.describe(),
-                "writes_mode": auth.mode(),
-            }),
-        );
-    }
+    debug_assert!(
+        auth.permits(authorization),
+        "the route checks this before parsing; see `may_not_write`"
+    );
     match population.create_human(request, "dashboard") {
         Ok(created) => (
             StatusCode::CREATED,
@@ -391,6 +404,51 @@ fn png_reply(bytes: Option<std::sync::Arc<Vec<u8>>>) -> impl warp::Reply {
     }
 }
 
+/// The terrain bytes, or a 404 when there is no island to describe.
+///
+/// `immutable` for a year, and that is earned rather than optimistic: the
+/// island refuses `SculptTerrain` and `SmoothTerrain`, so these bytes
+/// cannot change while the process lives. A client across a network
+/// fetches 5.8 MB once and never again.
+fn elevation_reply(bytes: Option<std::sync::Arc<Vec<u8>>>, gzip: bool) -> impl warp::Reply {
+    let (status, body) = match bytes {
+        None => (StatusCode::NOT_FOUND, Vec::new()),
+        Some(bytes) => (StatusCode::OK, bytes.to_vec()),
+    };
+    let kind = if status == StatusCode::OK {
+        "application/octet-stream"
+    } else {
+        "text/plain; charset=utf-8"
+    };
+    let encoding = if gzip && status == StatusCode::OK {
+        "gzip"
+    } else {
+        "identity"
+    };
+    warp::reply::with_status(
+        warp::reply::with_header(
+            warp::reply::with_header(
+                warp::reply::with_header(body, "content-type", kind),
+                "content-encoding",
+                encoding,
+            ),
+            "cache-control",
+            "public, max-age=31536000, immutable",
+        ),
+        status,
+    )
+}
+
+/// Whether a real computer bridge is attached to this process.
+///
+/// Read from the environment rather than from the world, because that is
+/// where it is decided: `HttpComputerBridge::from_env` attaches only when
+/// `COMPUTER_ACTIONS_ENABLED=1`, and nothing downstream of that decision
+/// is allowed to change the island's deterministic state.
+fn computer_service_attached() -> bool {
+    std::env::var("COMPUTER_ACTIONS_ENABLED").as_deref() == Ok("1")
+}
+
 /// Said in `/api/trees`, because a viewer that drew an empty island and
 /// said nothing would be read as a treeless one.
 const TREES_ARE_LOCAL: &str =
@@ -482,6 +540,126 @@ fn access_log() -> warp::log::Log<impl Fn(warp::log::Info<'_>) + Copy> {
     })
 }
 
+/// How this backend is exposed.
+///
+/// The dashboard used to be one program on one machine, where none of
+/// these questions came up: reads were open because the port was, and a
+/// browser only ever talked to the server that sent it the page. A backend
+/// serving a web app hosted somewhere else and a desktop application on
+/// somebody's laptop has to answer all three deliberately.
+#[derive(Debug, Clone)]
+pub struct ServeConfig {
+    /// Who may change the island.
+    pub control: ControlAuth,
+    /// Who may read it. [`ReadAuth::Open`] is right on a loopback bind and
+    /// is a decision anywhere else.
+    pub reads: ReadAuth,
+    /// Browser origins allowed to call this server's API, exactly as they
+    /// appear in an `Origin` header — scheme, host and port, no path, no
+    /// trailing slash (`https://island.example:8443`).
+    ///
+    /// Empty means no cross-origin header is sent at all, which is not the
+    /// same as refusing: a browser's own same-origin rule then applies,
+    /// which is what it does for a server that has never heard of CORS.
+    /// Nothing but a browser is affected either way — a desktop client and
+    /// `curl` do not send an `Origin` and are not bound by one.
+    pub allowed_origins: Vec<String>,
+}
+
+impl ServeConfig {
+    /// The way the dashboard has always run: writes by the control rule,
+    /// reads open, same-origin only.
+    pub fn local(control: ControlAuth) -> Self {
+        Self {
+            control,
+            reads: ReadAuth::Open,
+            allowed_origins: Vec::new(),
+        }
+    }
+}
+
+/// A read refused for want of a token.
+///
+/// A rejection rather than an answer, because the gate sits in front of
+/// every route and has no idea which one was being asked for.
+#[derive(Debug)]
+struct NeedsReadToken;
+
+impl warp::reject::Reject for NeedsReadToken {}
+
+/// Turn the gate's refusal, and a browser's blocked origin, into JSON.
+///
+/// Total, because the filter it recovers has to come out `Infallible` for
+/// `warp::serve`. In routing terms the last arm is unreachable: the page
+/// routes end in a catch-all that matches everything, so the only
+/// rejections that reach here are the two this names. It answers anyway,
+/// and says plainly that it does not know what happened, rather than
+/// letting warp return a bare 500 with no body.
+async fn refusals(err: warp::Rejection) -> Result<Box<dyn warp::Reply>, std::convert::Infallible> {
+    if err.find::<NeedsReadToken>().is_some() {
+        return Ok(Box::new(json(
+            StatusCode::UNAUTHORIZED,
+            &serde_json::json!({
+                "errors": ["This island is not readable without a token. Send it as \
+                            `Authorization: Bearer <token>`."],
+                "reads": "token",
+            }),
+        )));
+    }
+    if let Some(forbidden) = err.find::<warp::filters::cors::CorsForbidden>() {
+        return Ok(Box::new(json(
+            StatusCode::FORBIDDEN,
+            &serde_json::json!({
+                "errors": [format!(
+                    "This browser origin is not one the island accepts: {forbidden}. Start the \
+                     server with --allow-origin for the address the page is served from."
+                )],
+            }),
+        )));
+    }
+    Ok(Box::new(json(
+        StatusCode::INTERNAL_SERVER_ERROR,
+        &serde_json::json!({
+            "errors": [format!(
+                "The island could not route that request and does not know why: {err:?}. This \
+                 is a bug in the server rather than anything wrong with the request."
+            )],
+        }),
+    )))
+}
+
+/// Refuse every `/api` request that does not carry the read token.
+///
+/// In front of the routes rather than inside each of them, because a
+/// request that may not be read must not be answered differently
+/// depending on which endpoint it asked for -- a 404 for an unknown path
+/// and a 401 for a known one would tell an unauthenticated caller which
+/// paths exist.
+///
+/// The pages are deliberately outside it. They are markup with no island
+/// in them; every number on them arrives by `fetch`, which is gated. A
+/// browser pointed at a locked server therefore loads the page and is
+/// asked for the token, instead of being handed a bare 401 with no way to
+/// enter one.
+fn read_gate(
+    reads: ReadAuth,
+    control: ControlAuth,
+) -> impl Filter<Extract = (), Error = warp::Rejection> + Clone {
+    warp::path::peek()
+        .and(warp::header::optional::<String>("authorization"))
+        .and_then(move |peek: warp::path::Peek, header: Option<String>| {
+            let (reads, control) = (reads.clone(), control.clone());
+            async move {
+                if !peek.as_str().starts_with("api") || reads.permits(header.as_deref(), &control) {
+                    Ok(())
+                } else {
+                    Err(warp::reject::custom(NeedsReadToken))
+                }
+            }
+        })
+        .untuple_one()
+}
+
 pub fn routes(
     population: SharedPopulation,
     auth: ControlAuth,
@@ -499,6 +677,17 @@ pub fn routes_with_world(
     auth: ControlAuth,
     world: Option<SimHandle>,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = std::convert::Infallible> + Clone {
+    routes_with_config(population, world, ServeConfig::local(auth))
+}
+
+/// The routes as an operator configured them: who may read, who may write,
+/// and which browser origins may ask at all.
+pub fn routes_with_config(
+    population: SharedPopulation,
+    world: Option<SimHandle>,
+    config: ServeConfig,
+) -> impl Filter<Extract = (impl warp::Reply,), Error = std::convert::Infallible> + Clone {
+    let auth = config.control.clone();
     let get_world = warp::path!("api" / "world")
         .and(read())
         .and(with(world.clone()))
@@ -593,6 +782,14 @@ pub fn routes_with_world(
              body: bytes::Bytes,
              population: SharedPopulation,
              auth: ControlAuth| {
+                // Who before what. Parsing first told an unauthenticated
+                // caller the difference between a malformed body and a
+                // refused one, and made the server do the parsing for
+                // them; neither matters on a loopback bind and both do on
+                // a backend reachable from somewhere else.
+                if !auth.permits(authorization.as_deref()) {
+                    return may_not_write(&auth, "create people");
+                }
                 let request: CreateHumanRequest = match serde_json::from_slice(&body) {
                     Ok(request) => request,
                     Err(err) => {
@@ -634,20 +831,10 @@ pub fn routes_with_world(
                         &serde_json::json!({ "errors": ["No island is running, so there is nowhere to put anybody. Start the server with --scenario."] }),
                     );
                 };
+                // The same rule as storing a person: a world write is no
+                // less a write for happening a step later.
                 if !auth.permits(authorization.as_deref()) {
-                    // The same rule as storing a person: a world write is
-                    // no less a write for happening a step later.
-                    return json(
-                        StatusCode::UNAUTHORIZED,
-                        &serde_json::json!({
-                            "errors": [match auth.mode() {
-                                "token" => "That control token was not accepted.",
-                                _ => "This dashboard is not allowed to create people.",
-                            }],
-                            "writes": auth.describe(),
-                            "writes_mode": auth.mode(),
-                        }),
-                    );
+                    return may_not_write(&auth, "create people");
                 }
                 let request: WorldCreateRequest = match serde_json::from_slice(&body) {
                     Ok(request) => request,
@@ -913,17 +1100,7 @@ pub fn routes_with_world(
                     );
                 };
                 if !auth.permits(authorization.as_deref()) {
-                    return json(
-                        StatusCode::UNAUTHORIZED,
-                        &serde_json::json!({
-                            "errors": [match auth.mode() {
-                                "token" => "That control token was not accepted.",
-                                _ => "This dashboard is not allowed to intervene in the world.",
-                            }],
-                            "writes": auth.describe(),
-                            "writes_mode": auth.mode(),
-                        }),
-                    );
+                    return may_not_write(&auth, "intervene in the world");
                 }
                 let action: mk_interventions::InterventionAction =
                     match serde_json::from_slice(&body) {
@@ -1023,14 +1200,13 @@ pub fn routes_with_world(
                     );
                 };
                 if !auth.permits(authorization.as_deref()) {
-                    return json(
-                        StatusCode::UNAUTHORIZED,
-                        &serde_json::json!({
-                            "errors": ["This dashboard is not allowed to control the island."],
-                            "writes": auth.describe(),
-                            "writes_mode": auth.mode(),
-                        }),
-                    );
+                    // This used to say "not allowed to control the island"
+                    // whatever the mode was, so a wrong token and a server
+                    // that takes no writes at all read identically. They
+                    // need different answers: one is fixed by typing the
+                    // right token, the other by starting the server
+                    // differently.
+                    return may_not_write(&auth, "control the island");
                 }
                 let request: ControlRequest = match serde_json::from_slice(&body) {
                     Ok(request) => request,
@@ -1149,6 +1325,75 @@ pub fn routes_with_world(
             )
         });
 
+    // Asked before anything else, and answered without a token: a client
+    // cannot negotiate a schema it is not allowed to ask about, and a
+    // version endpoint behind the read gate would mean a frontend showing
+    // "unauthorized" where it should show "this server is older than you".
+    //
+    // It says nothing a reader could not learn by watching which endpoints
+    // answer: no token, no bind address, no data. What it does say is what
+    // this server can do, so a frontend offers what will work instead of
+    // offering everything and letting half of it fail.
+    let get_version = {
+        let reads_need_token = config.reads.needs_token();
+        let origins = config.allowed_origins.clone();
+        let mode = auth.mode().to_string();
+        warp::path!("api" / "version")
+            .and(read())
+            .and(with(world.clone()))
+            .map(move |world: Option<SimHandle>| {
+                let version = mk_island_api::ServerVersion {
+                    api_version: mk_island_api::API_VERSION,
+                    // One version so far, so the floor is the ceiling.
+                    // When the schema breaks, this is what an old client
+                    // is measured against.
+                    api_version_minimum: 1,
+                    server_version: VERSION.to_string(),
+                    capabilities: mk_island_api::Capabilities {
+                        world: world.is_some(),
+                        writes: mode.clone(),
+                        reads_need_token,
+                        allowed_origins: origins.clone(),
+                        elevation: world.is_some(),
+                        computer_service: computer_service_attached(),
+                        snapshots: world.as_ref().is_some_and(|w| w.can_snapshot()),
+                    },
+                };
+                json(
+                    StatusCode::OK,
+                    &serde_json::to_value(version).unwrap_or_default(),
+                )
+            })
+    };
+
+    // The terrain as numbers rather than as a picture, for a client that
+    // builds a mesh out of it. `/api/map.png` cannot serve that: a colour
+    // ramp is not a height, and a renderer that tried to read metres back
+    // out of one would be inventing them.
+    let get_elevation = warp::path!("api" / "elevation.bin")
+        .and(read())
+        .and(warp::header::optional::<String>("accept-encoding"))
+        .and(with(world.clone()))
+        .map(|encodings: Option<String>, world: Option<SimHandle>| {
+            let Some(world) = world else {
+                return elevation_reply(None, false);
+            };
+            // Gzip only when it was offered. Both copies are built at
+            // startup, so answering a caller that asked for `identity`
+            // costs nothing but the bytes it asked for.
+            let gzip = encodings
+                .as_deref()
+                .is_some_and(|value| value.to_ascii_lowercase().contains("gzip"));
+            elevation_reply(Some(world.elevation_bin(gzip)), gzip)
+        });
+
+    // Two endpoints answer without a read token, and both for the same
+    // reason: they are what a caller asks *before* it can have one. A
+    // monitor needs to know whether this process is alive, and a client
+    // needs to know whether this server still speaks its schema. Neither
+    // says anything about the island.
+    let open = get_health.or(get_version).unify();
+
     let api = get_status
         .or(get_properties)
         .or(get_economy)
@@ -1159,6 +1404,7 @@ pub fn routes_with_world(
         .or(get_trees)
         .or(get_vegetation)
         .or(get_patch)
+        .or(get_elevation)
         .or(get_world)
         .or(post_world_human)
         .or(post_world_intervention)
@@ -1167,7 +1413,6 @@ pub fn routes_with_world(
         .or(get_command)
         .or(post_control)
         .or(world_part)
-        .or(get_health)
         .or(get_options)
         .or(get_activity)
         .or(one)
@@ -1175,7 +1420,46 @@ pub fn routes_with_world(
         .or(post)
         .or(unknown_api);
 
-    api.or(pages::routes())
+    // Everything else goes through the read gate, which passes freely when
+    // no read token is configured -- the default, and what every existing
+    // caller sees.
+    let gated = read_gate(config.reads.clone(), auth.clone()).and(api.or(pages::routes()));
+
+    let served = open
+        .map(|reply| Box::new(reply) as Box<dyn warp::Reply>)
+        .or(gated.map(|reply| Box::new(reply) as Box<dyn warp::Reply>))
+        .unify();
+
+    // Cross-origin headers only when an operator named an origin. Sending
+    // none is not a refusal: it is what a server that has never heard of
+    // CORS does, and leaves a browser's own same-origin rule in charge.
+    // Configuring an empty allow-list instead would refuse the same-origin
+    // POSTs the Creator page makes, because a browser sends `Origin` on
+    // those too.
+    //
+    // Outermost, so a preflight is answered before the read gate sees it.
+    // A browser never puts an `Authorization` header on a preflight, so a
+    // gate in front of this would refuse every cross-origin write with a
+    // 401 the page could do nothing about.
+    let served: warp::filters::BoxedFilter<(Box<dyn warp::Reply>,)> =
+        if config.allowed_origins.is_empty() {
+            served.boxed()
+        } else {
+            let cors = warp::cors()
+                .allow_origins(config.allowed_origins.iter().map(String::as_str))
+                .allow_methods(vec!["GET", "HEAD", "POST", "OPTIONS"])
+                .allow_headers(vec!["authorization", "content-type", "accept"])
+                .allow_credentials(false)
+                .max_age(600);
+            served
+                .with(cors)
+                .map(|reply| Box::new(reply) as Box<dyn warp::Reply>)
+                .boxed()
+        };
+
+    served
+        .recover(refusals)
+        .unify()
         .with(warp::reply::with::header(
             "content-security-policy",
             CONTENT_SECURITY_POLICY,
@@ -1209,8 +1493,19 @@ pub async fn run_with_world(
     bind: std::net::SocketAddr,
     world: Option<SimHandle>,
 ) -> std::io::Result<()> {
+    run_with_config(population, bind, world, ServeConfig::local(auth)).await
+}
+
+/// Serve as an operator configured it: the backend a frontend on another
+/// machine talks to.
+pub async fn run_with_config(
+    population: SharedPopulation,
+    bind: std::net::SocketAddr,
+    world: Option<SimHandle>,
+    config: ServeConfig,
+) -> std::io::Result<()> {
     let listener = tokio::net::TcpListener::bind(bind).await?;
-    warp::serve(routes_with_world(population, auth, world))
+    warp::serve(routes_with_config(population, world, config))
         .incoming(listener)
         .graceful(async {
             let _ = tokio::signal::ctrl_c().await;
@@ -1545,5 +1840,271 @@ mod tests {
             let response = warp::test::request().path(path).reply(&filter).await;
             assert_ne!(response.status(), 200, "{path}");
         }
+    }
+}
+
+#[cfg(test)]
+mod remote_tests {
+    //! The backend as something a frontend on another machine talks to.
+    //!
+    //! Everything here was open or absent while the dashboard and the
+    //! island were one process on one machine. None of it is a change to
+    //! what the island does; all of it is a change to who may ask.
+
+    use super::*;
+    use std::net::{IpAddr, Ipv4Addr};
+
+    const LOOPBACK: IpAddr = IpAddr::V4(Ipv4Addr::LOCALHOST);
+    const LAN: IpAddr = IpAddr::V4(Ipv4Addr::new(192, 168, 1, 20));
+    const PAGE: &str = "https://island.example";
+
+    fn stored() -> (tempfile::TempDir, SharedPopulation) {
+        let tmp = tempfile::tempdir().unwrap();
+        let (population, _) = IslandHumanPopulation::open(tmp.path(), [3u8; 32]).unwrap();
+        (tmp, Arc::new(Mutex::new(population)))
+    }
+
+    fn served(
+        config: ServeConfig,
+    ) -> (
+        tempfile::TempDir,
+        impl Filter<Extract = (impl warp::Reply + 'static,), Error = std::convert::Infallible>
+            + Clone
+            + 'static,
+    ) {
+        let (tmp, population) = stored();
+        (tmp, routes_with_config(population, None, config))
+    }
+
+    fn remote(reads: ReadAuth, origins: &[&str]) -> ServeConfig {
+        ServeConfig {
+            control: ControlAuth::resolve(Some("control".into()), LAN),
+            reads,
+            allowed_origins: origins.iter().map(|o| o.to_string()).collect(),
+        }
+    }
+
+    /// Every path a frontend reads, so a gate that missed one would show
+    /// up here rather than in production.
+    const READS: [&str; 6] = [
+        "/api/status",
+        "/api/world",
+        "/api/humans",
+        "/api/activity",
+        "/api/creator/options",
+        "/api/nonsense",
+    ];
+
+    #[tokio::test]
+    async fn a_client_can_ask_what_this_server_speaks_before_it_has_a_token() {
+        let (_tmp, filter) = served(remote(ReadAuth::resolve(Some("read".into())), &[]));
+        let response = warp::test::request()
+            .path("/api/version")
+            .reply(&filter)
+            .await;
+        assert_eq!(response.status(), 200, "version must not need a token");
+        let version: mk_island_api::ServerVersion =
+            serde_json::from_slice(response.body()).expect("the shared schema reads it");
+        assert_eq!(version.api_version, mk_island_api::API_VERSION);
+        assert!(version.compatibility(mk_island_api::API_VERSION).is_ok());
+        // Without `--scenario` there is no island, and a frontend should
+        // be told so rather than drawing an empty sea.
+        assert!(!version.capabilities.world);
+        assert!(!version.capabilities.elevation);
+        assert_eq!(version.capabilities.writes, "token");
+        assert!(version.capabilities.reads_need_token);
+    }
+
+    #[tokio::test]
+    async fn a_monitor_can_still_ask_whether_the_process_is_alive() {
+        // A load balancer has no token and should not need one to find out
+        // that the thing behind it is up.
+        let (_tmp, filter) = served(remote(ReadAuth::resolve(Some("read".into())), &[]));
+        for path in ["/healthz", "/api/health"] {
+            let response = warp::test::request().path(path).reply(&filter).await;
+            assert_eq!(response.status(), 200, "{path}");
+        }
+    }
+
+    #[tokio::test]
+    async fn with_a_read_token_every_other_endpoint_is_refused_without_it() {
+        let (_tmp, filter) = served(remote(ReadAuth::resolve(Some("read".into())), &[]));
+        for path in READS {
+            let response = warp::test::request().path(path).reply(&filter).await;
+            assert_eq!(response.status(), 401, "{path} answered without a token");
+            let body: serde_json::Value = serde_json::from_slice(response.body()).unwrap();
+            assert_eq!(body["reads"], "token", "{path}");
+        }
+    }
+
+    #[tokio::test]
+    async fn an_unknown_path_is_refused_the_same_way_a_known_one_is() {
+        // Otherwise the gate is an oracle: a 404 for a path that does not
+        // exist and a 401 for one that does would map the API for somebody
+        // with no token at all.
+        let (_tmp, filter) = served(remote(ReadAuth::resolve(Some("read".into())), &[]));
+        let known = warp::test::request()
+            .path("/api/status")
+            .reply(&filter)
+            .await;
+        let unknown = warp::test::request()
+            .path("/api/nonsense")
+            .reply(&filter)
+            .await;
+        assert_eq!(known.status(), unknown.status());
+        assert_eq!(known.body(), unknown.body());
+    }
+
+    #[tokio::test]
+    async fn the_read_token_opens_them_again() {
+        let (_tmp, filter) = served(remote(ReadAuth::resolve(Some("read".into())), &[]));
+        for path in ["/api/status", "/api/humans", "/api/activity"] {
+            let response = warp::test::request()
+                .path(path)
+                .header("authorization", "Bearer read")
+                .reply(&filter)
+                .await;
+            assert_eq!(response.status(), 200, "{path}");
+        }
+    }
+
+    #[tokio::test]
+    async fn the_pages_load_even_when_the_island_is_locked() {
+        // A browser pointed at a locked server should get the page and be
+        // asked for the token, not a bare 401 with nowhere to type one.
+        // The page carries no island state; every number on it arrives by
+        // a fetch that is gated.
+        let (_tmp, filter) = served(remote(ReadAuth::resolve(Some("read".into())), &[]));
+        for path in ["/", "/people", "/island", "/creator", "/static/app.js"] {
+            let response = warp::test::request().path(path).reply(&filter).await;
+            assert_eq!(response.status(), 200, "{path}");
+        }
+    }
+
+    #[tokio::test]
+    async fn without_a_read_token_nothing_changes_for_anybody() {
+        let (_tmp, filter) = served(remote(ReadAuth::Open, &[]));
+        for path in ["/api/status", "/api/humans", "/", "/api/version"] {
+            let response = warp::test::request().path(path).reply(&filter).await;
+            assert_eq!(response.status(), 200, "{path}");
+        }
+    }
+
+    #[tokio::test]
+    async fn a_named_origin_gets_the_header_that_lets_a_browser_read_the_answer() {
+        let (_tmp, filter) = served(remote(ReadAuth::Open, &[PAGE]));
+        let response = warp::test::request()
+            .path("/api/status")
+            .header("origin", PAGE)
+            .reply(&filter)
+            .await;
+        assert_eq!(response.status(), 200);
+        assert_eq!(
+            response.headers()["access-control-allow-origin"],
+            PAGE,
+            "a browser will discard the body without this"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_preflight_is_answered_without_a_token_and_names_the_write_headers() {
+        // A browser never puts `Authorization` on a preflight, so this has
+        // to be answered in front of the read gate. It was not, once.
+        let (_tmp, filter) = served(remote(ReadAuth::resolve(Some("read".into())), &[PAGE]));
+        let response = warp::test::request()
+            .method("OPTIONS")
+            .path("/api/world/humans")
+            .header("origin", PAGE)
+            .header("access-control-request-method", "POST")
+            .header(
+                "access-control-request-headers",
+                "authorization,content-type",
+            )
+            .reply(&filter)
+            .await;
+        assert_eq!(response.status(), 200, "the preflight was refused");
+        let allowed = response.headers()["access-control-allow-headers"]
+            .to_str()
+            .unwrap()
+            .to_ascii_lowercase();
+        assert!(allowed.contains("authorization"), "{allowed}");
+        assert!(allowed.contains("content-type"), "{allowed}");
+        assert_eq!(response.headers()["access-control-allow-origin"], PAGE);
+    }
+
+    #[tokio::test]
+    async fn an_origin_nobody_named_is_refused_in_words() {
+        let (_tmp, filter) = served(remote(ReadAuth::Open, &[PAGE]));
+        let response = warp::test::request()
+            .path("/api/status")
+            .header("origin", "https://somewhere.else")
+            .reply(&filter)
+            .await;
+        assert_eq!(response.status(), 403);
+        let body: serde_json::Value = serde_json::from_slice(response.body()).unwrap();
+        let message = body["errors"][0].as_str().unwrap();
+        assert!(message.contains("--allow-origin"), "{message}");
+    }
+
+    #[tokio::test]
+    async fn with_no_origins_configured_a_same_origin_post_is_not_refused() {
+        // Configuring an empty allow-list would have refused this: a
+        // browser sends `Origin` on a same-origin POST too, and warp's
+        // CORS filter judges every request that carries one.
+        let (_tmp, population) = stored();
+        let filter = routes_with_config(
+            population,
+            None,
+            ServeConfig::local(ControlAuth::resolve(None, LOOPBACK)),
+        );
+        let response = warp::test::request()
+            .method("POST")
+            .path("/api/humans")
+            .header("origin", PAGE)
+            .json(&serde_json::json!({
+                "name": "Hine Moana", "biological_sex": "female",
+                "birth_timestamp": "1992-11-03T10:15:00+13:00",
+                "birth_latitude": -41.3, "birth_longitude": 174.8, "age_years": 33.9,
+                "height_cm": 166.0, "build": "Athletic", "hair_color": "Black",
+                "eye_color": "Brown", "skin_tone": "Medium"
+            }))
+            .reply(&filter)
+            .await;
+        assert_eq!(response.status(), 201, "a same-origin create was refused");
+        assert!(
+            !response
+                .headers()
+                .contains_key("access-control-allow-origin"),
+            "a server told about no origins should send no cross-origin header"
+        );
+    }
+
+    #[tokio::test]
+    async fn writes_are_still_refused_without_the_control_token() {
+        // The read gate is a second lock, not a replacement for the first.
+        let (_tmp, filter) = served(remote(ReadAuth::resolve(Some("read".into())), &[]));
+        let response = warp::test::request()
+            .method("POST")
+            .path("/api/humans")
+            .header("authorization", "Bearer read")
+            .json(&serde_json::json!({"name": "x"}))
+            .reply(&filter)
+            .await;
+        assert_eq!(
+            response.status(),
+            401,
+            "the read token must not be a licence to write"
+        );
+    }
+
+    #[tokio::test]
+    async fn asking_for_terrain_without_an_island_says_so_rather_than_sending_nothing() {
+        let (_tmp, filter) = served(remote(ReadAuth::Open, &[]));
+        let response = warp::test::request()
+            .path("/api/elevation.bin")
+            .reply(&filter)
+            .await;
+        assert_eq!(response.status(), 404);
+        assert!(response.body().is_empty());
     }
 }
