@@ -60,6 +60,12 @@ island-ui (--scenario <path> | --snapshot <path>) [--data-dir <dir>] [--speed re
                    to open on. The panel switches between them at any
                    time; this is for opening straight onto the estate, and
                    for a headless render that has nobody to press it.
+  --measure N      draw for N seconds, print the frame rate achieved, and
+                   exit. For putting a number on what this costs on the
+                   machine it is actually running on, rather than
+                   guessing: a software rasteriser and a GPU are orders of
+                   magnitude apart and neither can be inferred from the
+                   other.
 
 The island itself is never in this process unless you asked for it with
 --scenario or --snapshot. Nothing drawn here is ever hashed, and the
@@ -339,73 +345,99 @@ fn main() {
         showing = Showing::Island;
     }
 
-    App::new()
-        .add_plugins(
-            DefaultPlugins
-                .set(AssetPlugin {
-                    file_path: assets.to_string_lossy().into_owned(),
-                    ..default()
-                })
-                .set(WindowPlugin {
-                    primary_window: Some(Window {
-                        title: format!("Maer-Ken Island — {}", island.address()),
-                        // Wider than Bevy's 1280x720 default, because two side
-                        // panels and a map between them is what this draws, and
-                        // at 1280 the map is the narrowest of the three.
-                        resolution: bevy::window::WindowResolution::new(1600, 1000),
-                        ..default()
-                    }),
+    // How long to draw for before reporting a frame rate, if anybody
+    // asked. Rejected rather than ignored when it is not a number, for
+    // the same reason `--view` refuses a word it does not know.
+    let measure = flag(&args, "--measure").map(|seconds| match seconds.parse::<f32>() {
+        Ok(seconds) if seconds > 0.0 => seconds,
+        _ => {
+            eprintln!("--measure takes a number of seconds, not `{seconds}`.");
+            usage()
+        }
+    });
+
+    let mut app = App::new();
+    app.add_plugins(
+        DefaultPlugins
+            .set(AssetPlugin {
+                file_path: assets.to_string_lossy().into_owned(),
+                ..default()
+            })
+            .set(WindowPlugin {
+                primary_window: Some(Window {
+                    title: format!("Maer-Ken Island — {}", island.address()),
+                    // Wider than Bevy's 1280x720 default, because two side
+                    // panels and a map between them is what this draws, and
+                    // at 1280 the map is the narrowest of the three.
+                    resolution: bevy::window::WindowResolution::new(1600, 1000),
                     ..default()
                 }),
+                ..default()
+            }),
+    )
+    .add_plugins(EguiPlugin::default())
+    .insert_resource(TheIsland(island))
+    .insert_resource(Latest::default())
+    .insert_resource(View::default())
+    .insert_resource(EstateOrigin::default())
+    .insert_resource(Panels::default())
+    .insert_resource(showing)
+    .insert_resource(ClearColor(Color::srgb(0.02, 0.04, 0.08)))
+    // Spawning a glTF scene goes through `bevy_world_serialization`,
+    // which looks every component up in the type registry and panics
+    // on one it does not find. With Bevy's default features that
+    // registration happens inside plugins this build leaves out, so
+    // the types the models actually carry are registered here. The
+    // alternative is turning features back on for the registry
+    // alone, which would drag alsa and libudev back with them.
+    .register_type::<Transform>()
+    .register_type::<GlobalTransform>()
+    .register_type::<Visibility>()
+    .register_type::<InheritedVisibility>()
+    .register_type::<ViewVisibility>()
+    .register_type::<Name>()
+    .register_type::<bevy::camera::primitives::Aabb>()
+    .register_type::<Mesh3d>()
+    .register_type::<Children>()
+    .register_type::<ChildOf>()
+    .register_type::<TransformTreeChanged>()
+    // The glTF loader hangs these on the entities it makes, so a
+    // model carries them whether or not this application reads them.
+    .register_type::<bevy::gltf::GltfExtras>()
+    .register_type::<bevy::gltf::GltfSceneExtras>()
+    .register_type::<bevy::gltf::GltfSceneName>()
+    .register_type::<bevy::gltf::GltfMeshExtras>()
+    .register_type::<bevy::gltf::GltfMeshName>()
+    .register_type::<bevy::gltf::GltfMaterialExtras>()
+    .register_type::<bevy::gltf::GltfMaterialName>()
+    .add_systems(Startup, (build_ground, build_the_estate, light_the_island))
+    .add_systems(
+        Update,
+        (
+            read_the_island,
+            drive_the_camera,
+            place_islanders,
+            show_what_was_chosen,
         )
-        .add_plugins(EguiPlugin::default())
-        .insert_resource(TheIsland(island))
-        .insert_resource(Latest::default())
-        .insert_resource(View::default())
-        .insert_resource(EstateOrigin::default())
-        .insert_resource(Panels::default())
-        .insert_resource(showing)
-        .insert_resource(ClearColor(Color::srgb(0.02, 0.04, 0.08)))
-        // Spawning a glTF scene goes through `bevy_world_serialization`,
-        // which looks every component up in the type registry and panics
-        // on one it does not find. With Bevy's default features that
-        // registration happens inside plugins this build leaves out, so
-        // the types the models actually carry are registered here. The
-        // alternative is turning features back on for the registry
-        // alone, which would drag alsa and libudev back with them.
-        .register_type::<Transform>()
-        .register_type::<GlobalTransform>()
-        .register_type::<Visibility>()
-        .register_type::<InheritedVisibility>()
-        .register_type::<ViewVisibility>()
-        .register_type::<Name>()
-        .register_type::<bevy::camera::primitives::Aabb>()
-        .register_type::<Mesh3d>()
-        .register_type::<Children>()
-        .register_type::<ChildOf>()
-        .register_type::<TransformTreeChanged>()
-        // The glTF loader hangs these on the entities it makes, so a
-        // model carries them whether or not this application reads them.
-        .register_type::<bevy::gltf::GltfExtras>()
-        .register_type::<bevy::gltf::GltfSceneExtras>()
-        .register_type::<bevy::gltf::GltfSceneName>()
-        .register_type::<bevy::gltf::GltfMeshExtras>()
-        .register_type::<bevy::gltf::GltfMeshName>()
-        .register_type::<bevy::gltf::GltfMaterialExtras>()
-        .register_type::<bevy::gltf::GltfMaterialName>()
-        .add_systems(Startup, (build_ground, build_the_estate, light_the_island))
-        .add_systems(
-            Update,
-            (
-                read_the_island,
-                drive_the_camera,
-                place_islanders,
-                show_what_was_chosen,
-            )
-                .chain(),
-        )
-        .add_systems(EguiPrimaryContextPass, panels)
-        .run();
+            .chain(),
+    )
+    .add_systems(EguiPrimaryContextPass, panels);
+
+    if let Some(seconds) = measure {
+        // Sixty warm-up frames: the first ones carry shader compilation
+        // and the terrain upload, and counting those would report a
+        // number nobody experiences after the first second.
+        app.insert_resource(Measure {
+            seconds,
+            warm: 60,
+            seen: 0,
+            started: None,
+            frames: 0,
+        })
+        .add_systems(Update, measure_frames);
+    }
+
+    app.run();
 }
 
 /// Build the ground once. Terrain cannot change -- the island refuses
@@ -614,6 +646,49 @@ fn build_the_estate(
 /// other two excluded -- in one place instead of three.
 type OnlyIn<'w, 's, Marker, NotA, NotB> =
     Query<'w, 's, &'static mut Visibility, (With<Marker>, Without<NotA>, Without<NotB>)>;
+
+/// Counting frames, when somebody asked for a frame rate.
+///
+/// Not a general diagnostic: it exists so that "what does this cost to
+/// draw" has an answer measured on the machine asking, instead of a
+/// claim. `warm` is skipped before counting starts, because the first
+/// frames include shader compilation and the terrain upload and are not
+/// what anybody means by a frame rate.
+#[derive(Resource)]
+struct Measure {
+    seconds: f32,
+    warm: u32,
+    seen: u32,
+    started: Option<std::time::Instant>,
+    frames: u64,
+}
+
+/// Count frames for the asked-for span, say what it was, and stop.
+fn measure_frames(
+    mut measure: ResMut<Measure>,
+    mut quit: MessageWriter<bevy::app::AppExit>,
+    island: Res<TheIsland>,
+) {
+    if measure.seen < measure.warm {
+        measure.seen += 1;
+        return;
+    }
+    let started = *measure.started.get_or_insert_with(std::time::Instant::now);
+    measure.frames += 1;
+    let elapsed = started.elapsed().as_secs_f32();
+    if elapsed < measure.seconds {
+        return;
+    }
+    println!(
+        "{:.1} frames per second: {} frames in {:.1} s, after {} warm-up frames, drawing {}.",
+        measure.frames as f32 / elapsed,
+        measure.frames,
+        elapsed,
+        measure.warm,
+        island.0.address()
+    );
+    quit.write(bevy::app::AppExit::Success);
+}
 
 /// Show one frame and hide the other, and move the camera with it.
 fn show_what_was_chosen(

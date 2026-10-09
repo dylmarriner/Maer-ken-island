@@ -81,7 +81,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            xvfb imagemagick mesa-vulkan-drivers libxkbcommon-x11-0
+            xvfb xdotool imagemagick mesa-vulkan-drivers libxkbcommon-x11-0
       - name: Clippy
         run: cargo clippy -p island_ui --all-targets --locked -- -D warnings
       - name: Build
@@ -113,6 +113,19 @@ jobs:
       # names every model it could not find.
       - name: It draws the estate, with the models on it
         run: ./scripts/render-smoke.sh target/release/island-ui estate.png estate
+      # What it costs to draw, on the machine that drew it. Reported
+      # rather than asserted: a CI runner's software rasteriser is not a
+      # GPU and a threshold here would be a claim about the runner.
+      - name: What a frame costs here
+        run: |
+          # Its own screen: the smoke scripts start and stop theirs, so
+          # by here there is none left to draw on.
+          Xvfb :87 -screen 0 1600x1000x24 >/dev/null 2>&1 &
+          sleep 2
+          DISPLAY=:87 ./target/release/island-ui \
+            --scenario fixtures/island/default_scenario.json \
+            --data-dir "$RUNNER_TEMP/fps" --speed max --measure 20 \
+            || echo "the frame-rate measurement did not complete"
       - uses: actions/upload-artifact@v4
         if: always()
         with:

@@ -57,6 +57,16 @@ pub struct Placed {
 /// a computer and where it stands, not that it is 60 cm wide. These are
 /// the sizes such a thing is, so a room full of them reads correctly, and
 /// nothing downstream treats them as measurements.
+///
+/// Not an omission that could be fixed by reading harder, either.
+/// `PropertyItem` in the engine carries `id`, `kind`, `name`,
+/// `location`, `quantity`, `room` and `attaches_to`, and no dimension of
+/// any sort -- nothing on this island cares how wide a workbench is, so
+/// nothing records it. A renderer has to invent a size or draw nothing,
+/// and inventing one *here*, where it is named as a drawing convention,
+/// is the version that cannot be mistaken for the simulation's own
+/// number: `PlacedItem` crosses the wire without a size field, so there
+/// is nothing for a reader to confuse this with.
 fn drawn_size(kind: &str) -> (f32, f32, f32) {
     match kind {
         "Computer" => (0.6, 0.6, 0.6),
