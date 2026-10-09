@@ -315,6 +315,23 @@ fn main() {
     let assets = asset_root(flag(&args, "--assets"));
     println!("Models from {}.", assets.display());
 
+    // `--view estate` on an island that serves no estate would hide the
+    // ground, find nothing to show in its place and leave the camera
+    // where the island view had put it: a black window with no
+    // explanation. The panel already refuses that switch -- the button is
+    // disabled when there is no layout -- and a flag should not be able
+    // to reach a state the interface deliberately prevents. So it says so
+    // and opens on the island instead.
+    let mut showing = Showing::asked_for(flag(&args, "--view"));
+    if showing == Showing::Estate && island.estate().is_none() {
+        eprintln!(
+            "--view estate was asked for and {} serves no estate layout, so there is nothing \
+             to open on. Showing the island instead.",
+            island.address()
+        );
+        showing = Showing::Island;
+    }
+
     App::new()
         .add_plugins(
             DefaultPlugins
@@ -340,7 +357,7 @@ fn main() {
         .insert_resource(View::default())
         .insert_resource(EstateOrigin::default())
         .insert_resource(Panels::default())
-        .insert_resource(Showing::asked_for(flag(&args, "--view")))
+        .insert_resource(showing)
         .insert_resource(ClearColor(Color::srgb(0.02, 0.04, 0.08)))
         // Spawning a glTF scene goes through `bevy_world_serialization`,
         // which looks every component up in the type registry and panics
