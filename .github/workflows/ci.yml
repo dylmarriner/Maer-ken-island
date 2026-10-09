@@ -116,6 +116,20 @@ jobs:
       # What it costs to draw, on the machine that drew it. Reported
       # rather than asserted: a CI runner's software rasteriser is not a
       # GPU and a threshold here would be a claim about the runner.
+      # Drawing and *answering* are different claims, and a screenshot
+      # only settles the first: a window that renders a correct first
+      # frame and then ignores every click photographs identically to a
+      # working one. This drives it with synthetic X11 input -- a held
+      # drag, a scroll, the `e` and `i` keys, and a click on the panel's
+      # own button -- and asserts the picture changed the way each
+      # gesture should change it. Measured here: 39.7%, 59.0%, 59.5%,
+      # 29.4% and 29.4% of the frame respectively.
+      #
+      # What it still does not answer is whether the sensitivities feel
+      # right under a real hand. That is a judgement and no script
+      # settles it; this catches the failure one step below it.
+      - name: It answers a mouse and a keyboard
+        run: ./scripts/interaction-smoke.sh target/release/island-ui interaction
       - name: What a frame costs here
         run: |
           # Its own screen: the smoke scripts start and stop theirs, so
@@ -145,6 +159,7 @@ jobs:
           path: |
             frame.png
             estate.png
+            interaction/
           if-no-files-found: warn
 
       # The headless binary must stay buildable on a machine with no
