@@ -42,6 +42,7 @@ builds anywhere.
 | Ground | `/api/elevation.bin`, chunked into 64×64-cell meshes | `src/terrain.rs` |
 | Coast | Land and sea triangles split by the island's own land mask, not by height | `src/terrain.rs`, `chunk_mesh` in `src/main.rs` |
 | Islanders | `/api/world`, placed in two frames | `src/scene.rs` |
+| The estate | `/api/world/estate/layout`: footprints, rooms and things in metres | `src/estate.rs` |
 | The estate's things | `/api/properties`, mapped to the Maer-Ken models | `src/property.rs` |
 | Camera | Orbit over the map | `src/camera.rs` |
 | Panels | Clock, controls, roster, one person, the computer room, conversations | `panels` in `src/main.rs` |
@@ -68,6 +69,41 @@ coarse enough to see on a four-metre room. From the patch's own corner the
 numbers are single-digit metres and the step is half a micrometre.
 `the_estate_frame_keeps_precision_a_bedroom_needs` asserts the 7.8 mm
 figure, so this paragraph cannot drift from the arithmetic.
+
+### The estate, and the models on it
+
+`/api/world/estate/layout` is the estate as geometry: the patch rectangle,
+each building's footprint, each room and zone, and each item at the metres
+it stands on. `estate.rs` turns that into boxes in the estate frame, and
+`main.rs` hangs the Maer-Ken models on them.
+
+Three things about that are deliberate:
+
+- **The boxes are the simulation's geometry and the models are decoration.**
+  Every building, room and thing is drawn at the island's own metres
+  whether or not a model loads. A footprint taken from a model would make
+  the island disagree with itself, and a thing that is *only* a model is a
+  thing that vanishes when the model does not load.
+- **The computer room is a room, not a building.** `house_plan` lays its
+  space out inside the House's footprint, so it has no footprint of its
+  own and comes back from `rooms()`. A renderer looking for a building
+  called `ComputerRoom` draws nothing, which is why a test says so.
+- **The drawn sizes of items are invented and labelled as invented.** The
+  island records that Gem-D owns a computer and where it stands, not that
+  it is 60 cm wide. `drawn_size` says what such a thing is, so a room full
+  of them reads correctly, and nothing downstream treats those numbers as
+  measurements.
+
+Spawning a glTF scene in Bevy 0.19 goes through `bevy_world_serialization`,
+which looks every component up in the type registry and panics on one it
+does not find. With the feature list this crate takes, eighteen of those
+registrations happen inside plugins that are left out, so `main.rs` makes
+them explicitly. The alternative — turning the features back on for the
+registry alone — would drag alsa and libudev back with them.
+
+`--view island|estate` opens on one frame or the other. The panel switches
+between them at any time; the flag is for opening straight onto the estate
+and for a headless render, which has nobody to press it.
 
 ### Chunking
 
@@ -117,6 +153,28 @@ both: 1,500 colours, 0.2% land, 5% sea, 0.02% text. Reverting the winding
 alone fails it with three named reasons, which was checked rather than
 assumed.
 
+### It draws the estate, with the models on it
+
+The same script, `--view estate`, photographs the other frame, and CI runs
+both. The estate is a different picture with different failure modes: no
+sea in it anywhere, a cleared yard filling an eighth of the frame, and 52
+things carrying a model of their own.
+
+A photograph cannot tell a loaded model from the box underneath it at this
+size, so the check reads the application's log as well as the picture: how
+many things it hung a model on, and whether the asset server named any it
+could not find. That half has teeth, measured against a run with an empty
+`assets/` directory:
+
+| frame | colours | yard | light text | models |
+|---|---|---|---|---|
+| with `assets/` | 3,226 | 12.7% | 2.18% | 52, none missing |
+| with an empty `assets/` | 2,063 | 12.5% | 2.29% | 52 asked for, 13 named missing |
+
+The picture alone would not have failed that second run — the yard and the
+text are indistinguishable, and 2,063 colours clears the blankness
+threshold comfortably. The log is what fails it, by name, thirteen times.
+
 What a rendered frame shows, against the full 1,200 × 960 island: the
 landmass with its relief, the sea floor around it with the trench and the
 outer rise, the domain's edge buffer, both egui panels with the clock, the
@@ -138,6 +196,10 @@ application:
 - The model table: every building kind and item kind answered, every model
   it names present in `assets/`, the four machines in the computer room
   distinct (`property.rs`).
+- The estate as placed geometry: buildings at their real footprints, the
+  computer room found as a room rather than a building, machines standing
+  on the floor rather than sunk into it, a camera framing that can see all
+  of it, and an empty layout framed not at all (`estate.rs`).
 - Reading a real island end to end, both ways:
   `tests/reading_an_island.rs`.
 

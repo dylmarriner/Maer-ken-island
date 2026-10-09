@@ -295,6 +295,71 @@ async fn a_client_without_the_token_is_told_which_one_it_needs() {
     checked.expect("the checks ran");
 }
 
+/// One unauthenticated GET, returning the status and the body.
+///
+/// Raw rather than through `IslandClient`, because the point is what a
+/// *browser* gets when it loads the page -- before any script has run and
+/// so before anything could hold a token.
+async fn page(port: u16, path: &str) -> (u16, String) {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let mut stream = tokio::net::TcpStream::connect(("127.0.0.1", port))
+        .await
+        .expect("the backend is listening");
+    stream
+        .write_all(
+            format!("GET {path} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n")
+                .as_bytes(),
+        )
+        .await
+        .unwrap();
+    stream.flush().await.unwrap();
+    let mut raw = Vec::new();
+    stream.read_to_end(&mut raw).await.unwrap();
+    let text = String::from_utf8_lossy(&raw).into_owned();
+    let status = text
+        .split_whitespace()
+        .nth(1)
+        .and_then(|code| code.parse().ok())
+        .expect("a status line");
+    let body = text.split_once("\r\n\r\n").map(|(_, b)| b).unwrap_or("");
+    (status, body.to_string())
+}
+
+/// A locked backend still hands a browser the page and its scripts.
+///
+/// The read gate covers `/api` and nothing else, and this is the reason
+/// why. A browser arriving at a token-locked island holds no token yet:
+/// if the markup, the stylesheet or the generated `config.js` were behind
+/// the gate it would get a bare 401 with no field to type the token into,
+/// and `config.js` in particular is what tells the page which backend to
+/// ask -- without it the page would fall back to its own address and read
+/// the frontend instead of the island.
+///
+/// Nothing is leaked by this. The pages are markup with no island in
+/// them, and `config.js` names a backend the caller already reached.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_locked_backend_still_serves_the_page_a_token_is_typed_into() {
+    let config = ServeConfig {
+        control: ControlAuth::BearerToken("control".to_string()),
+        reads: ReadAuth::BearerToken("reading".to_string()),
+        ..ServeConfig::local(ControlAuth::Disabled)
+    };
+    let (world, port, server) = a_remote_backend(config).await;
+
+    for path in ["/", "/island", "/static/app.js", "/static/config.js"] {
+        let (status, body) = page(port, path).await;
+        assert_eq!(status, 200, "{path} is not readable without a token");
+        assert!(!body.is_empty(), "{path} came back empty");
+    }
+    // And the island behind it is still locked, which is the half that
+    // would make the above a hole rather than a convenience.
+    let (status, _) = page(port, "/api/world").await;
+    assert_eq!(status, 401, "the island itself must still want the token");
+
+    world.stop();
+    server.abort();
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_backend_that_is_not_there_is_not_reported_as_a_refusal() {
     // The distinction a frontend has to draw before it can say anything

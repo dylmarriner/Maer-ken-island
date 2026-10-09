@@ -894,7 +894,14 @@ fn apply(
                 // owns the island for something that cannot occur. If that
                 // ever stops being true, this match stops compiling.
                 match life.apply_command(command) {
-                    Ok(_) => {}
+                    Ok(Applied::Noted) => {}
+                    // Named rather than swallowed, on a reviewer's
+                    // suggestion: `Ok(_)` would have made a future
+                    // `apply_command` that started answering something
+                    // else here look exactly like the one that works.
+                    Ok(other) => {
+                        eprintln!("the snapshot was recorded, unexpectedly, as {other:?}")
+                    }
                     Err(e) => eprintln!("the snapshot was written but not recorded: {e}"),
                 }
                 Outcome::Saved {

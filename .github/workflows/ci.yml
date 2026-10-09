@@ -103,12 +103,23 @@ jobs:
       - name: It draws the island
         run: |
           cargo build --release -p island_ui --locked
-          ./scripts/render-smoke.sh target/release/island-ui frame.png
+          ./scripts/render-smoke.sh target/release/island-ui frame.png island
+      # The other half of what this application is for. The island view
+      # is a landmass in a sea; this one is the founders' estate at one
+      # unit to the metre, with the Maer-Ken models standing on it, and
+      # neither frame can fail for the other. Measured, the difference a
+      # missing `assets/` makes to this picture is 3,226 colours against
+      # 2,063 -- so the check also reads the log, where the asset server
+      # names every model it could not find.
+      - name: It draws the estate, with the models on it
+        run: ./scripts/render-smoke.sh target/release/island-ui estate.png estate
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: island-ui-frame
-          path: frame.png
+          path: |
+            frame.png
+            estate.png
           if-no-files-found: warn
 
       # The headless binary must stay buildable on a machine with no

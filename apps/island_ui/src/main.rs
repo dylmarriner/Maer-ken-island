@@ -52,6 +52,10 @@ island-ui (--scenario <path> | --snapshot <path>) [--data-dir <dir>] [--speed re
   --speed SPEED    real (the default), max, or a multiplier like 60. Only
                    for an island run here; a remote one is paced by
                    whoever started it, and the controls can change it.
+  --view WHICH     island (the default) or estate: which of the two frames
+                   to open on. The panel switches between them at any
+                   time; this is for opening straight onto the estate, and
+                   for a headless render that has nobody to press it.
 
 The island itself is never in this process unless you asked for it with
 --scenario or --snapshot. Nothing drawn here is ever hashed, and the
@@ -178,6 +182,24 @@ enum Showing {
     #[default]
     Island,
     Estate,
+}
+
+impl Showing {
+    /// What `--view` was asked for, or the island when it was not asked.
+    ///
+    /// An unknown word is refused rather than quietly defaulting: a
+    /// person who typed `--view estates` wants to be told, not to be
+    /// shown the island and left wondering why the flag did nothing.
+    fn asked_for(flag: Option<String>) -> Self {
+        match flag.as_deref() {
+            None | Some("island") => Showing::Island,
+            Some("estate") => Showing::Estate,
+            Some(other) => {
+                eprintln!("--view takes `island` or `estate`, not `{other}`.");
+                usage()
+            }
+        }
+    }
 }
 
 fn main() {
@@ -314,7 +336,7 @@ fn main() {
         .insert_resource(View::default())
         .insert_resource(EstateOrigin::default())
         .insert_resource(Panels::default())
-        .insert_resource(Showing::default())
+        .insert_resource(Showing::asked_for(flag(&args, "--view")))
         .insert_resource(ClearColor(Color::srgb(0.02, 0.04, 0.08)))
         // Spawning a glTF scene goes through `bevy_world_serialization`,
         // which looks every component up in the type registry and panics
@@ -334,6 +356,15 @@ fn main() {
         .register_type::<Children>()
         .register_type::<ChildOf>()
         .register_type::<TransformTreeChanged>()
+        // The glTF loader hangs these on the entities it makes, so a
+        // model carries them whether or not this application reads them.
+        .register_type::<bevy::gltf::GltfExtras>()
+        .register_type::<bevy::gltf::GltfSceneExtras>()
+        .register_type::<bevy::gltf::GltfSceneName>()
+        .register_type::<bevy::gltf::GltfMeshExtras>()
+        .register_type::<bevy::gltf::GltfMeshName>()
+        .register_type::<bevy::gltf::GltfMaterialExtras>()
+        .register_type::<bevy::gltf::GltfMaterialName>()
         .add_systems(Startup, (build_ground, build_the_estate, light_the_island))
         .add_systems(
             Update,
@@ -545,17 +576,25 @@ fn build_the_estate(
     );
 }
 
+/// Everything drawn in one frame, asked for by the marker that says which.
+///
+/// Three of these in one signature, and Bevy insists each excludes the
+/// other two: without the `Without`s the borrow checker cannot know the
+/// three sets are disjoint and the system will not build. Named rather
+/// than written out because clippy is right that the written-out form is
+/// unreadable, and because naming it puts the rule -- one marker, the
+/// other two excluded -- in one place instead of three.
+type OnlyIn<'w, 's, Marker, NotA, NotB> =
+    Query<'w, 's, &'static mut Visibility, (With<Marker>, Without<NotA>, Without<NotB>)>;
+
 /// Show one frame and hide the other, and move the camera with it.
 fn show_what_was_chosen(
     showing: Res<Showing>,
     island: Res<TheIsland>,
     mut view: ResMut<View>,
-    mut ground: Query<&mut Visibility, (With<Ground>, Without<OnTheEstate>, Without<Islander>)>,
-    mut estate_parts: Query<
-        &mut Visibility,
-        (With<OnTheEstate>, Without<Ground>, Without<Islander>),
-    >,
-    mut islanders: Query<&mut Visibility, (With<Islander>, Without<Ground>, Without<OnTheEstate>)>,
+    mut ground: OnlyIn<Ground, OnTheEstate, Islander>,
+    mut estate_parts: OnlyIn<OnTheEstate, Ground, Islander>,
+    mut islanders: OnlyIn<Islander, Ground, OnTheEstate>,
 ) {
     if !showing.is_changed() {
         return;

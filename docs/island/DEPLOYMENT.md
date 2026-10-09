@@ -168,9 +168,28 @@ Or with an island in its own process:
 island-ui --scenario fixtures/island/default_scenario.json --speed 60
 ```
 
-It draws the island, and CI checks that on every push by rendering a
-frame on a virtual screen and asserting the picture is of something. What
-has **not** been established is how it feels with a mouse, or what it
+It opens on the island. `--view estate` opens on the founders' estate
+instead — the same application, the other frame, switchable from the panel
+at any time:
+
+```bash
+island-ui --server https://island.example --view estate
+```
+
+The estate is drawn from the island's own geometry, which is why it draws
+at all on a machine with no `assets/` directory: every building, room and
+thing is a box at the simulation's metres, and the Maer-Ken models hang on
+top of that rather than standing in for it. `--assets DIR` says where they
+are when they are not beside the binary.
+
+It draws both, and CI checks both on every push by rendering each frame on
+a virtual screen and asserting the picture is of something. The estate's
+check reads the application's log as well, because a photograph cannot
+tell a loaded model from the box underneath it: measured, an empty
+`assets/` takes that frame from 3,226 colours to 2,063, which the picture
+alone would not have failed, while the log names thirteen missing models.
+
+What has **not** been established is how it feels with a mouse, or what it
 costs on a GPU: every frame so far was rasterised by lavapipe on the CPU,
 and no frame-rate figure is claimed. `docs/island/RENDER_STACK.md` is the
 full account.

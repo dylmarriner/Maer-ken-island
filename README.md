@@ -84,17 +84,26 @@ island export --to /var/www/island --backend https://island.example
 
 # the desktop application, on somebody's desk
 island-ui --server https://island.example --token "$ISLAND_READ_TOKEN"
+#   …opening on the founders' estate rather than on the island
+island-ui --server https://island.example --view estate
 ```
 
 `docs/island/DEPLOYMENT.md` is the full account: the two tokens and what
 each is for, CORS, TLS, the systemd unit and the container, and how to
 check a deployment.
 
-`island-ui` draws the island, and CI proves it: `scripts/render-smoke.sh`
-runs it on a virtual screen against a real island, photographs a frame and
-asserts the picture is of something — the frame is uploaded as an
-artifact. What that does not answer is how it feels with a mouse or what
-it costs on a GPU, because every frame so far was rasterised on the CPU.
+`island-ui` draws two things, and CI proves both: the island at ten
+kilometres to the unit, and the founders' estate at one metre to it, with
+the Maer-Ken models standing on it. `scripts/render-smoke.sh` runs the
+application on a virtual screen against a real island, photographs each
+frame and asserts the picture is of something; both frames are uploaded as
+artifacts. For the estate it reads the log as well, because a photograph
+cannot tell a loaded model from the box underneath it — measured, an empty
+`assets/` directory costs that frame a third of its colours and the log
+names thirteen models it could not find.
+
+What none of that answers is how it feels with a mouse or what it costs on
+a GPU, because every frame so far was rasterised on the CPU.
 `docs/island/RENDER_STACK.md` is the full account.
 
 ### The JSON behind it all

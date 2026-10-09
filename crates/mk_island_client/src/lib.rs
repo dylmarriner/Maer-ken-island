@@ -383,7 +383,28 @@ impl IslandClient {
     fn failure(&self, path: &str, err: ureq::Error) -> ClientError {
         match err {
             ureq::Error::Status(status, response) => {
-                let body = response.into_string().unwrap_or_default();
+                // The body is read separately from being parsed, because
+                // the two fail for different reasons and a reader needs to
+                // be told which. `unwrap_or_default` here would turn "the
+                // connection died halfway through the error page" into an
+                // empty string and then report it as "not the island's
+                // JSON: ", with nothing after the colon -- a message that
+                // blames the wrong thing and shows no evidence for it.
+                let body = match response.into_string() {
+                    Ok(body) => body,
+                    Err(e) => {
+                        return ClientError::Refused {
+                            status,
+                            refusal: Refusal {
+                                errors: vec![format!(
+                                    "{} answered {status}, and the body could not be read: {e}",
+                                    self.url(path)
+                                )],
+                                ..Refusal::default()
+                            },
+                        }
+                    }
+                };
                 let refusal: Refusal = serde_json::from_str(&body).unwrap_or_else(|_| Refusal {
                     // Not JSON at all: something between here and the
                     // island answered instead of it. Say so with what it
