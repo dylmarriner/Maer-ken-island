@@ -545,6 +545,76 @@ mod tests {
         }
     }
 
+    /// Every phrasing, rendered, must open a sentence.
+    ///
+    /// Exhaustive on purpose. The first version of this test walked four
+    /// hundred ticks of a simulated pair and passed *with the fix
+    /// reverted*, because fresh test humans only ever reached phrasings
+    /// that already began with a capital. A guard that cannot fail is
+    /// worse than no guard: it reports safety it has not checked. This
+    /// one enumerates every action and every phrasing, so a new
+    /// lower-case clause cannot slip in behind it.
+    #[test]
+    fn every_spoken_phrasing_renders_as_a_sentence() {
+        use crate::agents::ActionKind;
+
+        const EVERY_ACTION: [ActionKind; 19] = [
+            ActionKind::Idle,
+            ActionKind::Rest,
+            ActionKind::SeekWater,
+            ActionKind::SeekFood,
+            ActionKind::SeekShelter,
+            ActionKind::SocialApproach,
+            ActionKind::Explore,
+            ActionKind::Gather,
+            ActionKind::Mine,
+            ActionKind::Move,
+            ActionKind::Build,
+            ActionKind::Craft,
+            ActionKind::Transfer,
+            ActionKind::Harm,
+            ActionKind::Code,
+            ActionKind::Intimacy,
+            ActionKind::WebSearch,
+            ActionKind::SendEmail,
+            ActionKind::Idle,
+        ];
+
+        let mut checked = 0;
+        for action in EVERY_ACTION {
+            for phrasing in spoken_action(action) {
+                let said = sentence(phrasing);
+                let first = said.chars().next().expect("a phrasing is not empty");
+                assert!(
+                    !first.is_lowercase(),
+                    "{action:?} phrasing renders in lower case: {said}"
+                );
+                assert!(
+                    said.ends_with('.'),
+                    "{action:?} phrasing has no stop: {said}"
+                );
+                assert!(
+                    !said.ends_with(".."),
+                    "{action:?} phrasing doubled its stop: {said}"
+                );
+                checked += 1;
+            }
+        }
+        for name in ["hunger", "thirst", "fatigue", "something-else"] {
+            for pressing in [0.4, 0.9] {
+                for phrasing in spoken_need(name, pressing) {
+                    // A need is never the first clause on its own, but it
+                    // can be if an action phrase is ever dropped, and it
+                    // costs nothing to hold it to the same rule.
+                    let said = sentence(phrasing);
+                    assert!(!said.chars().next().expect("not empty").is_lowercase());
+                    checked += 1;
+                }
+            }
+        }
+        assert!(checked > 70, "only {checked} phrasings were checked");
+    }
+
     /// D36, from the side that matters: a speaker whose state has not
     /// moved does not say the same sentence over and over.
     ///
