@@ -165,6 +165,14 @@ impl IslandClient {
         self.json(&format!("/api/world/humans/{agent_id}"))
     }
 
+    /// The estate as geometry: what stands where, in metres.
+    ///
+    /// Fetched once. It does not change: the buildings are placed when
+    /// the island bootstraps and nothing on this island moves one.
+    pub fn estate_layout(&self) -> Result<mk_island_api::EstateLayout, ClientError> {
+        self.field("/api/world/estate/layout", "layout")
+    }
+
     /// The estate's properties: buildings, items, who owns them.
     pub fn properties(&self) -> Result<Vec<Property>, ClientError> {
         self.field("/api/properties", "properties")

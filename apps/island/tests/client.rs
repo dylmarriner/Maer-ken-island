@@ -354,3 +354,168 @@ async fn a_backend_with_no_island_says_so_rather_than_failing() {
     server.abort();
     checked.expect("the check ran");
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_estate_is_served_as_geometry_a_renderer_can_place() {
+    // The desktop application draws the founders' estate: the house, the
+    // workshop, the computer room, and the four machines inside it. None
+    // of that is drawable from `/api/properties`, which says what exists
+    // and not where it is.
+    let (world, port, server) = a_running_dashboard().await;
+    let base = at(port);
+
+    let read = tokio::task::spawn_blocking(move || {
+        let (island, _) = IslandClient::connect(&base, None).expect("connects");
+        let layout = island.estate_layout().expect("the layout reads");
+
+        // Buildings, with real extents rather than points.
+        assert!(
+            layout.buildings.len() >= 5,
+            "the estate has a house, a shed, a workshop, an armoury and a computer room: {:?}",
+            layout.buildings.iter().map(|b| &b.kind).collect::<Vec<_>>()
+        );
+        for building in &layout.buildings {
+            assert!(
+                building.rect_m.width_m() > 1.0 && building.rect_m.depth_m() > 1.0,
+                "{} is {} x {} m",
+                building.name,
+                building.rect_m.width_m(),
+                building.rect_m.depth_m()
+            );
+            let model = island_ui_model(&building.kind);
+            assert!(!model.is_empty(), "{} has no model path", building.kind);
+        }
+        // The computer room is a *building* to the engine and a *room
+        // inside the house* on the ground: `house_plan` is given the
+        // computer building's id and lays its space out within the
+        // house's footprint. So it has no footprint of its own, and a
+        // renderer that looked for one would find nothing and draw
+        // nothing. `assets/CREDITS.md` and `island_ui`'s model table both
+        // already said this; the first version of this test did not
+        // believe them.
+        assert!(
+            !layout.buildings.iter().any(|b| b.kind == "ComputerRoom"),
+            "the computer room should be a room, not a footprint: {:?}",
+            layout.buildings.iter().map(|b| &b.kind).collect::<Vec<_>>()
+        );
+        let house = layout
+            .buildings
+            .iter()
+            .find(|b| b.kind == "House")
+            .expect("the homestead");
+        let room = layout
+            .spaces
+            .iter()
+            .find(|s| s.label == "Computer Room")
+            .expect("the computer room is a space");
+        let (rx, ry) = room.rect_m.centre_m();
+        assert!(
+            rx >= house.rect_m.x0.min(house.rect_m.x1) - 1.0
+                && rx <= house.rect_m.x0.max(house.rect_m.x1) + 1.0
+                && ry >= house.rect_m.y0.min(house.rect_m.y1) - 1.0
+                && ry <= house.rect_m.y0.max(house.rect_m.y1) + 1.0,
+            "the computer room is at {rx}, {ry}, which is not inside the house ({:?})",
+            house.rect_m
+        );
+
+        // The rooms inside them.
+        assert!(
+            layout.spaces.iter().any(|s| s.label.contains("Computer")),
+            "the computer room is a space too: {:?}",
+            layout.spaces.iter().map(|s| &s.label).collect::<Vec<_>>()
+        );
+        assert!(
+            layout.spaces.iter().any(|s| s.label.contains("Bedroom")),
+            "the founders start in their own bedrooms, so those are rooms"
+        );
+
+        // And the things in them, with the join from placement to name
+        // already done.
+        let computers: Vec<&mk_island_api::PlacedItem> = layout
+            .items
+            .iter()
+            .filter(|item| item.kind == "Computer")
+            .collect();
+        assert_eq!(
+            computers.len(),
+            4,
+            "four machines, each at its own metres: {computers:?}"
+        );
+        for machine in &computers {
+            assert_eq!(
+                machine.space.as_deref(),
+                Some("Computer Room"),
+                "{} is not in the computer room",
+                machine.name
+            );
+            // Inside the room it belongs to, which is the whole point of
+            // serving metres rather than a room name.
+            let (x, y) = machine.position_m;
+            assert!(
+                x >= room.rect_m.x0.min(room.rect_m.x1) - 1.0
+                    && x <= room.rect_m.x0.max(room.rect_m.x1) + 1.0
+                    && y >= room.rect_m.y0.min(room.rect_m.y1) - 1.0
+                    && y <= room.rect_m.y0.max(room.rect_m.y1) + 1.0,
+                "{} stands at {x}, {y}, outside the room it is in ({:?})",
+                machine.name,
+                room.rect_m
+            );
+        }
+        // `items_in` finds everything in that room, which is more than
+        // the machines: the first version of this expected four and got
+        // six. What the other two are is printed rather than guessed at.
+        let in_the_room: Vec<&mk_island_api::PlacedItem> =
+            layout.items_in("Computer Room").collect();
+        println!(
+            "the computer room holds: {:?}",
+            in_the_room
+                .iter()
+                .map(|i| format!("{} ({})", i.name, i.kind))
+                .collect::<Vec<_>>()
+        );
+        assert!(
+            in_the_room.len() >= computers.len(),
+            "every machine is in the room: {} against {}",
+            in_the_room.len(),
+            computers.len()
+        );
+        assert_eq!(
+            in_the_room.iter().filter(|i| i.kind == "Computer").count(),
+            4,
+            "and four of them are the machines"
+        );
+
+        // The yard, and the ground everything stands on.
+        assert!(layout.yard.width_m() > 0.0 && layout.yard.depth_m() > 0.0);
+        let extent = layout.extent_m().expect("the estate covers some ground");
+        assert!(extent.width_m() > 0.0 && extent.depth_m() > 0.0);
+        assert!(
+            extent.x0 >= layout.patch.x0 - 1.0 && extent.x1 <= layout.patch.x1 + 1.0,
+            "the estate should be inside its own patch: {extent:?} against {:?}",
+            layout.patch
+        );
+    })
+    .await;
+
+    world.stop();
+    server.abort();
+    read.expect("the reads ran");
+}
+
+/// The model `island_ui` would draw a building kind with.
+///
+/// Spelled out here rather than depending on `island_ui` from this crate:
+/// the backend has no business linking a renderer, and what this test
+/// needs is only that the kinds the island serves are kinds that table
+/// knows. `island_ui`'s own tests check the files exist.
+fn island_ui_model(kind: &str) -> &'static str {
+    match kind {
+        "House" => "property/buildings/homestead_house.glb",
+        "Shed" => "property/buildings/equipment_shed.glb",
+        "Workshop" => "property/buildings/building_workshop.glb",
+        "Armoury" => "property/buildings/secure_armoury.glb",
+        "ComputerRoom" => "property/buildings/computer_room.glb",
+        "Garage" => "property/placeholder.glb",
+        _ => "",
+    }
+}

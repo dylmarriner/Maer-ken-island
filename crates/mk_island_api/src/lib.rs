@@ -29,7 +29,7 @@ pub use request::{
 pub use terrain::{Terrain, TerrainError};
 pub use version::{Capabilities, ServerVersion, API_VERSION};
 pub use wire::{
-    Building, Cell, Clock, Conversation, ConversationLine, Digest, Economy, EconomyEntry, Estate,
-    Item, Land, Person, Property, SpaceChoice, Stocks, Structure, TimelineEntry, Tree, Trees,
-    World,
+    Building, BuildingFootprint, Cell, Clock, Conversation, ConversationLine, Digest, Economy,
+    EconomyEntry, Estate, EstateLayout, Item, Land, Person, PlacedItem, Property, Rect,
+    SpaceChoice, SpaceRect, Stocks, Structure, TimelineEntry, Tree, Trees, World,
 };

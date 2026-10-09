@@ -326,3 +326,173 @@ pub struct Cell {
     /// on a 2 km grid. Sea is never buildable.
     pub buildable: bool,
 }
+
+/// A rectangle on the estate patch, in domain metres: west, south, east,
+/// north.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+pub struct Rect {
+    pub x0: f64,
+    pub y0: f64,
+    pub x1: f64,
+    pub y1: f64,
+}
+
+impl Rect {
+    pub fn width_m(&self) -> f64 {
+        (self.x1 - self.x0).abs()
+    }
+
+    pub fn depth_m(&self) -> f64 {
+        (self.y1 - self.y0).abs()
+    }
+
+    pub fn centre_m(&self) -> (f64, f64) {
+        ((self.x0 + self.x1) / 2.0, (self.y0 + self.y1) / 2.0)
+    }
+}
+
+/// A building on the estate, where it stands and how big it is.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct BuildingFootprint {
+    pub name: String,
+    /// A `PropertyBuildingKind` in words: `House`, `Shed`, `Workshop`,
+    /// `Armoury`, `ComputerRoom`, `Garage`.
+    pub kind: String,
+    pub rect_m: Rect,
+    pub rotation_deg: f64,
+}
+
+/// A room or zone inside a building, by the layout's own label.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SpaceRect {
+    pub id: u32,
+    pub label: String,
+    /// `Room`, `Zone` or `WholeBuilding`.
+    pub kind: String,
+    pub rect_m: Rect,
+}
+
+/// A thing on the estate, at the metres it stands on.
+///
+/// The join between the layout's placements and the property inventory is
+/// done on the server: a placement carries an item id and a client would
+/// otherwise have to fetch the inventory and match them up to find out
+/// that the thing at these metres is a computer.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PlacedItem {
+    pub name: String,
+    /// A `PropertyItemKind` in words: `Vehicle`, `VehicleAttachment`,
+    /// `ShedTool`, `BuildingEquipment`, `ArmouryItem`, `Computer`,
+    /// `HouseholdItem`.
+    pub kind: String,
+    pub position_m: (f64, f64),
+    /// The space it is in, by the layout's own label, or `None` outdoors.
+    pub space: Option<String>,
+}
+
+/// The founders' estate as geometry: what stands where, in metres.
+///
+/// Served on its own rather than with the rest of the world because it
+/// does not change -- the buildings are placed at bootstrap and nothing in
+/// Phase 4 moves one -- and because it is the one thing a renderer needs
+/// before it can draw the estate at all. A frontend fetches it once.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct EstateLayout {
+    /// The patch's south-west corner and size in domain metres, which is
+    /// the floating origin an estate-scale frame measures from.
+    pub patch: Rect,
+    /// The cleared ground around the buildings. The engine places no stem
+    /// inside it, so a renderer that did not know would draw a wood with
+    /// an unexplained hole.
+    pub yard: Rect,
+    pub buildings: Vec<BuildingFootprint>,
+    pub spaces: Vec<SpaceRect>,
+    pub items: Vec<PlacedItem>,
+}
+
+impl EstateLayout {
+    /// Everything in one space, for an interior view.
+    pub fn items_in<'a>(&'a self, label: &'a str) -> impl Iterator<Item = &'a PlacedItem> + 'a {
+        self.items
+            .iter()
+            .filter(move |item| item.space.as_deref() == Some(label))
+    }
+
+    /// The ground the estate covers, as a rectangle around everything on
+    /// it. `None` when there is nothing.
+    pub fn extent_m(&self) -> Option<Rect> {
+        let mut found = false;
+        let mut extent = Rect {
+            x0: f64::MAX,
+            y0: f64::MAX,
+            x1: f64::MIN,
+            y1: f64::MIN,
+        };
+        // A rectangle with no area is not ground. Without this check a
+        // default-constructed layout -- no buildings, a yard of zeroes --
+        // reports an extent at the origin, and a camera asked to frame
+        // the estate obligingly frames nothing.
+        let real = |r: &Rect| r.width_m() > 0.0 && r.depth_m() > 0.0;
+        for rect in self
+            .buildings
+            .iter()
+            .map(|b| b.rect_m)
+            .chain([self.yard])
+            .filter(real)
+        {
+            found = true;
+            extent.x0 = extent.x0.min(rect.x0.min(rect.x1));
+            extent.y0 = extent.y0.min(rect.y0.min(rect.y1));
+            extent.x1 = extent.x1.max(rect.x0.max(rect.x1));
+            extent.y1 = extent.y1.max(rect.y0.max(rect.y1));
+        }
+        found.then_some(extent)
+    }
+}
+
+#[cfg(test)]
+mod estate_tests {
+    use super::*;
+
+    #[test]
+    fn an_estate_with_nothing_on_it_covers_no_ground() {
+        // A default layout has a yard of zeroes. Counting it would give an
+        // extent at the origin, and anything that framed the estate would
+        // frame nothing and look as though it had worked.
+        assert_eq!(EstateLayout::default().extent_m(), None);
+    }
+
+    #[test]
+    fn the_extent_holds_every_building_and_the_yard() {
+        let layout = EstateLayout {
+            yard: Rect {
+                x0: 10.0,
+                y0: 10.0,
+                x1: 30.0,
+                y1: 30.0,
+            },
+            buildings: vec![BuildingFootprint {
+                name: "Shed".to_string(),
+                kind: "Shed".to_string(),
+                rect_m: Rect {
+                    x0: 35.0,
+                    y0: 5.0,
+                    x1: 41.0,
+                    y1: 11.0,
+                },
+                rotation_deg: 0.0,
+            }],
+            ..Default::default()
+        };
+        let extent = layout.extent_m().expect("there is ground here");
+        assert_eq!(
+            extent,
+            Rect {
+                x0: 10.0,
+                y0: 5.0,
+                x1: 41.0,
+                y1: 30.0
+            }
+        );
+    }
+}

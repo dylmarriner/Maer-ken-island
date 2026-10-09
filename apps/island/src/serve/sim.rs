@@ -172,6 +172,12 @@ pub struct SimHandle {
     /// ground at a height and cannot read metres back out of a colour.
     elevation_bin: Arc<Vec<u8>>,
     elevation_gz: Arc<Vec<u8>>,
+    /// The estate as geometry, copied once at startup.
+    ///
+    /// Beside the terrain and for the same reason: the buildings are
+    /// placed at bootstrap and nothing in Phase 4 moves one, so a copy
+    /// taken here stays true and the sim thread is never asked for it.
+    estate_layout: Arc<mk_island_api::EstateLayout>,
     /// Whether a real bridge to the outside is attached, so a frontend
     /// can say that this island's humans may reach the internet.
     ///
@@ -251,6 +257,11 @@ impl SimHandle {
     /// Whether this island's humans have a way out to the internet.
     pub fn has_computer_bridge(&self) -> bool {
         self.has_computer_bridge
+    }
+
+    /// The estate as geometry: what stands where, in metres.
+    pub fn estate_layout(&self) -> Arc<mk_island_api::EstateLayout> {
+        Arc::clone(&self.estate_layout)
     }
 
     /// The island's terrain, for anything that has to ask the grids a
@@ -489,6 +500,7 @@ pub fn spawn_with(
     // The same grids as numbers, for a client that builds a mesh. Both
     // forms are kept so a caller asking for `identity` is not handed gzip
     // it did not ask for.
+    let estate_layout = Arc::new(IslandProjection::estate_layout(&life));
     let elevation_bin = Arc::new(crate::serve::projection::elevation_bin(&terrain));
     let elevation_gz = Arc::new(crate::serve::projection::gzipped(&elevation_bin));
     // The vegetation layers, likewise drawn here and then redrawn by the
@@ -527,6 +539,7 @@ pub fn spawn_with(
         terrain,
         elevation_bin,
         elevation_gz,
+        estate_layout,
         can_snapshot: snapshots.is_some(),
         has_computer_bridge: life.has_computer_bridge(),
         vegetation_png,

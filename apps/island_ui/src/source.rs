@@ -19,7 +19,8 @@
 //! polls, and the renderer reads whatever was last published.
 
 use mk_island_api::{
-    Capabilities, Conversation, Economy, Property, ServerVersion, Terrain, TimelineEntry, World,
+    Capabilities, Conversation, Economy, EstateLayout, Property, ServerVersion, Terrain,
+    TimelineEntry, World,
 };
 use mk_island_client::{ClientError, IslandClient};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -71,6 +72,10 @@ pub struct Island {
     /// The ground, fetched once. Terrain cannot change: the island
     /// refuses every terrain edit, and the backend serves it immutable.
     terrain: Option<Terrain>,
+    /// The estate as geometry, fetched once for the same reason: the
+    /// buildings are placed at bootstrap and nothing on this island moves
+    /// one.
+    estate: Option<EstateLayout>,
     latest: Arc<RwLock<Snapshot>>,
     stop: Arc<AtomicBool>,
     /// Kept so the embedded backend lives exactly as long as this does.
@@ -107,6 +112,12 @@ impl Island {
             None
         };
 
+        // Not fatal if it fails: an island with no estate is a thing
+        // this application can still draw, and a renderer that refused to
+        // start over a missing building would be worse than one that
+        // shows the island and says the estate is unavailable.
+        let estate = client.estate_layout().ok();
+
         let latest = Arc::new(RwLock::new(Snapshot::default()));
         let stop = Arc::new(AtomicBool::new(false));
         let poller = spawn_poller(client.clone(), Arc::clone(&latest), Arc::clone(&stop));
@@ -115,6 +126,7 @@ impl Island {
             client,
             version,
             terrain,
+            estate,
             latest,
             stop,
             _local: local,
@@ -135,6 +147,11 @@ impl Island {
 
     pub fn terrain(&self) -> Option<&Terrain> {
         self.terrain.as_ref()
+    }
+
+    /// The estate as geometry: what stands where, in metres.
+    pub fn estate(&self) -> Option<&EstateLayout> {
+        self.estate.as_ref()
     }
 
     pub fn capabilities(&self) -> &Capabilities {

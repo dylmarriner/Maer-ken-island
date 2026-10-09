@@ -454,6 +454,15 @@ fn elevation_reply(bytes: Option<std::sync::Arc<Vec<u8>>>, gzip: bool) -> impl w
     )
 }
 
+/// Said in `/api/world/estate/layout`, because a client should know it
+/// need not ask twice.
+const ESTATE_IS_FIXED: &str =
+    "Where the estate's buildings and things stand, in domain metres. This does not change: they \
+     are placed when the island bootstraps and nothing on this island moves a building. Fetch it \
+     once. The rectangles are west, south, east and north; the yard is the cleared ground the \
+     engine places no stem inside, so a renderer that did not know would draw the wood with an \
+     unexplained hole in it.";
+
 /// Said in `/api/trees`, because a viewer that drew an empty island and
 /// said nothing would be read as a treeless one.
 const TREES_ARE_LOCAL: &str =
@@ -1384,7 +1393,7 @@ pub fn routes_with_config(
             }
             json(
                 StatusCode::NOT_FOUND,
-                &serde_json::json!({ "errors": ["No such endpoint. The dashboard serves /api/status, /api/world, /api/world/<estate|vegetation|materials|clock>, /api/world/humans, /api/world/humans/<agent-id>, /api/world/interventions, /api/world/commands/<id>, /api/properties, /api/economy, /api/timeline, /api/conversations, /api/map.png, /api/vegetation.png, /api/patch.png, /api/cell/<row>/<col>, /api/trees, /api/control, /api/health, /api/humans, /api/humans/<agent-id>, /api/activity and /api/creator/options."] }),
+                &serde_json::json!({ "errors": ["No such endpoint. The dashboard serves /api/status, /api/world, /api/world/<estate|vegetation|materials|clock>, /api/world/estate/layout, /api/world/humans, /api/world/humans/<agent-id>, /api/world/interventions, /api/world/commands/<id>, /api/properties, /api/economy, /api/timeline, /api/conversations, /api/map.png, /api/vegetation.png, /api/patch.png, /api/cell/<row>/<col>, /api/trees, /api/control, /api/health, /api/humans, /api/humans/<agent-id>, /api/activity and /api/creator/options."] }),
             )
         });
 
@@ -1457,7 +1466,28 @@ pub fn routes_with_config(
     // says anything about the island.
     let open = get_health.or(get_version).unify();
 
+    // The estate as geometry, for a renderer that draws it rather than
+    // listing it. Its own endpoint because it does not change: a client
+    // fetches it when it connects and never again.
+    let get_estate_layout = warp::path!("api" / "world" / "estate" / "layout")
+        .and(read())
+        .and(with(world.clone()))
+        .map(|world: Option<SimHandle>| match world {
+            None => json(
+                StatusCode::NOT_FOUND,
+                &serde_json::json!({ "errors": ["No island is running, so there is no estate on it. Start the server with --scenario."] }),
+            ),
+            Some(world) => json(
+                StatusCode::OK,
+                &serde_json::json!({
+                    "layout": &*world.estate_layout(),
+                    "note": ESTATE_IS_FIXED,
+                }),
+            ),
+        });
+
     let api = get_status
+        .or(get_estate_layout)
         .or(get_properties)
         .or(get_economy)
         .or(get_timeline)

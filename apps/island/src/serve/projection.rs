@@ -505,6 +505,98 @@ impl IslandProjection {
         )
     }
 
+    /// The founders' estate as geometry: what stands where, in metres.
+    ///
+    /// Built once and copied, because it does not change -- the buildings
+    /// are placed at bootstrap and nothing in Phase 4 moves one. A
+    /// renderer fetches it when it connects and never again.
+    ///
+    /// The join from a placement's `item_id` to the thing's name and kind
+    /// is done here. A client could do it -- fetch the inventory, match
+    /// the ids -- but every client would have to, and a placement on its
+    /// own does not say that the thing at these metres is a computer.
+    pub fn estate_layout(life: &IslandLife) -> mk_island_api::EstateLayout {
+        use mk_engine::regional::estate_layout::Space;
+        let layout = &life.placed.layout;
+        let rect = |r: &mk_engine::regional::estate_layout::Rect| mk_island_api::Rect {
+            x0: r.x0,
+            y0: r.y0,
+            x1: r.x1,
+            y1: r.y1,
+        };
+        // Every item on every property of this estate, by id.
+        let named: std::collections::BTreeMap<u64, (&str, String)> = life
+            .placed
+            .property
+            .properties
+            .iter()
+            .flat_map(|p| p.items.iter())
+            .map(|i| (i.id, (i.name.as_str(), format!("{:?}", i.kind))))
+            .collect();
+        let label_of = |space: Space| match space {
+            Space::Outdoors => None,
+            Space::Inside(id) => layout
+                .spaces
+                .iter()
+                .find(|s| s.id == id)
+                .map(|s| s.label.clone()),
+        };
+        let patch = &layout.patch;
+        mk_island_api::EstateLayout {
+            patch: mk_island_api::Rect {
+                x0: patch.origin_x_m,
+                y0: patch.origin_y_m,
+                x1: patch.origin_x_m + patch.width_m,
+                y1: patch.origin_y_m + patch.height_m,
+            },
+            yard: rect(&layout.yard),
+            buildings: layout
+                .buildings
+                .iter()
+                .map(|b| mk_island_api::BuildingFootprint {
+                    // The layout keeps a building id; the name is on the
+                    // property inventory, so this looks it up and falls
+                    // back to the kind rather than inventing one.
+                    name: life
+                        .placed
+                        .property
+                        .properties
+                        .iter()
+                        .flat_map(|p| p.buildings.iter())
+                        .find(|existing| existing.id == b.building_id)
+                        .map(|existing| existing.name.clone())
+                        .unwrap_or_else(|| format!("{:?}", b.kind)),
+                    kind: format!("{:?}", b.kind),
+                    rect_m: rect(&b.rect_m),
+                    rotation_deg: b.rotation_deg,
+                })
+                .collect(),
+            spaces: layout
+                .spaces
+                .iter()
+                .map(|s| mk_island_api::SpaceRect {
+                    id: s.id.0,
+                    label: s.label.clone(),
+                    kind: format!("{:?}", s.kind),
+                    rect_m: rect(&s.rect_m),
+                })
+                .collect(),
+            items: layout
+                .items
+                .iter()
+                .filter_map(|placement| {
+                    let (name, kind) = named.get(&placement.item_id)?;
+                    Some(mk_island_api::PlacedItem {
+                        name: (*name).to_string(),
+                        kind: kind.clone(),
+                        position_m: placement.position_m,
+                        space: label_of(placement.space),
+                    })
+                })
+                .collect(),
+        }
+    }
+
     /// What the resource economy holds, and what it has recorded.
     pub fn economy_now(life: &IslandLife) -> Arc<Economy> {
         Arc::new(Economy {

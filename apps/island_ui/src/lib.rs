@@ -15,6 +15,7 @@
 #![forbid(unsafe_code)]
 
 pub mod camera;
+pub mod estate;
 pub mod property;
 pub mod scene;
 pub mod source;

@@ -20,6 +20,7 @@ use bevy_egui::egui::{self, LayerId, Ui, UiBuilder};
 use bevy_egui::{EguiContexts, EguiPlugin, EguiPrimaryContextPass};
 
 use island_ui::camera::Orbit;
+use island_ui::estate;
 use island_ui::scene::{self, Point};
 use island_ui::source::{Island, LocalBackend, Snapshot};
 use island_ui::{property, terrain};
@@ -42,6 +43,12 @@ island-ui (--scenario <path> | --snapshot <path>) [--data-dir <dir>] [--speed re
   --snapshot PATH  carry on a saved island, here, the same way.
   --data-dir DIR   where a locally-run island keeps its people
                    (default ./island-data)
+  --assets DIR     where the models live (default: ISLAND_ASSETS, then
+                   ./assets, then an assets/ beside this binary or one
+                   directory above it). Without them the estate still
+                   draws -- every building, room and thing is a box at the
+                   simulation's own metres -- but it draws without the
+                   models.
   --speed SPEED    real (the default), max, or a multiplier like 60. Only
                    for an island run here; a remote one is paced by
                    whoever started it, and the controls can change it.
@@ -58,6 +65,47 @@ fn help() -> ! {
 fn usage() -> ! {
     eprintln!("{USAGE}");
     std::process::exit(2);
+}
+
+/// Where the models are.
+///
+/// Searched rather than assumed, because the three places this runs from
+/// are different: a developer's checkout (`./assets`), a release tree
+/// built by `deploy/build-release.sh` (`assets/` beside the binary), and
+/// a `cargo run` from the workspace root (also `./assets`).
+///
+/// Never fatal. A missing asset root means the estate draws as boxes at
+/// the simulation's own metres, which is most of what it is: the models
+/// are decoration hung on that geometry.
+fn asset_root(asked: Option<String>) -> std::path::PathBuf {
+    if let Some(asked) = asked {
+        return std::path::PathBuf::from(asked);
+    }
+    if let Some(from_env) = std::env::var_os("ISLAND_ASSETS") {
+        return std::path::PathBuf::from(from_env);
+    }
+    let beside_the_binary = std::env::current_exe().ok().and_then(|exe| {
+        let dir = exe.parent()?.to_path_buf();
+        [dir.join("assets"), dir.join("../assets")]
+            .into_iter()
+            .find(|candidate| candidate.is_dir())
+    });
+    let here = std::path::PathBuf::from("assets");
+    let found = if here.is_dir() {
+        here
+    } else {
+        beside_the_binary.unwrap_or(here)
+    };
+    // Absolute, always. Bevy resolves a *relative* asset path against the
+    // binary's own directory, not the working directory -- so `assets`
+    // from a `cargo run` in the workspace root became
+    // `target/debug/assets`, and every model failed to load with "Path
+    // not found" while the directory sat where it always was. The estate
+    // still drew, because its geometry is the simulation's and the models
+    // are hung on it, which is how that went unnoticed for one frame.
+    found
+        .canonicalize()
+        .unwrap_or_else(|_| std::env::current_dir().unwrap_or_default().join(found))
 }
 
 /// Whether there is a desktop to put a window on.
@@ -107,6 +155,30 @@ struct Panels {
 /// than respawned every frame.
 #[derive(Component)]
 struct Islander(String);
+
+/// Marks the ground, so the estate view can hide it.
+#[derive(Component)]
+struct Ground;
+
+/// Marks everything on the estate, drawn in metres rather than in ten-
+/// kilometre units, and hidden unless the estate is what is being looked
+/// at.
+#[derive(Component)]
+struct OnTheEstate;
+
+/// Which of the two frames is being shown.
+///
+/// Two views rather than one, because one scale cannot hold an island
+/// 2,400 km across and a four-metre room: see `scene.rs`. Switching hides
+/// one set of entities and shows the other, and moves the camera, rather
+/// than rescaling anything -- a rescaled estate would still be measured
+/// in six-figure metres and still lose millimetres to `f32`.
+#[derive(Resource, Clone, Copy, PartialEq, Eq, Default)]
+enum Showing {
+    #[default]
+    Island,
+    Estate,
+}
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -214,29 +286,64 @@ fn main() {
         height_m / 1000.0
     );
 
+    let assets = asset_root(flag(&args, "--assets"));
+    println!("Models from {}.", assets.display());
+
     App::new()
-        .add_plugins(DefaultPlugins.set(WindowPlugin {
-            primary_window: Some(Window {
-                title: format!("Maer-Ken Island — {}", island.address()),
-                // Wider than Bevy's 1280x720 default, because two side
-                // panels and a map between them is what this draws, and
-                // at 1280 the map is the narrowest of the three.
-                resolution: bevy::window::WindowResolution::new(1600, 1000),
-                ..default()
-            }),
-            ..default()
-        }))
+        .add_plugins(
+            DefaultPlugins
+                .set(AssetPlugin {
+                    file_path: assets.to_string_lossy().into_owned(),
+                    ..default()
+                })
+                .set(WindowPlugin {
+                    primary_window: Some(Window {
+                        title: format!("Maer-Ken Island — {}", island.address()),
+                        // Wider than Bevy's 1280x720 default, because two side
+                        // panels and a map between them is what this draws, and
+                        // at 1280 the map is the narrowest of the three.
+                        resolution: bevy::window::WindowResolution::new(1600, 1000),
+                        ..default()
+                    }),
+                    ..default()
+                }),
+        )
         .add_plugins(EguiPlugin::default())
         .insert_resource(TheIsland(island))
         .insert_resource(Latest::default())
         .insert_resource(View::default())
         .insert_resource(EstateOrigin::default())
         .insert_resource(Panels::default())
+        .insert_resource(Showing::default())
         .insert_resource(ClearColor(Color::srgb(0.02, 0.04, 0.08)))
-        .add_systems(Startup, (build_ground, light_the_island))
+        // Spawning a glTF scene goes through `bevy_world_serialization`,
+        // which looks every component up in the type registry and panics
+        // on one it does not find. With Bevy's default features that
+        // registration happens inside plugins this build leaves out, so
+        // the types the models actually carry are registered here. The
+        // alternative is turning features back on for the registry
+        // alone, which would drag alsa and libudev back with them.
+        .register_type::<Transform>()
+        .register_type::<GlobalTransform>()
+        .register_type::<Visibility>()
+        .register_type::<InheritedVisibility>()
+        .register_type::<ViewVisibility>()
+        .register_type::<Name>()
+        .register_type::<bevy::camera::primitives::Aabb>()
+        .register_type::<Mesh3d>()
+        .register_type::<Children>()
+        .register_type::<ChildOf>()
+        .register_type::<TransformTreeChanged>()
+        .add_systems(Startup, (build_ground, build_the_estate, light_the_island))
         .add_systems(
             Update,
-            (read_the_island, drive_the_camera, place_islanders).chain(),
+            (
+                read_the_island,
+                drive_the_camera,
+                place_islanders,
+                show_what_was_chosen,
+            )
+                .chain(),
         )
         .add_systems(EguiPrimaryContextPass, panels)
         .run();
@@ -277,6 +384,7 @@ fn build_ground(
                 continue;
             };
             commands.spawn((
+                Ground,
                 Mesh3d(meshes.add(mesh)),
                 MeshMaterial3d(material),
                 Transform::IDENTITY,
@@ -324,6 +432,163 @@ fn chunk_mesh(chunk: &terrain::Chunk, want_land: bool) -> Option<Mesh> {
     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, chunk.normals.clone());
     mesh.insert_indices(Indices::U32(kept));
     Some(mesh)
+}
+
+/// The founders' estate, in metres, hidden until somebody asks for it.
+///
+/// Built once at startup: the buildings are placed when the island
+/// bootstraps and nothing on this island moves one.
+///
+/// Every shape here is the simulation's own -- a building is its
+/// footprint, a room is its rectangle, a thing is at the metres it stands
+/// on. The models from `assets/` are hung on those shapes rather than
+/// consulted for them: a model at the wrong scale makes an odd-looking
+/// shed, and a footprint taken from a model would make the island
+/// disagree with itself.
+fn build_the_estate(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    assets: Res<AssetServer>,
+    island: Res<TheIsland>,
+) {
+    let Some(layout) = island.0.estate() else {
+        warn!("this island served no estate layout, so there is nothing to draw of the estate");
+        return;
+    };
+
+    let box_for = |size: (f32, f32, f32)| Cuboid::new(size.0, size.1, size.2).mesh().build();
+    let colour = |r: f32, g: f32, b: f32, alpha: f32| StandardMaterial {
+        base_color: Color::srgba(r, g, b, alpha),
+        alpha_mode: if alpha < 1.0 {
+            AlphaMode::Blend
+        } else {
+            AlphaMode::Opaque
+        },
+        perceptual_roughness: 0.9,
+        ..default()
+    };
+
+    // The cleared ground first, so everything else stands on something.
+    let yard = estate::yard(layout);
+    commands.spawn((
+        OnTheEstate,
+        Mesh3d(meshes.add(box_for(yard.size_m))),
+        MeshMaterial3d(materials.add(colour(0.42, 0.44, 0.33, 1.0))),
+        Transform::from_xyz(yard.at.x, yard.at.y, yard.at.z),
+        Visibility::Hidden,
+    ));
+
+    // Buildings as their real footprints, translucent so the rooms and
+    // the things inside them can be seen without a cutaway.
+    for building in estate::buildings(layout) {
+        commands.spawn((
+            OnTheEstate,
+            Mesh3d(meshes.add(box_for(building.size_m))),
+            MeshMaterial3d(materials.add(colour(0.72, 0.68, 0.58, 0.35))),
+            Transform::from_xyz(building.at.x, building.at.y, building.at.z)
+                .with_rotation(Quat::from_rotation_y(building.rotation_deg.to_radians())),
+            Visibility::Hidden,
+        ));
+    }
+
+    for room in estate::rooms(layout) {
+        // The computer room gets its own colour, because it is the room
+        // this application exists to be able to show.
+        let is_computers = room.name.contains("Computer");
+        commands.spawn((
+            OnTheEstate,
+            Mesh3d(meshes.add(box_for(room.size_m))),
+            MeshMaterial3d(materials.add(if is_computers {
+                colour(0.30, 0.42, 0.55, 1.0)
+            } else {
+                colour(0.55, 0.50, 0.44, 1.0)
+            })),
+            Transform::from_xyz(room.at.x, room.at.y, room.at.z),
+            Visibility::Hidden,
+        ));
+    }
+
+    let mut things = 0usize;
+    let mut modelled = 0usize;
+    for thing in estate::things(layout) {
+        let at = Transform::from_xyz(thing.at.x, thing.at.y, thing.at.z);
+        // A box at the size such a thing is, always: the model may be at
+        // any scale, and a thing that is only a model is a thing that
+        // vanishes when the model does not load.
+        commands.spawn((
+            OnTheEstate,
+            Mesh3d(meshes.add(box_for(thing.size_m))),
+            MeshMaterial3d(materials.add(match thing.kind.as_str() {
+                "Computer" => colour(0.85, 0.87, 0.92, 1.0),
+                "Vehicle" => colour(0.55, 0.35, 0.25, 1.0),
+                _ => colour(0.62, 0.58, 0.50, 1.0),
+            })),
+            at,
+            Visibility::Hidden,
+        ));
+        things += 1;
+        if let Some(model) = thing.model.filter(|m| m.is_really_this) {
+            commands.spawn((
+                OnTheEstate,
+                WorldAssetRoot(assets.load(GltfAssetLabel::Scene(0).from_asset(model.path))),
+                at,
+                Visibility::Hidden,
+            ));
+            modelled += 1;
+        }
+    }
+    info!(
+        "the estate: {} buildings, {} rooms, {things} things ({modelled} with models of their own)",
+        layout.buildings.len(),
+        layout.spaces.len()
+    );
+}
+
+/// Show one frame and hide the other, and move the camera with it.
+fn show_what_was_chosen(
+    showing: Res<Showing>,
+    island: Res<TheIsland>,
+    mut view: ResMut<View>,
+    mut ground: Query<&mut Visibility, (With<Ground>, Without<OnTheEstate>, Without<Islander>)>,
+    mut estate_parts: Query<
+        &mut Visibility,
+        (With<OnTheEstate>, Without<Ground>, Without<Islander>),
+    >,
+    mut islanders: Query<&mut Visibility, (With<Islander>, Without<Ground>, Without<OnTheEstate>)>,
+) {
+    if !showing.is_changed() {
+        return;
+    }
+    let on_the_island = *showing == Showing::Island;
+    let show = |visible: bool| {
+        if visible {
+            Visibility::Inherited
+        } else {
+            Visibility::Hidden
+        }
+    };
+    for mut visibility in &mut ground {
+        *visibility = show(on_the_island);
+    }
+    for mut visibility in &mut islanders {
+        *visibility = show(on_the_island);
+    }
+    for mut visibility in &mut estate_parts {
+        *visibility = show(!on_the_island);
+    }
+
+    match *showing {
+        Showing::Island => view.0.look_at(Point::new(0.0, 0.0, 0.0), 320.0),
+        Showing::Estate => {
+            if let Some((focus, distance)) = island.0.estate().and_then(estate::framing) {
+                view.0.look_at(focus, distance);
+                // Lower than the island view: a yard is read from an
+                // angle, not from overhead.
+                view.0.pitch = 0.6;
+            }
+        }
+    }
 }
 
 /// The sun, and enough ambient light that a shaded slope is still legible.
@@ -490,6 +755,7 @@ fn panels(
     latest: Res<Latest>,
     mut panels: ResMut<Panels>,
     mut view: ResMut<View>,
+    mut showing: ResMut<Showing>,
     origin: Res<EstateOrigin>,
 ) {
     let Ok(ctx) = contexts.ctx_mut() else {
@@ -596,6 +862,40 @@ fn panels(
             }
             if let Some(said) = &panels.said {
                 ui.label(said.clone());
+            }
+
+            ui.separator();
+            ui.horizontal(|ui| {
+                ui.label("Looking at");
+                if ui
+                    .selectable_label(*showing == Showing::Island, "the island")
+                    .clicked()
+                {
+                    *showing = Showing::Island;
+                }
+                let has_estate = island.0.estate().is_some();
+                ui.add_enabled_ui(has_estate, |ui| {
+                    if ui
+                        .selectable_label(*showing == Showing::Estate, "the estate")
+                        .clicked()
+                    {
+                        *showing = Showing::Estate;
+                    }
+                });
+            });
+            if let Some(layout) = island.0.estate() {
+                if *showing == Showing::Estate {
+                    ui.label(format!(
+                        "{} buildings, {} rooms, {} things",
+                        layout.buildings.len(),
+                        layout.spaces.len(),
+                        layout.items.len()
+                    ));
+                    let machines = layout.items.iter().filter(|i| i.kind == "Computer").count();
+                    ui.label(format!(
+                        "{machines} machines in the computer room, drawn from Maer-Ken's models"
+                    ));
+                }
             }
 
             ui.separator();
