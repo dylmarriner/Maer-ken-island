@@ -29,7 +29,7 @@
 //! is never to make everything look sourced; it is that a reader can tell
 //! at a glance which is which.
 
-use super::property::PropertyItemKind;
+use super::property::{PropertyBuildingKind, PropertyItemKind};
 
 /// How big a thing is, and where that came from.
 ///
@@ -66,6 +66,71 @@ impl Dimensions {
     /// Footprint on the ground, m².
     pub fn footprint_m2(&self) -> f64 {
         self.length_m * self.width_m
+    }
+}
+
+/// How tall a building of this kind is, and where that came from.
+///
+/// Until this existed the renderer drew every building at a flat three
+/// metres, and that was not merely imprecise -- it was wrong in a way
+/// the island could have caught. A Fendt 1000 Vario is 3.606 m tall and
+/// it is parked in the shed.
+///
+/// The heights are to the eaves, which is what a box should be drawn at
+/// and what decides whether a machine fits. Roof pitch above that is
+/// not modelled, so these are deliberately the lower of the two numbers
+/// a builder would quote.
+pub fn building_height(kind: PropertyBuildingKind) -> Dimensions {
+    // Only the height is real here; a building's footprint comes from
+    // the estate layout, which has had real rectangles all along. The
+    // length and width are carried as zero and the renderer uses the
+    // layout's, which is why `extent` is not offered for a building.
+    let at = |height_m: f64, source: &'static str| Dimensions {
+        length_m: 0.0,
+        width_m: 0.0,
+        height_m,
+        source,
+    };
+    match kind {
+        // 2.4 m is the habitable-room height New Zealand has required
+        // since 1975, plus the floor platform and the ceiling space
+        // above it, which puts a single-storey eave around 3 m.
+        PropertyBuildingKind::House => at(
+            3.0,
+            "a single-storey dwelling at the eaves: 2.4 m habitable-room height (NZ House \
+             Improvement Regulations 1947 as amended 1975; Auckland District Plan Central \
+             Area sets the same 2.4 m), plus floor platform and ceiling space",
+        ),
+        PropertyBuildingKind::ComputerRoom => at(
+            2.4,
+            "a room inside the house, at New Zealand's 2.4 m habitable-room height",
+        ),
+        // The one that was wrong. PAES 420:2002 requires a machinery
+        // shed's clear height to be the machine's height plus 0.3 m,
+        // with 3 m an absolute minimum; this estate's tallest machine
+        // is a Fendt 1000 Vario at 3.606 m, so 3.9 m is the floor and
+        // not a comfortable one. Australian farm practice puts shed
+        // doors at five to six metres for large machinery, and six is
+        // taken because a shed that only just admits a tractor admits
+        // it with nothing on the three-point hitch.
+        PropertyBuildingKind::Shed | PropertyBuildingKind::Garage => at(
+            6.0,
+            "a machinery shed: PNS/PAES 420:2002 requires clear height = machine height + \
+             0.3 m (minimum 3 m), and the tallest machine here is 3.606 m; Australian farm \
+             practice puts doors for large machinery at 5-6 m (Stock Journal)",
+        ),
+        // Tall enough to stand a ladder in and run a hoist, which this
+        // estate owns, without being a machinery shed.
+        PropertyBuildingKind::Workshop => at(
+            4.5,
+            "a workshop with a material hoist and ladder set in it: above the 3 m PAES floor \
+             for a working building, below a machinery shed's 6 m",
+        ),
+        PropertyBuildingKind::Armoury => at(
+            3.0,
+            "a secure store: the 3 m minimum clear height PNS/PAES 420:2002 sets for a \
+             working farm building, with nothing in it taller than a locker",
+        ),
     }
 }
 
@@ -347,6 +412,68 @@ mod tests {
             "a Fendt 1000 is over 3.5 m tall: {fendt:?}"
         );
         assert!(fendt.longest_m() > 6.0);
+    }
+
+    #[test]
+    fn a_machine_fits_in_the_building_it_is_kept_in() {
+        // The check the flat three-metre convention made impossible.
+        // Both sides of it are real now -- the tractor's height is
+        // Fendt's and the shed's is a machinery-shed standard -- so the
+        // question "does it fit" has an answer, and this is it.
+        //
+        // PNS/PAES 420:2002 asks for the machine's height plus 0.3 m of
+        // clear height, so that is the bar rather than bare clearance.
+        let shed = building_height(PropertyBuildingKind::Shed).height_m;
+        for machine in [
+            "Fendt 1000 Vario",
+            "Fendt 900 Vario",
+            "Ford Raptor 4x4 Ute",
+            "Polaris RZR 2000 PRO R",
+        ] {
+            let it = of(PropertyItemKind::Vehicle, machine);
+            assert!(
+                shed >= it.height_m + 0.3,
+                "{machine} is {:.3} m tall and the shed is {shed:.3} m: PAES 420 wants \
+                 {:.3} m of clear height",
+                it.height_m,
+                it.height_m + 0.3
+            );
+        }
+    }
+
+    #[test]
+    fn a_house_is_not_a_machinery_shed() {
+        // They were the same number before any of this was real, and
+        // the whole point is that they are not the same building.
+        let house = building_height(PropertyBuildingKind::House).height_m;
+        let shed = building_height(PropertyBuildingKind::Shed).height_m;
+        assert!(house < shed, "{house} {shed}");
+        // And a computer room is a room in the house, so it cannot be
+        // taller than the house around it.
+        let room = building_height(PropertyBuildingKind::ComputerRoom).height_m;
+        assert!(
+            room <= house,
+            "a room is taller than its house: {room} > {house}"
+        );
+    }
+
+    #[test]
+    fn every_building_height_says_where_it_came_from() {
+        for kind in [
+            PropertyBuildingKind::House,
+            PropertyBuildingKind::Shed,
+            PropertyBuildingKind::Workshop,
+            PropertyBuildingKind::Armoury,
+            PropertyBuildingKind::ComputerRoom,
+            PropertyBuildingKind::Garage,
+        ] {
+            let it = building_height(kind);
+            assert!(
+                !it.source.is_empty(),
+                "{kind:?} has a height with no source"
+            );
+            assert!(it.height_m > 2.0, "{kind:?} is {:.1} m tall", it.height_m);
+        }
     }
 
     #[test]

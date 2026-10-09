@@ -18,12 +18,13 @@ use crate::property::{self, Model};
 use crate::scene::{estate_of, Point};
 use mk_island_api::{EstateLayout, Rect};
 
-/// How tall a building is drawn, in metres.
+/// How tall a building is drawn when the island does not say.
 ///
-/// The layout gives footprints and no heights, because the simulation has
-/// no use for one: nothing on this island cares how tall the workshop is.
-/// Three metres is a single storey and the key says it is a drawing
-/// convention rather than a measurement.
+/// It does say now -- `BuildingFootprint::height_m` carries a real
+/// height with a real source, and a shed is six metres because the
+/// tractor in it is 3.6. This remains only for an older backend that
+/// serves a layout without heights, where drawing nothing would be
+/// worse than drawing a storey.
 pub const WALL_HEIGHT_M: f32 = 3.0;
 
 /// And a room, drawn as a floor rather than a box so the things standing
@@ -72,17 +73,27 @@ pub fn buildings(layout: &EstateLayout) -> Vec<Placed> {
     layout
         .buildings
         .iter()
-        .map(|building| Placed {
-            name: building.name.clone(),
-            kind: building.kind.clone(),
-            at: centre(&building.rect_m, origin, f64::from(WALL_HEIGHT_M) / 2.0),
-            size_m: (
-                building.rect_m.width_m() as f32,
-                WALL_HEIGHT_M,
-                building.rect_m.depth_m() as f32,
-            ),
-            rotation_deg: building.rotation_deg as f32,
-            model: Some(property::building(&building.kind)),
+        .map(|building| {
+            // The island's height where it has one. A zero means an
+            // older backend that does not serve heights at all, not a
+            // building of no height, so the storey is the fallback.
+            let height = if building.height_m > 0.0 {
+                building.height_m as f32
+            } else {
+                WALL_HEIGHT_M
+            };
+            Placed {
+                name: building.name.clone(),
+                kind: building.kind.clone(),
+                at: centre(&building.rect_m, origin, f64::from(height) / 2.0),
+                size_m: (
+                    building.rect_m.width_m() as f32,
+                    height,
+                    building.rect_m.depth_m() as f32,
+                ),
+                rotation_deg: building.rotation_deg as f32,
+                model: Some(property::building(&building.kind)),
+            }
         })
         .collect()
 }
@@ -198,12 +209,18 @@ mod tests {
                     kind: "House".to_string(),
                     rect_m: rect(113_960.0, 124_010.0, 113_972.0, 124_020.0),
                     rotation_deg: 30.0,
+                    // What the island serves for a single storey.
+                    height_m: 3.0,
+                    height_source: "a single-storey dwelling at the eaves".to_string(),
                 },
                 BuildingFootprint {
                     name: "Tool Shed".to_string(),
                     kind: "Shed".to_string(),
                     rect_m: rect(113_975.0, 124_010.0, 113_981.0, 124_015.0),
                     rotation_deg: 0.0,
+                    // Tall enough for the tractor that lives in it.
+                    height_m: 6.0,
+                    height_source: "a machinery shed".to_string(),
                 },
             ],
             spaces: vec![SpaceRect {
@@ -251,15 +268,39 @@ mod tests {
     }
 
     #[test]
-    fn a_building_is_drawn_at_its_real_footprint() {
+    fn a_building_is_drawn_at_its_real_footprint_and_its_real_height() {
         let placed = buildings(&layout());
         let house = placed.iter().find(|p| p.kind == "House").unwrap();
         assert_eq!(house.size_m.0, 12.0, "the house is 12 m across");
         assert_eq!(house.size_m.2, 10.0, "and 10 m deep");
         assert_eq!(house.rotation_deg, 30.0, "and turned as the layout says");
-        assert_eq!(house.size_m.1, WALL_HEIGHT_M);
+        assert_eq!(house.size_m.1, 3.0, "and the height the island served");
         // Standing on the ground rather than half-buried in it.
-        assert_eq!(house.at.y, WALL_HEIGHT_M / 2.0);
+        assert_eq!(house.at.y, 1.5);
+
+        // The shed is taller than the house, which is the whole point:
+        // one holds people and the other holds a 3.6 m tractor. Drawing
+        // both at a flat three metres was how that went unnoticed.
+        let shed = placed.iter().find(|p| p.kind == "Shed").unwrap();
+        assert_eq!(shed.size_m.1, 6.0);
+        assert!(shed.size_m.1 > house.size_m.1);
+    }
+
+    #[test]
+    fn a_layout_with_no_heights_still_draws_a_building() {
+        // An older backend serves no `height_m` at all, which arrives as
+        // zero. A building of no height is a building nobody can see, so
+        // the storey is used instead -- the frontend degrades rather
+        // than vanishing.
+        let mut old = layout();
+        for building in &mut old.buildings {
+            building.height_m = 0.0;
+            building.height_source = String::new();
+        }
+        for placed in buildings(&old) {
+            assert_eq!(placed.size_m.1, WALL_HEIGHT_M, "{}", placed.name);
+            assert!(placed.at.y > 0.0, "{} is buried", placed.name);
+        }
     }
 
     #[test]

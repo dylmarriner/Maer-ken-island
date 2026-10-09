@@ -584,6 +584,11 @@ impl IslandProjection {
                     kind: format!("{:?}", b.kind),
                     rect_m: rect(&b.rect_m),
                     rotation_deg: b.rotation_deg,
+                    // The island's own height, derived like the item
+                    // sizes and stored no more than they are. A shed is
+                    // six metres because what is parked in it is 3.6.
+                    height_m: dimensions::building_height(b.kind).height_m,
+                    height_source: dimensions::building_height(b.kind).source.to_string(),
                 })
                 .collect(),
             spaces: layout

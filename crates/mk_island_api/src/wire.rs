@@ -360,6 +360,16 @@ pub struct BuildingFootprint {
     pub kind: String,
     pub rect_m: Rect,
     pub rotation_deg: f64,
+    /// How tall it is, in metres, to the eaves.
+    ///
+    /// The island's answer, not a renderer's convention. Every frontend
+    /// drew buildings at a flat three metres before this, which put a
+    /// 3.606 m Fendt 1000 Vario inside a 3 m shed and said nothing.
+    #[serde(default)]
+    pub height_m: f64,
+    /// Where that height came from, in words a reader can check.
+    #[serde(default)]
+    pub height_source: String,
 }
 
 /// A room or zone inside a building, by the layout's own label.
@@ -500,6 +510,8 @@ mod estate_tests {
                     y1: 11.0,
                 },
                 rotation_deg: 0.0,
+                height_m: 6.0,
+                height_source: "a machinery shed".to_string(),
             }],
             ..Default::default()
         };
