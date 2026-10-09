@@ -34,8 +34,12 @@ island-ui (--scenario <path> | --snapshot <path>) [--data-dir <dir>] [--speed re
                    backend on its own machine and this is one of several
                    screens looking at it.
   --token TOKEN    the token that backend wants, if it wants one. A control
-                   token reads and writes; a read token only reads, and the
-                   controls say so rather than failing when pressed.
+                   token reads and writes; a read token only reads. Which
+                   of the two this is cannot be known before it is used --
+                   `/api/version` says a token is wanted, not what the one
+                   you hold is for -- so the controls stay live and a read
+                   token's refusal is shown under them in the island's own
+                   words.
   --scenario PATH  run an island here instead, in this process. It is the
                    same backend, on a loopback port nothing else can reach,
                    read through the same client -- so there is one way in

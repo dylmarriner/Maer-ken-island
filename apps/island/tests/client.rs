@@ -281,6 +281,20 @@ async fn a_client_without_the_token_is_told_which_one_it_needs() {
             "it must say which token: {err}"
         );
 
+        // The same for the controls, which is the path the desktop
+        // application's Pause button takes. It cannot grey that button
+        // out in advance -- `/api/version` says a token is wanted, not
+        // what the one in hand is for -- so what it shows when the button
+        // is pressed is the whole of what a reader gets told, and
+        // `island-ui --help` says as much.
+        let err = reader
+            .control(&ControlRequest::Pause)
+            .expect_err("nor to pause the island");
+        assert!(
+            err.to_string().contains("control token"),
+            "the button has nothing else to show: {err}"
+        );
+
         // The control token does both.
         let operator = anonymous.with_token(Some("control".to_string()));
         operator.world().expect("the control token reads too");

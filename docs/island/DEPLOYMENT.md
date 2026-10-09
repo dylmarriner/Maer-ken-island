@@ -251,6 +251,29 @@ offering everything and letting half of it fail:
 | `computer_service` | A real bridge to the outside is attached. |
 | `snapshots` | A snapshot directory was configured, so the button will work. |
 
+### The whole shape, measured
+
+Run against one backend on `0.0.0.0:8120` with both tokens and
+`--allow-origin http://127.0.0.1:3010`, a dashboard on `127.0.0.1:3010`
+started with `--frontend-only --backend`, and the desktop application
+reading the backend with the read token:
+
+| Asked | Answer |
+|---|---|
+| `GET /api/world`, no token | `401` |
+| `GET /api/world`, read token | `200` |
+| `GET /api/world/estate/layout`, read token | `200`, the five buildings in metres |
+| `POST /api/control`, read token | `401` |
+| `POST /api/control`, control token | `200` |
+| `GET /api/version`, no token | `200` — a frontend must be able to find out it needs one |
+| `GET /island` on the dashboard | `200` |
+| `GET /static/config.js` on the dashboard | `window.ISLAND_BACKEND = "http://127.0.0.1:8120"` |
+| `GET /api/world` with `Origin: http://127.0.0.1:3010` | `200`, `access-control-allow-origin` set |
+| `GET /api/world` with any other `Origin` | `403`, naming `--allow-origin` |
+| `island-ui --server … --token … --view estate` | draws the estate, 52 models, clock at 60.0× of the 60× asked for |
+
+Three processes, three machines' worth of separation, one island.
+
 ## What the backend costs
 
 Measured on the development machine, from `benchmarks/`:
