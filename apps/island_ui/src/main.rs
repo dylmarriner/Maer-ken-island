@@ -62,11 +62,23 @@ island-ui (--scenario <path> | --snapshot <path>) [--data-dir <dir>] [--speed re
                    straight onto the estate, and for a headless render
                    that has nobody to press anything.
   --detail N       how finely to sample the ground: 1 (every cell, the
-                   default), 2, 4 or 8. The island is 1,200 x 960 cells,
-                   which is 2.3 M triangles at full detail for a picture
-                   about 1,280 pixels across; 2 is a quarter of that and 4
-                   a sixteenth. It has to divide 64, because that is where
-                   the ground's chunks meet.
+                   default), 2, 4 or 8. It has to divide 64, because that
+                   is where the ground's chunks meet.
+
+                   The island is 1,200 x 960 cells -- 2.3 M triangles for
+                   a picture about 1,280 pixels across. On a GPU that is
+                   nothing, which is why the default is full detail.
+                   Measured under a software rasteriser, where it is not:
+
+                     detail 1   2,299,682 triangles   0.6 fps
+                     detail 2     576,000 triangles   1.4 fps
+                     detail 4     144,000 triangles   3.2 fps
+                     detail 8      36,000 triangles   6.0 fps
+
+                   4 still shows the island's relief, its coastline and
+                   the trench; 8 flattens it into a smooth green shape
+                   and is the point at which this stops looking like the
+                   island.
   --measure N      draw for N seconds, print the frame rate achieved, and
                    exit. For putting a number on what this costs on the
                    machine it is actually running on, rather than
@@ -810,7 +822,8 @@ fn say_what_is_drawing(
              view runs at about 0.6 frames a second this way, against 10.8 for the estate. \
              Nothing is misdrawn and nothing here needs fixing -- it is slow because no \
              graphics driver was found. Install one (on Linux, a Vulkan driver for your \
-             card) and this goes away.",
+             card) and this goes away. Until then `--detail 4` draws the island at about \
+             3.2 frames a second and still shows its relief, its coastline and the trench.",
             info.name, info.backend
         );
     } else {

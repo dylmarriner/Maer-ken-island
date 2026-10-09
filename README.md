@@ -102,9 +102,17 @@ cannot tell a loaded model from the box underneath it — measured, an empty
 `assets/` directory costs that frame a third of its colours and the log
 names thirteen models it could not find.
 
-What none of that answers is how it feels with a mouse or what it costs on
-a GPU, because every frame so far was rasterised on the CPU.
-`docs/island/RENDER_STACK.md` is the full account.
+It answers a mouse and a keyboard too, and that is checked rather than
+assumed: CI drives it with synthetic X11 input — a held drag, a scroll,
+the `e` and `i` keys and a click on the panel's own button — and asserts
+the picture changed the way each gesture should.
+
+What none of that answers is what it costs on a GPU, because every frame
+so far was rasterised on the CPU — measured at 0.6 frames a second for
+the island view and 10.8 for the estate. The application already asks
+for the best adapter a machine has and now says which one it got; on a
+software one it says so and names both remedies, a driver or
+`--detail 4`. `docs/island/RENDER_STACK.md` is the full account.
 
 ### The JSON behind it all
 

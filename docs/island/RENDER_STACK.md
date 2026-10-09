@@ -291,6 +291,40 @@ the island. That corrects an assumption: the island view is
 triangles at 1600×1000, and 1.7 seconds a frame is what a CPU takes over
 that.
 
+### What the detail knob buys
+
+`--detail N` samples the ground every Nth cell. Measured on the same
+software rasteriser, island view, paced island:
+
+| `--detail` | triangles | frames/s | what it looks like |
+|---|---|---|---|
+| 1 (default) | 2,299,682 | 0.6 | every cell |
+| 2 | 576,000 | 1.4 | indistinguishable at this zoom |
+| 4 | 144,000 | 3.2 | relief, coastline and trench all still there |
+| 8 | 36,000 | 6.0 | flattened to a smooth green shape |
+
+Ten times faster from end to end, and **not** linear in the triangle
+count — four times fewer triangles roughly doubles the rate, which says
+there is a fixed per-frame cost (fill at 1600×1000, and egui) that
+decimation cannot touch.
+
+**The default is 1**, deliberately. On a GPU 2.3 M triangles is nothing,
+so a coarser default would be a silent quality reduction for everyone to
+help the machines that are already the exception. The software-rasteriser
+warning names `--detail 4` instead, which is where the trade is actually
+worth making: 5× the frame rate and the island still looks like itself.
+At 8 it does not — that frame is in the history of this document as the
+reason the default is not 8.
+
+This measurement had to be taken twice. The first sweep reported 0.6
+frames per second at *every* detail level, which read as "the island
+view is fill-rate bound and decimation is worthless" — and was one
+sentence from being written down here as a finding. The binary predated
+`--detail`, and the option parser silently discarded flags it did not
+read. What gave it away was not the frame rates, which were entirely
+plausible, but a missing line of output. An unknown argument is an error
+now.
+
 **The plain conclusion: at the island scale this needs a GPU.** Not a
 hedge — a measurement. The application already asks for one (Bevy
 defaults to `PowerPreference::HighPerformance` across every backend), so
