@@ -1,0 +1,73 @@
+[package]
+name = "island_ui"
+version = "0.1.0"
+edition = "2021"
+license = "LicenseRef-All-Rights-Reserved"
+description = "Maer-Ken Island as a desktop application."
+
+[[bin]]
+name = "island-ui"
+path = "src/main.rs"
+
+[lib]
+# A library as well as a binary, so everything that is not the renderer --
+# the island source, the projection, the terrain meshing, the camera, the
+# asset table -- can be tested without a window. That is most of it, and on
+# a machine with no GPU it is all that can be tested at all.
+name = "island_ui"
+path = "src/lib.rs"
+
+[dependencies]
+mk_island_api = { path = "../../crates/mk_island_api" }
+mk_island_client = { path = "../../crates/mk_island_client" }
+# For `--scenario`: the desktop app starts the same backend `island serve`
+# does, on loopback, and then reads it through the same client it uses for
+# a remote one. One way in, so the local case is proven by the remote one.
+island = { path = "../island" }
+island_humans = { path = "../island_humans" }
+mk_engine = { path = "../../crates/mk_engine" }
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+
+[dependencies.bevy]
+version = "0.19"
+# Default features off, and the list is not arbitrary: `bevy_audio` pulls
+# in alsa and `bevy_gilrs` pulls in libudev, neither of which this island
+# uses and neither of whose development packages are on a plain server.
+# What is left builds from source alone.
+default-features = false
+features = [
+  "bevy_asset",
+  "bevy_core_pipeline",
+  "bevy_pbr",
+  "bevy_render",
+  "bevy_gltf",
+  "bevy_scene",
+  # Spawning a GLB. In 0.19 a glTF scene is a `WorldAsset` and the
+  # component that spawns one is `WorldAssetRoot` -- renamed from
+  # `SceneRoot`, because "scene" now means the new BSN scene system.
+  "bevy_world_serialization",
+  "bevy_winit",
+  "bevy_window",
+  "bevy_state",
+  "bevy_log",
+  "x11",
+  "tonemapping_luts",
+  "ktx2",
+  "zstd_rust",
+  "png",
+  "multi_threaded",
+]
+
+[dependencies.bevy_egui]
+version = "0.42"
+default-features = false
+features = ["render"]
+
+[dev-dependencies]
+tempfile = "3"
+mk_island = { path = "../../crates/mk_island" }
+
+[lints]
+workspace = true

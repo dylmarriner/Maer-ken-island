@@ -366,6 +366,8 @@ fn main() {
                 reads: ReadAuth::Open,
                 allowed_origins,
                 backend: Some(backend),
+                // The env var, as a server run from a terminal should.
+                access_log: None,
                 connect_origins,
             },
         )) {
@@ -517,6 +519,7 @@ fn main() {
             reads,
             allowed_origins,
             backend,
+            access_log: None,
             connect_origins,
         },
     )) {

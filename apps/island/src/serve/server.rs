@@ -562,9 +562,14 @@ fn content_security_policy(connect: &[String]) -> String {
 
 /// One line per request on stdout, the way a server log reads. Set
 /// `ISLAND_ACCESS_LOG=off` to keep the terminal quiet.
-fn access_log() -> warp::log::Log<impl Fn(warp::log::Info<'_>) + Copy> {
-    warp::log::custom(|info| {
-        if std::env::var("ISLAND_ACCESS_LOG").is_ok_and(|value| value.eq_ignore_ascii_case("off")) {
+fn access_log(wanted: Option<bool>) -> warp::log::Log<impl Fn(warp::log::Info<'_>) + Clone> {
+    warp::log::custom(move |info| {
+        let on = match wanted {
+            Some(on) => on,
+            None => !std::env::var("ISLAND_ACCESS_LOG")
+                .is_ok_and(|value| value.eq_ignore_ascii_case("off")),
+        };
+        if !on {
             return;
         }
         println!(
@@ -609,6 +614,19 @@ pub struct ServeConfig {
     /// API left off entirely, which is how the two halves end up on
     /// different machines.
     pub backend: Option<String>,
+    /// Whether a line per request goes to stdout.
+    ///
+    /// `None` -- the ordinary case -- follows `ISLAND_ACCESS_LOG`, which
+    /// is what a server run from a terminal should do. `Some(false)` is
+    /// for a caller that is not a terminal: the desktop application
+    /// embeds this backend and polls it four times a second, and a
+    /// request log would be noise in its output.
+    ///
+    /// A field rather than the caller setting the environment variable,
+    /// because setting a process-wide variable to configure one server is
+    /// a side effect on everything else in the process -- and, since Rust
+    /// 2024, an `unsafe` one.
+    pub access_log: Option<bool>,
     /// Islands the pages are permitted to call, for the `connect-src` and
     /// `img-src` a browser enforces on them. The configured backend is
     /// always one of these; more can be named so a reader can point the
@@ -625,6 +643,7 @@ impl ServeConfig {
             reads: ReadAuth::Open,
             allowed_origins: Vec::new(),
             backend: None,
+            access_log: None,
             connect_origins: Vec::new(),
         }
     }
@@ -1542,7 +1561,7 @@ pub fn routes_with_config(
             "permissions-policy",
             "geolocation=(), camera=(), microphone=()",
         ))
-        .with(access_log())
+        .with(access_log(config.access_log))
 }
 
 /// Serve until Ctrl-C, following upstream `mk serve`'s pattern.
@@ -1562,6 +1581,28 @@ pub async fn run_with_world(
     world: Option<SimHandle>,
 ) -> std::io::Result<()> {
     run_with_config(population, bind, world, ServeConfig::local(auth)).await
+}
+
+/// Serve on a listener somebody else bound.
+///
+/// For a caller that needs the port *before* the server starts -- the
+/// desktop application binds 127.0.0.1:0, reads the port the operating
+/// system picked, and connects a client to it. Asking the runtime for the
+/// port afterwards would be a race against the server's own startup.
+///
+/// It also keeps `warp` out of that application's dependencies, which
+/// matters more than it looks: a desktop binary has no business linking an
+/// HTTP framework just to name a type.
+pub async fn serve_on(
+    listener: tokio::net::TcpListener,
+    population: SharedPopulation,
+    world: Option<SimHandle>,
+    config: ServeConfig,
+) {
+    warp::serve(routes_with_config(population, world, config))
+        .incoming(listener)
+        .run()
+        .await;
 }
 
 /// Serve the pages alone, for an island on another machine.
@@ -1584,7 +1625,7 @@ pub async fn run_frontend(bind: std::net::SocketAddr, config: ServeConfig) -> st
             "permissions-policy",
             "geolocation=(), camera=(), microphone=()",
         ))
-        .with(access_log());
+        .with(access_log(config.access_log));
     warp::serve(routes)
         .incoming(listener)
         .graceful(async {
@@ -2243,8 +2284,7 @@ mod cors_refusal_tests {
                 control: ControlAuth::resolve(Some("control".into()), LAN),
                 reads: ReadAuth::resolve(Some("read".into())),
                 allowed_origins: vec![PAGE.to_string()],
-                backend: None,
-                connect_origins: Vec::new(),
+                ..ServeConfig::local(ControlAuth::Disabled)
             },
         );
 
