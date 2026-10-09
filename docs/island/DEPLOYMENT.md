@@ -198,6 +198,55 @@ far was rasterised by lavapipe on the CPU, and no frame-rate figure from
 real hardware is claimed. `docs/island/RENDER_STACK.md` is the full
 account.
 
+### The two claims this repository cannot check itself
+
+Everything above was verified inside one container, which has no GPU and
+one network interface. Two things therefore stand unverified, and neither
+can be settled by any amount of further work in that container. They are
+written out here as procedures rather than caveats, so that whoever has
+the hardware can close them in an afternoon and write the numbers down.
+
+**Does it use the GPU, and what does a frame cost?** The application asks
+for the high-performance adapter in its own code (`wants_the_best_gpu`),
+and says at startup which one it actually got. On a machine with a
+graphics driver:
+
+```sh
+island-ui --scenario fixtures/island/default_scenario.json --measure 30
+island-ui --scenario fixtures/island/default_scenario.json --view estate --measure 30
+```
+
+The startup line names the adapter. If it says `drawing on the CPU` the
+machine has no driver and the figures are meaningless; otherwise
+`--measure` prints frames per second after a sixty-frame warm-up. The
+figures to beat are the software ones: **0.6 fps** on the island view and
+**10.8** on the estate, at 1600x1000 under lavapipe. `--detail 4` is the
+knob if the island view is still slow.
+
+**Does it run across separate computers?** The parts that make this
+possible are tested — the backend binds any address, enforces a read
+token and an origin allow-list over the wire, and `--frontend-only
+--backend <url>` generates a `config.js` naming the backend rather than
+baking it in. What one container cannot show is the topology. On two or
+more machines, with the backend on A and the frontends on B and C:
+
+```sh
+# on A
+ISLAND_READ_TOKEN=... ISLAND_CONTROL_TOKEN=... island serve \
+  --scenario ... --bind 0.0.0.0:8120 --allow-origin http://B:3010
+# on B
+island serve --frontend-only --backend http://A:8120 --bind 0.0.0.0:3010
+# on C
+island-ui --server http://A:8120 --token ... --view estate
+```
+
+Expect, and check: `/api/version` answering without a token, `/api/world`
+refusing without one and answering with it, an origin that is not B
+getting a 403, `window.ISLAND_BACKEND` on B naming A, and C logging
+`Reading the island at http://A:8120` before it draws. Those exact checks
+pass here between processes over this container's own interface; what a
+second machine adds is the one thing a single host cannot fake.
+
 On a machine with no screen it says so in a sentence and exits 1, after
 telling you whether the backend was reachable — so a headless operator
 still gets an answer about the connection.
