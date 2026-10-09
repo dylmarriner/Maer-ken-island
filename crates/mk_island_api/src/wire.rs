@@ -388,6 +388,25 @@ pub struct PlacedItem {
     pub position_m: (f64, f64),
     /// The space it is in, by the layout's own label, or `None` outdoors.
     pub space: Option<String>,
+    /// How big it really is: length, width, height in metres, along its
+    /// own axes.
+    ///
+    /// The island's answer rather than a renderer's guess. Every frontend
+    /// drawing this estate used to invent a size, which meant two of them
+    /// could draw the same truck differently and neither would be wrong
+    /// about anything the island had said. Now the island says.
+    #[serde(default)]
+    pub size_m: (f64, f64, f64),
+    /// Where that figure came from, in words a reader can check: a
+    /// citation for a named thing, or a sentence beginning "convention:"
+    /// for one the table knows only by kind.
+    ///
+    /// Carried on the wire rather than kept server-side because a
+    /// frontend showing a measurement should be able to show where it
+    /// came from, and because a figure whose provenance is one hop away
+    /// is a figure nobody checks.
+    #[serde(default)]
+    pub size_source: String,
 }
 
 /// The founders' estate as geometry: what stands where, in metres.

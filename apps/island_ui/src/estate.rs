@@ -40,44 +40,19 @@ pub struct Placed {
     pub kind: String,
     /// The centre of the thing, in the estate frame.
     pub at: Point,
-    /// How big it is, in metres. For a building and a room this is the
-    /// real footprint; for an item it is the size it is drawn at, which
-    /// the simulation does not specify.
+    /// How big it is, in metres, as (across, up, deep) in this frame.
+    ///
+    /// Real throughout now: a building and a room carry their footprint
+    /// from the layout, and an item carries the island's own dimensions
+    /// from `organisms::dimensions` -- the maker's figures where the
+    /// thing is a named machine. Nothing here is this renderer's
+    /// invention any more.
     pub size_m: (f32, f32, f32),
     /// Turned, in degrees, about the vertical.
     pub rotation_deg: f32,
     /// The model, if one is named for it. `is_really_this` false means a
     /// placeholder, and the key says so.
     pub model: Option<Model>,
-}
-
-/// How big a thing of each kind is drawn, in metres.
-///
-/// Invented, and labelled as invented: the island records that Gem-D owns
-/// a computer and where it stands, not that it is 60 cm wide. These are
-/// the sizes such a thing is, so a room full of them reads correctly, and
-/// nothing downstream treats them as measurements.
-///
-/// Not an omission that could be fixed by reading harder, either.
-/// `PropertyItem` in the engine carries `id`, `kind`, `name`,
-/// `location`, `quantity`, `room` and `attaches_to`, and no dimension of
-/// any sort -- nothing on this island cares how wide a workbench is, so
-/// nothing records it. A renderer has to invent a size or draw nothing,
-/// and inventing one *here*, where it is named as a drawing convention,
-/// is the version that cannot be mistaken for the simulation's own
-/// number: `PlacedItem` crosses the wire without a size field, so there
-/// is nothing for a reader to confuse this with.
-fn drawn_size(kind: &str) -> (f32, f32, f32) {
-    match kind {
-        "Computer" => (0.6, 0.6, 0.6),
-        "HouseholdItem" => (0.6, 0.9, 0.6),
-        "BuildingEquipment" => (1.2, 1.0, 0.8),
-        "ArmouryItem" => (0.8, 1.2, 0.5),
-        "Vehicle" => (4.8, 1.8, 2.0),
-        "VehicleAttachment" => (2.0, 1.0, 1.5),
-        "ShedTool" => (0.5, 1.0, 0.3),
-        _ => (0.6, 0.6, 0.6),
-    }
 }
 
 fn centre(rect: &Rect, origin_m: (f64, f64), height_m: f64) -> Point {
@@ -143,7 +118,14 @@ pub fn things(layout: &EstateLayout) -> Vec<Placed> {
         .items
         .iter()
         .map(|item| {
-            let size = drawn_size(&item.kind);
+            // The island's own figure, not this renderer's. `size_m`
+            // comes from `organisms::dimensions` -- a Ford Raptor is
+            // 5.381 m long because Ford says so -- and the only thing
+            // done to it here is the axis swap: the wire gives length,
+            // width and height, and this frame wants x across, y up, z
+            // deep.
+            let (length, width, height) = item.size_m;
+            let size = (length as f32, height as f32, width as f32);
             Placed {
                 name: item.name.clone(),
                 kind: item.kind.clone(),
@@ -152,7 +134,7 @@ pub fn things(layout: &EstateLayout) -> Vec<Placed> {
                     origin,
                     item.position_m.0,
                     item.position_m.1,
-                    f64::from(size.1) / 2.0 + f64::from(FLOOR_THICKNESS_M),
+                    height / 2.0 + f64::from(FLOOR_THICKNESS_M),
                 ),
                 size_m: size,
                 rotation_deg: 0.0,
@@ -236,12 +218,17 @@ mod tests {
                     kind: "Computer".to_string(),
                     position_m: (113_965.0, 124_013.0),
                     space: Some("Computer Room".to_string()),
+                    // What the island serves for a desktop tower.
+                    size_m: (0.5, 0.25, 0.45),
+                    size_source: "convention: a desktop tower case".to_string(),
                 },
                 PlacedItem {
                     name: "Local Archive Server".to_string(),
                     kind: "Computer".to_string(),
                     position_m: (113_967.0, 124_015.0),
                     space: Some("Computer Room".to_string()),
+                    size_m: (0.5, 0.25, 0.45),
+                    size_source: "convention: a desktop tower case".to_string(),
                 },
             ],
         }

@@ -61,6 +61,12 @@ island-ui (--scenario <path> | --snapshot <path>) [--data-dir <dir>] [--speed re
                    time, as do the `i` and `e` keys; this is for opening
                    straight onto the estate, and for a headless render
                    that has nobody to press anything.
+  --detail N       how finely to sample the ground: 1 (every cell, the
+                   default), 2, 4 or 8. The island is 1,200 x 960 cells,
+                   which is 2.3 M triangles at full detail for a picture
+                   about 1,280 pixels across; 2 is a quarter of that and 4
+                   a sixteenth. It has to divide 64, because that is where
+                   the ground's chunks meet.
   --measure N      draw for N seconds, print the frame rate achieved, and
                    exit. For putting a number on what this costs on the
                    machine it is actually running on, rather than
@@ -357,6 +363,22 @@ fn main() {
         }
     });
 
+    // Rejected rather than rounded when it is not a stride that keeps
+    // the chunks closed: 3 draws an island with a crack through it every
+    // 64 cells, and silently substituting 2 would hide a typo behind a
+    // picture that looks almost right.
+    let detail = flag(&args, "--detail").map_or(1, |asked| match asked.parse::<usize>() {
+        Ok(stride) if terrain::stride_is_usable(stride) => stride,
+        _ => {
+            eprintln!(
+                "--detail takes one of {:?}, not `{asked}`: it has to divide 64, which is \
+                 where the ground's chunks meet.",
+                terrain::strides()
+            );
+            usage()
+        }
+    });
+
     let mut app = App::new();
     app.add_plugins(
         DefaultPlugins
@@ -383,6 +405,7 @@ fn main() {
     .insert_resource(EstateOrigin::default())
     .insert_resource(Panels::default())
     .insert_resource(showing)
+    .insert_resource(Detail(detail))
     .insert_resource(ClearColor(Color::srgb(0.02, 0.04, 0.08)))
     // Spawning a glTF scene goes through `bevy_world_serialization`,
     // which looks every component up in the type registry and panics
@@ -415,6 +438,7 @@ fn main() {
     .add_systems(
         Update,
         (
+            say_what_is_drawing,
             read_the_island,
             pick_a_view,
             drive_the_camera,
@@ -449,6 +473,7 @@ fn build_ground(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     island: Res<TheIsland>,
+    detail: Res<Detail>,
 ) {
     let Some(ground) = island.0.terrain() else {
         return;
@@ -464,8 +489,9 @@ fn build_ground(
         ..default()
     });
 
-    let chunks = terrain::chunks(ground);
+    let chunks = terrain::chunks_at(ground, detail.0);
     let count = chunks.len();
+    let triangles: usize = chunks.iter().map(|chunk| chunk.triangles()).sum();
     for chunk in chunks {
         // A chunk is drawn twice: once as land and once as sea, each with
         // only its own triangles. Splitting by vertex would need one
@@ -484,7 +510,15 @@ fn build_ground(
             ));
         }
     }
-    info!("{count} chunks of ground");
+    info!(
+        "{count} chunks of ground, {triangles} triangles at detail {}",
+        detail.0
+    );
+    println!(
+        "Ground: {count} chunks, {triangles} triangles (every {} cell{}).",
+        detail.0,
+        if detail.0 == 1 { "" } else { "s" }
+    );
 }
 
 /// One chunk's triangles, kept to the land ones or the sea ones.
@@ -648,6 +682,63 @@ fn build_the_estate(
 /// other two excluded -- in one place instead of three.
 type OnlyIn<'w, 's, Marker, NotA, NotB> =
     Query<'w, 's, &'static mut Visibility, (With<Marker>, Without<NotA>, Without<NotB>)>;
+
+/// How finely the ground is sampled: 1 is every cell, 2 every second.
+///
+/// A knob rather than a constant because the right answer depends on the
+/// adapter, and the adapter is not known until the window opens. See
+/// `--detail` and `docs/island/RENDER_STACK.md` for the measurements
+/// that set the default.
+#[derive(Resource, Clone, Copy)]
+struct Detail(usize);
+
+/// Say which graphics adapter this actually got, once, at startup.
+///
+/// Bevy asks for `PowerPreference::HighPerformance` and every backend by
+/// default, so this application already takes the best GPU a machine
+/// has. What it did not do was *say* which one it ended up with -- and
+/// the difference between a GPU and a software rasteriser is not subtle.
+/// Measured on this island at 1600x1000 under lavapipe: 0.6 frames per
+/// second on the island view and 10.8 on the estate. Somebody whose
+/// driver is missing sees those numbers and no reason for them.
+///
+/// So it is said, and a CPU adapter is called what it is. Nothing in
+/// this code is wrong when that fires -- the remedy is a driver, and the
+/// message says so rather than leaving a reader to infer it from a frame
+/// rate.
+///
+/// The device kind is compared as its printed name rather than against
+/// the `wgpu` enum, because that enum is not re-exported through Bevy's
+/// public surface at this version and reaching into the dependency to
+/// name it would tie this file to a version of `wgpu` it does not
+/// otherwise depend on.
+fn say_what_is_drawing(
+    adapter: Res<bevy::render::renderer::RenderAdapterInfo>,
+    mut said: Local<bool>,
+) {
+    if *said {
+        return;
+    }
+    *said = true;
+    let info = &**adapter;
+    let kind = format!("{:?}", info.device_type);
+    if kind == "Cpu" {
+        warn!(
+            "drawing on the CPU: `{}` ({}) is a software rasteriser, not a GPU. The island \
+             view runs at about 0.6 frames a second this way, against 10.8 for the estate. \
+             Nothing is misdrawn and nothing here needs fixing -- it is slow because no \
+             graphics driver was found. Install one (on Linux, a Vulkan driver for your \
+             card) and this goes away.",
+            info.name, info.backend
+        );
+    } else {
+        info!("drawing on {} ({kind} via {})", info.name, info.backend);
+    }
+    println!(
+        "Drawing on {} — {kind}, {} backend.",
+        info.name, info.backend
+    );
+}
 
 /// Counting frames, when somebody asked for a frame rate.
 ///

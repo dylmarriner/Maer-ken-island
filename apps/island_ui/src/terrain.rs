@@ -39,6 +39,12 @@ pub struct Chunk {
     /// The cells it covers, as a half-open range of the terrain grid.
     pub rows: std::ops::Range<usize>,
     pub cols: std::ops::Range<usize>,
+    /// The grid rows and columns this chunk actually sampled. At full
+    /// detail that is every one in `rows`/`cols`; at a coarser stride it
+    /// is every second or fourth, and these are what the vertex grid is
+    /// built from.
+    pub sampled_rows: Vec<usize>,
+    pub sampled_cols: Vec<usize>,
     /// Positions in the regional frame, row-major from the chunk's
     /// south-west corner.
     pub positions: Vec<Point>,
@@ -62,11 +68,17 @@ impl Chunk {
     /// Vertices along each edge. One more than the cells it covers,
     /// because a quad needs both of its corners.
     pub fn vertex_rows(&self) -> usize {
-        self.rows.len()
+        self.sampled_rows.len()
     }
 
     pub fn vertex_cols(&self) -> usize {
-        self.cols.len()
+        self.sampled_cols.len()
+    }
+
+    /// Triangles in this chunk, which is what the adapter is asked to
+    /// draw and therefore the number worth counting.
+    pub fn triangles(&self) -> usize {
+        self.indices.len() / 3
     }
 
     /// The middle of the chunk, for a camera asked to look at it.
@@ -95,6 +107,38 @@ pub fn chunk_grid(terrain: &Terrain) -> (usize, usize) {
 /// a crack right through the island. Sharing the edge vertices is what
 /// closes it.
 pub fn chunk(terrain: &Terrain, chunk_row: usize, chunk_col: usize) -> Option<Chunk> {
+    chunk_at(terrain, chunk_row, chunk_col, 1)
+}
+
+/// How coarsely the ground may be sampled.
+///
+/// A stride of 1 is every cell; 2 is every second, which is a quarter of
+/// the triangles; 4 is a sixteenth. It must divide [`CHUNK_CELLS`], and
+/// that is the whole reason this is checked rather than trusted: chunks
+/// meet at multiples of 64, so a stride that divides 64 puts a sampled
+/// vertex exactly on every shared edge and the chunks still close. A
+/// stride of 3 would not, and the island would get a crack through it
+/// every 64 cells -- the same defect the shared edge exists to prevent,
+/// reintroduced by a number.
+pub fn strides() -> [usize; 4] {
+    [1, 2, 4, 8]
+}
+
+/// Whether this stride keeps the chunks closed.
+pub fn stride_is_usable(stride: usize) -> bool {
+    stride > 0 && CHUNK_CELLS.is_multiple_of(stride)
+}
+
+/// Build one chunk at a given sampling stride.
+pub fn chunk_at(
+    terrain: &Terrain,
+    chunk_row: usize,
+    chunk_col: usize,
+    stride: usize,
+) -> Option<Chunk> {
+    if !stride_is_usable(stride) {
+        return None;
+    }
     let (chunk_rows, chunk_cols) = chunk_grid(terrain);
     if chunk_row >= chunk_rows || chunk_col >= chunk_cols {
         return None;
@@ -106,14 +150,28 @@ pub fn chunk(terrain: &Terrain, chunk_row: usize, chunk_col: usize) -> Option<Ch
     let row1 = (row0 + CHUNK_CELLS + 1).min(terrain.rows);
     let col1 = (col0 + CHUNK_CELLS + 1).min(terrain.cols);
     let (rows, cols) = (row0..row1, col0..col1);
+    // The cells actually sampled. At stride 1 this is every one; at 2,
+    // every second. The last chunk of the grid is partial and may not
+    // land on a stride boundary, so its final row and column are added
+    // back -- without them the island would stop short of its own edge.
+    let sample = |range: std::ops::Range<usize>| -> Vec<usize> {
+        let mut taken: Vec<usize> = range.clone().step_by(stride).collect();
+        match (taken.last(), range.end.checked_sub(1)) {
+            (Some(&last), Some(edge)) if last != edge => taken.push(edge),
+            _ => {}
+        }
+        taken
+    };
+    let sampled_rows = sample(rows.clone());
+    let sampled_cols = sample(cols.clone());
 
-    let mut positions = Vec::with_capacity(rows.len() * cols.len());
-    let mut land = Vec::with_capacity(rows.len() * cols.len());
+    let mut positions = Vec::with_capacity(sampled_rows.len() * sampled_cols.len());
+    let mut land = Vec::with_capacity(sampled_rows.len() * sampled_cols.len());
     let mut min = Point::new(f32::MAX, f32::MAX, f32::MAX);
     let mut max = Point::new(f32::MIN, f32::MIN, f32::MIN);
 
-    for row in rows.clone() {
-        for col in cols.clone() {
+    for &row in &sampled_rows {
+        for &col in &sampled_cols {
             let (x_m, y_m) = terrain.centre_m(row, col);
             let elevation = f64::from(terrain.elevation_at(row, col).unwrap_or(0.0));
             let point = regional_of(terrain, x_m, y_m, elevation);
@@ -124,10 +182,10 @@ pub fn chunk(terrain: &Terrain, chunk_row: usize, chunk_col: usize) -> Option<Ch
         }
     }
 
-    let width = cols.len();
-    let mut indices =
-        Vec::with_capacity(rows.len().saturating_sub(1) * width.saturating_sub(1) * 6);
-    for r in 0..rows.len().saturating_sub(1) {
+    let width = sampled_cols.len();
+    let height = sampled_rows.len();
+    let mut indices = Vec::with_capacity(height.saturating_sub(1) * width.saturating_sub(1) * 6);
+    for r in 0..height.saturating_sub(1) {
         for c in 0..width.saturating_sub(1) {
             let i = (r * width + c) as u32;
             let right = i + 1;
@@ -151,11 +209,13 @@ pub fn chunk(terrain: &Terrain, chunk_row: usize, chunk_col: usize) -> Option<Ch
         }
     }
 
-    let normals = normals_for(&positions, rows.len(), width);
+    let normals = normals_for(&positions, height, width);
 
     Some(Chunk {
         chunk_row,
         chunk_col,
+        sampled_rows,
+        sampled_cols,
         rows,
         cols,
         positions,
@@ -167,12 +227,23 @@ pub fn chunk(terrain: &Terrain, chunk_row: usize, chunk_col: usize) -> Option<Ch
     })
 }
 
-/// Every chunk of the island, south-west first.
+/// Every chunk of the island at full detail, south-west first.
 pub fn chunks(terrain: &Terrain) -> Vec<Chunk> {
+    chunks_at(terrain, 1)
+}
+
+/// Every chunk of the island at a sampling stride.
+///
+/// The island is 1,200 x 960 cells, which is 2.3 million triangles at
+/// full detail -- for a picture about 1,280 pixels across, where the
+/// whole island is on screen at once. That is roughly 1,800 triangles
+/// per pixel column, and every one of them is transformed whether or not
+/// it can be told from its neighbour.
+pub fn chunks_at(terrain: &Terrain, stride: usize) -> Vec<Chunk> {
     let (rows, cols) = chunk_grid(terrain);
     (0..rows)
         .flat_map(|r| (0..cols).map(move |c| (r, c)))
-        .filter_map(|(r, c)| chunk(terrain, r, c))
+        .filter_map(|(r, c)| chunk_at(terrain, r, c, stride))
         .collect()
 }
 
@@ -207,6 +278,126 @@ fn normals_for(positions: &[Point], rows: usize, cols: usize) -> Vec<[f32; 3]> {
         }
     }
     normals
+}
+
+#[cfg(test)]
+mod detail_tests {
+    use super::*;
+
+    fn a_grid(rows: usize, cols: usize) -> Terrain {
+        let mut elevation = Vec::with_capacity(rows * cols);
+        for r in 0..rows {
+            for c in 0..cols {
+                // A slope with a bump, so decimation has something to lose
+                // and the test is not comparing two flat planes.
+                elevation.push((r as f32) * 0.5 + (c as f32) * 0.25 + ((r * c) % 7) as f32);
+            }
+        }
+        Terrain {
+            rows,
+            cols,
+            cell_size_m: 2000.0,
+            elevation_m: elevation,
+            land: vec![true; rows * cols],
+        }
+    }
+
+    #[test]
+    fn a_stride_that_would_crack_the_island_is_refused() {
+        // Chunks meet at multiples of 64. A stride of 3 does not divide
+        // 64, so the sampled vertices either side of a seam would not
+        // line up and the island would show a crack every 64 cells --
+        // which is the exact defect the shared edge exists to prevent.
+        let terrain = a_grid(130, 130);
+        assert!(stride_is_usable(1));
+        assert!(stride_is_usable(2));
+        assert!(stride_is_usable(8));
+        assert!(!stride_is_usable(3));
+        assert!(!stride_is_usable(0));
+        assert!(!stride_is_usable(7));
+        assert!(chunk_at(&terrain, 0, 0, 3).is_none());
+        assert!(chunk_at(&terrain, 0, 0, 0).is_none());
+    }
+
+    #[test]
+    fn neighbouring_chunks_still_share_their_edge_at_every_usable_stride() {
+        // The crack test, at each stride. Two chunks side by side must
+        // agree exactly on the vertices along the seam -- not nearly,
+        // exactly, because a sub-millimetre disagreement is still a hole
+        // the sky shows through.
+        let terrain = a_grid(200, 200);
+        for stride in strides() {
+            let left = chunk_at(&terrain, 0, 0, stride).expect("a chunk");
+            let right = chunk_at(&terrain, 0, 1, stride).expect("the chunk beside it");
+            assert_eq!(
+                left.sampled_cols.last(),
+                right.sampled_cols.first(),
+                "stride {stride}: the chunks do not meet on the same column"
+            );
+            let width = left.vertex_cols();
+            for row in 0..left.vertex_rows() {
+                let on_the_left = left.positions[row * width + (width - 1)];
+                let on_the_right = right.positions[row * right.vertex_cols()];
+                assert_eq!(
+                    on_the_left, on_the_right,
+                    "stride {stride}, row {row}: the seam does not close"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_coarser_stride_costs_what_it_should() {
+        // Halving the sampling quarters the triangles. Asserted because
+        // the whole reason for this knob is the count, and a change that
+        // did not reduce it would be all of the quality loss and none of
+        // the gain.
+        let terrain = a_grid(200, 200);
+        let at = |stride| -> usize {
+            chunks_at(&terrain, stride)
+                .iter()
+                .map(|chunk| chunk.triangles())
+                .sum()
+        };
+        let (full, half, quarter) = (at(1), at(2), at(4));
+        assert!(full > half && half > quarter, "{full} {half} {quarter}");
+        // Not exactly a quarter: chunks share edges, and the last chunk
+        // of the grid is partial, so both add vertices the arithmetic
+        // does not. Within a fifth of it is the claim worth making.
+        let ratio = full as f64 / half as f64;
+        assert!(
+            (3.2..4.8).contains(&ratio),
+            "halving the sampling should quarter the triangles, got {ratio:.2}x"
+        );
+    }
+
+    #[test]
+    fn every_triangle_still_faces_the_sky_at_every_stride() {
+        // The defect that made the first frame black, re-checked at each
+        // stride: decimation changes which vertices are used, and a
+        // winding that survived stride 1 is not thereby proven at 4.
+        let terrain = a_grid(140, 140);
+        for stride in strides() {
+            for chunk in chunks_at(&terrain, stride) {
+                for triangle in chunk.indices.chunks(3) {
+                    let [a, b, c] = [
+                        chunk.positions[triangle[0] as usize],
+                        chunk.positions[triangle[1] as usize],
+                        chunk.positions[triangle[2] as usize],
+                    ];
+                    let (u, v) = (
+                        (b.x - a.x, b.y - a.y, b.z - a.z),
+                        (c.x - a.x, c.y - a.y, c.z - a.z),
+                    );
+                    let normal_y = u.2 * v.0 - u.0 * v.2;
+                    assert!(
+                        normal_y > 0.0,
+                        "stride {stride}: a triangle faces the sea floor"
+                    );
+                }
+            }
+        }
+    }
 }
 
 #[cfg(test)]

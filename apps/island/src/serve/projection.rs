@@ -15,6 +15,7 @@ use std::sync::Arc;
 
 use mk_engine::humans::dialogue::ConversationRelationship;
 use mk_engine::humans::HumanBeing;
+use mk_engine::organisms::dimensions::{self, Dimensions};
 use mk_engine::regional::estate_layout::Space;
 use mk_engine::regional::life::IslandLife;
 use serde::Serialize;
@@ -525,13 +526,27 @@ impl IslandProjection {
             y1: r.y1,
         };
         // Every item on every property of this estate, by id.
-        let named: std::collections::BTreeMap<u64, (&str, String)> = life
+        // Name, kind, and how big the thing really is. The size comes
+        // from `organisms::dimensions`, which is the island's own answer
+        // -- derived from the item rather than stored on it, so nothing
+        // here touches the state digest -- rather than something each
+        // frontend makes up for itself.
+        let named: std::collections::BTreeMap<u64, (&str, String, Dimensions)> = life
             .placed
             .property
             .properties
             .iter()
             .flat_map(|p| p.items.iter())
-            .map(|i| (i.id, (i.name.as_str(), format!("{:?}", i.kind))))
+            .map(|i| {
+                (
+                    i.id,
+                    (
+                        i.name.as_str(),
+                        format!("{:?}", i.kind),
+                        dimensions::of(i.kind, &i.name),
+                    ),
+                )
+            })
             .collect();
         let label_of = |space: Space| match space {
             Space::Outdoors => None,
@@ -585,12 +600,14 @@ impl IslandProjection {
                 .items
                 .iter()
                 .filter_map(|placement| {
-                    let (name, kind) = named.get(&placement.item_id)?;
+                    let (name, kind, size) = named.get(&placement.item_id)?;
                     Some(mk_island_api::PlacedItem {
                         name: (*name).to_string(),
                         kind: kind.clone(),
                         position_m: placement.position_m,
                         space: label_of(placement.space),
+                        size_m: (size.length_m, size.width_m, size.height_m),
+                        size_source: size.source.to_string(),
                     })
                 })
                 .collect(),

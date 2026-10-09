@@ -35,6 +35,15 @@
 #     down and put "the island" where "the estate" had been. The click
 #     landed on the already-selected button and changed 0.32% of the
 #     frame, which is what a hover highlight costs.
+#   * **A bare Xvfb has no focused window.** Mouse events are delivered
+#     by position and arrive regardless; key events go to whatever has
+#     focus, and with no window manager running there is nothing to give
+#     it -- `xdotool getwindowfocus` answers "the focused window of 1",
+#     which is the X server saying "none". Every keypress went nowhere
+#     and the view never switched. Focusing the window explicitly first
+#     fixes it: measured, `e` then changed 32.5% of the frame. This one
+#     was a property of the harness rather than of the application, and
+#     the two looked identical from the outside until it was checked.
 #
 # The second is why the view switch is now driven by the `e` key as well
 # as by the button: the key cannot drift with the layout, and the button
@@ -117,6 +126,14 @@ changed() {
 }
 
 alive "settling"
+
+# Give the window focus before anything is typed at it. There is no
+# window manager on a bare Xvfb, so nothing has focus and key events are
+# delivered to nobody; see the note at the top.
+window=$(DISPLAY="$DISPLAY_NUM" xdotool search --name "Maer-Ken Island" | head -1)
+[ -n "$window" ] || { echo "no island-ui window to focus" >&2; exit 1; }
+DISPLAY="$DISPLAY_NUM" xdotool windowfocus "$window"
+
 shot 00-opened
 
 # A left-drag across the middle of the window, away from either panel:
