@@ -545,6 +545,36 @@ mod tests {
         }
     }
 
+    // Eighteen, and the compiler is what keeps it eighteen:
+    // `spoken_action` matches on `ActionKind` with no wildcard arm, so
+    // a nineteenth variant fails to compile there before it can slip
+    // past here. This list only has to be right about what exists
+    // today -- and the first version of it was not. It said
+    // `[ActionKind; 19]` with `Idle` written twice, which checked
+    // Idle's phrasings over again and inflated the count. Review
+    // caught that; `no_action_is_listed_twice` below catches the next
+    // one.
+    const EVERY_ACTION: [crate::agents::ActionKind; 18] = [
+        crate::agents::ActionKind::Idle,
+        crate::agents::ActionKind::Rest,
+        crate::agents::ActionKind::SeekWater,
+        crate::agents::ActionKind::SeekFood,
+        crate::agents::ActionKind::SeekShelter,
+        crate::agents::ActionKind::SocialApproach,
+        crate::agents::ActionKind::Explore,
+        crate::agents::ActionKind::Gather,
+        crate::agents::ActionKind::Mine,
+        crate::agents::ActionKind::Move,
+        crate::agents::ActionKind::Build,
+        crate::agents::ActionKind::Craft,
+        crate::agents::ActionKind::Transfer,
+        crate::agents::ActionKind::Harm,
+        crate::agents::ActionKind::Code,
+        crate::agents::ActionKind::Intimacy,
+        crate::agents::ActionKind::WebSearch,
+        crate::agents::ActionKind::SendEmail,
+    ];
+
     /// Every phrasing, rendered, must open a sentence.
     ///
     /// Exhaustive on purpose. The first version of this test walked four
@@ -556,30 +586,6 @@ mod tests {
     /// lower-case clause cannot slip in behind it.
     #[test]
     fn every_spoken_phrasing_renders_as_a_sentence() {
-        use crate::agents::ActionKind;
-
-        const EVERY_ACTION: [ActionKind; 19] = [
-            ActionKind::Idle,
-            ActionKind::Rest,
-            ActionKind::SeekWater,
-            ActionKind::SeekFood,
-            ActionKind::SeekShelter,
-            ActionKind::SocialApproach,
-            ActionKind::Explore,
-            ActionKind::Gather,
-            ActionKind::Mine,
-            ActionKind::Move,
-            ActionKind::Build,
-            ActionKind::Craft,
-            ActionKind::Transfer,
-            ActionKind::Harm,
-            ActionKind::Code,
-            ActionKind::Intimacy,
-            ActionKind::WebSearch,
-            ActionKind::SendEmail,
-            ActionKind::Idle,
-        ];
-
         let mut checked = 0;
         for action in EVERY_ACTION {
             for phrasing in spoken_action(action) {
@@ -612,7 +618,30 @@ mod tests {
                 }
             }
         }
-        assert!(checked > 70, "only {checked} phrasings were checked");
+        // Exact rather than a floor, because a floor is what let a
+        // duplicated variant pass unnoticed: 18 actions of 4 phrasings,
+        // plus 4 need names at 2 intensities of 3 phrasings.
+        assert_eq!(
+            checked,
+            18 * 4 + 4 * 2 * 3,
+            "the number of phrasings checked is not the number there are"
+        );
+    }
+
+    /// The list above is hand-written, so the thing to guard is the
+    /// mistake a hand makes: writing one twice and believing the count.
+    #[test]
+    fn no_action_is_listed_twice_in_the_phrasing_sweep() {
+        // Same list, compared against itself by name. `ActionKind` has no
+        // `Hash`, and `Debug` is enough to tell eighteen variants apart.
+        let names: Vec<String> = EVERY_ACTION.iter().map(|a| format!("{a:?}")).collect();
+        let unique: std::collections::BTreeSet<&String> = names.iter().collect();
+        assert_eq!(
+            unique.len(),
+            names.len(),
+            "an action is listed more than once: {names:?}"
+        );
+        assert_eq!(unique.len(), 18, "ActionKind has eighteen variants");
     }
 
     /// D36, from the side that matters: a speaker whose state has not
