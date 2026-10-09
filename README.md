@@ -12,14 +12,35 @@ It defines the locked scope (a uniquely shaped, New-Zealand-sized island on an E
 
 ## What is here
 
+The island is no longer one program. It is a **backend** that simulates
+and serves, and **frontends** that read it — a web dashboard that can be
+hosted anywhere, and a desktop application. They share one wire schema and
+there is exactly one way to read an island.
+
+### The island itself
+
 - `crates/mk_core/src/human/` — canonical identity, genetics, temperament, neurocognition, personality, drives, hormones, attachment, schema and profile types.
 - `crates/mk_engine/src/humans/` — live runtime systems for body, needs, cognition, emotion, memory, consciousness, reproduction, lifecycle, social behaviour and brain-state models.
-- `apps/island_humans/` — the island-facing population bootstrap and CLI.
-- `apps/island/` — the dashboard: the overview, the roster, the Human Creator and the JSON behind them.
+- `crates/mk_engine/src/regional/` — the island: geophysics, climate, ecology, the estate, materials, energy, the humans on it.
+- `crates/mk_island/` — the regional domain contract.
 - `fixtures/human/` — canonical Gem-D / Gem-K human fixtures.
-- `assets/humans/` — the founder GLB models.
-- `tools/blender/generate_human_model.py` — the Maer-Ken human model generator.
 - `docs/canon/` — the copied HumanReplicationSchema and human schema-family authority.
+
+### The backend, and what reads it
+
+- `apps/island/` — `island serve`, `run`, `replay`, `inspect` and `export`. The simulation, the HTTP API and the dashboard's pages.
+- `crates/mk_island_api/` — every shape that crosses the network, defined once. Serde and nothing else, so a client can link it without building the island.
+- `crates/mk_island_client/` — a typed, blocking client for a backend. What the desktop application uses, and what anything else should.
+- `apps/island_ui/` — `island-ui`, the desktop application, on Bevy 0.19.
+- `apps/island_humans/` — the Phase-0b population bootstrap and CLI.
+- `apps/island_preview/` — the headless renderer for the geophysics galleries.
+- `services/computer-service/` — the opt-in Node bridge that lets a founder reach the real internet. Off unless asked for.
+
+### Assets
+
+- `assets/humans/` — the founder GLB models.
+- `assets/property/`, `assets/computers/`, `assets/tools/`, `assets/vehicles/`, `assets/terrain/` — the estate's buildings, the four machines in the computer room, the workshop equipment, the named vehicles and the terrain materials, from upstream Maer-Ken. `assets/CREDITS.md` says exactly what they are, which is less than it would be convenient to claim.
+- `tools/blender/`, `tools/assets/` — the generators they came from, so they can be rebuilt rather than only trusted.
 
 ## Current bootstrap
 
@@ -30,43 +51,84 @@ New people are built through upstream's `SpawnHuman` path from the population's 
 ## Run it
 
 ```bash
-cargo test --workspace                          # fast tier
-cargo run -p island -- serve                    # dashboard at http://127.0.0.1:8080/
-cargo run -p island_humans -- founders          # list everyone (CLI)
-cargo run -p island_humans -- create "Hine Moana" female 1992-11-03T10:15:00+13:00 -41.3 174.8 --height 166 --hair black
+cargo test --workspace --exclude island_ui    # fast tier
+cargo run -p island -- serve --scenario fixtures/island/default_scenario.json
+cargo run -p island_humans -- founders        # list everyone (CLI)
 ```
 
-### The dashboard (`island serve`)
+### On one machine
 
-Three pages, served from the binary with nothing to install beside it:
+`island serve --scenario …` is the whole thing: the island, its API and its
+dashboard at <http://127.0.0.1:8080/>. This is unchanged and still the
+simplest way to run it.
 
-- **Overview** (`/`): how many people there are, how old they are, where their
-  records live, who was added lately, and what does and does not work yet.
-- **People** (`/people`): the roster, searchable and sortable, and everything
-  stored about whoever you pick — who they are, what their body is doing, how
-  they feel, how they think — with the complete record underneath to copy or
-  download. `/people?human=<agent-id>` opens straight to one person.
-- **Create a human** (`/creator`): name, sex, birth date and place, age and
-  appearance. Each new person gets a folder immediately.
+- **Overview** (`/`): how many people there are, how old they are, where their records live, what the island's clock is doing, and what does and does not work yet.
+- **People** (`/people`): the roster and everything stored about whoever you pick, with the complete record underneath.
+- **The island** (`/island`): the map — elevation or standing vegetation across the whole island, the estate's patch 400× finer, and the individual stems in the wood around it — what has been built, and everything that has reached the island from outside.
+- **Create a human** (`/creator`): name, sex, birth date and place, age and appearance.
 
-The JSON behind the pages is public too: `/api/status`, `/api/health` (also
-`/healthz`), `/api/humans`, `/api/humans/<agent-id>`, `/api/activity` and
-`/api/creator/options`. `POST /api/humans` is the only write.
+### On several machines
+
+The backend on one, the frontends on others:
+
+```bash
+# the island
+export ISLAND_CONTROL_TOKEN=…   # who may change it
+export ISLAND_READ_TOKEN=…      # who may look at it
+island serve --scenario … --bind 0.0.0.0:8080 --allow-origin https://island.example
+
+# the dashboard, somewhere else
+island serve --frontend-only --backend https://island.example --bind 0.0.0.0:3000
+#   …or as plain files for any web server:
+island export --to /var/www/island --backend https://island.example
+
+# the desktop application, on somebody's desk
+island-ui --server https://island.example --token "$ISLAND_READ_TOKEN"
+```
+
+`docs/island/DEPLOYMENT.md` is the full account: the two tokens and what
+each is for, CORS, TLS, the systemd unit and the container, and how to
+check a deployment.
+
+**Read `docs/island/RENDER_STACK.md` before relying on `island-ui`.**
+Everything that is not the renderer is tested and both its command-line
+paths have been run against a live island, but no window has ever been
+opened by that binary — the machine it was written on has no display, no
+Vulkan driver and no EGL. Somebody has to run it on a machine with a
+screen.
+
+### The JSON behind it all
+
+`/api/status`, `/api/version`, `/api/health` (also `/healthz`),
+`/api/world` and its parts, `/api/world/humans`, `/api/properties`,
+`/api/economy`, `/api/timeline`, `/api/conversations`, `/api/map.png`,
+`/api/vegetation.png`, `/api/patch.png`, `/api/elevation.bin`,
+`/api/cell/<row>/<col>`, `/api/trees`, `/api/humans`, `/api/activity` and
+`/api/creator/options`. The writes are `POST /api/humans`,
+`/api/world/humans`, `/api/world/interventions` and `/api/control`.
 
 Every response carries a strict content security policy and the usual
-hardening headers; the pages load no third-party script, style or font. One
-line per request is printed to stdout — set `ISLAND_ACCESS_LOG=off` to stop
-that.
+hardening headers; the pages load no third-party script, style or font.
+One line per request is printed to stdout — set `ISLAND_ACCESS_LOG=off` to
+stop that.
 
-`island serve [--data-dir DIR] [--bind ADDR:PORT] [--seed HEX64]`. Reading never needs a token. Creating people is allowed:
+### Who may do what
 
-- with `ISLAND_CONTROL_TOKEN` set: only for requests carrying `Authorization: Bearer <token>`. The Creator page has a field for it, kept in the browser tab only.
-- without a token on a loopback bind (the default `127.0.0.1:8080`): from this machine.
-- without a token on any other bind: never. Set a token before using `--bind 0.0.0.0:…`.
+Two tokens, answering two questions. `ISLAND_CONTROL_TOKEN` decides who may
+**change** the island: set it and every write needs
+`Authorization: Bearer <token>`; without it only a loopback bind accepts
+writes at all. `ISLAND_READ_TOKEN` decides who may **look**. Reads are open
+without it, which is right on a loopback bind and a decision anywhere else
+— a backend bound to `0.0.0.0` with neither is readable in full by anyone
+who can reach the port, and it says so on startup.
 
-**Time is not running yet.** People are created and stored, but nobody ages, eats or acts until the island world exists (Phase 4).
+`/api/health` and `/api/version` answer without either, because they are
+what a caller asks before it can have one.
 
-**Back up your storage key.** Human files are encrypted with `island-data/humans/.secret_storage_key`, generated on first run, or with `MK_STORAGE_KEY` if set. Lose the key and every human file becomes unreadable. Back it up with the data, or set `MK_STORAGE_KEY` yourself.
+**Back up your storage key.** Human files are encrypted with
+`island-data/humans/.secret_storage_key`, generated on first run, or with
+`MK_STORAGE_KEY` if set. Lose the key and every human file becomes
+unreadable. Back it up with the data, or set `MK_STORAGE_KEY` yourself.
 
 ## Source authority
 

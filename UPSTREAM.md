@@ -217,3 +217,79 @@ Upstream `dylmarriner/Maer-Ken` default-branch HEAD is `7c05f0dcf254387ffd7322db
 **Owner decision needed:** keep the pin (program plan decision 2) or resync. Nothing is waiting on upstream today, so keeping the pin is the default.
 
 Human schema or runtime changes should be compared against upstream first. Island-only rules belong in `apps/island_humans` unless the underlying human model itself is intentionally being changed.
+
+## Phase 5 imports (2026-10-09)
+
+A second import from `dylmarriner/Maer-Ken`, at
+`3508e61710749d35a22c0f0dac27a61350639ad2` — the upstream default branch
+has moved since the pin at `7c05f0d`. **Nothing of the human runtime was
+re-imported**: this is assets and one Node service, and the pin for
+`crates/mk_core` / `crates/mk_engine` is unchanged at `7c05f0d`.
+
+### What came across
+
+| From | To | What it is |
+|---|---|---|
+| `apps/mk_ui/assets/generated/gem_property/buildings/` | `assets/property/buildings/` | Five of the six `PropertyBuildingKind` variants. |
+| `.../gem_property/computers/` | `assets/computers/` | The four `PropertyItemKind::Computer` machines in the computer room. |
+| `.../gem_property/building_equipment/` | `assets/tools/` | Seven workshop models. |
+| `.../gem_property/armoury/`, `.../household/` | `assets/property/armoury/`, `.../household/` | Three each. |
+| `.../gem_property/vehicles/` | `assets/vehicles/` | The four named vehicles. |
+| `.../maerken_terrain_materials/` | `assets/terrain/` | 52 PNG textures across 13 material families, 21 biome preview GLBs. |
+| `tools/assets/generate_gem_property_assets.py`, `generate_maerken_terrain_materials.py` | `tools/assets/` | The generators, so the above can be rebuilt rather than only trusted. |
+| `apps/computer-service/` | `services/computer-service/` | The Node bridge for `ActionKind::WebSearch`/`SendEmail`, unchanged. |
+
+1.5 MB of assets in total. `assets/CREDITS.md` carries upstream's own
+description of them, which is the honest one: deterministic low-poly
+reconstructions built by a Blender script from primitives, not exports
+from the Gemini Universe source the property manifest describes — that
+repository is unavailable. The terrain files are material previews and are
+not claimed to be source-authored art. The founders' GLBs keep upstream's
+caveat that their origin was never independently re-verified.
+
+Three kinds of thing have no model upstream either — `Garage`, `ShedTool`
+and `VehicleAttachment` — and the renderer draws a placeholder and says so
+rather than substituting the shed for the garage.
+
+`services/computer-service` is imported unchanged and its own six tests
+pass here (`npm ci && npm test`). Its licence is upstream's, which is this
+repository's: all rights reserved.
+
+### Phase 5 divergences
+
+New code, not changed imports, except where noted.
+
+1. `crates/mk_island_api` (new) — the wire schema: every shape that
+   crosses the network, defined once, depending on `serde` and nothing
+   else. Upstream has no equivalent because upstream's UI is in-process.
+2. `crates/mk_island_client` (new) — a typed, blocking HTTP client for an
+   island backend.
+3. `apps/island_ui` (new) — the desktop application, on Bevy 0.19.
+   Upstream's `mk_ui`/`mk_desktop`/`mk_studio` target Bevy 0.13 and a
+   sphere; this is a flat regional frame on 0.19, so the upstream render
+   code was a behavioural reference rather than code to copy. Nothing was
+   copied from it.
+4. `mk_engine::regional::humans` — `RegionalHumanContext` gains
+   `computer_bridge`, `observe` reports `computer_bridge_available` from
+   it instead of hard-coding `0.0`, and `step_regional_humans` passes it
+   to upstream's `HumanSystem::step_on`, which has always taken one and
+   had been handed `None`. **This changes imported code**, and it is the
+   smallest change that could: upstream's gating, costs and cooldowns are
+   untouched, and `IslandLife::attach_computer_bridge` is the island's own
+   equivalent of upstream's `WorldState::with_computer_bridge`. Suitable
+   for upstreaming as the island half of an interface upstream already
+   has.
+5. `apps/island/src/serve` — `ServeConfig` (read token, allowed origins,
+   backend, access log), `/api/version`, `/api/elevation.bin`,
+   `--frontend-only` and `island export`. Upstream's `mk serve` has none
+   of this; it serves its own pages to its own machine.
+
+### Drift check (2026-10-09)
+
+Upstream default-branch HEAD is now `3508e617`, against the pin at
+`7c05f0d`. The human runtime was **not** resynced: Phase 0's defects
+(`UPSTREAM.md` items 4–7) and Phase 0c's biology changes are still
+divergences awaiting an upstream pull request, and resyncing while they
+are unmerged would mean reapplying them by hand. The owner's decision from
+2026-10-02 — keep the pin — stands, and the assets imported here do not
+touch it.

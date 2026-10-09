@@ -1,7 +1,16 @@
 # Island system status
 
-Updated 2026-10-08. This records what is implemented, measured and verified, and the known
+Updated 2026-10-09. This records what is implemented, measured and verified, and the known
 fidelity limits. The project is **not complete**: see "Not done".
+
+The island stopped being one program on 2026-10-09. It is now a backend that simulates and
+serves, and frontends that read it: a web dashboard that can be hosted on any machine, and a
+desktop application. `docs/island/DEPLOYMENT.md` is how to run them apart.
+
+One line of that is more important than the rest, so it is here as well as there: **the desktop
+application has never drawn a frame.** It builds, it reads a live island both ways, and every
+part of it that is not the renderer is tested — on a machine with no display, no Vulkan driver
+and no EGL, which is the only kind of machine it has run on. See `docs/island/RENDER_STACK.md`.
 
 ## Implemented
 
@@ -27,7 +36,13 @@ fidelity limits. The project is **not complete**: see "Not done".
 | An island buildability rule (Phase 4 Task 4) | Done. Upstream's `physics::MAX_CLIMB_HEIGHT_M` is an **absolute** 2 m of relief between neighbouring cells — a statement about a grid's resolution, not terrain. On the island's 2 km cells that is a gradient of 0.1%, and measured it admits **0 of 66,116 land cells**, the founders' estate at 8.6% included. `MAX_BUILD_GRADIENT` asks the same question as a gradient, at 1 in 3 (~18°), where ground is conventionally classed very steep. It admits 99.9% of this island, which is the island being gentle at 2 km rather than the rule being lax, and it cannot judge a building plot — only exclude mountainside, which is all it claims | `regional/geophysics.rs`, `resource_economy.rs` (`place_structure`), `tests/island_interventions.rs`, `UPSTREAM.md` item 28 |
 | Headless runner and Phase-4 acceptance (Phase 4 Task 5) | Done, `island replay` included. `island run` advances a scenario or a saved island and prints the canonical digest; `island inspect` describes a snapshot without running it. Two runs of one scenario and seed agree, and stopping at 60 steps and resuming reaches the same digest as 120 straight through, measured on the full island from the command line | `apps/island/src/run.rs`, `tests/island_runtime_acceptance.rs` |
 | The island behind the dashboard, read and write (Phase 4 Task 6) | Done, but for a map. `island serve --scenario` runs `IslandLife` on its own thread and publishes a projection after every step; `GET /api/world` and the overview read it. `POST /api/world/humans` queues a creation applied between steps, and the creator page picks a room from the estate's own layout. A person created there is in the world and breathing. The roster page shows the island's own people with their full records and where they are, and the overview can pause the island or change its speed — measured: pause held the clock still at tick 1080. A person can be put in a room or on a cell of the island, with the sea refused by name, and `--import-0b` carries a Phase-0b population in as ordinary creations. `/api/properties`, `/api/economy` and `/api/timeline` are served, and the `/island` page reads them: the estate's buildings and its eighty-odd things, what has been built, and everything that has reached the island from outside. (This row previously said they were not served "because the projection does not carry the data". That was wrong, and measuring the island is what showed it: the properties and the replay log were there all along, and the economy is genuinely empty rather than absent — it says so in the reply, and fills as soon as somebody builds.) The overview can also step the island exactly n steps and then hold, and the island page can intervene in it, refusals included | `serve/sim.rs`, `serve/projection.rs`, `serve/server.rs`, `regional/create_human.rs`, `tests/island_create_human.rs`, `apps/island/tests/serve.rs` |
-| Web dashboard: overview, roster with a readable per-person record, the island's own page, Human Creator, JSON API (`island serve`) | Done for the human-only bootstrap; the Phase 5 desktop app is separate. Every path has been driven in Chromium against the full island with no console errors and no failed requests | `apps/island/src/serve/`, `apps/island/static/`, `apps/island/tests/serve.rs` |
+| Web dashboard: overview, roster with a readable per-person record, the island's own page, Human Creator, JSON API (`island serve`) | Done. Every path has been driven in Chromium against the full island with no console errors and no failed requests | `apps/island/src/serve/`, `apps/island/static/`, `apps/island/tests/serve.rs` |
+| **The island as a backend, read by frontends on other machines** | Done. `ISLAND_READ_TOKEN` gates every `/api` endpoint in front of the routes, so an unauthenticated caller cannot tell a path that exists from one that does not; `--allow-origin` names the browsers that may ask; `/api/version` says what this server speaks and can do, and `/api/elevation.bin` serves the terrain as numbers for a client that builds a mesh. Measured on a real server bound to `0.0.0.0` with both tokens: version and health answer unauthenticated, everything else 401s without a token and 200s with either, an unnamed origin gets a 403 naming `--allow-origin`, and forty concurrent readers all got 200 | `serve/auth.rs`, `serve/server.rs`, `apps/island/tests/client.rs` |
+| **One wire schema, shared** | Done. Every shape that crosses the network is defined once, in a crate that depends on `serde` and nothing else, so a client links it without building the island. Two tests keep it honest: one compares the key sets both ways (the silent direction is a field added to the server's projection and not to the schema, which would reach no frontend and look like a server that never sent it — verified to bite), and one puts every intervention constructor through the real `InterventionAction` | `crates/mk_island_api/`, `apps/island/tests/schema.rs` |
+| **A typed client** | Done. `mk_island_client` draws the four distinctions a frontend needs and HTTP's status codes do not: nobody answered, somebody answered and said no, this server is a different version, and the answer was unreadable. Tested against the real backend rather than a mock, which found three field-name disagreements and one real gap in the server | `crates/mk_island_client/`, `apps/island/tests/client.rs` |
+| **The web dashboard, hosted away from its island** | Done. `island serve --frontend-only --backend URL` serves the pages for an island elsewhere; `island export --to DIR` writes the same bytes for any web server. Driven in Chromium against two processes and again against `npx http-server`: every page loads with no console errors and no failed requests, arriving with no token shows the island's own words and opens the token field, and the map draws the real island — 4,604 distinct colours over 2,401 km — from both | `apps/island/static/app.js`, `serve/pages.rs` |
+| **The desktop application (Phase 5)** | Built and tested, **never drawn**. `island-ui` on Bevy 0.19 reads an island over HTTP, remote or embedded, through one code path. Its projection, terrain chunking, camera, model table and whole data path are tested headlessly, and both command-line paths have been run against a live island. **No window has ever been opened by this binary**: this container has no display, no Vulkan ICD and no EGL, so `wgpu` cannot obtain an adapter by any path. Whether the meshes look right, the panels lay out or it is pleasant to use is unanswered | `apps/island_ui/`, `docs/island/RENDER_STACK.md` |
+| **The opt-in computer service** | Done, and off. A founder at their own machine in a powered computer room can search the web and send email for real, through a vendored Node service, when `COMPUTER_ACTIONS_ENABLED=1`. It makes the island irreproducible on purpose, which is why `run`, `replay` and `inspect` never attach it. Off, and on-but-failing, both leave the state digest identical — the costs are charged on success only | `services/computer-service/`, `crates/mk_engine/tests/island_computer_service.rs` |
 
 ## Measured (release build, development machine)
 
@@ -46,12 +61,22 @@ The combined island (without persistence, the scheduler, a larger population, th
 
     cargo fmt --all -- --check
     cargo clippy --workspace --all-targets -- -D warnings
-    cargo test --workspace --release
-    cargo test --workspace --release -- --ignored slow_
+    cargo test --workspace --release --no-fail-fast
+    cargo test --workspace --release --no-fail-fast -- --ignored slow_
+
+    cd services/computer-service && npm ci && npm test
+    for f in apps/island/static/*.js; do cp "$f" /tmp/x.mjs && node --check /tmp/x.mjs; done
+
+`--workspace` now includes `island_ui`, which pulls in Bevy: 392 crates and about nine minutes
+from cold on four cores. For a run that only needs the island, `--exclude island_ui` skips it,
+and that is what CI's fast job does — a formatting mistake should be reported in two minutes
+rather than after a Bevy build. `island_ui` has its own CI job, with its own clippy, build and
+tests.
 
 `cargo test --workspace` in debug builds a large target directory (tens of GB with debug info and
 incremental compilation on). On a machine with a small disk, `CARGO_INCREMENTAL=0` and
-`CARGO_PROFILE_DEV_DEBUG=0` keep it to a fraction of that.
+`CARGO_PROFILE_DEV_DEBUG=0` keep it to a fraction of that. With Bevy in the tree that matters
+more than it did: a debug build of this workspace filled this container's disk once.
 
 The last full-workspace run was **1,226 passing, 0 failing, 22 ignored, across 88 binaries**
 (2026-10-08, commit `94b97b1`), with `cargo fmt --all -- --check` and
@@ -100,11 +125,25 @@ Three things were tried first and are recorded so nobody repeats them. Pacing th
 digest off in the tests did not fix it either, and left behind an unreachable knob that review
 caught. Blaming the test count was wrong: removing the test this branch added left the same
 failure. Each of those was a guess that looked right; the profile swap was the first thing that
-was measured before it was believed, and it is also the only one that worked. **The real fix is for the suite to stop running nineteen full
-islands at once**, by sharing one between the tests that only read, which is a refactor of that
-file rather than a line of it, and worth doing deliberately rather than smuggling into a
-dashboard branch. Until then: a failure of this one test alone, with the other eighteen passing,
-is this, and re-running confirms it. Any other failure is real.
+was measured before it was believed, and it is also the only one that worked.
+
+**The refactor this paragraph used to leave for later is done.** The seven tests in that file
+that only *read* an island now share one, built once on a thread of its own and served for the
+life of the process; the eleven that create a person, pause the clock or intervene keep an
+island each, because the next test to read a shared one would see what they did. That is seven
+fewer islands and seven fewer simulation threads.
+
+Measured, median of three: **22.0 s to 20.2 s idle, and 57.4 s to 44.1 s under three times
+oversubscription** (eight busy loops on four cores). The gain is where it should be — 23% where
+the threads compete, 8% where they do not.
+
+**It is not established that this fixes the flake, and the honest reason is that the flake did
+not reproduce.** On the old fixture, under those same eight busy loops, the suite passed 25 of
+25 twice. The failure seen on 2026-10-09 was under a Bevy build, which is memory and I/O as well
+as CPU, and synthetic load did not stand in for it. So: the cause named above is gone and the
+suite is faster and less contended, and whether that was sufficient is still a question. A
+failure of this one test alone, with the others passing, remains the thing to re-run before
+believing.
 
 `slow_the_human_runtime_stays_small_and_roughly_linear_to_five_thousand_people` used to fail on
 a bad draw, and no longer does. It asserts `cost(5000) <= 4 x cost(200)` — a ratio against the
@@ -228,9 +267,23 @@ the estate's electrical system is still free (D13).
   would be invented even where the number happened to be right, which is the failure
   `REALISM.md` exists to prevent. Everything downstream (sizing, staffing, the town) hangs off
   that table, so the phase waits on reachable sources or on the values being supplied.
-- Phase 5: the desktop app (`island-ui`, Bevy) replacing the human-only bootstrap, performance
-  work, pruning, final benchmarks. The `island serve` web dashboard covers the human-only
-  bootstrap in the meantime. With `--scenario` it now has a world and a clock; it still has no
-  map.
+- Phase 5, partly. `island-ui` exists, builds on Bevy 0.19 with no system graphics packages
+  (9 min 19 s from cold, 392 crates, 1.9 GB of target directory), reads an island remotely or
+  embedded through one code path, and has its projection, terrain chunking, camera, model table
+  and data path tested headlessly. Both command-line paths have been run against a live island.
+
+  **What is not done is the part a GPU does, and no amount of care here substitutes for it.**
+  No window has ever been opened by that binary. This container has no display, no Vulkan ICD
+  (`mesa-vulkan-drivers` is not installable) and no EGL, so `wgpu` cannot obtain an adapter by
+  any path and there is no software rasterizer to fall back to. Unproven: that the meshes look
+  right, that the materials are sensible, that the egui panels lay out, that the camera controls
+  feel like anything, and what the frame rate is. `docs/island/RENDER_STACK.md` says which half
+  is which. **Somebody has to run it on a machine with a screen before it is relied on.**
+
+  Also still open from that phase's plan: the estate's interiors drawn from `EstateLayout`
+  footprints, individual stems rendered in 3D (the web map draws them; the desktop application
+  does not yet), the human inspector's full detail sections, the foundry panel, the resolution
+  gate and its benchmark, `island_bench`, the allocation-bound test, retiring `apps/island_humans`,
+  and the planetary-only pruning. None of those is blocked; none is done.
 - Owner reviews: Gate 1 (island) and Gate 2 (weather previews).
 - Upstream pull requests for every divergence in `UPSTREAM.md`.
