@@ -330,6 +330,14 @@ impl IslandLife {
     }
 }
 
+/// "1 cell" / "4 cells". These summaries are read by a person — they are
+/// what the dashboard puts on screen after an intervention — and "over 1
+/// coarse cells" is the sort of thing that makes software look like it is
+/// talking to itself.
+fn plural(n: usize, one: &str, many: &str) -> String {
+    format!("{n} {}", if n == 1 { one } else { many })
+}
+
 fn control(directive: IslandDirective) -> IslandApplied {
     IslandApplied::Control { directive }
 }
@@ -519,7 +527,10 @@ impl IslandLife {
         }
 
         Ok(mutated(
-            format!("set {parameter:?} to {value} over {touched} coarse cells{booked}"),
+            format!(
+                "set {parameter:?} to {value} over {}{booked}",
+                plural(touched, "coarse cell", "coarse cells")
+            ),
             touched,
         ))
     }
@@ -565,9 +576,9 @@ impl IslandLife {
         ));
         Ok(mutated(
             format!(
-                "added {total_kgc} kgC of standing producer carbon over {} land cells \
+                "added {total_kgc} kgC of standing producer carbon over {} \
                  ({per_cell_kgc_m2:.6} kgC/m² each)",
-                cells.len()
+                plural(cells.len(), "land cell", "land cells")
             ),
             cells.len(),
         ))

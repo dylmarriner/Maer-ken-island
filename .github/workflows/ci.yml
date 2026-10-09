@@ -1,7 +1,19 @@
 name: CI
 
 on:
+  # `push` is deliberately limited to the default branch. Before this, a
+  # bare `push:` alongside `pull_request:` meant every push to a PR branch
+  # started CI *twice* on the same commit — two full fmt + clippy +
+  # `cargo test --workspace` runs of 18-28 minutes each, for identical
+  # work. (Proof, on f63ab04: run #92 `event: push` and run #93
+  # `event: pull_request`, same `head_sha`.) This repository is private, so
+  # those are billable minutes, and half of them bought nothing.
+  #
+  # The trade: a push to a branch with no pull request open no longer runs
+  # CI. Work here reaches `main` through a pull request, so that branch is
+  # covered by the `pull_request` event from the moment one is opened.
   push:
+    branches: [main]
   pull_request:
   schedule:
     # Nightly slow tier, 03:17 UTC.
@@ -33,10 +45,177 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Format
         run: cargo fmt --all -- --check
+      # `--exclude island_ui` on the two that compile. Without it this job
+      # builds Bevy -- 392 crates, about nine minutes -- and the point of
+      # splitting the desktop application into its own job is that a
+      # formatting mistake is reported in a couple of minutes instead.
+      # `island_ui`'s own clippy, build and tests are in that job.
       - name: Clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy --workspace --exclude island_ui --all-targets -- -D warnings
       - name: Fast tests
-        run: cargo test --workspace
+        run: cargo test --workspace --exclude island_ui
+
+  # The desktop application, in its own job because it pulls in Bevy: 392
+  # crates and about nine minutes from cold. Keeping it out of `check`
+  # means a formatting mistake is still reported in a couple of minutes
+  # rather than after a Bevy build.
+  desktop:
+    name: desktop application
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned toolchain
+        run: rustup show
+      - uses: Swatinem/rust-cache@v2
+      # Nothing is installed to *build* this. Bevy's default features
+      # need alsa and libudev; this crate turns both off -- there is no
+      # sound and there are no gamepads on this island -- so if the build
+      # step ever needs a system package, a feature has crept back in.
+      #
+      # The packages below are for *running* it, which is a different
+      # question and one this job also answers: a virtual screen, a
+      # software Vulkan driver, and something to photograph a frame with.
+      - name: Install what a headless render needs
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            xvfb xdotool imagemagick mesa-vulkan-drivers libxkbcommon-x11-0
+      - name: Clippy
+        run: cargo clippy -p island_ui --all-targets --locked -- -D warnings
+      - name: Build
+        run: cargo build -p island_ui --locked
+      # Everything that is not the renderer. No windowed test runs here,
+      # because a CI runner has no display and neither did the machine
+      # this was written on; `docs/island/RENDER_STACK.md` says which half
+      # that leaves unverified.
+      - name: Tests
+        run: cargo test -p island_ui --locked
+      # Does it actually draw the island? Built in release, because
+      # software rasterising 285 chunks in a debug build is slower than
+      # the job's patience.
+      #
+      # This step is why the two defects in the first frame this
+      # application ever rendered -- every triangle backface-culled, and
+      # egui with no font data -- cannot come back silently. Neither was
+      # visible to any unit test, and both are visible to this.
+      - name: It draws the island
+        run: |
+          cargo build --release -p island_ui --locked
+          ./scripts/render-smoke.sh target/release/island-ui frame.png island
+      # The other half of what this application is for. The island view
+      # is a landmass in a sea; this one is the founders' estate at one
+      # unit to the metre, with the Maer-Ken models standing on it, and
+      # neither frame can fail for the other. Measured, the difference a
+      # missing `assets/` makes to this picture is 3,226 colours against
+      # 2,063 -- so the check also reads the log, where the asset server
+      # names every model it could not find.
+      - name: It draws the estate, with the models on it
+        run: ./scripts/render-smoke.sh target/release/island-ui estate.png estate
+      # What it costs to draw, on the machine that drew it. Reported
+      # rather than asserted: a CI runner's software rasteriser is not a
+      # GPU and a threshold here would be a claim about the runner.
+      # Drawing and *answering* are different claims, and a screenshot
+      # only settles the first: a window that renders a correct first
+      # frame and then ignores every click photographs identically to a
+      # working one. This drives it with synthetic X11 input -- a held
+      # drag, a scroll, the `e` and `i` keys, and a click on the panel's
+      # own button -- and asserts the picture changed the way each
+      # gesture should change it. Measured here: 39.7%, 59.0%, 59.5%,
+      # 29.4% and 29.4% of the frame respectively.
+      #
+      # What it still does not answer is whether the sensitivities feel
+      # right under a real hand. That is a judgement and no script
+      # settles it; this catches the failure one step below it.
+      - name: It answers a mouse and a keyboard
+        run: ./scripts/interaction-smoke.sh target/release/island-ui interaction
+      - name: What a frame costs here
+        run: |
+          # Its own screen: the smoke scripts start and stop theirs, so
+          # by here there is none left to draw on. Stopped again
+          # afterwards rather than left to the runner's teardown, the
+          # same way the smoke scripts stop theirs.
+          Xvfb :87 -screen 0 1600x1000x24 >/dev/null 2>&1 &
+          screen=$!
+          trap 'kill "$screen" 2>/dev/null || true' EXIT INT TERM
+          sleep 2
+          # Paced rather than `--speed max`, so the figure is about
+          # drawing rather than about the simulation competing for the
+          # same cores. Measured, that distinction is smaller than it
+          # sounds and not uniform: the estate view went 8.9 -> 10.8 FPS
+          # when the island was paced, and the island view 0.5 -> 0.6.
+          # The island view is drawing-bound -- 285 chunks is roughly
+          # 2.3 M triangles at 1600x1000 -- so what the simulation does
+          # with the spare cores barely registers.
+          DISPLAY=:87 ./target/release/island-ui \
+            --scenario fixtures/island/default_scenario.json \
+            --data-dir "$RUNNER_TEMP/fps" --speed 60 --measure 20 \
+            || echo "the frame-rate measurement did not complete"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: island-ui-frame
+          path: |
+            frame.png
+            estate.png
+            interaction/
+          if-no-files-found: warn
+
+      # The headless binary must stay buildable on a machine with no
+      # graphics packages at all, which means it must not acquire Bevy
+      # through a dependency.
+      - name: The backend links no Bevy
+        run: |
+          if cargo tree -p island | grep -q '^.*bevy'; then
+            echo "apps/island has picked up a dependency on bevy" >&2
+            cargo tree -p island | grep bevy >&2
+            exit 1
+          fi
+
+  # The opt-in bridge to the outside. Its own job because it is Node, and
+  # a short one because the service is small.
+  computer-service:
+    name: computer service
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: services/computer-service/package-lock.json
+      - name: Install
+        run: npm ci
+        working-directory: services/computer-service
+      - name: Tests
+        run: npm test
+        working-directory: services/computer-service
+
+  # The dashboard's own scripts. There is no bundler and no test runner
+  # for them, and there does not need to be -- but a syntax error in a
+  # module the server embeds is a page that loads and does nothing, and
+  # that is worth two seconds to catch.
+  web:
+    name: web dashboard
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Every module parses
+        run: |
+          set -eu
+          for file in apps/island/static/*.js; do
+            cp "$file" "/tmp/$(basename "$file" .js).mjs"
+            node --check "/tmp/$(basename "$file" .js).mjs"
+            echo "ok $file"
+          done
 
   slow:
     name: slow tests (nightly)

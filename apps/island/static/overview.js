@@ -3,6 +3,8 @@
 "use strict";
 
 import {
+  explain,
+  mountServerChrome,
   ageWords,
   clearOffline,
   count,
@@ -13,6 +15,7 @@ import {
   message,
   postJson,
   reportOffline,
+  storedToken,
 } from "/static/app.js";
 
 const statsEl = document.getElementById("stats");
@@ -199,20 +202,30 @@ function tellTheTruthAboutTime(running) {
 /// Ask the island to run differently. Nothing it does changes the world —
 /// speed decides how often a fixed step happens, and a pause leaves exactly
 /// the state it was paused in — so these are safe to press.
-async function control(body) {
+async function control(body, stepping) {
   worldControlNote.hidden = false;
   worldControlNote.textContent = "Asking the island…";
   try {
-    const { status, body: answer } = await postJson("/api/control", body, "");
+    // The token the creator page stored. Sending "" here meant every
+    // pause, step and speed change came back 401 on a server started with
+    // ISLAND_CONTROL_TOKEN, with nothing on screen saying why.
+    const { status, body: answer } = await postJson("/api/control", body, storedToken());
     if (status === 200) {
-      worldControlNote.textContent = answer.paused
-        ? "Paused. The island is exactly where it stopped."
-        : `Running at ${answer.speed}.`;
+      // A step pauses first and then advances that many, so the island
+      // *is* paused when the answer comes back — saying only "Paused"
+      // would read as if the button had not worked.
+      worldControlNote.textContent = stepping
+        ? `Stepping ${count(stepping, "step", "steps")}, then holding. ` +
+          `Each step is a minute of island time.`
+        : answer.paused
+          ? "Paused. The island is exactly where it stopped."
+          : `Running at ${answer.speed}.`;
       paused = answer.paused;
       pauseEl.textContent = paused ? "Resume" : "Pause";
     } else if (status === 401) {
-      worldControlNote.textContent =
-        (answer.errors && answer.errors[0]) || "This dashboard may not control the island.";
+      worldControlNote.textContent = `${
+        (answer.errors && answer.errors[0]) || "This dashboard may not control the island."
+      } Enter the control token on the Create a human page and it will be used here too.`;
     } else {
       worldControlNote.textContent =
         (answer.errors && answer.errors[0]) || `The island answered ${status}.`;
@@ -229,6 +242,12 @@ for (const button of document.querySelectorAll("#world-controls [data-speed]")) 
   button.addEventListener("click", () =>
     control({ command: "set_speed", speed: button.dataset.speed }),
   );
+}
+// Stepping holds the island still and then advances exactly that many
+// steps. It is how you watch one thing happen rather than chasing it past.
+for (const button of document.querySelectorAll("#world-controls [data-step]")) {
+  const ticks = Number(button.dataset.step);
+  button.addEventListener("click", () => control({ command: "step", ticks }, ticks));
 }
 
 function showWorld(world) {
@@ -304,10 +323,13 @@ async function load() {
     showWorld(world);
   } catch (error) {
     reportOffline(error);
-    message(activityEl, "The creation log could not be read while the server is unreachable.", "hint");
+    message(activityEl, `The creation log could not be read: ${explain(error)}`, "hint");
   }
 }
 
+// Before anything is asked for, so the control is there to type a
+// token into when the first request comes back 401.
+mountServerChrome();
 load();
 
 // A running island changes while the page is open, so the world panel

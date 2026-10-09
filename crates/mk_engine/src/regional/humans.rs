@@ -91,6 +91,14 @@ pub struct RegionalHumanContext<'a> {
     pub domain: &'a IslandDomain,
     /// Solar output available now (kW), for the power gate.
     pub solar_kw: f64,
+    /// A real bridge to the outside, when one is attached.
+    ///
+    /// `None` is the ordinary case and the only one a replay ever sees.
+    /// With one attached, a human at their own machine in a powered
+    /// computer room may search the web or send an email for real --
+    /// which means the island stops being reproducible, deliberately, and
+    /// is why this is opt-in and why `replay`/`inspect` never attach it.
+    pub computer_bridge: Option<&'a dyn crate::humans::computer_bridge::ComputerBridge>,
 }
 
 fn founders_estate(property: &PropertySystem) -> Option<&StarterProperty> {
@@ -277,7 +285,16 @@ pub fn observe(
         daylight_fraction: daylight_fraction(&physical.insolation, coarse_r, coarse_c),
         biome,
         computer_access: gate && in_computer_room && powered,
-        computer_bridge_available: 0.0,
+        // Two separate affordances, and upstream is explicit about why:
+        // `computer_access` is this human being at a machine of their own
+        // in a powered room, and this is the world having a way out to
+        // the internet at all. `Code` needs only the first; a web search
+        // or an email needs both.
+        computer_bridge_available: if ctx.computer_bridge.is_some() {
+            1.0
+        } else {
+            0.0
+        },
     })
 }
 
@@ -322,7 +339,7 @@ pub fn step_regional_humans(
         economy,
         &ctx.physical.geophysics.elevation_m,
         |position, agent_id| observe(ctx, &positions_ro, &occupancy, tick, position, agent_id),
-        None,
+        ctx.computer_bridge,
     );
 
     let patch = &ctx.layout.patch;

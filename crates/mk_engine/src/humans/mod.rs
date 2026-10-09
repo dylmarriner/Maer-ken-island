@@ -103,16 +103,179 @@ use std::collections::VecDeque;
 pub const CONVERSATION_LOG_MAX_ENTRIES: usize = 500;
 
 /// Per-human cap on `HumanBeing::conversation_history` — generous, sized
-/// like a lifetime of remembered exchanges rather than a shared display
+/// like a long stretch of remembered exchanges rather than a shared display
 /// ring buffer, per the user's explicit "conversations should be
 /// remembered, not a rolling log" constraint.
 pub const CONVERSATION_HISTORY_MAX_ENTRIES: usize = 2_000;
+
+/// How many lines the shared feed may hold in total, across all its
+/// entries.
+///
+/// An entry count stopped being a bound when `merge_or_push` made an
+/// entry a whole exchange instead of a minute of one. A founder's
+/// unbroken waking stretch measures about **1,021 lines**
+/// (`conversation_rate.rs`, one simulated day), so 500 entries of that
+/// size is half a million lines in what the dashboard calls a display
+/// convenience. Lines are what the memory actually costs, so lines are
+/// what is capped.
+///
+/// This budget holds about a day of island talking in the shared feed,
+/// which is more than a page showing the last forty conversations can
+/// use.
+pub const CONVERSATION_LOG_MAX_LINES: usize = 2_000;
+
+/// How many lines one human's remembered conversations may hold in
+/// total, across all their entries. The real bound on
+/// `conversation_history`, for the reason given on
+/// [`CONVERSATION_LOG_MAX_LINES`].
+///
+/// At the measured rate — 2,042 lines in a 36-hour day — this is about
+/// **ten island days** of talking a person, roughly 15 Earth days, for a
+/// few megabytes each. That is an engineering budget and not a claim
+/// about memory: storing a lifetime of speech verbatim at this rate
+/// would be hundreds of megabytes a head, and the old comment here
+/// calling 2,000 entries "a lifetime" was only ever true because each
+/// entry held two lines. What a person recalls of talk they had weeks
+/// ago, and whether it should be stored as text at all, is D36.
+pub const CONVERSATION_HISTORY_MAX_LINES: usize = 20_000;
+
+/// What the shared dashboard feed is held to.
+const SHARED_FEED_BOUNDS: ConversationBounds = ConversationBounds {
+    max_entries: CONVERSATION_LOG_MAX_ENTRIES,
+    max_lines: CONVERSATION_LOG_MAX_LINES,
+};
+
+/// What one human's own remembered conversations are held to.
+const OWN_MEMORY_BOUNDS: ConversationBounds = ConversationBounds {
+    max_entries: CONVERSATION_HISTORY_MAX_ENTRIES,
+    max_lines: CONVERSATION_HISTORY_MAX_LINES,
+};
 
 fn push_bounded<T>(log: &mut VecDeque<T>, max_entries: usize, entry: T) {
     if log.len() >= max_entries {
         log.pop_front();
     }
     log.push_back(entry);
+}
+
+/// Record an exchange, continuing the one already in progress when there
+/// is one.
+///
+/// A conversation here is the whole exchange between a pair, not the
+/// minute of it that happened on this tick. If this log already holds
+/// the same two people talking on the tick immediately before, the new
+/// lines belong to that exchange and are appended to it; otherwise this
+/// is a new conversation and gets its own entry.
+///
+/// The event keeps the tick it *started* on, which is what makes it one
+/// conversation rather than a thousand: `tick` on the stored event
+/// answers "when did they start talking", `last_tick` answers "when did
+/// they stop", and the lines answer "what was said". Before this, the
+/// first two answers were the same minute and there were a thousand of
+/// them a day.
+///
+/// Same pair means the same pair in either order -- `generate_conversation`
+/// is given `(a, b)` in the pairing's order, and a conversation does not
+/// become a different conversation because the other person spoke first.
+///
+/// ## Why this searches rather than looking at the last entry
+///
+/// In a person's own `conversation_history` the last entry is always
+/// their last conversation, because the greedy matching in
+/// `step_dialogue` marks a human busy once paired, so nobody has two
+/// conversations on one tick. Their history is therefore in `last_tick`
+/// order and the back entry is the only thing that can be continued.
+///
+/// The island-wide `conversation_log` has no such order: every pair
+/// talking on a tick appends to it, so a pair's own last entry sits
+/// behind whatever other pairs said afterwards. Looking only at the
+/// back there would start a new conversation every tick for everyone
+/// whenever more than one pair was talking -- which is most of the
+/// time, and would have left the shared feed fragmented in exactly the
+/// way this change is meant to fix. So the search walks back to the
+/// pair's own last entry. Both deques are capped
+/// ([`CONVERSATION_LOG_MAX_ENTRIES`], [`CONVERSATION_HISTORY_MAX_ENTRIES`]),
+/// which is what bounds the walk, and in a person's history it stops on
+/// the first entry it looks at whenever there is anything to continue.
+fn merge_or_push(
+    log: &mut VecDeque<dialogue::ConversationEvent>,
+    bounds: ConversationBounds,
+    event: &dialogue::ConversationEvent,
+    tick: u64,
+) {
+    let same_pair = |held: &dialogue::ConversationEvent| {
+        (held.participant_a_id == event.participant_a_id
+            && held.participant_b_id == event.participant_b_id)
+            || (held.participant_a_id == event.participant_b_id
+                && held.participant_b_id == event.participant_a_id)
+    };
+    // The pair's own most recent entry, however far back other pairs
+    // have pushed it.
+    let mut merged = false;
+    if let Some(held) = log.iter_mut().rev().find(|held| same_pair(held)) {
+        // Still going if its most recent line was said on the tick
+        // before this one. That is `last_tick`, the end of the exchange
+        // so far, not `tick`, which stays at the beginning of it.
+        if held.last_tick + 1 == tick {
+            held.lines.extend(event.lines.iter().cloned());
+            held.last_tick = tick;
+            merged = true;
+        }
+    }
+    if !merged {
+        push_bounded(log, bounds.max_entries, event.clone());
+    }
+    evict_to_line_budget(log, bounds.max_lines);
+}
+
+/// The two bounds a conversation log is held to. Entries alone stopped
+/// being a bound when an entry became a whole exchange instead of a
+/// minute of one, so both travel together.
+#[derive(Debug, Clone, Copy)]
+struct ConversationBounds {
+    max_entries: usize,
+    max_lines: usize,
+}
+
+/// Drop whole conversations until the log holds no more than `max_lines`
+/// lines.
+///
+/// Least recently spoken goes first, by `last_tick` rather than by
+/// position. Position is the order conversations *started* in, and once
+/// an exchange can run for hours the two come apart: a conversation that
+/// began this morning and is still going sits near the front, so
+/// dropping from the front would evict the one happening right now and
+/// keep a brief one that has already ended. What has not been spoken in
+/// longest is what a feed of recent conversations, and a person's own
+/// memory, can best afford to lose.
+///
+/// Never the last one left: a log holding a single conversation longer
+/// than the whole budget keeps it rather than emptying itself, because
+/// something that long is the only thing there is to remember and a feed
+/// showing nothing is worse than a feed showing one thing.
+///
+/// Conversations are dropped whole rather than trimmed line by line, so
+/// what is kept is always a real exchange from beginning to end. Half a
+/// conversation, with its opening missing and no mark saying so, would
+/// be a worse record than not having it. Removing from the middle keeps
+/// the rest in start order, which is what the dashboard's "newest first"
+/// depends on.
+fn evict_to_line_budget(log: &mut VecDeque<dialogue::ConversationEvent>, max_lines: usize) {
+    let mut held: usize = log.iter().map(|event| event.lines.len()).sum();
+    while held > max_lines && log.len() > 1 {
+        let Some(stalest) = log
+            .iter()
+            .enumerate()
+            .min_by_key(|(index, event)| (event.last_tick, *index))
+            .map(|(index, _)| index)
+        else {
+            break;
+        };
+        let Some(dropped) = log.remove(stalest) else {
+            break;
+        };
+        held -= dropped.lines.len();
+    }
 }
 
 /// This human's own father/mother `agent_id`s, from the birth record
@@ -397,9 +560,10 @@ impl HumanSystem {
     /// in the population (humans are bucketed by grid cell and each looks at
     /// a bounded window of eligible candidates):
     ///
-    /// * **Family pairs** — the founders, every living child with each living
-    ///   parent (at any distance), and adjacent siblings — outrank everyone
-    ///   else. Among themselves they are ordered by a hash of the tick and
+    /// * **Family pairs** — the founders, and every adjacent child/parent and
+    ///   adjacent sibling pair — outrank everyone else. "Adjacent" is
+    ///   Manhattan distance 1 or less, the same test throughout: people have
+    ///   to be near each other to talk. Among themselves they are ordered by a hash of the tick and
     ///   the two ids, so no family pair monopolises a person: over time the
     ///   founders talk to each other *and* to their children.
     /// * **Neighbour pairs** — humans in the same or an edge-adjacent cell
@@ -433,7 +597,24 @@ impl HumanSystem {
         let alive = |i: usize| matches!(humans[i].profile.status, HumanStatus::Alive);
         let approaching =
             |h: &HumanBeing| matches!(h.economy_action.kind, ActionKind::SocialApproach);
-        let living: Vec<usize> = (0..humans.len()).filter(|&i| alive(i)).collect();
+        // Awake, not merely alive.
+        //
+        // Family pairs used to be matched on `alive` alone, so the founders
+        // held a conversation on every tick of every night: watched on a
+        // running island, both asleep from tick 1799, they generated forty
+        // exchanges across ticks 2001-2040. Nobody was awake for any of
+        // them, and each one fed both participants' relationship memory and
+        // social state.
+        //
+        // `circadian.asleep` is the sleep gate's own output, computed every
+        // tick from the Forger-Jewett-Kronauer pacemaker, so this adds no
+        // state and invents nothing: it stops reading a person as available
+        // to talk while the model already says they are asleep. The
+        // remaining half of D35 — that waking pairs still converse on every
+        // single tick, once a simulated minute — is a question about what
+        // the rate should be, and is left open.
+        let available = |i: usize| alive(i) && !humans[i].circadian.asleep;
+        let living: Vec<usize> = (0..humans.len()).filter(|&i| available(i)).collect();
 
         // Deterministic per-tick tie-break, independent of registry order.
         let tick_hash = |a: usize, b: usize| -> u64 {
@@ -481,13 +662,30 @@ impl HumanSystem {
             self.registry.position_of("Gem-D"),
             self.registry.position_of("Gem-K"),
         ) {
-            if alive(d) && alive(k) {
+            if available(d) && available(k) {
                 add_edge(d, k, Relationship::Founders, false);
             }
         }
 
-        // Family: children and their living parents, wherever they are; and
-        // the living children of each parent, to find siblings.
+        // Family: children and their living parents, near enough to be
+        // heard; and the living children of each parent, to find siblings.
+        //
+        // This is D34, and the rule is the one siblings already use rather
+        // than a new one: Manhattan distance 1 or less. A parent and child
+        // used to be matched at *any* distance, which on a 2 km grid meant
+        // a pair 400 cells apart -- 800 km -- holding a conversation, and
+        // feeding the relationship memory and social state behind it. No
+        // number is invented here, because inventing a range for how far a
+        // voice carries would be worse than using the one the model already
+        // applies to two siblings standing in a field.
+        //
+        // What this gives up is the shortcut where a parent and child find
+        // each other without moving. That was never real: seeking somebody
+        // out is movement, and `SocialApproach` is how this model does
+        // movement toward a person. A spread family will now talk less
+        // until they walk to each other, which is the correct answer to
+        // "can these two hear one another" even though it is the quieter
+        // one.
         let mut children_of: HashMap<String, Vec<usize>> = HashMap::new();
         for &child in &living {
             let Some((father_id, mother_id)) = parent_agent_ids(&humans[child]) else {
@@ -495,7 +693,7 @@ impl HumanSystem {
             };
             for parent_id in [father_id, mother_id] {
                 if let Some(parent) = self.registry.position_of(&parent_id) {
-                    if parent != child && alive(parent) {
+                    if parent != child && available(parent) && manhattan(child, parent) <= 1 {
                         add_edge(child, parent, Relationship::ParentChild, false);
                     }
                 }
@@ -600,24 +798,47 @@ impl HumanSystem {
             .collect();
 
         for (a_id, b_id, event) in events {
-            push_bounded(
-                &mut self.conversation_log,
-                CONVERSATION_LOG_MAX_ENTRIES,
-                event.clone(),
-            );
+            // Carried on where the same pair were already talking,
+            // rather than filed as a new conversation every minute.
+            //
+            // This is D35's remaining half, and the measurement is what
+            // decided its shape. Counting *words* rather than
+            // conversations, Gem-D says 43,985 of them in a 36-hour day
+            // against the ~24,000 a person measured by Mehl et al.
+            // (*Science* 317:82, 2007 -- 396 people, wearable
+            // recorders, ~16,000 words a day) would say in a day that
+            // long. That is 1.8x the average and inside their observed
+            // range of 700 to 47,000. The founders are talkative; they
+            // are not impossible, and the rate was never the defect.
+            //
+            // The defect was the division. Each exchange is two lines
+            // and about twenty-one words, so a thousand of them is one
+            // near-continuous conversation cut into minute-long
+            // fragments -- and each fragment was filed as a separate
+            // remembered conversation. Nobody remembers an afternoon
+            // with their partner as a thousand conversations, and a
+            // 2,000-entry history meant to hold a lifetime filled in two
+            // days because of how talking was *divided*, not how much of
+            // it there was.
+            //
+            // So a pair who spoke on the previous tick continue the
+            // exchange they were already having. No threshold is
+            // invented for this: "the tick before this one" is the
+            // finest grain the simulation has, and anything coarser
+            // would be a number with nothing behind it.
+            //
+            // Merging does not reduce how much is said -- a day is 2,042
+            // lines either way -- so it moves where the bound has to go.
+            // An entry that is a whole waking stretch holds about a
+            // thousand lines, and 2,000 of those would be millions of
+            // lines a head, so both logs are held to a line budget as
+            // well as an entry count. See `ConversationBounds`.
+            merge_or_push(&mut self.conversation_log, SHARED_FEED_BOUNDS, &event, tick);
             if let Some(a) = self.registry.get_human_mut(&a_id) {
-                push_bounded(
-                    &mut a.conversation_history,
-                    CONVERSATION_HISTORY_MAX_ENTRIES,
-                    event.clone(),
-                );
+                merge_or_push(&mut a.conversation_history, OWN_MEMORY_BOUNDS, &event, tick);
             }
             if let Some(b) = self.registry.get_human_mut(&b_id) {
-                push_bounded(
-                    &mut b.conversation_history,
-                    CONVERSATION_HISTORY_MAX_ENTRIES,
-                    event,
-                );
+                merge_or_push(&mut b.conversation_history, OWN_MEMORY_BOUNDS, &event, tick);
             }
         }
     }
@@ -2423,6 +2644,226 @@ mod tests {
         assert_eq!(parent_conversations, 1);
     }
 
+    #[test]
+    fn a_parent_and_child_do_not_converse_from_opposite_ends_of_the_island() {
+        // This is me coming here and saying so, which is what the earlier
+        // version of this test asked whoever gave the pair a distance rule
+        // to do. It used to assert the opposite -- that 400 cells, 800 km
+        // on the island's 2 km grid, did not stop a parent and child
+        // talking -- and it said it was pinning the real behaviour rather
+        // than the desired one.
+        //
+        // The behaviour changed because that one was not defensible as
+        // realism: two people 800 km apart cannot hear each other, and no
+        // amount of being related changes it. They now get the same
+        // adjacency test siblings always had.
+        let mut system = HumanSystem::new();
+        let mut parent = HumanBeing::new("far-parent".to_string(), BiologicalSex::Female);
+        let mut child = HumanBeing::new("far-child".to_string(), BiologicalSex::Male);
+
+        for h in [&mut parent, &mut child] {
+            if h.profile.canonical_schema.is_none() {
+                h.profile.canonical_schema = Some(HumanSchema::canonical_minimal(h.agent_id()));
+            }
+        }
+        child
+            .profile
+            .canonical_schema
+            .as_mut()
+            .unwrap()
+            .reproductive_systems
+            .genetics_system
+            .birth_records
+            .push(mk_core::human::schema::BirthRecordSchema {
+                birth_id: "birth_far-child".to_string(),
+                genotype_id: "genotype_far-child".to_string(),
+                father_id: "unknown-father".to_string(),
+                mother_id: "far-parent".to_string(),
+                birth_timestamp: "tick-0".to_string(),
+                agent_id: "far-child".to_string(),
+                mutations: vec![],
+            });
+
+        parent.set_runtime_position(GridPosition::new(0, 0));
+        child.set_runtime_position(GridPosition::new(0, 400));
+        system.registry.add_human_no_storage(parent);
+        system.registry.add_human_no_storage(child);
+
+        system.step_dialogue(&mk_core::rng::RngRegistry::new([11u8; 32]), 2);
+
+        let events: Vec<_> = system.conversation_log().collect();
+        assert!(
+            events.is_empty(),
+            "a parent and child 800 km apart held a conversation: {:?}",
+            events
+                .iter()
+                .map(|event| event.relationship)
+                .collect::<Vec<_>>()
+        );
+    }
+
+    /// The same pair, standing next to each other, must still talk --
+    /// otherwise the change above would read as a fix while having
+    /// silenced families altogether.
+    #[test]
+    fn a_parent_and_child_standing_together_still_converse() {
+        let mut system = HumanSystem::new();
+        let mut parent = HumanBeing::new("near-parent".to_string(), BiologicalSex::Female);
+        let mut child = HumanBeing::new("near-child".to_string(), BiologicalSex::Male);
+
+        for h in [&mut parent, &mut child] {
+            if h.profile.canonical_schema.is_none() {
+                h.profile.canonical_schema = Some(HumanSchema::canonical_minimal(h.agent_id()));
+            }
+        }
+        child
+            .profile
+            .canonical_schema
+            .as_mut()
+            .unwrap()
+            .reproductive_systems
+            .genetics_system
+            .birth_records
+            .push(mk_core::human::schema::BirthRecordSchema {
+                birth_id: "birth_near-child".to_string(),
+                genotype_id: "genotype_near-child".to_string(),
+                father_id: "unknown-father".to_string(),
+                mother_id: "near-parent".to_string(),
+                birth_timestamp: "tick-0".to_string(),
+                agent_id: "near-child".to_string(),
+                mutations: vec![],
+            });
+
+        parent.set_runtime_position(GridPosition::new(10, 10));
+        child.set_runtime_position(GridPosition::new(10, 11));
+        system.registry.add_human_no_storage(parent);
+        system.registry.add_human_no_storage(child);
+
+        system.step_dialogue(&mk_core::rng::RngRegistry::new([11u8; 32]), 2);
+
+        let events: Vec<_> = system.conversation_log().collect();
+        assert_eq!(events.len(), 1, "a parent and child in the next cell talk");
+        assert_eq!(
+            events[0].relationship,
+            dialogue::ConversationRelationship::ParentChild
+        );
+    }
+
+    #[test]
+    fn siblings_that_far_apart_do_not_converse() {
+        // This was the other half of D34, and the reason it read as an
+        // inconsistency rather than a blanket choice: the same distance
+        // that silenced two siblings left a parent and child talking.
+        // Both are silent now, which is what made the inconsistency go
+        // away -- by levelling up to the stricter rule, not down.
+        let mut system = HumanSystem::new();
+        for (name, col) in [("far-sib-a", 0), ("far-sib-b", 400)] {
+            let mut human = HumanBeing::new(name.to_string(), BiologicalSex::Female);
+            human
+                .profile
+                .canonical_schema
+                .get_or_insert_with(|| HumanSchema::canonical_minimal(name))
+                .reproductive_systems
+                .genetics_system
+                .birth_records
+                .push(mk_core::human::schema::BirthRecordSchema {
+                    birth_id: format!("birth_{name}"),
+                    genotype_id: format!("genotype_{name}"),
+                    father_id: "shared-father".to_string(),
+                    mother_id: "shared-mother".to_string(),
+                    birth_timestamp: "tick-0".to_string(),
+                    agent_id: name.to_string(),
+                    mutations: vec![],
+                });
+            human.set_runtime_position(GridPosition::new(0, col));
+            system.registry.add_human_no_storage(human);
+        }
+
+        system.step_dialogue(&mk_core::rng::RngRegistry::new([11u8; 32]), 2);
+
+        assert_eq!(system.conversation_log().count(), 0);
+    }
+
+    #[test]
+    fn two_sleeping_people_hold_no_conversation() {
+        // Half of D35, fixed. Family pairs used to be matched on `alive`
+        // alone, so on a running island both founders, asleep from tick
+        // 1799, generated forty exchanges across ticks 2001-2040. This
+        // asserted that behaviour before the gate went in; it now asserts
+        // its absence.
+        let mut system = HumanSystem::new();
+        system
+            .registry
+            .add_human_no_storage(HumanBeing::gem_d_founder());
+        system
+            .registry
+            .add_human_no_storage(HumanBeing::gem_k_founder());
+        for id in ["Gem-D", "Gem-K"] {
+            system
+                .registry
+                .get_human_mut(id)
+                .expect("a founder")
+                .circadian
+                .asleep = true;
+        }
+
+        let rng = mk_core::rng::RngRegistry::new([21u8; 32]);
+        for tick in 0..3 {
+            system.step_dialogue(&rng, tick);
+        }
+        assert_eq!(
+            system.conversation_log().count(),
+            0,
+            "nobody talks in their sleep"
+        );
+
+        // And they talk again on waking, so this is a gate and not a ban:
+        // the pair is otherwise exactly the one that conversed before.
+        for id in ["Gem-D", "Gem-K"] {
+            system
+                .registry
+                .get_human_mut(id)
+                .expect("a founder")
+                .circadian
+                .asleep = false;
+        }
+        system.step_dialogue(&rng, 3);
+        assert_eq!(system.conversation_log().count(), 1);
+    }
+
+    #[test]
+    fn one_sleeper_is_enough_to_stop_a_conversation() {
+        // It takes two people awake. A conversation with a sleeping partner
+        // would be no more real for the speaker being awake, and it would
+        // still write into the sleeper's relationship memory.
+        let mut system = HumanSystem::new();
+        system
+            .registry
+            .add_human_no_storage(HumanBeing::gem_d_founder());
+        system
+            .registry
+            .add_human_no_storage(HumanBeing::gem_k_founder());
+        system
+            .registry
+            .get_human_mut("Gem-K")
+            .expect("a founder")
+            .circadian
+            .asleep = true;
+
+        system.step_dialogue(&mk_core::rng::RngRegistry::new([22u8; 32]), 0);
+
+        assert_eq!(system.conversation_log().count(), 0);
+        assert!(
+            system
+                .registry
+                .get_human("Gem-D")
+                .expect("a founder")
+                .conversation_history
+                .is_empty(),
+            "the waking founder remembers no conversation either"
+        );
+    }
+
     fn crowd(size: usize, cells: usize) -> HumanSystem {
         let mut system = HumanSystem::new();
         for n in 0..size {
@@ -2487,17 +2928,27 @@ mod tests {
     #[test]
     fn founders_and_their_child_all_get_to_talk() {
         let mut system = HumanSystem::new();
+        // All three in one cell. They used to be forty cells apart, which
+        // worked only because a parent and child were matched at any
+        // distance (D34). The property under test is the rotation -- that
+        // no family pair monopolises a person -- and that has nothing to
+        // do with distance, so the household is now a household.
+        //
+        // One cell rather than three touching ones, because under
+        // Manhattan distance 1 no three cells are all adjacent to each
+        // other: putting the child a step from each parent leaves the
+        // parents two steps apart. A 2 km cell is a house and then some,
+        // so a family sharing one is the ordinary case, not a contrivance.
+        let home = GridPosition::new(20, 20);
         let mut gem_d = HumanBeing::gem_d_founder();
         let mut gem_k = HumanBeing::gem_k_founder();
-        gem_d.set_runtime_position(GridPosition::new(0, 0));
-        gem_k.set_runtime_position(GridPosition::new(40, 40));
+        gem_d.set_runtime_position(home);
+        gem_k.set_runtime_position(home);
         system.registry.add_human_no_storage(gem_d);
         system.registry.add_human_no_storage(gem_k);
-        system.registry.add_human_no_storage(kin(
-            "first-child",
-            ("Gem-D", "Gem-K"),
-            GridPosition::new(20, 20),
-        ));
+        system
+            .registry
+            .add_human_no_storage(kin("first-child", ("Gem-D", "Gem-K"), home));
         let rng = mk_core::rng::RngRegistry::new([3u8; 32]);
 
         for tick in 0..60 {
@@ -2521,7 +2972,41 @@ mod tests {
     }
 
     #[test]
-    fn a_child_talks_to_its_distant_parent_rather_than_a_nearby_stranger() {
+    fn a_child_talks_to_its_parent_rather_than_a_stranger_beside_them() {
+        // Family outranks a neighbour reaching out, which is the property
+        // this has always been about. It used to prove it with a parent
+        // thirty cells away, because distance did not count against a
+        // parent then (D34). Now both are in earshot and the ranking is
+        // what decides it, which is what the name claims.
+        let mut system = HumanSystem::new();
+        system.registry.add_human_no_storage({
+            let mut parent = HumanBeing::new("near-parent".to_string(), BiologicalSex::Male);
+            parent.set_runtime_position(GridPosition::new(2, 1));
+            parent
+        });
+        system.registry.add_human_no_storage(kin(
+            "kid",
+            ("near-parent", "unknown-mother"),
+            GridPosition::new(2, 2),
+        ));
+        let mut stranger = HumanBeing::new("stranger".to_string(), BiologicalSex::Male);
+        stranger.set_runtime_position(GridPosition::new(2, 3));
+        stranger.economy_action.kind = ActionKind::SocialApproach;
+        system.registry.add_human_no_storage(stranger);
+
+        system.step_dialogue(&mk_core::rng::RngRegistry::new([2u8; 32]), 5);
+
+        assert_eq!(talked_with(&system, "near-parent"), 1);
+        assert_eq!(talked_with(&system, "kid"), 1);
+        assert_eq!(talked_with(&system, "stranger"), 0);
+    }
+
+    /// And the consequence of D34's fix that is worth stating out loud: a
+    /// child whose parent is far away is not left silent in a crowd. They
+    /// talk to whoever is actually there, which is both what the matcher
+    /// does and what a person does.
+    #[test]
+    fn a_child_whose_parent_is_far_away_talks_to_the_neighbour_who_is_there() {
         let mut system = HumanSystem::new();
         system.registry.add_human_no_storage({
             let mut parent = HumanBeing::new("far-parent".to_string(), BiologicalSex::Male);
@@ -2540,9 +3025,17 @@ mod tests {
 
         system.step_dialogue(&mk_core::rng::RngRegistry::new([2u8; 32]), 5);
 
-        assert_eq!(talked_with(&system, "far-parent"), 1);
+        assert_eq!(
+            talked_with(&system, "far-parent"),
+            0,
+            "a parent 56 km away is not in the conversation"
+        );
         assert_eq!(talked_with(&system, "kid"), 1);
-        assert_eq!(talked_with(&system, "stranger"), 0);
+        assert_eq!(
+            talked_with(&system, "stranger"),
+            1,
+            "the child talks to the person standing next to them"
+        );
     }
 
     #[test]
@@ -2730,5 +3223,195 @@ mod tests {
 
         assert_eq!(human.reproduction.sexual_activity_count, 3);
         assert_eq!(human.reproduction.satisfaction, 0.9);
+    }
+
+    /// Bounds wide enough that nothing is evicted, for the tests that
+    /// are about merging rather than about the budget.
+    fn roomy() -> ConversationBounds {
+        ConversationBounds {
+            max_entries: 500,
+            max_lines: usize::MAX,
+        }
+    }
+
+    /// One exchange between a pair, said on `tick`, carrying `lines`
+    /// lines so a merge can be counted rather than guessed at.
+    fn exchange(a: u64, b: u64, tick: u64, lines: usize) -> dialogue::ConversationEvent {
+        dialogue::ConversationEvent {
+            tick,
+            last_tick: tick,
+            participant_a_id: mk_core::human::HumanId(a),
+            participant_b_id: mk_core::human::HumanId(b),
+            relationship: dialogue::ConversationRelationship::Other,
+            lines: (0..lines)
+                .map(|n| dialogue::DialogueLine {
+                    speaker_id: mk_core::human::HumanId(a),
+                    speaker_name: format!("human {a}"),
+                    text: format!("line {n} on tick {tick}"),
+                    gist: String::new(),
+                })
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn talking_on_the_next_tick_carries_the_same_conversation_on() {
+        let mut log = VecDeque::new();
+        for tick in 1..=5 {
+            merge_or_push(&mut log, roomy(), &exchange(1, 2, tick, 2), tick);
+        }
+
+        assert_eq!(log.len(), 1, "five minutes of talking is one conversation");
+        let held = &log[0];
+        assert_eq!(held.tick, 1, "it is remembered from when they started");
+        assert_eq!(held.last_tick, 5, "and runs to the last thing said");
+        assert_eq!(held.lines.len(), 10, "every line said is kept");
+    }
+
+    #[test]
+    fn a_gap_of_even_one_tick_starts_a_new_conversation() {
+        let mut log = VecDeque::new();
+        merge_or_push(&mut log, roomy(), &exchange(1, 2, 1, 2), 1);
+        merge_or_push(&mut log, roomy(), &exchange(1, 2, 3, 2), 3);
+
+        assert_eq!(log.len(), 2, "they stopped talking and started again");
+        assert_eq!(log[0].last_tick, 1);
+        assert_eq!(log[1].tick, 3);
+    }
+
+    #[test]
+    fn who_spoke_first_does_not_make_it_a_different_conversation() {
+        let mut log = VecDeque::new();
+        merge_or_push(&mut log, roomy(), &exchange(1, 2, 1, 2), 1);
+        // The pairing handed them over the other way round this tick.
+        merge_or_push(&mut log, roomy(), &exchange(2, 1, 2, 2), 2);
+
+        assert_eq!(log.len(), 1, "it is the same two people talking");
+        assert_eq!(log[0].lines.len(), 4);
+    }
+
+    /// The island-wide log holds every pair, so a pair's own last entry
+    /// sits behind whatever other pairs said after it. Reading only the
+    /// back of the log would see someone else's conversation there and
+    /// file a new one every tick -- which is the fragmentation this is
+    /// meant to end, so it is worth a test of its own.
+    #[test]
+    fn another_pair_talking_in_between_does_not_split_a_conversation() {
+        let mut log = VecDeque::new();
+        for tick in 1..=4 {
+            merge_or_push(&mut log, roomy(), &exchange(1, 2, tick, 2), tick);
+            merge_or_push(&mut log, roomy(), &exchange(3, 4, tick, 2), tick);
+        }
+
+        assert_eq!(log.len(), 2, "two pairs talked, so two conversations");
+        assert_eq!(log[0].lines.len(), 8, "the first pair's lines are all here");
+        assert_eq!(log[1].lines.len(), 8, "and so are the second pair's");
+        assert!(log.iter().all(|held| held.tick == 1 && held.last_tick == 4));
+    }
+
+    #[test]
+    fn a_conversation_long_enough_to_fall_out_of_the_log_still_does() {
+        let mut log = VecDeque::new();
+        // Each pair speaks once, on its own tick, so nothing merges and
+        // the cap is the only thing deciding what is kept.
+        for tick in 1..=12 {
+            merge_or_push(
+                &mut log,
+                ConversationBounds {
+                    max_entries: 10,
+                    max_lines: usize::MAX,
+                },
+                &exchange(1, 100 + tick, tick, 2),
+                tick,
+            );
+        }
+
+        assert_eq!(log.len(), 10, "the cap still holds");
+        assert_eq!(log[0].tick, 3, "the oldest two were evicted, oldest first");
+        assert_eq!(log[9].tick, 12);
+    }
+
+    /// Merging makes an entry a whole exchange, so an entry count stopped
+    /// bounding anything: 500 entries of a founder's waking stretch is
+    /// half a million lines. The line budget is the real bound, and
+    /// whole conversations go rather than conversations losing their
+    /// beginnings.
+    #[test]
+    fn the_line_budget_drops_whole_conversations_oldest_first() {
+        let bounds = ConversationBounds {
+            max_entries: 500,
+            max_lines: 10,
+        };
+        let mut log = VecDeque::new();
+        // Four separate conversations of four lines each: 16 lines
+        // offered into a budget of 10.
+        for (n, tick) in (1..=4).map(|n| (n, n * 10)) {
+            merge_or_push(&mut log, bounds, &exchange(1, 100 + n, tick, 4), tick);
+        }
+
+        let held: usize = log.iter().map(|event| event.lines.len()).sum();
+        assert!(held <= 10, "the budget holds: {held} lines");
+        assert_eq!(log.len(), 2, "two whole conversations fit in ten lines");
+        assert_eq!(log[0].tick, 30, "the stalest two went first");
+        assert!(
+            log.iter().all(|event| event.lines.len() == 4),
+            "a kept conversation keeps all of its lines"
+        );
+    }
+
+    #[test]
+    fn one_conversation_longer_than_the_whole_budget_is_still_kept() {
+        let bounds = ConversationBounds {
+            max_entries: 500,
+            max_lines: 4,
+        };
+        let mut log = VecDeque::new();
+        for tick in 1..=6 {
+            merge_or_push(&mut log, bounds, &exchange(1, 2, tick, 2), tick);
+        }
+
+        assert_eq!(log.len(), 1, "it is all there is to remember");
+        assert_eq!(log[0].lines.len(), 12, "and it is not cut in half");
+    }
+
+    /// Position is the order conversations started in, and once an
+    /// exchange can run for hours that is not the order they went quiet
+    /// in. An exchange that began this morning and is still going sits
+    /// near the front of the log; evicting from the front would drop the
+    /// conversation happening right now and keep one that ended hours
+    /// ago.
+    #[test]
+    fn the_conversation_still_going_outlives_a_newer_one_that_ended() {
+        let bounds = ConversationBounds {
+            max_entries: 500,
+            max_lines: 20,
+        };
+        let mut log = VecDeque::new();
+
+        // One pair talk without a break from the first tick to the
+        // twentieth, so their exchange is a single entry at the front of
+        // the log and is the one still going at the end.
+        for tick in 1..=20 {
+            merge_or_push(&mut log, bounds, &exchange(1, 2, tick, 1), tick);
+            // Another pair say two words early on and stop. Their entry
+            // is newer, and goes quiet long before the first pair do.
+            if (5..=6).contains(&tick) {
+                merge_or_push(&mut log, bounds, &exchange(3, 4, tick, 1), tick);
+            }
+        }
+
+        assert_eq!(
+            log.len(),
+            1,
+            "twenty-two lines went into a twenty-line budget, so one had to go"
+        );
+        let kept = &log[0];
+        assert_eq!(
+            kept.participant_a_id,
+            mk_core::human::HumanId(1),
+            "the conversation that was still going is the one that was kept"
+        );
+        assert_eq!(kept.last_tick, 20);
+        assert_eq!(kept.lines.len(), 20, "and it kept every line of itself");
     }
 }

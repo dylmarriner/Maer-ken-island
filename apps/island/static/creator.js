@@ -3,15 +3,17 @@
 "use strict";
 
 import {
+  mountServerChrome,
   clearOffline,
   el,
   fillChrome,
   getJson,
   postJson,
+  rememberToken,
   reportOffline,
+  storedToken,
 } from "/static/app.js";
 
-const TOKEN_KEY = "island-control-token";
 const form = document.getElementById("creator");
 const resultEl = document.getElementById("result");
 const submitEl = document.getElementById("submit");
@@ -31,24 +33,6 @@ function showErrors(heading, messages) {
   list.append(...messages.map((text) => el("li", text)));
   wrap.append(list);
   resultEl.replaceChildren(wrap);
-}
-
-function storedToken() {
-  try {
-    return sessionStorage.getItem(TOKEN_KEY) || "";
-  } catch (_) {
-    return "";
-  }
-}
-
-function rememberToken(token) {
-  try {
-    if (token) sessionStorage.setItem(TOKEN_KEY, token);
-    else sessionStorage.removeItem(TOKEN_KEY);
-  } catch (_) {
-    // A browser with storage switched off still works; the token just has to
-    // be typed again next time.
-  }
 }
 
 // Age follows the birth date until someone types an age themselves.
@@ -373,4 +357,7 @@ form.addEventListener("submit", async (event) => {
   }
 });
 
+// Before anything is asked for, so the control is there to type a
+// token into when the first request comes back 401.
+mountServerChrome();
 setup();

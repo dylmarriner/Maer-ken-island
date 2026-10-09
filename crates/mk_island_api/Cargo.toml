@@ -1,0 +1,10 @@
+[package]
+name = "mk_island_api"
+version = "0.1.0"
+edition = "2021"
+license = "LicenseRef-All-Rights-Reserved"
+description = "The wire schema the island backend speaks and every frontend reads."
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }

@@ -4,6 +4,7 @@
 /// Schemas only. No ticking. No memory. No agency.
 pub mod anatomy;
 pub mod development;
+pub mod dimensions;
 pub mod metabolism;
 pub mod nervous_systems;
 pub mod property;

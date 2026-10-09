@@ -1,0 +1,20 @@
+{
+  "name": "computer-service",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Real web-search/email bridge for Maer'Ken's ActionKind::WebSearch/SendEmail, per docs/superpowers/specs/2026-09-11-computer-access-integration-design.md.",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.21.0",
+    "googleapis": "^144.0.0"
+  },
+  "engines": {
+    "node": ">=18.17"
+  }
+}

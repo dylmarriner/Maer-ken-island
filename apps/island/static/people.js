@@ -2,6 +2,8 @@
 "use strict";
 
 import {
+  explain,
+  mountServerChrome,
   ageWords,
   clearOffline,
   count,
@@ -307,7 +309,7 @@ async function load() {
   } catch (error) {
     reportOffline(error);
     statusEl.textContent = "The roster could not be loaded.";
-    message(detailEl, "Nothing can be read while the island server is unreachable.", "hint");
+    message(detailEl, `Nothing can be read: ${explain(error)}`, "hint");
   }
 }
 
@@ -320,4 +322,96 @@ addEventListener("popstate", () => {
   if (wanted && wanted !== selected) select(wanted);
 });
 
+// Before anything is asked for, so the control is there to type a
+// token into when the first request comes back 401.
+mountServerChrome();
 load();
+
+// ---------------------------------------------------------------------------
+// What the islanders have said to each other.
+//
+// The engine has generated these all along and nothing has ever shown them:
+// `HumanSystem` keeps a bounded feed, `mk_view` projects it, and no surface
+// read it. A simulation whose people talk and whose dashboard cannot show a
+// word of it is only half observable, and it is the half that cannot be
+// checked by looking.
+// ---------------------------------------------------------------------------
+
+const talkPanelEl = document.getElementById("talk-panel");
+const talkEl = document.getElementById("talk");
+const talkNoteEl = document.getElementById("talk-note");
+
+/// One conversation, as the end of an exchange with the speakers named.
+///
+/// A conversation is the whole exchange between a pair, not the minute of
+/// it that happened on one tick, so it spans `tick` to `last_tick` and can
+/// hold hundreds of lines. The backend sends the most recent of them and
+/// `lines_said` says how many there really are; this card shows that span
+/// and that count, so nobody reads a tail as the whole thing.
+function conversationCard(conversation) {
+  const card = el("article", null, { class: "talk-card" });
+  const head = el("p", null, { class: "talk-head" });
+  const last = conversation.last_tick ?? conversation.tick;
+  const when =
+    last > conversation.tick
+      ? `ticks ${conversation.tick}-${last}`
+      : `tick ${conversation.tick}`;
+  head.append(
+    el("span", when, { class: "talk-tick" }),
+    el("span", conversation.relationship, { class: "talk-rel" }),
+  );
+  card.append(head);
+  // `lines_said` is 0 from a backend too old to send it, which means "no
+  // count given" rather than "nothing was said" -- so only say the lines
+  // are a tail when the count is there and is actually larger.
+  const linesSaid = conversation.lines_said ?? 0;
+  if (linesSaid > conversation.lines.length) {
+    card.append(
+      el("p", `the last ${conversation.lines.length} of ${linesSaid} lines`, {
+        class: "talk-more",
+      }),
+    );
+  }
+  for (const line of conversation.lines) {
+    const said = el("p", null, { class: "talk-line" });
+    // The name the engine used. When a person has no typed-in name it is
+    // their id, which is what `Person` does everywhere else on this
+    // dashboard rather than inventing something friendlier.
+    said.append(el("span", `${line.speaker_name}: `, { class: "talk-who" }));
+    said.append(document.createTextNode(line.text));
+    card.append(said);
+  }
+  return card;
+}
+
+async function loadConversations() {
+  try {
+    const data = await getJson("/api/conversations");
+    // Shown rather than paraphrased, like the island page's notes: a reader
+    // needs to know these lines are composed from real state and that no
+    // language model wrote them.
+    talkNoteEl.textContent = data.note;
+    if (!data.conversations.length) {
+      talkEl.replaceChildren(
+        emptyState(
+          "Nobody has spoken yet",
+          "Conversations happen when people are near each other or are kin. None has been generated on this island so far.",
+        ),
+      );
+    } else {
+      talkEl.replaceChildren(...data.conversations.map(conversationCard));
+    }
+    talkPanelEl.hidden = false;
+  } catch (error) {
+    // A missing island is not an error worth shouting about here: the page
+    // already says there is no world. Any other failure hides the panel
+    // rather than showing an empty one that looks like silence.
+    if (error.status !== 404) reportOffline(error);
+    talkPanelEl.hidden = true;
+  }
+}
+
+loadConversations();
+// People keep talking while the page is open, so this refreshes. Five
+// seconds matches the island page's own cadence.
+setInterval(loadConversations, 5000);

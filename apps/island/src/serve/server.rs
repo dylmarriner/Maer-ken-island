@@ -1,7 +1,7 @@
 //! The dashboard's HTTP API and pages. Reads never change anything; the one
 //! write, `POST /api/humans`, is gated by [`ControlAuth`].
 
-use super::auth::ControlAuth;
+use super::auth::{ControlAuth, ReadAuth};
 use super::pages;
 use super::read;
 use super::sim::{IslandCommand, SimHandle, SimSpeed};
@@ -10,6 +10,11 @@ use island_humans::{CreateHumanError, CreateHumanRequest, IslandHumanPopulation}
 use mk_engine::regional::commands::ControlCommand;
 use mk_engine::regional::create_human::{CreateLocation, IslandCreateHuman};
 use mk_engine::regional::estate_layout::SpaceId;
+// The write shapes, from the schema every frontend compiles against. The
+// island's own validation stays here: whether that room exists and whether
+// that cell is in the sea are questions only the live world can answer, and
+// a request type on somebody else's laptop must not pretend to know them.
+use mk_island_api::{ControlRequest, CreateHumanRequest as WorldCreateRequest};
 use std::sync::{Arc, Mutex};
 use warp::http::StatusCode;
 use warp::Filter;
@@ -223,25 +228,38 @@ pub fn options() -> serde_json::Value {
     })
 }
 
+/// The answer to a write this caller may not make.
+///
+/// One place, because three routes were each writing their own copy of it
+/// and a frontend has to be able to tell "your token is wrong" from "this
+/// server takes no writes from off-host at all" -- which is what
+/// `writes_mode` is for, and why it has to be the same word everywhere.
+///
+/// `what` completes "This dashboard is not allowed to ...".
+fn may_not_write(auth: &ControlAuth, what: &str) -> warp::reply::WithStatus<warp::reply::Json> {
+    json(
+        StatusCode::UNAUTHORIZED,
+        &serde_json::json!({
+            "errors": [match auth.mode() {
+                "token" => "That control token was not accepted.".to_string(),
+                _ => format!("This dashboard is not allowed to {what}."),
+            }],
+            "writes": auth.describe(),
+            "writes_mode": auth.mode(),
+        }),
+    )
+}
+
 pub fn create(
     population: &mut IslandHumanPopulation,
     auth: &ControlAuth,
     authorization: Option<&str>,
     request: CreateHumanRequest,
 ) -> (StatusCode, serde_json::Value) {
-    if !auth.permits(authorization) {
-        return (
-            StatusCode::UNAUTHORIZED,
-            serde_json::json!({
-                "errors": [match auth.mode() {
-                    "token" => "That control token was not accepted.",
-                    _ => "This dashboard is not allowed to create people.",
-                }],
-                "writes": auth.describe(),
-                "writes_mode": auth.mode(),
-            }),
-        );
-    }
+    debug_assert!(
+        auth.permits(authorization),
+        "the route checks this before parsing; see `may_not_write`"
+    );
     match population.create_human(request, "dashboard") {
         Ok(created) => (
             StatusCode::CREATED,
@@ -254,141 +272,85 @@ pub fn create(
     }
 }
 
-/// A request to create somebody *in the world*.
+/// Turn the wire shape into a command, or say what is wrong with it.
 ///
-/// The dashboard's stored-person fields, plus where on the island they
-/// start. `space` names a room of the estate by its layout id; `row`/`col`
-/// put them on a cell. Exactly one is required, because "somewhere" is not
-/// a place and guessing one would put a person where nobody asked.
-#[derive(Debug, serde::Deserialize)]
-struct WorldCreateRequest {
-    name: String,
-    biological_sex: String,
-    birth_timestamp: String,
-    age_years: f64,
-    height_cm: f64,
-    build: String,
-    hair_color: String,
-    eye_color: String,
-    skin_tone: String,
-    space: Option<u32>,
-    row: Option<usize>,
-    col: Option<usize>,
-    /// Default true: somebody created on the island was, as a rule, born
-    /// there. A creator who means otherwise says so and gives coordinates.
-    #[serde(default = "yes")]
-    birthplace_here: bool,
-    #[serde(default)]
-    birth_latitude: f64,
-    #[serde(default)]
-    birth_longitude: f64,
-}
-
-fn yes() -> bool {
-    true
-}
-
-impl WorldCreateRequest {
-    /// Turn the wire shape into a command, or say what is wrong with it.
-    ///
-    /// Only the parts the engine cannot check are checked here: the sex
-    /// word and the choice of location. Everything else — the age, the
-    /// height, whether that room exists, whether that cell is in the sea —
-    /// belongs to the island and is checked on its own thread against the
-    /// live world, which is the only place those answers are true.
-    fn into_command(self) -> Result<IslandCreateHuman, Vec<String>> {
-        let mut problems = Vec::new();
-        let sex = match self.biological_sex.trim().to_ascii_lowercase().as_str() {
-            "male" => Some(mk_core::human::BiologicalSex::Male),
-            "female" => Some(mk_core::human::BiologicalSex::Female),
-            other => {
-                problems.push(format!(
-                    "biological_sex: {other:?} is not one the spawn templates support; use male or female."
-                ));
-                None
-            }
-        };
-        let location = match (self.space, self.row, self.col) {
-            (Some(id), None, None) => Some(CreateLocation::EstateSpace(SpaceId(id))),
-            (None, Some(row), Some(col)) => Some(CreateLocation::IslandCell { row, col }),
-            (None, None, None) => {
-                problems.push(
-                    "location: say where they start — `space` for a room of the estate, or `row` and `col` for a cell of the island."
-                        .to_string(),
-                );
-                None
-            }
-            _ => {
-                problems.push(
-                    "location: give either `space` or both `row` and `col`, not a mixture."
-                        .to_string(),
-                );
-                None
-            }
-        };
-        match (sex, location) {
-            (Some(biological_sex), Some(location)) if problems.is_empty() => {
-                Ok(IslandCreateHuman {
-                    name: self.name,
-                    biological_sex,
-                    birth_timestamp: self.birth_timestamp,
-                    age_years: self.age_years,
-                    height_cm: self.height_cm,
-                    build: self.build,
-                    hair_color: self.hair_color,
-                    eye_color: self.eye_color,
-                    skin_tone: self.skin_tone,
-                    location,
-                    birthplace_here: self.birthplace_here,
-                    birth_latitude: self.birth_latitude,
-                    birth_longitude: self.birth_longitude,
-                })
-            }
-            _ => Err(problems),
+/// Only the parts the engine cannot check are checked here: the sex
+/// word and the choice of location. Everything else — the age, the
+/// height, whether that room exists, whether that cell is in the sea —
+/// belongs to the island and is checked on its own thread against the
+/// live world, which is the only place those answers are true.
+fn into_command(request: WorldCreateRequest) -> Result<IslandCreateHuman, Vec<String>> {
+    let mut problems = Vec::new();
+    let sex = match request.biological_sex.trim().to_ascii_lowercase().as_str() {
+        "male" => Some(mk_core::human::BiologicalSex::Male),
+        "female" => Some(mk_core::human::BiologicalSex::Female),
+        other => {
+            problems.push(format!(
+                "biological_sex: {other:?} is not one the spawn templates support; use male or female."
+            ));
+            None
         }
+    };
+    let location = match (request.space, request.row, request.col) {
+        (Some(id), None, None) => Some(CreateLocation::EstateSpace(SpaceId(id))),
+        (None, Some(row), Some(col)) => Some(CreateLocation::IslandCell { row, col }),
+        (None, None, None) => {
+            problems.push(
+                "location: say where they start — `space` for a room of the estate, or `row` and `col` for a cell of the island."
+                    .to_string(),
+            );
+            None
+        }
+        _ => {
+            problems.push(
+                "location: give either `space` or both `row` and `col`, not a mixture.".to_string(),
+            );
+            None
+        }
+    };
+    match (sex, location) {
+        (Some(biological_sex), Some(location)) if problems.is_empty() => Ok(IslandCreateHuman {
+            name: request.name,
+            biological_sex,
+            birth_timestamp: request.birth_timestamp,
+            age_years: request.age_years,
+            height_cm: request.height_cm,
+            build: request.build,
+            hair_color: request.hair_color,
+            eye_color: request.eye_color,
+            skin_tone: request.skin_tone,
+            location,
+            birthplace_here: request.birthplace_here,
+            birth_latitude: request.birth_latitude,
+            birth_longitude: request.birth_longitude,
+        }),
+        _ => Err(problems),
     }
 }
 
-/// Running the island: pause it, resume it, step it, or change its speed.
-#[derive(Debug, serde::Deserialize)]
-#[serde(tag = "command", rename_all = "snake_case")]
-enum ControlRequest {
-    Pause,
-    Resume,
-    /// Advance exactly this many steps and then hold. `ControlCommand::Step`
-    /// has been in the island's vocabulary since Task 4 with nothing behind
-    /// it; this is the loop's step budget, which is also what an upstream
-    /// `InterventionAction::Step` now drives.
-    Step {
-        ticks: u64,
-    },
-    /// `real`, `max`, or a multiplier like `60`.
-    SetSpeed {
-        speed: String,
-    },
-}
-
-impl ControlRequest {
-    /// Apply it, and give back the command to record.
-    fn apply(&self, world: &SimHandle) -> Result<ControlCommand, String> {
-        match self {
-            Self::Pause => {
-                world.set_paused(true);
-                Ok(ControlCommand::Pause)
-            }
-            Self::Resume => {
-                world.set_paused(false);
-                Ok(ControlCommand::Resume)
-            }
-            Self::Step { ticks } => {
-                world.step_for(*ticks);
-                Ok(ControlCommand::Step(*ticks))
-            }
-            Self::SetSpeed { speed } => {
-                let parsed: SimSpeed = speed.parse()?;
-                world.set_speed(parsed);
-                Ok(ControlCommand::SetSpeed(speed.clone()))
-            }
+/// Apply a control request, and give back the command to record.
+fn apply_control(request: &ControlRequest, world: &SimHandle) -> Result<ControlCommand, String> {
+    match request {
+        ControlRequest::Pause => {
+            world.set_paused(true);
+            Ok(ControlCommand::Pause)
+        }
+        ControlRequest::Resume => {
+            world.set_paused(false);
+            Ok(ControlCommand::Resume)
+        }
+        ControlRequest::Step { ticks } => {
+            world.step_for(*ticks);
+            Ok(ControlCommand::Step(*ticks))
+        }
+        // Unlike the others this one is not applied here: it has to
+        // happen on the thread that owns the island, between steps,
+        // like anything else that touches the world or its files.
+        ControlRequest::Snapshot => Ok(ControlCommand::Snapshot),
+        ControlRequest::SetSpeed { speed } => {
+            let parsed: SimSpeed = speed.parse()?;
+            world.set_speed(parsed);
+            Ok(ControlCommand::SetSpeed(speed.clone()))
         }
     }
 }
@@ -400,31 +362,235 @@ struct ActivityQuery {
 
 /// Said in `/api/economy` rather than left for a reader to infer from three
 /// empty lists.
+///
+/// Plain prose with no markup: the dashboard puts it on the page with
+/// `textContent`, as it does everything from the server, so a backtick
+/// would be a backtick on screen rather than code formatting.
 const NO_RESOURCE_NODES: &str =
-    "The island seeds no resource nodes from its biomes, the way a planetary world does, so \
-     `resource_nodes` is always 0. Structures and events are real: they are what has actually \
+    "The island seeds no resource nodes from its biomes, the way a planetary world does, so the \
+     count of them is always zero. Structures and events are real: they are what has actually \
      been built here and what the economy recorded doing it, which is nothing until somebody \
      builds something.";
 
 /// Said in `/api/timeline` for the same reason.
 const TIMELINE_IS_EXTERNAL: &str =
     "Everything that has reached this island from outside, in the order it applied — the same \
-     record `island replay` reads, so this cannot disagree with it. It is not a history of what \
-     the islanders did: nothing here is a person going to bed or felling a tree.";
+     record the replay runner reads, so this cannot disagree with it. It is not a history of \
+     what the islanders did: nothing here is a person going to bed or felling a tree.";
+
+/// A PNG, or a 404 when there is no island to draw.
+///
+/// `no-cache` rather than the elevation map's silence: these layers are
+/// redrawn as the island's biomass grows, and a browser that held the
+/// first one would show the forest it bootstrapped with for ever.
+fn png_reply(bytes: Option<std::sync::Arc<Vec<u8>>>) -> impl warp::Reply {
+    match bytes {
+        None => warp::reply::with_status(
+            warp::reply::with_header(
+                warp::reply::with_header(Vec::new(), "content-type", "text/plain; charset=utf-8"),
+                "cache-control",
+                "no-cache",
+            ),
+            StatusCode::NOT_FOUND,
+        ),
+        Some(bytes) => warp::reply::with_status(
+            warp::reply::with_header(
+                warp::reply::with_header(bytes.to_vec(), "content-type", "image/png"),
+                "cache-control",
+                "no-cache",
+            ),
+            StatusCode::OK,
+        ),
+    }
+}
+
+/// The terrain bytes, or a 404 when there is no island to describe.
+///
+/// `immutable` for a year, and that is earned rather than optimistic: the
+/// island refuses `SculptTerrain` and `SmoothTerrain`, so these bytes
+/// cannot change while the process lives. A client across a network
+/// fetches 5.8 MB once and never again.
+fn elevation_reply(bytes: Option<std::sync::Arc<Vec<u8>>>, gzip: bool) -> impl warp::Reply {
+    // The refusal is JSON and says `--scenario`, like every other endpoint
+    // that has no island to answer about. This used to be an empty body
+    // with a 404, which is the one answer a client cannot do anything
+    // with: it cannot tell "this backend is not simulating an island"
+    // from "something between us ate the response".
+    const NO_ISLAND: &str = "{\"errors\":[\"No island is running, so it has no terrain. Start \
+                             the server with --scenario.\"]}";
+    let (status, body) = match bytes {
+        None => (StatusCode::NOT_FOUND, NO_ISLAND.as_bytes().to_vec()),
+        Some(bytes) => (StatusCode::OK, bytes.to_vec()),
+    };
+    let kind = if status == StatusCode::OK {
+        "application/octet-stream"
+    } else {
+        "application/json"
+    };
+    let encoding = if gzip && status == StatusCode::OK {
+        "gzip"
+    } else {
+        "identity"
+    };
+    warp::reply::with_status(
+        warp::reply::with_header(
+            warp::reply::with_header(
+                warp::reply::with_header(body, "content-type", kind),
+                "content-encoding",
+                encoding,
+            ),
+            "cache-control",
+            // Immutable only when there is terrain: the island refuses
+            // every terrain edit, so those bytes cannot change while the
+            // process lives. A refusal is not immutable -- the island it
+            // is refusing about may well be started next.
+            if status == StatusCode::OK {
+                "public, max-age=31536000, immutable"
+            } else {
+                "no-store"
+            },
+        ),
+        status,
+    )
+}
+
+/// Said in `/api/world/estate/layout`, because a client should know it
+/// need not ask twice.
+const ESTATE_IS_FIXED: &str =
+    "Where the estate's buildings and things stand, in domain metres. This does not change: they \
+     are placed when the island bootstraps and nothing on this island moves a building. Fetch it \
+     once. The rectangles are west, south, east and north; the yard is the cleared ground the \
+     engine places no stem inside, so a renderer that did not know would draw the wood with an \
+     unexplained hole in it.";
+
+/// Said in `/api/trees`, because a viewer that drew an empty island and
+/// said nothing would be read as a treeless one.
+const TREES_ARE_LOCAL: &str =
+    "Individual stems exist only inside `individual_radius_m` of `individual_centre_m` — the \
+     ground around the founders' estate. Out there the engine holds a `TreeInstance` per stem \
+     above a minimum diameter, with its own height, diameter and biomass. Everywhere else, \
+     including the rest of the 4 km patch and the whole island beyond it, vegetation is modelled \
+     as stand cover and biomass per cell, not as trees, so there is nothing individual to draw \
+     and an empty box here does not mean bare ground. `kind` is Tree, Shrub or Grass and is not \
+     a species: the island's vegetation carries no species, and island-scale species is open \
+     work. `in_box` is how many really stood in the box before thinning, `shown` how many came \
+     back; zoom in until they agree and you are looking at every stem there is.";
+
+/// How many stems `/api/trees` will return however large a `cap` is asked
+/// for. Four thousand draws in a few milliseconds on a canvas and costs
+/// about 400 kB of JSON; a caller asking for the whole 200,000 would get
+/// a 20 MB body and a picture indistinguishable from a thinned one.
+const TREE_CAP_CEILING: usize = 4_000;
+
+/// The box `/api/trees` is asked about, in domain metres, with a cap on
+/// how many stems come back.
+///
+/// Defaulted rather than required so `/api/trees` with no query at all
+/// answers something sensible — a box large enough to hold any island the
+/// engine builds, which the thinning then samples.
+#[derive(serde::Deserialize)]
+struct TreeBox {
+    #[serde(default = "lowest")]
+    x0: f64,
+    #[serde(default = "lowest")]
+    y0: f64,
+    #[serde(default = "highest")]
+    x1: f64,
+    #[serde(default = "highest")]
+    y1: f64,
+    #[serde(default = "default_tree_cap")]
+    cap: usize,
+}
+
+/// Not zero: a default of zero would quietly clip to the north-east
+/// quadrant of the domain, and nothing says domain metres are positive.
+fn lowest() -> f64 {
+    f64::MIN
+}
+
+fn highest() -> f64 {
+    f64::MAX
+}
+
+fn default_tree_cap() -> usize {
+    TREE_CAP_CEILING
+}
+
+/// Said in `/api/conversations`, because a reader needs to know what these
+/// lines are and, just as much, what they are not.
+///
+/// Kept true as the model changes, which has caught it three times now:
+/// it told readers the islanders talked "awake or asleep" after the sleep
+/// gate had stopped that; it pointed at D35 after D35 was resolved; and
+/// it explained the repetition by saying a line *is* the speaker's
+/// internal monologue, which stopped being so when speech was given its
+/// own phrasings (D36). A note that explains a limitation the code no
+/// longer has is worse than no note, because a reader has no way to tell
+/// it is out of date. The third was caught by
+/// `notes_cite_live_deviations.rs`, written after the second.
+const CONVERSATIONS_ARE_COMPOSED: &str =
+    "What the islanders have said to each other, newest first. Every line is composed by the \
+     engine from state it had already computed: the speaker's own emotion and internal \
+     monologue, and what the listener said to them last time these two spoke. No language \
+     model is involved, and the same two people at the same tick always say the same thing. \
+     This is the whole island's recent feed, not one person's memory: each islander keeps their \
+     own, far longer, history. A conversation here is the whole exchange between a pair, not \
+     the minute of it that happened on one tick, so one can span hours and hold hundreds of \
+     lines; the last few of them are shown and the count says how many there really were. \
+     A waking pair converses on every tick, which is once a simulated minute, so over a long \
+     exchange phrasings recur: what somebody says is drawn from a set of ways of saying what \
+     their state actually is, and a day holds a couple of hundred distinct sentences rather \
+     than a couple of thousand. What they are shown saying is what the engine composed, \
+     repetition included, rather than tidied up.";
+
+/// The note served with `/api/conversations`, for the test that keeps its
+/// citation honest. Exposed rather than duplicated: a test written against
+/// its own copy of this text would pass while the served one went stale,
+/// which is the exact failure it exists to catch.
+pub fn conversations_note() -> &'static str {
+    CONVERSATIONS_ARE_COMPOSED
+}
 
 /// Headers every response carries. The pages load nothing from anywhere but
 /// this server, so the policy can say exactly that: no third-party script,
 /// style, image or connection, no framing, and no form posting its own way
 /// out if a script fails to load.
-const CONTENT_SECURITY_POLICY: &str = "default-src 'self'; script-src 'self'; style-src 'self'; \
-     img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'; \
-     frame-ancestors 'none'";
+/// The policy these pages are served under.
+///
+/// `connect-src` and `img-src` have to name every island the pages may
+/// read, because a frontend hosted away from its backend calls another
+/// origin and a browser will not let it unless the page it is on says so.
+/// `self` stays in both: the ordinary case is still the island serving its
+/// own dashboard.
+///
+/// This is the one header that has to grow when a backend is configured,
+/// and it is worth saying why it is not simply relaxed to `*`. The page's
+/// own policy is what stops a script that got onto it from sending the
+/// island's contents somewhere else. Listing the islands an operator
+/// actually named keeps that, and costs them one flag.
+fn content_security_policy(connect: &[String]) -> String {
+    let extra = if connect.is_empty() {
+        String::new()
+    } else {
+        format!(" {}", connect.join(" "))
+    };
+    format!(
+        "default-src 'self'; script-src 'self'; style-src 'self'; \
+         img-src 'self' data: blob:{extra}; connect-src 'self'{extra}; base-uri 'none'; \
+         form-action 'none'; frame-ancestors 'none'"
+    )
+}
 
 /// One line per request on stdout, the way a server log reads. Set
 /// `ISLAND_ACCESS_LOG=off` to keep the terminal quiet.
-fn access_log() -> warp::log::Log<impl Fn(warp::log::Info<'_>) + Copy> {
-    warp::log::custom(|info| {
-        if std::env::var("ISLAND_ACCESS_LOG").is_ok_and(|value| value.eq_ignore_ascii_case("off")) {
+fn access_log(wanted: Option<bool>) -> warp::log::Log<impl Fn(warp::log::Info<'_>) + Clone> {
+    warp::log::custom(move |info| {
+        let on = match wanted {
+            Some(on) => on,
+            None => !std::env::var("ISLAND_ACCESS_LOG")
+                .is_ok_and(|value| value.eq_ignore_ascii_case("off")),
+        };
+        if !on {
             return;
         }
         println!(
@@ -435,6 +601,155 @@ fn access_log() -> warp::log::Log<impl Fn(warp::log::Info<'_>) + Copy> {
             info.elapsed().as_secs_f64() * 1000.0
         );
     })
+}
+
+/// How this backend is exposed.
+///
+/// The dashboard used to be one program on one machine, where none of
+/// these questions came up: reads were open because the port was, and a
+/// browser only ever talked to the server that sent it the page. A backend
+/// serving a web app hosted somewhere else and a desktop application on
+/// somebody's laptop has to answer all three deliberately.
+#[derive(Debug, Clone)]
+pub struct ServeConfig {
+    /// Who may change the island.
+    pub control: ControlAuth,
+    /// Who may read it. [`ReadAuth::Open`] is right on a loopback bind and
+    /// is a decision anywhere else.
+    pub reads: ReadAuth,
+    /// Browser origins allowed to call this server's API, exactly as they
+    /// appear in an `Origin` header — scheme, host and port, no path, no
+    /// trailing slash (`https://island.example:8443`).
+    ///
+    /// Empty means no cross-origin header is sent at all, which is not the
+    /// same as refusing: a browser's own same-origin rule then applies,
+    /// which is what it does for a server that has never heard of CORS.
+    /// Nothing but a browser is affected either way — a desktop client and
+    /// `curl` do not send an `Origin` and are not bound by one.
+    pub allowed_origins: Vec<String>,
+    /// Which island the pages this server sends should read. `None` -- the
+    /// ordinary case -- means the server that sent them.
+    ///
+    /// Set, this server is a *frontend*: it hands out the dashboard and
+    /// the island is somewhere else. `--frontend-only` is that with the
+    /// API left off entirely, which is how the two halves end up on
+    /// different machines.
+    pub backend: Option<String>,
+    /// Whether a line per request goes to stdout.
+    ///
+    /// `None` -- the ordinary case -- follows `ISLAND_ACCESS_LOG`, which
+    /// is what a server run from a terminal should do. `Some(false)` is
+    /// for a caller that is not a terminal: the desktop application
+    /// embeds this backend and polls it four times a second, and a
+    /// request log would be noise in its output.
+    ///
+    /// A field rather than the caller setting the environment variable,
+    /// because setting a process-wide variable to configure one server is
+    /// a side effect on everything else in the process -- and, since Rust
+    /// 2024, an `unsafe` one.
+    pub access_log: Option<bool>,
+    /// Islands the pages are permitted to call, for the `connect-src` and
+    /// `img-src` a browser enforces on them. The configured backend is
+    /// always one of these; more can be named so a reader can point the
+    /// server control at another island without the browser refusing.
+    pub connect_origins: Vec<String>,
+}
+
+impl ServeConfig {
+    /// The way the dashboard has always run: writes by the control rule,
+    /// reads open, same-origin only.
+    pub fn local(control: ControlAuth) -> Self {
+        Self {
+            control,
+            reads: ReadAuth::Open,
+            allowed_origins: Vec::new(),
+            backend: None,
+            access_log: None,
+            connect_origins: Vec::new(),
+        }
+    }
+}
+
+/// A read refused for want of a token.
+///
+/// A rejection rather than an answer, because the gate sits in front of
+/// every route and has no idea which one was being asked for.
+#[derive(Debug)]
+struct NeedsReadToken;
+
+impl warp::reject::Reject for NeedsReadToken {}
+
+/// Turn the gate's refusal, and a browser's blocked origin, into JSON.
+///
+/// Total, because the filter it recovers has to come out `Infallible` for
+/// `warp::serve`. In routing terms the last arm is unreachable: the page
+/// routes end in a catch-all that matches everything, so the only
+/// rejections that reach here are the two this names. It answers anyway,
+/// and says plainly that it does not know what happened, rather than
+/// letting warp return a bare 500 with no body.
+async fn refusals(err: warp::Rejection) -> Result<Box<dyn warp::Reply>, std::convert::Infallible> {
+    if err.find::<NeedsReadToken>().is_some() {
+        return Ok(Box::new(json(
+            StatusCode::UNAUTHORIZED,
+            &serde_json::json!({
+                "errors": ["This island is not readable without a token. Send it as \
+                            `Authorization: Bearer <token>`."],
+                "reads": "token",
+            }),
+        )));
+    }
+    if let Some(forbidden) = err.find::<warp::filters::cors::CorsForbidden>() {
+        return Ok(Box::new(json(
+            StatusCode::FORBIDDEN,
+            &serde_json::json!({
+                "errors": [format!(
+                    "This browser origin is not one the island accepts: {forbidden}. Start the \
+                     server with --allow-origin for the address the page is served from."
+                )],
+            }),
+        )));
+    }
+    Ok(Box::new(json(
+        StatusCode::INTERNAL_SERVER_ERROR,
+        &serde_json::json!({
+            "errors": [format!(
+                "The island could not route that request and does not know why: {err:?}. This \
+                 is a bug in the server rather than anything wrong with the request."
+            )],
+        }),
+    )))
+}
+
+/// Refuse every `/api` request that does not carry the read token.
+///
+/// In front of the routes rather than inside each of them, because a
+/// request that may not be read must not be answered differently
+/// depending on which endpoint it asked for -- a 404 for an unknown path
+/// and a 401 for a known one would tell an unauthenticated caller which
+/// paths exist.
+///
+/// The pages are deliberately outside it. They are markup with no island
+/// in them; every number on them arrives by `fetch`, which is gated. A
+/// browser pointed at a locked server therefore loads the page and is
+/// asked for the token, instead of being handed a bare 401 with no way to
+/// enter one.
+fn read_gate(
+    reads: ReadAuth,
+    control: ControlAuth,
+) -> impl Filter<Extract = (), Error = warp::Rejection> + Clone {
+    warp::path::peek()
+        .and(warp::header::optional::<String>("authorization"))
+        .and_then(move |peek: warp::path::Peek, header: Option<String>| {
+            let (reads, control) = (reads.clone(), control.clone());
+            async move {
+                if !peek.as_str().starts_with("api") || reads.permits(header.as_deref(), &control) {
+                    Ok(())
+                } else {
+                    Err(warp::reject::custom(NeedsReadToken))
+                }
+            }
+        })
+        .untuple_one()
 }
 
 pub fn routes(
@@ -454,6 +769,19 @@ pub fn routes_with_world(
     auth: ControlAuth,
     world: Option<SimHandle>,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = std::convert::Infallible> + Clone {
+    routes_with_config(population, world, ServeConfig::local(auth))
+}
+
+/// The routes as an operator configured them: who may read, who may write,
+/// and which browser origins may ask at all.
+pub fn routes_with_config(
+    population: SharedPopulation,
+    world: Option<SimHandle>,
+    config: ServeConfig,
+) -> impl Filter<Extract = (impl warp::Reply,), Error = std::convert::Infallible> + Clone {
+    let auth = config.control.clone();
+    let policy = content_security_policy(&config.connect_origins);
+    let backend = config.backend.clone();
     let get_world = warp::path!("api" / "world")
         .and(read())
         .and(with(world.clone()))
@@ -548,6 +876,14 @@ pub fn routes_with_world(
              body: bytes::Bytes,
              population: SharedPopulation,
              auth: ControlAuth| {
+                // Who before what. Parsing first told an unauthenticated
+                // caller the difference between a malformed body and a
+                // refused one, and made the server do the parsing for
+                // them; neither matters on a loopback bind and both do on
+                // a backend reachable from somewhere else.
+                if !auth.permits(authorization.as_deref()) {
+                    return may_not_write(&auth, "create people");
+                }
                 let request: CreateHumanRequest = match serde_json::from_slice(&body) {
                     Ok(request) => request,
                     Err(err) => {
@@ -589,20 +925,10 @@ pub fn routes_with_world(
                         &serde_json::json!({ "errors": ["No island is running, so there is nowhere to put anybody. Start the server with --scenario."] }),
                     );
                 };
+                // The same rule as storing a person: a world write is no
+                // less a write for happening a step later.
                 if !auth.permits(authorization.as_deref()) {
-                    // The same rule as storing a person: a world write is
-                    // no less a write for happening a step later.
-                    return json(
-                        StatusCode::UNAUTHORIZED,
-                        &serde_json::json!({
-                            "errors": [match auth.mode() {
-                                "token" => "That control token was not accepted.",
-                                _ => "This dashboard is not allowed to create people.",
-                            }],
-                            "writes": auth.describe(),
-                            "writes_mode": auth.mode(),
-                        }),
-                    );
+                    return may_not_write(&auth, "create people");
                 }
                 let request: WorldCreateRequest = match serde_json::from_slice(&body) {
                     Ok(request) => request,
@@ -615,7 +941,7 @@ pub fn routes_with_world(
                         )
                     }
                 };
-                match request.into_command() {
+                match into_command(request) {
                     Err(problems) => json(
                         StatusCode::UNPROCESSABLE_ENTITY,
                         &serde_json::json!({ "errors": problems }),
@@ -697,6 +1023,120 @@ pub fn routes_with_world(
             }
         });
 
+    // What is at one cell, for a click on the map.
+    //
+    // The map is one pixel per medium cell, so the page can work out which
+    // cell was clicked and ask about that one. Answering per click rather
+    // than shipping the whole grid keeps this to a few reads: the grid is
+    // 1,152,000 cells, which is megabytes nobody asked for.
+    let get_cell = warp::path!("api" / "cell" / usize / usize)
+        .and(read())
+        .and(with(world.clone()))
+        .map(|row: usize, col: usize, world: Option<SimHandle>| match world {
+            None => json(
+                StatusCode::NOT_FOUND,
+                &serde_json::json!({ "errors": ["No island is running. Start the server with --scenario."] }),
+            ),
+            Some(world) => match world.cell(row, col) {
+                None => json(
+                    StatusCode::NOT_FOUND,
+                    &serde_json::json!({
+                        "errors": [format!("No cell at row {row}, column {col}: the island's medium grid is smaller than that.")]
+                    }),
+                ),
+                Some(cell) => json(StatusCode::OK, &serde_json::json!({ "cell": cell })),
+            },
+        });
+
+    // The island, drawn. Everything else this dashboard serves describes
+    // the world in words and tables; this is the one endpoint that shows
+    // it. The picture is rendered once at startup and handed out as an
+    // `Arc`, so serving it costs a clone and never touches the sim thread.
+    let get_map = warp::path!("api" / "map.png")
+        .and(read())
+        .and(with(world.clone()))
+        .map(|world: Option<SimHandle>| match world {
+            None => warp::reply::with_status(
+                warp::reply::with_header(Vec::new(), "content-type", "text/plain; charset=utf-8"),
+                StatusCode::NOT_FOUND,
+            ),
+            Some(world) => warp::reply::with_status(
+                warp::reply::with_header(world.map_png().to_vec(), "content-type", "image/png"),
+                StatusCode::OK,
+            ),
+        });
+
+    // The stems themselves, inside a box of domain metres, so a viewer can
+    // zoom from the whole island down to a stand of trees and have the
+    // server send only what is in frame.
+    //
+    // A box rather than the lot: the patch holds about 200,000 stems, and
+    // the honest answer to "show me all the trees" is a thinned sample
+    // plus the count that was thinned, which `Trees` carries. Zoom in far
+    // enough and the thinning stops and every stem in view is real.
+    let get_trees = warp::path!("api" / "trees")
+        .and(read())
+        .and(warp::query::<TreeBox>())
+        .and(with(world.clone()))
+        .map(|query: TreeBox, world: Option<SimHandle>| match world {
+            None => json(
+                StatusCode::NOT_FOUND,
+                &serde_json::json!({ "errors": ["No island is running, so nothing is growing. Start the server with --scenario."] }),
+            ),
+            Some(world) => {
+                let found = world.trees_in(
+                    query.x0,
+                    query.y0,
+                    query.x1,
+                    query.y1,
+                    query.cap.min(TREE_CAP_CEILING),
+                );
+                json(
+                    StatusCode::OK,
+                    &serde_json::json!({
+                        "trees": found,
+                        "note": TREES_ARE_LOCAL,
+                    }),
+                )
+            }
+        });
+
+    // The two vegetation layers. Unlike the elevation these are redrawn
+    // as the island grows, so a browser must not keep the first one for
+    // ever: they are served `no-cache`, which is a revalidation rather
+    // than a refetch and costs a 304 when nothing has changed.
+    let get_vegetation = warp::path!("api" / "vegetation.png")
+        .and(read())
+        .and(with(world.clone()))
+        .map(|world: Option<SimHandle>| png_reply(world.map(|w| w.vegetation_png())));
+
+    let get_patch = warp::path!("api" / "patch.png")
+        .and(read())
+        .and(with(world.clone()))
+        .map(|world: Option<SimHandle>| png_reply(world.map(|w| w.patch_png())));
+
+    let get_conversations = warp::path!("api" / "conversations")
+        .and(read())
+        .and(with(world.clone()))
+        .map(|world: Option<SimHandle>| match world {
+            None => json(
+                StatusCode::NOT_FOUND,
+                &serde_json::json!({ "errors": ["No island is running, so nobody is talking. Start the server with --scenario."] }),
+            ),
+            Some(world) => {
+                let current = world.projection();
+                json(
+                    StatusCode::OK,
+                    &serde_json::json!({
+                        "conversations": *current.conversations,
+                        "tick": current.clock.tick,
+                        "shown": crate::serve::projection::CONVERSATIONS_SHOWN,
+                        "note": CONVERSATIONS_ARE_COMPOSED,
+                    }),
+                )
+            }
+        });
+
     let get_timeline = warp::path!("api" / "timeline")
         .and(read())
         .and(with(world.clone()))
@@ -707,12 +1147,18 @@ pub fn routes_with_world(
             ),
             Some(world) => {
                 let current = world.projection();
+                // Said here rather than only on stderr. This list is read
+                // from the copy in memory, so if writing the log has
+                // started failing the page would otherwise show a record
+                // that is not on disk and give no sign of it.
+                let log_error = world.replay_log_error();
                 json(
                     StatusCode::OK,
                     &serde_json::json!({
                         "entries": *current.timeline,
                         "tick": current.clock.tick,
                         "note": TIMELINE_IS_EXTERNAL,
+                        "log_error": log_error,
                     }),
                 )
             }
@@ -748,17 +1194,7 @@ pub fn routes_with_world(
                     );
                 };
                 if !auth.permits(authorization.as_deref()) {
-                    return json(
-                        StatusCode::UNAUTHORIZED,
-                        &serde_json::json!({
-                            "errors": [match auth.mode() {
-                                "token" => "That control token was not accepted.",
-                                _ => "This dashboard is not allowed to intervene in the world.",
-                            }],
-                            "writes": auth.describe(),
-                            "writes_mode": auth.mode(),
-                        }),
-                    );
+                    return may_not_write(&auth, "intervene in the world");
                 }
                 let action: mk_interventions::InterventionAction =
                     match serde_json::from_slice(&body) {
@@ -858,14 +1294,13 @@ pub fn routes_with_world(
                     );
                 };
                 if !auth.permits(authorization.as_deref()) {
-                    return json(
-                        StatusCode::UNAUTHORIZED,
-                        &serde_json::json!({
-                            "errors": ["This dashboard is not allowed to control the island."],
-                            "writes": auth.describe(),
-                            "writes_mode": auth.mode(),
-                        }),
-                    );
+                    // This used to say "not allowed to control the island"
+                    // whatever the mode was, so a wrong token and a server
+                    // that takes no writes at all read identically. They
+                    // need different answers: one is fixed by typing the
+                    // right token, the other by starting the server
+                    // differently.
+                    return may_not_write(&auth, "control the island");
                 }
                 let request: ControlRequest = match serde_json::from_slice(&body) {
                     Ok(request) => request,
@@ -878,21 +1313,28 @@ pub fn routes_with_world(
                         )
                     }
                 };
-                match request.apply(&world) {
+                match apply_control(&request, &world) {
                     Err(problem) => json(
                         StatusCode::UNPROCESSABLE_ENTITY,
                         &serde_json::json!({ "errors": [problem] }),
                     ),
                     Ok(control) => {
-                        // Queued only for the record: the pacing already
-                        // changed, and the log should say that it did.
-                        world.send(IslandCommand::Control(control));
+                        // Pause, resume, step and speed have already taken
+                        // effect and are queued only so the log says they
+                        // did. `Snapshot` is the exception: nothing has
+                        // happened yet, and it is the queue that will do
+                        // it. So the command id comes back for all of them
+                        // — harmless for the four, and the only way to
+                        // learn how a snapshot went for the fifth.
+                        let queued = world.send(IslandCommand::Control(control));
                         let pacing = world.pacing();
                         json(
                             StatusCode::OK,
                             &serde_json::json!({
                                 "speed": pacing.speed.describe(),
                                 "paused": pacing.paused,
+                                "command": queued,
+                                "poll": queued.map(|id| format!("/api/world/commands/{id}")),
                             }),
                         )
                     }
@@ -973,14 +1415,111 @@ pub fn routes_with_world(
             }
             json(
                 StatusCode::NOT_FOUND,
-                &serde_json::json!({ "errors": ["No such endpoint. The dashboard serves /api/status, /api/world, /api/world/<estate|vegetation|materials|clock>, /api/world/humans, /api/world/humans/<agent-id>, /api/world/interventions, /api/world/commands/<id>, /api/properties, /api/economy, /api/timeline, /api/control, /api/health, /api/humans, /api/humans/<agent-id>, /api/activity and /api/creator/options."] }),
+                &serde_json::json!({ "errors": ["No such endpoint. The dashboard serves /api/status, /api/world, /api/world/<estate|vegetation|materials|clock>, /api/world/estate/layout, /api/world/humans, /api/world/humans/<agent-id>, /api/world/interventions, /api/world/commands/<id>, /api/properties, /api/economy, /api/timeline, /api/conversations, /api/map.png, /api/vegetation.png, /api/patch.png, /api/cell/<row>/<col>, /api/trees, /api/control, /api/health, /api/humans, /api/humans/<agent-id>, /api/activity and /api/creator/options."] }),
             )
         });
 
+    // Asked before anything else, and answered without a token: a client
+    // cannot negotiate a schema it is not allowed to ask about, and a
+    // version endpoint behind the read gate would mean a frontend showing
+    // "unauthorized" where it should show "this server is older than you".
+    //
+    // It says nothing a reader could not learn by watching which endpoints
+    // answer: no token, no bind address, no data. What it does say is what
+    // this server can do, so a frontend offers what will work instead of
+    // offering everything and letting half of it fail.
+    let get_version = {
+        let reads_need_token = config.reads.needs_token();
+        let origins = config.allowed_origins.clone();
+        let mode = auth.mode().to_string();
+        warp::path!("api" / "version")
+            .and(read())
+            .and(with(world.clone()))
+            .map(move |world: Option<SimHandle>| {
+                let version = mk_island_api::ServerVersion {
+                    api_version: mk_island_api::API_VERSION,
+                    // One version so far, so the floor is the ceiling.
+                    // When the schema breaks, this is what an old client
+                    // is measured against.
+                    api_version_minimum: 1,
+                    server_version: VERSION.to_string(),
+                    capabilities: mk_island_api::Capabilities {
+                        world: world.is_some(),
+                        writes: mode.clone(),
+                        reads_need_token,
+                        allowed_origins: origins.clone(),
+                        elevation: world.is_some(),
+                        computer_service: world.as_ref().is_some_and(|w| w.has_computer_bridge()),
+                        snapshots: world.as_ref().is_some_and(|w| w.can_snapshot()),
+                    },
+                };
+                json(
+                    StatusCode::OK,
+                    &serde_json::to_value(version).unwrap_or_default(),
+                )
+            })
+    };
+
+    // The terrain as numbers rather than as a picture, for a client that
+    // builds a mesh out of it. `/api/map.png` cannot serve that: a colour
+    // ramp is not a height, and a renderer that tried to read metres back
+    // out of one would be inventing them.
+    let get_elevation = warp::path!("api" / "elevation.bin")
+        .and(read())
+        .and(warp::header::optional::<String>("accept-encoding"))
+        .and(with(world.clone()))
+        .map(|encodings: Option<String>, world: Option<SimHandle>| {
+            let Some(world) = world else {
+                return elevation_reply(None, false);
+            };
+            // Gzip only when it was offered. Both copies are built at
+            // startup, so answering a caller that asked for `identity`
+            // costs nothing but the bytes it asked for.
+            let gzip = encodings
+                .as_deref()
+                .is_some_and(|value| value.to_ascii_lowercase().contains("gzip"));
+            elevation_reply(Some(world.elevation_bin(gzip)), gzip)
+        });
+
+    // Two endpoints answer without a read token, and both for the same
+    // reason: they are what a caller asks *before* it can have one. A
+    // monitor needs to know whether this process is alive, and a client
+    // needs to know whether this server still speaks its schema. Neither
+    // says anything about the island.
+    let open = get_health.or(get_version).unify();
+
+    // The estate as geometry, for a renderer that draws it rather than
+    // listing it. Its own endpoint because it does not change: a client
+    // fetches it when it connects and never again.
+    let get_estate_layout = warp::path!("api" / "world" / "estate" / "layout")
+        .and(read())
+        .and(with(world.clone()))
+        .map(|world: Option<SimHandle>| match world {
+            None => json(
+                StatusCode::NOT_FOUND,
+                &serde_json::json!({ "errors": ["No island is running, so there is no estate on it. Start the server with --scenario."] }),
+            ),
+            Some(world) => json(
+                StatusCode::OK,
+                &serde_json::json!({
+                    "layout": &*world.estate_layout(),
+                    "note": ESTATE_IS_FIXED,
+                }),
+            ),
+        });
+
     let api = get_status
+        .or(get_estate_layout)
         .or(get_properties)
         .or(get_economy)
         .or(get_timeline)
+        .or(get_conversations)
+        .or(get_map)
+        .or(get_cell)
+        .or(get_trees)
+        .or(get_vegetation)
+        .or(get_patch)
+        .or(get_elevation)
         .or(get_world)
         .or(post_world_human)
         .or(post_world_intervention)
@@ -989,7 +1528,6 @@ pub fn routes_with_world(
         .or(get_command)
         .or(post_control)
         .or(world_part)
-        .or(get_health)
         .or(get_options)
         .or(get_activity)
         .or(one)
@@ -997,11 +1535,64 @@ pub fn routes_with_world(
         .or(post)
         .or(unknown_api);
 
-    api.or(pages::routes())
-        .with(warp::reply::with::header(
-            "content-security-policy",
-            CONTENT_SECURITY_POLICY,
-        ))
+    // Everything else goes through the read gate, which passes freely when
+    // no read token is configured -- the default, and what every existing
+    // caller sees.
+    let gated =
+        read_gate(config.reads.clone(), auth.clone()).and(api.or(pages::routes_for(backend)));
+
+    // Recovered here, *inside* the CORS wrapper below, and that ordering
+    // is the whole point. A refusal produced outside it carries no
+    // `access-control-allow-origin`, so a browser cannot read the body --
+    // it reports a CORS failure and the page shows "could not reach the
+    // island" for a server that answered perfectly clearly that it wanted
+    // a token. Measured in Chromium against a split deployment: every
+    // unauthenticated read failed as `net::ERR_FAILED` with no way to find
+    // out why, until this moved.
+    let served = open
+        .map(|reply| Box::new(reply) as Box<dyn warp::Reply>)
+        .or(gated.map(|reply| Box::new(reply) as Box<dyn warp::Reply>))
+        .unify()
+        .recover(refusals)
+        .unify();
+
+    // Cross-origin headers only when an operator named an origin. Sending
+    // none is not a refusal: it is what a server that has never heard of
+    // CORS does, and leaves a browser's own same-origin rule in charge.
+    // Configuring an empty allow-list instead would refuse the same-origin
+    // POSTs the Creator page makes, because a browser sends `Origin` on
+    // those too.
+    //
+    // Outermost, so a preflight is answered before the read gate sees it.
+    // A browser never puts an `Authorization` header on a preflight, so a
+    // gate in front of this would refuse every cross-origin write with a
+    // 401 the page could do nothing about.
+    let served: warp::filters::BoxedFilter<(Box<dyn warp::Reply>,)> =
+        if config.allowed_origins.is_empty() {
+            served.boxed()
+        } else {
+            let cors = warp::cors()
+                .allow_origins(config.allowed_origins.iter().map(String::as_str))
+                .allow_methods(vec!["GET", "HEAD", "POST", "OPTIONS"])
+                .allow_headers(vec!["authorization", "content-type", "accept"])
+                .allow_credentials(false)
+                .max_age(600);
+            served
+                .with(cors)
+                .map(|reply| Box::new(reply) as Box<dyn warp::Reply>)
+                .boxed()
+        };
+
+    // Twice, and both are needed. The first (above, inside the CORS
+    // wrapper) turns the read gate's refusal into an ordinary reply, so
+    // it comes back with the cross-origin header a browser needs to read
+    // it. This one catches what the CORS wrapper itself raises -- a
+    // blocked origin -- and the `Rejection` that boxing puts back into
+    // the type regardless.
+    served
+        .recover(refusals)
+        .unify()
+        .with(warp::reply::with::header("content-security-policy", policy))
         .with(warp::reply::with::header(
             "x-content-type-options",
             "nosniff",
@@ -1012,7 +1603,7 @@ pub fn routes_with_world(
             "permissions-policy",
             "geolocation=(), camera=(), microphone=()",
         ))
-        .with(access_log())
+        .with(access_log(config.access_log))
 }
 
 /// Serve until Ctrl-C, following upstream `mk serve`'s pattern.
@@ -1031,8 +1622,72 @@ pub async fn run_with_world(
     bind: std::net::SocketAddr,
     world: Option<SimHandle>,
 ) -> std::io::Result<()> {
+    run_with_config(population, bind, world, ServeConfig::local(auth)).await
+}
+
+/// Serve on a listener somebody else bound.
+///
+/// For a caller that needs the port *before* the server starts -- the
+/// desktop application binds 127.0.0.1:0, reads the port the operating
+/// system picked, and connects a client to it. Asking the runtime for the
+/// port afterwards would be a race against the server's own startup.
+///
+/// It also keeps `warp` out of that application's dependencies, which
+/// matters more than it looks: a desktop binary has no business linking an
+/// HTTP framework just to name a type.
+pub async fn serve_on(
+    listener: tokio::net::TcpListener,
+    population: SharedPopulation,
+    world: Option<SimHandle>,
+    config: ServeConfig,
+) {
+    warp::serve(routes_with_config(population, world, config))
+        .incoming(listener)
+        .run()
+        .await;
+}
+
+/// Serve the pages alone, for an island on another machine.
+///
+/// No population, no world, no API: a web server for the dashboard, which
+/// can sit anywhere a browser can reach. Every request these pages make
+/// goes to the backend named in the config.
+pub async fn run_frontend(bind: std::net::SocketAddr, config: ServeConfig) -> std::io::Result<()> {
+    let policy = content_security_policy(&config.connect_origins);
     let listener = tokio::net::TcpListener::bind(bind).await?;
-    warp::serve(routes_with_world(population, auth, world))
+    let routes = pages::routes_for(config.backend.clone())
+        .with(warp::reply::with::header("content-security-policy", policy))
+        .with(warp::reply::with::header(
+            "x-content-type-options",
+            "nosniff",
+        ))
+        .with(warp::reply::with::header("x-frame-options", "DENY"))
+        .with(warp::reply::with::header("referrer-policy", "no-referrer"))
+        .with(warp::reply::with::header(
+            "permissions-policy",
+            "geolocation=(), camera=(), microphone=()",
+        ))
+        .with(access_log(config.access_log));
+    warp::serve(routes)
+        .incoming(listener)
+        .graceful(async {
+            let _ = tokio::signal::ctrl_c().await;
+        })
+        .run()
+        .await;
+    Ok(())
+}
+
+/// Serve as an operator configured it: the backend a frontend on another
+/// machine talks to.
+pub async fn run_with_config(
+    population: SharedPopulation,
+    bind: std::net::SocketAddr,
+    world: Option<SimHandle>,
+    config: ServeConfig,
+) -> std::io::Result<()> {
+    let listener = tokio::net::TcpListener::bind(bind).await?;
+    warp::serve(routes_with_config(population, world, config))
         .incoming(listener)
         .graceful(async {
             let _ = tokio::signal::ctrl_c().await;
@@ -1366,6 +2021,333 @@ mod tests {
         ] {
             let response = warp::test::request().path(path).reply(&filter).await;
             assert_ne!(response.status(), 200, "{path}");
+        }
+    }
+}
+
+#[cfg(test)]
+mod remote_tests {
+    //! The backend as something a frontend on another machine talks to.
+    //!
+    //! Everything here was open or absent while the dashboard and the
+    //! island were one process on one machine. None of it is a change to
+    //! what the island does; all of it is a change to who may ask.
+
+    use super::*;
+    use std::net::{IpAddr, Ipv4Addr};
+
+    const LOOPBACK: IpAddr = IpAddr::V4(Ipv4Addr::LOCALHOST);
+    const LAN: IpAddr = IpAddr::V4(Ipv4Addr::new(192, 168, 1, 20));
+    const PAGE: &str = "https://island.example";
+
+    fn stored() -> (tempfile::TempDir, SharedPopulation) {
+        let tmp = tempfile::tempdir().unwrap();
+        let (population, _) = IslandHumanPopulation::open(tmp.path(), [3u8; 32]).unwrap();
+        (tmp, Arc::new(Mutex::new(population)))
+    }
+
+    fn served(
+        config: ServeConfig,
+    ) -> (
+        tempfile::TempDir,
+        impl Filter<Extract = (impl warp::Reply + 'static,), Error = std::convert::Infallible>
+            + Clone
+            + 'static,
+    ) {
+        let (tmp, population) = stored();
+        (tmp, routes_with_config(population, None, config))
+    }
+
+    fn remote(reads: ReadAuth, origins: &[&str]) -> ServeConfig {
+        ServeConfig {
+            control: ControlAuth::resolve(Some("control".into()), LAN),
+            reads,
+            allowed_origins: origins.iter().map(|o| o.to_string()).collect(),
+            ..ServeConfig::local(ControlAuth::Disabled)
+        }
+    }
+
+    /// Every path a frontend reads, so a gate that missed one would show
+    /// up here rather than in production.
+    const READS: [&str; 6] = [
+        "/api/status",
+        "/api/world",
+        "/api/humans",
+        "/api/activity",
+        "/api/creator/options",
+        "/api/nonsense",
+    ];
+
+    #[tokio::test]
+    async fn a_client_can_ask_what_this_server_speaks_before_it_has_a_token() {
+        let (_tmp, filter) = served(remote(ReadAuth::resolve(Some("read".into())), &[]));
+        let response = warp::test::request()
+            .path("/api/version")
+            .reply(&filter)
+            .await;
+        assert_eq!(response.status(), 200, "version must not need a token");
+        let version: mk_island_api::ServerVersion =
+            serde_json::from_slice(response.body()).expect("the shared schema reads it");
+        assert_eq!(version.api_version, mk_island_api::API_VERSION);
+        assert!(version.compatibility(mk_island_api::API_VERSION).is_ok());
+        // Without `--scenario` there is no island, and a frontend should
+        // be told so rather than drawing an empty sea.
+        assert!(!version.capabilities.world);
+        assert!(!version.capabilities.elevation);
+        assert_eq!(version.capabilities.writes, "token");
+        assert!(version.capabilities.reads_need_token);
+    }
+
+    #[tokio::test]
+    async fn a_monitor_can_still_ask_whether_the_process_is_alive() {
+        // A load balancer has no token and should not need one to find out
+        // that the thing behind it is up.
+        let (_tmp, filter) = served(remote(ReadAuth::resolve(Some("read".into())), &[]));
+        for path in ["/healthz", "/api/health"] {
+            let response = warp::test::request().path(path).reply(&filter).await;
+            assert_eq!(response.status(), 200, "{path}");
+        }
+    }
+
+    #[tokio::test]
+    async fn with_a_read_token_every_other_endpoint_is_refused_without_it() {
+        let (_tmp, filter) = served(remote(ReadAuth::resolve(Some("read".into())), &[]));
+        for path in READS {
+            let response = warp::test::request().path(path).reply(&filter).await;
+            assert_eq!(response.status(), 401, "{path} answered without a token");
+            let body: serde_json::Value = serde_json::from_slice(response.body()).unwrap();
+            assert_eq!(body["reads"], "token", "{path}");
+        }
+    }
+
+    #[tokio::test]
+    async fn an_unknown_path_is_refused_the_same_way_a_known_one_is() {
+        // Otherwise the gate is an oracle: a 404 for a path that does not
+        // exist and a 401 for one that does would map the API for somebody
+        // with no token at all.
+        let (_tmp, filter) = served(remote(ReadAuth::resolve(Some("read".into())), &[]));
+        let known = warp::test::request()
+            .path("/api/status")
+            .reply(&filter)
+            .await;
+        let unknown = warp::test::request()
+            .path("/api/nonsense")
+            .reply(&filter)
+            .await;
+        assert_eq!(known.status(), unknown.status());
+        assert_eq!(known.body(), unknown.body());
+    }
+
+    #[tokio::test]
+    async fn the_read_token_opens_them_again() {
+        let (_tmp, filter) = served(remote(ReadAuth::resolve(Some("read".into())), &[]));
+        for path in ["/api/status", "/api/humans", "/api/activity"] {
+            let response = warp::test::request()
+                .path(path)
+                .header("authorization", "Bearer read")
+                .reply(&filter)
+                .await;
+            assert_eq!(response.status(), 200, "{path}");
+        }
+    }
+
+    #[tokio::test]
+    async fn the_pages_load_even_when_the_island_is_locked() {
+        // A browser pointed at a locked server should get the page and be
+        // asked for the token, not a bare 401 with nowhere to type one.
+        // The page carries no island state; every number on it arrives by
+        // a fetch that is gated.
+        let (_tmp, filter) = served(remote(ReadAuth::resolve(Some("read".into())), &[]));
+        for path in ["/", "/people", "/island", "/creator", "/static/app.js"] {
+            let response = warp::test::request().path(path).reply(&filter).await;
+            assert_eq!(response.status(), 200, "{path}");
+        }
+    }
+
+    #[tokio::test]
+    async fn without_a_read_token_nothing_changes_for_anybody() {
+        let (_tmp, filter) = served(remote(ReadAuth::Open, &[]));
+        for path in ["/api/status", "/api/humans", "/", "/api/version"] {
+            let response = warp::test::request().path(path).reply(&filter).await;
+            assert_eq!(response.status(), 200, "{path}");
+        }
+    }
+
+    #[tokio::test]
+    async fn a_named_origin_gets_the_header_that_lets_a_browser_read_the_answer() {
+        let (_tmp, filter) = served(remote(ReadAuth::Open, &[PAGE]));
+        let response = warp::test::request()
+            .path("/api/status")
+            .header("origin", PAGE)
+            .reply(&filter)
+            .await;
+        assert_eq!(response.status(), 200);
+        assert_eq!(
+            response.headers()["access-control-allow-origin"],
+            PAGE,
+            "a browser will discard the body without this"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_preflight_is_answered_without_a_token_and_names_the_write_headers() {
+        // A browser never puts `Authorization` on a preflight, so this has
+        // to be answered in front of the read gate. It was not, once.
+        let (_tmp, filter) = served(remote(ReadAuth::resolve(Some("read".into())), &[PAGE]));
+        let response = warp::test::request()
+            .method("OPTIONS")
+            .path("/api/world/humans")
+            .header("origin", PAGE)
+            .header("access-control-request-method", "POST")
+            .header(
+                "access-control-request-headers",
+                "authorization,content-type",
+            )
+            .reply(&filter)
+            .await;
+        assert_eq!(response.status(), 200, "the preflight was refused");
+        let allowed = response.headers()["access-control-allow-headers"]
+            .to_str()
+            .unwrap()
+            .to_ascii_lowercase();
+        assert!(allowed.contains("authorization"), "{allowed}");
+        assert!(allowed.contains("content-type"), "{allowed}");
+        assert_eq!(response.headers()["access-control-allow-origin"], PAGE);
+    }
+
+    #[tokio::test]
+    async fn an_origin_nobody_named_is_refused_in_words() {
+        let (_tmp, filter) = served(remote(ReadAuth::Open, &[PAGE]));
+        let response = warp::test::request()
+            .path("/api/status")
+            .header("origin", "https://somewhere.else")
+            .reply(&filter)
+            .await;
+        assert_eq!(response.status(), 403);
+        let body: serde_json::Value = serde_json::from_slice(response.body()).unwrap();
+        let message = body["errors"][0].as_str().unwrap();
+        assert!(message.contains("--allow-origin"), "{message}");
+    }
+
+    #[tokio::test]
+    async fn with_no_origins_configured_a_same_origin_post_is_not_refused() {
+        // Configuring an empty allow-list would have refused this: a
+        // browser sends `Origin` on a same-origin POST too, and warp's
+        // CORS filter judges every request that carries one.
+        let (_tmp, population) = stored();
+        let filter = routes_with_config(
+            population,
+            None,
+            ServeConfig::local(ControlAuth::resolve(None, LOOPBACK)),
+        );
+        let response = warp::test::request()
+            .method("POST")
+            .path("/api/humans")
+            .header("origin", PAGE)
+            .json(&serde_json::json!({
+                "name": "Hine Moana", "biological_sex": "female",
+                "birth_timestamp": "1992-11-03T10:15:00+13:00",
+                "birth_latitude": -41.3, "birth_longitude": 174.8, "age_years": 33.9,
+                "height_cm": 166.0, "build": "Athletic", "hair_color": "Black",
+                "eye_color": "Brown", "skin_tone": "Medium"
+            }))
+            .reply(&filter)
+            .await;
+        assert_eq!(response.status(), 201, "a same-origin create was refused");
+        assert!(
+            !response
+                .headers()
+                .contains_key("access-control-allow-origin"),
+            "a server told about no origins should send no cross-origin header"
+        );
+    }
+
+    #[tokio::test]
+    async fn writes_are_still_refused_without_the_control_token() {
+        // The read gate is a second lock, not a replacement for the first.
+        let (_tmp, filter) = served(remote(ReadAuth::resolve(Some("read".into())), &[]));
+        let response = warp::test::request()
+            .method("POST")
+            .path("/api/humans")
+            .header("authorization", "Bearer read")
+            .json(&serde_json::json!({"name": "x"}))
+            .reply(&filter)
+            .await;
+        assert_eq!(
+            response.status(),
+            401,
+            "the read token must not be a licence to write"
+        );
+    }
+
+    #[tokio::test]
+    async fn asking_for_terrain_without_an_island_says_so_rather_than_sending_nothing() {
+        let (_tmp, filter) = served(remote(ReadAuth::Open, &[]));
+        let response = warp::test::request()
+            .path("/api/elevation.bin")
+            .reply(&filter)
+            .await;
+        assert_eq!(response.status(), 404);
+        let body: serde_json::Value = serde_json::from_slice(response.body())
+            .expect("a refusal is JSON, like every other endpoint's");
+        assert!(
+            body["errors"][0].as_str().unwrap().contains("--scenario"),
+            "{body}"
+        );
+    }
+}
+
+#[cfg(test)]
+mod cors_refusal_tests {
+    //! A refusal a browser can actually read.
+    //!
+    //! This is the one thing in the backend that only a browser could
+    //! have found, and it is worth a test of its own because it is
+    //! invisible to every other client: `curl` reads a 401 whether or not
+    //! it carries `access-control-allow-origin`, and a browser does not.
+    //! Without the header the fetch fails as a CORS error, the body is
+    //! unreadable, and a page that could have said "this island needs a
+    //! token" says "could not reach the island" instead.
+
+    use super::*;
+    use std::net::{IpAddr, Ipv4Addr};
+
+    const LAN: IpAddr = IpAddr::V4(Ipv4Addr::new(192, 168, 1, 20));
+    const PAGE: &str = "https://island.example";
+
+    #[tokio::test]
+    async fn a_refusal_carries_the_header_a_browser_needs_to_read_it() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (population, _) = IslandHumanPopulation::open(tmp.path(), [3u8; 32]).unwrap();
+        let filter = routes_with_config(
+            Arc::new(Mutex::new(population)),
+            None,
+            ServeConfig {
+                control: ControlAuth::resolve(Some("control".into()), LAN),
+                reads: ReadAuth::resolve(Some("read".into())),
+                allowed_origins: vec![PAGE.to_string()],
+                ..ServeConfig::local(ControlAuth::Disabled)
+            },
+        );
+
+        for path in ["/api/status", "/api/world", "/api/humans"] {
+            let response = warp::test::request()
+                .path(path)
+                .header("origin", PAGE)
+                .reply(&filter)
+                .await;
+            assert_eq!(response.status(), 401, "{path}");
+            assert_eq!(
+                response
+                    .headers()
+                    .get("access-control-allow-origin")
+                    .map(|v| v.to_str().unwrap()),
+                Some(PAGE),
+                "{path}: a browser will discard this refusal unread, and the page will blame \
+                 the network for a server that answered perfectly clearly"
+            );
+            let body: serde_json::Value = serde_json::from_slice(response.body()).unwrap();
+            assert_eq!(body["reads"], "token", "{path}");
         }
     }
 }

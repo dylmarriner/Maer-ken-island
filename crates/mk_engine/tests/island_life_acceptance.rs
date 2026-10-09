@@ -20,7 +20,54 @@ const DAY: u64 = 86_400;
 /// scenario (`fixtures/island/default_scenario.json`), identical across
 /// processes. Changing any Phase 1-3 behaviour changes it: update it
 /// deliberately, in the commit that changes the behaviour.
-const WEEK_DIGEST: &str = "e796f9f9a851bd98c1ffbae6a427c3b5dc258dcc38ae79d70e85359299cc5d2a";
+///
+/// Last changed by giving a spoken sentence a capital letter: most of
+/// D36's phrasings are written as clauses, because that is how they read
+/// mid-sentence, and whichever is drawn first has to open one. The
+/// People page was showing `... "I want to be close to someone right
+/// now." come here a minute`, which no test saw and no reader could
+/// miss. Capitalising changes the text, so it changes the hash.
+///
+/// Before that, by D36 itself: speech was given its own phrasings instead of
+/// being the speaker's internal monologue verbatim, so the words in a
+/// week of conversation differ and the relationship memory built from
+/// them differs with it. Audited the same way as every other change to
+/// this constant, by deferring the assertion and running the rest:
+/// audits closed 196 against a required 196, food and water shortfalls
+/// both zero, Gem-D at 13.0 kg of body carbon against an expected 13.0
+/// and Gem-K at 10.4 against 10.4, temperate-forest NPP at 707 g
+/// C/m2/yr inside the pack's 400-900. Nothing physical moved; only the
+/// hash did.
+///
+/// Before that, by the other half of D35: a pair who speak again on the
+/// next tick now carry the same exchange on rather than opening a new
+/// one, so `ConversationEvent` gained a `last_tick`, and the logs that
+/// hold those exchanges are bounded by lines rather than by an entry
+/// count that stopped meaning anything once an entry became a whole
+/// conversation. A week of island life therefore holds different
+/// conversation records and different relationship memory. (The half
+/// before it was the sleep gate on `humans::step_dialogue`, which
+/// stopped family pairs being matched on `alive` alone and so talking
+/// through every night.)
+///
+/// It was changed only after checking that everything this test measures
+/// about the week still holds, because a pinned digest is the easiest
+/// thing in the repository to update for the wrong reason. Deferring this
+/// assertion to the end of the test and running the rest gave: audits
+/// closed 196 against a required 196, food and water shortfalls both zero,
+/// Gem-D at 13.0 kg of body carbon against an expected 13.0 and Gem-K at
+/// 10.4 against 10.4 — inside the 0.98-1.02 band that a fixed portion
+/// (1.05x) and an action-gated harvest (0.90x) both failed — and the
+/// temperate-forest NPP at 707 g C/m2/yr inside the ecology pack's
+/// 400-900. Nothing physical moved; only the hash did.
+///
+/// D34's fix -- a parent and child now need the same adjacency as
+/// everyone else -- did *not* move this digest, which is worth recording
+/// because it is evidence rather than an argument: on the reference
+/// island no parent/child pair is matched at a distance in a week, so
+/// giving them a distance rule costs the reference island nothing and
+/// only silences the conversations that were never audible.
+const WEEK_DIGEST: &str = "5fc08dfd0b15efe14e567a55a13cf6a86c98401fa0d355ae78e35f4833b501a6";
 
 fn repo(path: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))

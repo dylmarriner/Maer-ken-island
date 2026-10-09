@@ -70,7 +70,15 @@ The human track still has explicit limits:
 - tactile and multimodal perception use summary values rather than full sensor simulation
 - brain modules are deterministic engine models, not validated neuron-level neuroscience
 - generic runtime schema fields such as `active_thoughts` and `goal_stack` do not have one-to-one engine equivalents
-- sibling dialogue has a relationship type but no automatic pairing trigger
+- sibling dialogue **does** now have an automatic pairing trigger — `humans::step_dialogue`
+  finds siblings through their shared parents and matches adjacent ones in its family tier
+  (`8a819a1`, `adjacent_siblings_converse_as_siblings`). This entry previously said there was
+  none, and had been wrong since that commit. The inconsistency recorded here next -- that the
+  same function matched a parent and child at **any** distance while siblings and neighbours
+  needed adjacency, so family conversation crossed the island where sibling conversation did
+  not -- is `D34` in [`../island/DEVIATIONS.md`](../island/DEVIATIONS.md) and is now resolved:
+  a parent and child get the same adjacency test as everyone else, and two people 800 km apart
+  no longer hold a conversation
 - canonical fixtures and valid/invalid contract tests remain incomplete across schema families
 - the standalone `mk_human_foundry` crate no longer exists in the repository (previously tracked here as "not a root workspace member"; it has since been removed or was never checked in)
 - `formal_predictive_processing::step()` genuinely runs every tick (`lifecycle.rs:479`, real inputs). Its `selected_action` is read only inside its own module, by its TD and habit terms, and by its tests; no other subsystem consumes it, so it costs a full hierarchical-inference and actor-critic update per human per tick for an action nothing executes. `AutonomousMind`, not this subsystem, is what actually drives behaviour. (`thought.rs`'s module comment now says this correctly and can be trusted; the earlier note here that it claimed `step()` had no call site is itself out of date.) Whether to wire the output into decisions or stop running it is the owner's call, and the cost is now measured rather than guessed: 1.6 us of a 20 us human step, **8%**, for 1,000 adults in release (`benchmarks/humans_population.md`, `slow_formal_predictive_processing_costs_this_share_of_a_human_step`)

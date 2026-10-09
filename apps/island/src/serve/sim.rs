@@ -20,7 +20,7 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
-use mk_engine::regional::commands::{Applied, CommandError};
+use mk_engine::regional::commands::{Applied, CommandError, ControlCommand};
 use mk_engine::regional::create_human::{CreateHumanError, CreatedIslander};
 use mk_engine::regional::interventions::{IslandApplied, IslandDirective};
 use mk_engine::regional::life::IslandLife;
@@ -40,32 +40,11 @@ use super::projection::{Digest, IslandProjection, Views};
 pub use mk_engine::regional::commands::IslandCommand;
 
 /// What became of a command.
-#[derive(Debug, Clone, serde::Serialize)]
-#[serde(tag = "state", rename_all = "snake_case")]
-pub enum Outcome {
-    /// Accepted and waiting for the next step to apply it.
-    Queued,
-    Created {
-        agent_id: String,
-        space: Option<String>,
-        cell: (usize, usize),
-        tick: u64,
-        /// A folder that could not be written. The person exists anyway.
-        storage_error: Option<String>,
-    },
-    Refused {
-        problems: Vec<String>,
-    },
-    /// An intervention the island carried out, or a directive it carried
-    /// out on the loop.
-    Intervened {
-        summary: String,
-        touched: usize,
-        tick: u64,
-    },
-    /// A control command: recorded, and nothing in the world moved.
-    Noted,
-}
+///
+/// Defined in `mk_island_api` and re-exported, so the desktop client polling
+/// `/api/world/commands/<id>` across a network matches on exactly the
+/// variants this loop writes.
+pub use mk_island_api::Outcome;
 
 /// A queued command and the id it will be answered under.
 struct Queued {
@@ -163,6 +142,63 @@ pub struct SimHandle {
     commands: Sender<Queued>,
     outcomes: Arc<Mutex<BTreeMap<u64, Outcome>>>,
     next_id: Arc<AtomicU64>,
+    /// The island's terrain, copied once at startup.
+    ///
+    /// Terrain cannot change: the island refuses `SculptTerrain` and
+    /// `SmoothTerrain`. So the grids are copied here once and a click on
+    /// the map is answered from them, without the sim thread ever being
+    /// asked.
+    terrain: Arc<crate::serve::projection::Terrain>,
+    /// The island's elevation map, rendered once as a PNG.
+    ///
+    /// Terrain does not move: the island refuses `SculptTerrain` and
+    /// `SmoothTerrain`, so the picture taken at startup stays true for the
+    /// life of the process. Rendering it once and handing out an `Arc`
+    /// keeps it off the sim thread's path entirely.
+    map_png: Arc<Vec<u8>>,
+    /// The island's standing vegetation, and the estate patch's, as PNGs.
+    ///
+    /// Unlike the elevation render these go stale: biomass grows. They are
+    /// redrawn on the stems' cadence, behind an `RwLock` the HTTP handlers
+    /// only ever read, for the same reason everything else here is --
+    /// nobody but the sim thread may touch the island.
+    vegetation_png: Arc<RwLock<Arc<Vec<u8>>>>,
+    patch_png: Arc<RwLock<Arc<Vec<u8>>>>,
+    /// The island's terrain as numbers, raw and gzipped.
+    ///
+    /// Built once beside `map_png`, and for the same reason: terrain
+    /// cannot change, so this stays true for the life of the process. The
+    /// picture is for a page; these are for a client that has to put the
+    /// ground at a height and cannot read metres back out of a colour.
+    elevation_bin: Arc<Vec<u8>>,
+    elevation_gz: Arc<Vec<u8>>,
+    /// The estate as geometry, copied once at startup.
+    ///
+    /// Beside the terrain and for the same reason: the buildings are
+    /// placed at bootstrap and nothing in Phase 4 moves one, so a copy
+    /// taken here stays true and the sim thread is never asked for it.
+    estate_layout: Arc<mk_island_api::EstateLayout>,
+    /// Whether a real bridge to the outside is attached, so a frontend
+    /// can say that this island's humans may reach the internet.
+    ///
+    /// Read from the island itself at startup rather than from the
+    /// environment, so it says what is true rather than what was asked
+    /// for: `HttpComputerBridge::from_env` can decline, and a capability
+    /// that reported the request would be wrong exactly when it mattered.
+    has_computer_bridge: bool,
+    /// Whether a snapshot directory was configured, so a frontend can
+    /// offer the button or say why it is not there, rather than offering
+    /// it and having the island refuse.
+    can_snapshot: bool,
+    /// Why the replay log last failed to write, if it did.
+    ///
+    /// The log is what makes a run reproducible, and the timeline the
+    /// dashboard serves is read from the copy in memory — so when writing
+    /// stops working the page goes on showing commands that are not on
+    /// disk, and says nothing. This used to go to stderr alone, which in a
+    /// server process is nowhere. A full disk is not hypothetical: it
+    /// happened twice while this branch was being written.
+    log_error: Arc<Mutex<Option<String>>>,
 }
 
 impl SimHandle {
@@ -182,6 +218,104 @@ impl SimHandle {
     /// Ask the thread to finish its current step and stop.
     pub fn stop(&self) {
         self.stop.store(true, Ordering::Relaxed);
+    }
+
+    /// What is at one medium-grid cell, or `None` off the island.
+    ///
+    /// Answered from the terrain snapshot taken at startup, never from the
+    /// island: the sim thread owns that and nothing else may touch it. A
+    /// first attempt at this reached for a `life` field on the handle,
+    /// which does not exist and should not -- that separation is the whole
+    /// point of the projection.
+    pub fn cell(&self, row: usize, col: usize) -> Option<crate::serve::projection::Cell> {
+        crate::serve::projection::cell_of(&self.terrain, row, col)
+    }
+
+    /// The island's elevation map as a PNG, rendered once at startup.
+    pub fn map_png(&self) -> Arc<Vec<u8>> {
+        Arc::clone(&self.map_png)
+    }
+
+    /// The island's terrain as numbers: see
+    /// [`crate::serve::projection::elevation_bin`] for the layout.
+    /// `gzip` picks the gzipped copy, for a caller that said it would
+    /// take one.
+    pub fn elevation_bin(&self, gzip: bool) -> Arc<Vec<u8>> {
+        if gzip {
+            Arc::clone(&self.elevation_gz)
+        } else {
+            Arc::clone(&self.elevation_bin)
+        }
+    }
+
+    /// Whether `ControlCommand::Snapshot` will write a file rather than
+    /// being refused for want of somewhere to put it.
+    pub fn can_snapshot(&self) -> bool {
+        self.can_snapshot
+    }
+
+    /// Whether this island's humans have a way out to the internet.
+    pub fn has_computer_bridge(&self) -> bool {
+        self.has_computer_bridge
+    }
+
+    /// The estate as geometry: what stands where, in metres.
+    pub fn estate_layout(&self) -> Arc<mk_island_api::EstateLayout> {
+        Arc::clone(&self.estate_layout)
+    }
+
+    /// The island's terrain, for anything that has to ask the grids a
+    /// question the projection does not answer.
+    pub fn terrain(&self) -> &crate::serve::projection::Terrain {
+        &self.terrain
+    }
+
+    /// The island's standing vegetation as a PNG, at one pixel per medium
+    /// cell, as of the last redraw.
+    pub fn vegetation_png(&self) -> Arc<Vec<u8>> {
+        match self.vegetation_png.read() {
+            Ok(it) => Arc::clone(&it),
+            Err(poisoned) => Arc::clone(&poisoned.into_inner()),
+        }
+    }
+
+    /// The estate's 4 km patch as a PNG, at one pixel per 5 m stand cell.
+    pub fn patch_png(&self) -> Arc<Vec<u8>> {
+        match self.patch_png.read() {
+            Ok(it) => Arc::clone(&it),
+            Err(poisoned) => Arc::clone(&poisoned.into_inner()),
+        }
+    }
+
+    /// The individual stems standing inside a box of domain metres.
+    ///
+    /// Read off the published projection and the startup terrain, never
+    /// off the island: the same rule as `cell`. The stems are behind an
+    /// `Arc`, so this clones a pointer and then walks it, and the sim
+    /// thread is free to publish a newer set underneath in the meantime --
+    /// the caller just answers from the one it took.
+    pub fn trees_in(
+        &self,
+        x0: f64,
+        y0: f64,
+        x1: f64,
+        y1: f64,
+        cap: usize,
+    ) -> crate::serve::projection::Trees {
+        let stems = match self.projection.read() {
+            Ok(current) => Arc::clone(&current.trees),
+            Err(poisoned) => Arc::clone(&poisoned.into_inner().trees),
+        };
+        crate::serve::projection::trees_in(&self.terrain, &stems, x0, y0, x1, y1, cap)
+    }
+
+    /// Why the replay log last failed to write, if it did. `None` means the
+    /// last attempt succeeded, or that no log was asked for.
+    pub fn replay_log_error(&self) -> Option<String> {
+        match self.log_error.lock() {
+            Ok(it) => it.clone(),
+            Err(poisoned) => poisoned.into_inner().clone(),
+        }
     }
 
     /// How the island is being run right now.
@@ -270,19 +404,58 @@ const SPEED_WINDOW: Duration = Duration::from_secs(5);
 
 /// How often the canonical digest is recomputed, in steps.
 ///
-/// Measured by `slow_what_a_step_and_a_digest_cost`: a step is 1.2 ms and a
-/// digest is **800 ms** — 650 times more — because hashing walks both
-/// 1,152,000-cell grids and every human's canonical JSON. (It is not the
-/// stems: that measurement is on a 50-tree patch.) Hashing every step made
-/// the island run hundreds of times slower than it needed to, for a number
-/// nobody reads that often.
+/// A digest is **800 ms**, because hashing walks both 1,152,000-cell grids
+/// and every human's canonical JSON. It is not the stems, which is why
+/// `slow_what_a_step_and_a_digest_cost` can measure it on a 50-tree patch.
 ///
-/// Sixty steps is one simulated hour at the default cadence. It still
-/// dominates the loop — about 15 ms amortised per step against 1.4 ms of
-/// actual simulation — which caps the island near 3,500x real time. That is
-/// far above the `RealTime` default and enough for a dashboard; if a faster
-/// headless-style speed is ever wanted here, this is the knob.
+/// **The step it is compared against must not be measured there.** That
+/// test's step figure is 1.2 ms on its fifty trees; the real island, with
+/// 199,997 of them, steps at **4.3 ms** (`benchmarks/phase4_cost.md`), and
+/// `benchmarks/island_week.md` implied it all along at 49 s for 10,080
+/// steps. An earlier version of this comment said "650 times more" from
+/// the toy step. On the real island a digest is about **186x** a step —
+/// still enough that hashing every one made the island run far slower than
+/// it needed to, for a number nobody reads that often.
+///
+/// Sixty steps is one simulated hour at the default cadence. The digest
+/// still dominates the loop — 13.3 ms amortised per step against 4.3 ms of
+/// actual simulation — which caps the island near 3,400x real time. That is
+/// far above the `RealTime` default and enough for a dashboard.
+///
+/// Raising it would buy simulation speed and lose digest freshness, and
+/// nothing else — the digest is a read of existing state, so how often it
+/// is taken cannot change the island. It is a constant rather than a knob:
+/// a settable version was written while chasing a flaky test, did not fix
+/// the flake, and ended up with no caller at all, so it went out again
+/// rather than sit here as an unreachable method promising a tuning nobody
+/// could reach. Changing the cadence still means changing this line.
 const DIGEST_EVERY: u64 = 60;
+
+/// Steps between refreshes of the published views -- the people, the
+/// economy and the conversation feed.
+///
+/// One simulated hour, the same as the digest's default, but for a quite
+/// different reason: these are cheap, and the number is about how stale a
+/// dashboard may be rather than about what the loop can afford. They used
+/// to be refreshed inside the digest's cadence check, which coupled "how
+/// fresh is the page" to "how expensive is a hash" and meant that turning
+/// the digest down turned the page stale.
+const VIEWS_EVERY: u64 = 60;
+
+/// Steps between refreshes of the published stems.
+///
+/// Its own cadence, and a far slower one, because this copy is nothing
+/// like the others: the patch holds about 200,000 `TreeInstance`s at 56
+/// bytes apiece, so republishing them is an eleven-megabyte memcpy, where
+/// the whole conversation feed is forty short strings. `tests/tree_cost.rs`
+/// measures what it actually costs against a step.
+///
+/// A simulated day is the right staleness for what it shows. Trees are the
+/// slowest thing on the island -- a stem puts on millimetres in a year --
+/// so a map of them an hour or a day old is the same map. Nothing a person
+/// does through the dashboard plants or fells one: the commands that exist
+/// place structures and people, and those ride the fast views.
+const TREES_EVERY: u64 = 1_440;
 
 /// Start an island running on its own thread.
 ///
@@ -300,10 +473,46 @@ pub fn spawn(life: IslandLife, speed: SimSpeed) -> SimHandle {
 /// in memory would be lost by the thing a log is for, which is a run that
 /// stopped unexpectedly.
 pub fn spawn_logging(life: IslandLife, speed: SimSpeed, log: Option<PathBuf>) -> SimHandle {
+    spawn_with(life, speed, log, None)
+}
+
+/// As [`spawn_logging`], and `snapshots` is the directory
+/// `ControlCommand::Snapshot` writes into.
+pub fn spawn_with(
+    life: IslandLife,
+    speed: SimSpeed,
+    log: Option<PathBuf>,
+    snapshots: Option<PathBuf>,
+) -> SimHandle {
     let step_seconds = life.scenario.cadences.human_seconds;
     // The starting island is hashed once — and only once: hashing costs
-    // about 930 ms against a 1.4 ms step, so the thread is handed this one
-    // rather than computing its own.
+    // about 800 ms against a 4.3 ms step on the real island
+    // (`benchmarks/phase4_cost.md`), so the thread is handed this one
+    // rather than computing its own. This comment said "930 ms against a
+    // 1.4 ms step" until a reviewer caught it: both figures were ones I had
+    // already corrected elsewhere in this branch and missed here.
+    // Drawn once, here, while this thread still owns the island and before
+    // the sim thread takes it. `island_preview` already paints this exact
+    // picture for the headless galleries.
+    let map_png =
+        Arc::new(island_preview::elevation_image(&life.domain, &life.physical.geophysics).png());
+    let terrain = Arc::new(crate::serve::projection::Terrain::of(&life));
+    // The same grids as numbers, for a client that builds a mesh. Both
+    // forms are kept so a caller asking for `identity` is not handed gzip
+    // it did not ask for.
+    let estate_layout = Arc::new(IslandProjection::estate_layout(&life));
+    let elevation_bin = Arc::new(crate::serve::projection::elevation_bin(&terrain));
+    let elevation_gz = Arc::new(crate::serve::projection::gzipped(&elevation_bin));
+    // The vegetation layers, likewise drawn here and then redrawn by the
+    // thread on the stems' cadence. Unlike the elevation they move:
+    // biomass grows, and a page that drew the island's vegetation once at
+    // bootstrap would be showing last year's forest for ever.
+    let vegetation_png = Arc::new(RwLock::new(Arc::new(
+        island_preview::biomass_image(&life.domain, &life.ecology, &life.physical.geophysics).png(),
+    )));
+    let patch_png = Arc::new(RwLock::new(Arc::new(
+        island_preview::stand_image(&life.vegetation).png(),
+    )));
     let first = IslandProjection::digest_now(&life);
     let views = Views::of(&life);
     let projection = Arc::new(RwLock::new(IslandProjection::of(
@@ -325,10 +534,23 @@ pub fn spawn_logging(life: IslandLife, speed: SimSpeed, log: Option<PathBuf>) ->
         commands,
         outcomes: Arc::new(Mutex::new(BTreeMap::new())),
         next_id: Arc::new(AtomicU64::new(1)),
+        log_error: Arc::new(Mutex::new(None)),
+        map_png,
+        terrain,
+        elevation_bin,
+        elevation_gz,
+        estate_layout,
+        can_snapshot: snapshots.is_some(),
+        has_computer_bridge: life.has_computer_bridge(),
+        vegetation_png,
+        patch_png,
     };
     let stop = Arc::clone(&handle.stop);
     let outcomes = Arc::clone(&handle.outcomes);
     let pacing = Arc::clone(&handle.pacing);
+    let log_error = Arc::clone(&handle.log_error);
+    let vegetation_png = Arc::clone(&handle.vegetation_png);
+    let patch_png = Arc::clone(&handle.patch_png);
 
     std::thread::Builder::new()
         .name("island-sim".into())
@@ -344,6 +566,10 @@ pub fn spawn_logging(life: IslandLife, speed: SimSpeed, log: Option<PathBuf>) ->
                 inbox,
                 outcomes,
                 log,
+                log_error,
+                snapshots,
+                vegetation_png,
+                patch_png,
             })
         })
         .expect("the simulation thread starts");
@@ -363,6 +589,16 @@ struct Loop {
     inbox: Receiver<Queued>,
     outcomes: Arc<Mutex<BTreeMap<u64, Outcome>>>,
     log: Option<PathBuf>,
+    /// Shared with the handle, so a failed write reaches the dashboard
+    /// rather than only stderr.
+    log_error: Arc<Mutex<Option<String>>>,
+    /// Shared with the handle, and redrawn on the stems' cadence.
+    vegetation_png: Arc<RwLock<Arc<Vec<u8>>>>,
+    patch_png: Arc<RwLock<Arc<Vec<u8>>>>,
+    /// Where `ControlCommand::Snapshot` writes. Without one the command is
+    /// *refused*, because the alternative is what this used to do: record
+    /// "wrote a snapshot" in the timeline and write nothing.
+    snapshots: Option<PathBuf>,
 }
 
 /// The loop itself: apply what was asked, step, publish, wait if there is
@@ -393,7 +629,7 @@ fn run(mut it: Loop) {
         let mut created_somebody = false;
         let mut applied_anything = false;
         while let Ok(Queued { id, command }) = it.inbox.try_recv() {
-            let outcome = apply(&mut it.life, &it.pacing, command);
+            let outcome = apply(&mut it.life, &it.pacing, it.snapshots.as_ref(), command);
             created_somebody |= matches!(outcome, Outcome::Created { .. });
             applied_anything |= !matches!(outcome, Outcome::Refused { .. });
             record(&it.outcomes, id, outcome);
@@ -410,13 +646,25 @@ fn run(mut it: Loop) {
         let stepping = !pacing.paused || pacing.steps_owed > 0;
         if applied_anything {
             if let Some(path) = &it.log {
-                // A failure here loses the record, not the world: say so
-                // and carry on, as the folders do.
-                if let Err(e) = it.life.replay_log().save(path) {
-                    eprintln!(
-                        "the replay log could not be written to {}: {e}",
-                        path.display()
-                    );
+                // A failure here loses the record, not the world: carry on,
+                // as the folders do — but say so somewhere a person will
+                // look. The island keeps running and the timeline keeps
+                // serving from memory, so without this the page shows
+                // commands that are not on disk and gives no sign.
+                let outcome = match it.life.replay_log().save(path) {
+                    Ok(()) => None,
+                    Err(e) => {
+                        let said = format!(
+                            "the replay log could not be written to {}: {e}",
+                            path.display()
+                        );
+                        eprintln!("{said}");
+                        Some(said)
+                    }
+                };
+                match it.log_error.lock() {
+                    Ok(mut slot) => *slot = outcome,
+                    Err(poisoned) => *poisoned.into_inner() = outcome,
                 }
             }
         }
@@ -485,12 +733,71 @@ fn run(mut it: Loop) {
             owed.steps_owed = owed.steps_owed.saturating_sub(1);
         }
 
-        if it.life.tick.is_multiple_of(DIGEST_EVERY) {
-            it.digest = IslandProjection::digest_now(&it.life);
+        // The views and the digest are on separate cadences, and that is
+        // not tidiness: they were one block until turning the digest off
+        // in the tests silently turned the conversation feed off with it,
+        // because the feed had been refreshed inside the digest's `if`.
+        // They share no cost and no purpose. Reading a handful of totals
+        // and copying at most forty short conversations is cheap; hashing
+        // two 1,152,000-cell grids is 186 steps' worth of work.
+        if it.life.tick.is_multiple_of(VIEWS_EVERY) {
             it.views.records = IslandProjection::records_now(&it.life);
             it.views.records_at_tick = it.life.tick;
             it.views.economy = IslandProjection::economy_now(&it.life);
             it.views.economy_at_tick = it.life.tick;
+            // Conversations ride the same cadence as the records of the
+            // people having them, which is a coherent rule and, more to
+            // the point, the only one that works.
+            //
+            // Refreshing them every step was tried first, on the argument
+            // that they are the liveliest thing the page shows and no
+            // command causes them. That argument was right and the change
+            // was still wrong. A step is not a fixed amount of work: the
+            // island runs at `AsFastAsPossible` here and in every test,
+            // where a step on a small island is microseconds, while this
+            // copy costs about the same 17 us whatever the island holds,
+            // because it is sized by the conversations and not by the
+            // world. Per step, across the test suite's concurrent sim
+            // threads, that was enough allocator churn to starve the HTTP
+            // runtime: `a_new_person_can_be_read_the_moment_they_exist`
+            // missed its sixty-second deadline, reproducibly, and passed
+            // again the moment this came off the per-step path.
+            //
+            // The 0.98% of a step measured by `tests/conversation_cost.rs`
+            // is real and was the wrong thing to reason from: it is a
+            // share of a *full* island's 1.7 ms step, not of the fast ones
+            // that actually set the loop's pace.
+            it.views.conversations = IslandProjection::conversations_now(&it.life);
+        }
+
+        if it.life.tick.is_multiple_of(TREES_EVERY) {
+            it.views.trees = IslandProjection::trees_now(&it.life);
+            // The vegetation layers, on the same cadence and for the same
+            // reason: they are the only things on the map that change and
+            // are expensive to draw. The lock is held for the swap alone,
+            // never across the render, so a request can never wait on a
+            // million-cell repaint.
+            let island = Arc::new(
+                island_preview::biomass_image(
+                    &it.life.domain,
+                    &it.life.ecology,
+                    &it.life.physical.geophysics,
+                )
+                .png(),
+            );
+            let patch = Arc::new(island_preview::stand_image(&it.life.vegetation).png());
+            match it.vegetation_png.write() {
+                Ok(mut slot) => *slot = island,
+                Err(poisoned) => *poisoned.into_inner() = island,
+            }
+            match it.patch_png.write() {
+                Ok(mut slot) => *slot = patch,
+                Err(poisoned) => *poisoned.into_inner() = patch,
+            }
+        }
+
+        if it.life.tick.is_multiple_of(DIGEST_EVERY) {
+            it.digest = IslandProjection::digest_now(&it.life);
         }
 
         let now = Instant::now();
@@ -539,7 +846,73 @@ fn run(mut it: Loop) {
 /// carry out, and this is the host: a directive that were only reported
 /// and not acted on would be a dashboard that accepted a pause and kept
 /// running.
-fn apply(life: &mut IslandLife, pacing: &Mutex<Pacing>, command: IslandCommand) -> Outcome {
+fn apply(
+    life: &mut IslandLife,
+    pacing: &Mutex<Pacing>,
+    snapshots: Option<&PathBuf>,
+    command: IslandCommand,
+) -> Outcome {
+    // `Snapshot` is the one control that does touch the world's surroundings,
+    // so it is carried out here rather than left to `apply_command`, which
+    // records every control as having moved nothing. Before this it *was*
+    // left there: the timeline said "wrote a snapshot" and no snapshot was
+    // written, which is worse than the command not existing.
+    if let IslandCommand::Control(ControlCommand::Snapshot) = &command {
+        let Some(dir) = snapshots else {
+            return Outcome::Refused {
+                problems: vec![
+                    "This dashboard has nowhere to write a snapshot. Start the server with \
+                     --snapshot-dir <dir>."
+                        .to_string(),
+                ],
+            };
+        };
+        let path = dir.join(format!("island-{:08}.mks", life.tick));
+        if let Err(e) = std::fs::create_dir_all(dir) {
+            return Outcome::Refused {
+                problems: vec![format!("{} could not be made: {e}", dir.display())],
+            };
+        }
+        // Timed, because it is slow enough to matter: measured at 27 s for
+        // the full island (`benchmarks/phase4_cost.md`), during which this
+        // thread is not stepping. The duration goes back to whoever asked,
+        // so a stopped clock has an explanation.
+        let started = Instant::now();
+        let saved = mk_engine::io::island_snapshot::save_island_snapshot(life, &path);
+        let took = started.elapsed();
+        return match saved {
+            Err(e) => Outcome::Refused {
+                problems: vec![format!("the snapshot was not written: {e}")],
+            },
+            Ok(()) => {
+                let bytes = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+                // Recorded only now that it happened. The result is not
+                // checked because a `Control` command cannot fail —
+                // `apply_command`'s arm for it records and returns
+                // `Ok(Applied::Noted)` with no fallible step in between —
+                // and `.expect()` here would put a panic on the thread that
+                // owns the island for something that cannot occur. If that
+                // ever stops being true, this match stops compiling.
+                match life.apply_command(command) {
+                    Ok(Applied::Noted) => {}
+                    // Named rather than swallowed, on a reviewer's
+                    // suggestion: `Ok(_)` would have made a future
+                    // `apply_command` that started answering something
+                    // else here look exactly like the one that works.
+                    Ok(other) => {
+                        eprintln!("the snapshot was recorded, unexpectedly, as {other:?}")
+                    }
+                    Err(e) => eprintln!("the snapshot was written but not recorded: {e}"),
+                }
+                Outcome::Saved {
+                    path: path.display().to_string(),
+                    bytes,
+                    took_ms: took.as_millis() as u64,
+                    tick: life.tick,
+                }
+            }
+        };
+    }
     match life.apply_command(command) {
         Ok(Applied::Created(CreatedIslander {
             agent_id,

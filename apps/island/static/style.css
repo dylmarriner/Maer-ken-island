@@ -179,6 +179,49 @@ main {
 .site-footer p { margin: 0; }
 .site-footer .spacer { flex: 1; }
 
+/* --- the server control --------------------------------------------- *
+ *
+ * In the footer on every page, because a frontend hosted away from its
+ * island has to be told which island. When the island serves its own
+ * dashboard -- still the ordinary case -- this is one line of text saying
+ * so, and the form behind it stays shut.
+ */
+
+#server-chrome { flex-basis: 100%; order: 1; }
+.server-line { display: flex; gap: 0.4rem; align-items: baseline; flex-wrap: wrap; }
+.server-line .muted { color: var(--muted); }
+.linkish {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: var(--accent, #2f6fb3);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.linkish:hover { text-decoration: none; }
+.server-form {
+  display: grid;
+  gap: 0.3rem;
+  max-width: 44ch;
+  margin-top: 0.7rem;
+  padding: 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg, transparent);
+}
+.server-form label { font-weight: 600; color: var(--ink-soft); }
+.server-form input {
+  font: inherit;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  color: inherit;
+}
+.server-form .hint { margin: 0 0 0.4rem; font-size: 0.8rem; color: var(--muted); }
+.server-form button { justify-self: start; margin-top: 0.3rem; }
+
 /* --- page intro ----------------------------------------------------- */
 
 .intro { max-width: 62ch; margin-bottom: 1.4rem; }
@@ -208,6 +251,12 @@ main {
 .banner strong { font-weight: 650; }
 .banner.is-error { border-color: var(--err); background: var(--err-bg); color: var(--err); }
 .banner.is-quiet { border-color: var(--line); background: var(--bg-sunk); color: var(--ink-soft); }
+/* An intervention the island carried out, and one it declined. A refusal is
+   the island saying what it is, not a failure on the way in, so it is a
+   warning rather than an error: the request was fine, the island simply has
+   no meaning for it. */
+.banner.is-ok { border-color: var(--ok); background: var(--accent-soft); color: var(--ok); }
+.banner.is-warn { border-color: var(--warn-line); background: var(--warn-bg); color: var(--warn-ink); }
 .banner[hidden] { display: none; }
 
 /* --- cards and panels ----------------------------------------------- */
@@ -487,3 +536,123 @@ button.link {
 .facts { margin: 0 0 1rem; }
 .facts dt { color: var(--muted); font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.06em; }
 .facts dd { margin: 0.1rem 0 0.7rem; font-family: var(--mono); font-size: 0.85rem; overflow-wrap: anywhere; }
+
+/* The Island page: properties, what has been built, and what has been done.
+   Cards for the properties because each is a thing with its own contents;
+   plain tables for the structures, the economy's own record and the
+   timeline, because those are rows that want comparing down a column. */
+.card-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+}
+
+.card {
+  background: var(--panel-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.95rem 1.05rem;
+  min-width: 0;
+}
+
+.card > h3 {
+  margin: 0 0 0.2rem;
+  font-size: 1.02rem;
+}
+
+.pair {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.3rem 0;
+  border-top: 1px solid var(--line);
+}
+
+.pair-label {
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.pair-value {
+  text-align: right;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.card details {
+  margin-top: 0.6rem;
+  font-size: 0.9rem;
+}
+
+.card summary {
+  cursor: pointer;
+  color: var(--accent);
+  padding: 0.2rem 0;
+}
+
+.plain-list {
+  margin: 0.4rem 0 0.2rem;
+  padding-left: 1.1rem;
+  color: var(--ink-soft);
+}
+
+.plain-list li { padding: 0.1rem 0; }
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+  margin: 0.5rem 0 1rem;
+  /* Long names wrap rather than forcing the whole panel to scroll. */
+  table-layout: auto;
+}
+
+.data-table th,
+.data-table td {
+  text-align: left;
+  padding: 0.4rem 0.6rem 0.4rem 0;
+  border-bottom: 1px solid var(--line);
+  overflow-wrap: anywhere;
+}
+
+.data-table th {
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.data-table tbody tr:last-child td { border-bottom: none; }
+
+/* The numeric columns read better right-aligned against each other. */
+.data-table td:first-child,
+.data-table th:first-child { white-space: nowrap; }
+
+/* What the islanders have said to each other. */
+.talk-card { border: 1px solid var(--line); border-radius: 6px; padding: 0.7rem 0.9rem; margin: 0 0 0.7rem; }
+.talk-head { display: flex; gap: 0.6rem; align-items: baseline; margin: 0 0 0.45rem; }
+.talk-tick { color: var(--muted); font-size: 0.82rem; font-variant-numeric: tabular-nums; }
+.talk-rel { color: var(--muted); font-size: 0.82rem; font-style: italic; }
+.talk-line { margin: 0 0 0.3rem; line-height: 1.45; }
+.talk-more { color: var(--muted); font-size: 0.82rem; margin: 0 0 0.45rem; }
+.talk-who { font-weight: 600; }
+
+/* A server-side failure the page must not show silently. */
+.panel-note .warn { color: var(--warn-ink); font-weight: 600; }
+
+/* The island's map. */
+#map { display: block; width: 100%; height: auto; aspect-ratio: 5 / 4; border: 1px solid var(--line); border-radius: 6px; }
+#map { cursor: crosshair; touch-action: none; background: #0b1016; }
+#map.map-dragging { cursor: grabbing; }
+.map-controls { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; margin-bottom: 0.5rem; }
+.map-controls span { color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+#map-cell { margin-top: 0.6rem; min-height: 3rem; }
+#map-cell .cell-where { margin: 0 0 0.2rem; font-variant-numeric: tabular-nums; }
+#map-cell .cell-what { margin: 0; color: var(--ink-soft); }
+
+/* Markers over the map, in the picture's own coordinate space. */
+#map-frame { position: relative; display: block; max-width: 100%; }
+.map-key-person, .map-key-structure, .map-key-estate { font-weight: 600; }
+.map-key-person { color: #8a6b00; }
+.map-key-structure { color: #a43c18; }

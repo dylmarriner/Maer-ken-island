@@ -893,3 +893,34 @@ fn the_buildability_rule_survives_a_change_of_resolution() {
     mask.set(1, 2, false);
     assert!(is_buildable_cell(&shore, &mask, 2000.0, 1, 1));
 }
+
+#[test]
+fn a_summary_a_person_reads_counts_one_cell_as_one_cell() {
+    // These strings go straight onto the dashboard after an intervention.
+    // A region small enough to touch exactly one cell used to report "over
+    // 1 coarse cells", which is the sort of thing that makes software look
+    // like it is talking to itself.
+    let mut life = island();
+    let (row, col) = a_land_cell(&life);
+    let one = life
+        .intervene(&InterventionAction::ModifyClimate {
+            parameter: ClimateParameter::Temperature,
+            value: 291.0,
+            // Smaller than a coarse cell, so only the centre is touched.
+            region: Some(Region::new(at(&life, row, col), 0.2)),
+        })
+        .expect("the climate is editable")
+        .summary();
+    assert!(one.contains("over 1 coarse cell,"), "{one}");
+    assert!(!one.contains("1 coarse cells"), "{one}");
+
+    let many = life
+        .intervene(&InterventionAction::ModifyClimate {
+            parameter: ClimateParameter::Temperature,
+            value: 292.0,
+            region: Some(Region::new(at(&life, row, col), 400.0)),
+        })
+        .expect("the climate is editable")
+        .summary();
+    assert!(many.contains("coarse cells"), "{many}");
+}
