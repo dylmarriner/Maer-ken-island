@@ -519,11 +519,15 @@ fn default_tree_cap() -> usize {
 /// Said in `/api/conversations`, because a reader needs to know what these
 /// lines are and, just as much, what they are not.
 ///
-/// Kept true as the model changes, which has caught it twice: it told
-/// readers the islanders talked "awake or asleep" after the sleep gate
-/// had stopped that, and pointed at D35 after D35 was resolved. A note
-/// that explains a limitation the code no longer has is worse than no
-/// note, because a reader has no way to tell it is out of date.
+/// Kept true as the model changes, which has caught it three times now:
+/// it told readers the islanders talked "awake or asleep" after the sleep
+/// gate had stopped that; it pointed at D35 after D35 was resolved; and
+/// it explained the repetition by saying a line *is* the speaker's
+/// internal monologue, which stopped being so when speech was given its
+/// own phrasings (D36). A note that explains a limitation the code no
+/// longer has is worse than no note, because a reader has no way to tell
+/// it is out of date. The third was caught by
+/// `notes_cite_live_deviations.rs`, written after the second.
 const CONVERSATIONS_ARE_COMPOSED: &str =
     "What the islanders have said to each other, newest first. Every line is composed by the \
      engine from state it had already computed: the speaker's own emotion and internal \
@@ -533,11 +537,11 @@ const CONVERSATIONS_ARE_COMPOSED: &str =
      own, far longer, history. A conversation here is the whole exchange between a pair, not \
      the minute of it that happened on one tick, so one can span hours and hold hundreds of \
      lines; the last few of them are shown and the count says how many there really were. \
-     Expect repetition within one: a waking pair converses on every tick, which is once a \
-     simulated minute, and a line is the speaker's internal monologue, which is deliberately \
-     the same whenever their state is the same. That is a known limit of the model rather than \
-     of this page (D36 in the deviation register), and it is shown as it is rather than tidied \
-     up.";
+     A waking pair converses on every tick, which is once a simulated minute, so over a long \
+     exchange phrasings recur: what somebody says is drawn from a set of ways of saying what \
+     their state actually is, and a day holds a couple of hundred distinct sentences rather \
+     than a couple of thousand. What they are shown saying is what the engine composed, \
+     repetition included, rather than tidied up.";
 
 /// The note served with `/api/conversations`, for the test that keeps its
 /// citation honest. Exposed rather than duplicated: a test written against

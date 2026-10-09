@@ -22,6 +22,7 @@
 //! humans remember what the other says — and the next opener draws on it.
 
 use super::HumanBeing;
+use crate::agents::ActionKind;
 use mk_core::human::HumanId;
 use mk_core::rng::{RngKey, RngRegistry, SubsystemId};
 use mk_core::time::Tick;
@@ -165,6 +166,198 @@ fn remembered_gist<'a>(speaker: &'a HumanBeing, listener: &HumanBeing) -> Option
         .map(|line| line.gist.as_str())
 }
 
+/// Ways of saying out loud what `action` was, for a speaker who is not
+/// reading their own inner voice aloud.
+///
+/// The first of each set is the monologue's own wording, so nothing is
+/// lost; the rest are the same thing said as people say it. This is
+/// where D36 is fixed, and it is phrasing rather than content: the state
+/// behind every one of these is identical, because inventing a *different
+/// state* to get variety would be inventing what the island did.
+fn spoken_action(action: ActionKind) -> &'static [&'static str] {
+    match action {
+        ActionKind::Idle => &[
+            "I'm just taking a moment",
+            "I'm having a breather",
+            "I'm not doing much, to be honest",
+            "I'm just standing here a while",
+        ],
+        ActionKind::Rest => &[
+            "I could really use some rest",
+            "I'm worn out",
+            "I need to sit down for a bit",
+            "I've not got much left in me today",
+        ],
+        ActionKind::SeekWater => &[
+            "I need to find water",
+            "I'm going to look for water",
+            "I want a drink, properly",
+            "I should fill something before it gets late",
+        ],
+        ActionKind::SeekFood => &[
+            "I should find something to eat",
+            "I'm going to see what there is to eat",
+            "I want to get something in me",
+            "I could do with a meal",
+        ],
+        ActionKind::SeekShelter => &[
+            "I should get to shelter",
+            "I want to be under a roof",
+            "I'm heading in before this turns",
+            "I'd rather not be out in this",
+        ],
+        ActionKind::SocialApproach => &[
+            "I want to talk to someone",
+            "I was hoping to find you",
+            "I've been wanting a word with somebody",
+            "I came looking for company",
+        ],
+        ActionKind::Explore => &[
+            "I feel like looking around",
+            "I want to see what's out there",
+            "I've a mind to wander a bit",
+            "I keep wondering what's past the ridge",
+        ],
+        ActionKind::Gather => &[
+            "I should gather some resources",
+            "I'm collecting what I can",
+            "I want to bring a load back",
+            "there's plenty worth picking up out there",
+        ],
+        ActionKind::Mine => &[
+            "I should get back to mining",
+            "I've stone to get out",
+            "I want to finish what I started at the face",
+            "there's more down there than I've taken",
+        ],
+        ActionKind::Move => &[
+            "I need to move on from here",
+            "I'm not staying here",
+            "I want to be somewhere else",
+            "it's time I shifted",
+        ],
+        ActionKind::Build => &[
+            "I want to keep building",
+            "I've work to finish on the build",
+            "I want to see it standing",
+            "there's more to put up before I stop",
+        ],
+        ActionKind::Craft => &[
+            "I should get back to crafting",
+            "I've something half-made waiting",
+            "I want to finish what's on the bench",
+            "I'd like to make something properly for once",
+        ],
+        ActionKind::Transfer => &[
+            "I should hand this off to someone",
+            "I've something for you, if you want it",
+            "I'd rather this went to somebody who needs it",
+            "I'm passing this on",
+        ],
+        ActionKind::Harm => &[
+            "I want to hurt you",
+            "I'm not going to pretend I'm calm about this",
+            "something in me wants to swing",
+            "stay back from me",
+        ],
+        ActionKind::Code => &[
+            "I want to get back to my work on the computer",
+            "I've something running I want to finish",
+            "the machine's waiting on me",
+            "I left it half-written and it's been nagging at me",
+        ],
+        ActionKind::Intimacy => &[
+            "I want to be close to someone right now",
+            "I'd like you near me",
+            "I don't want to be on my own tonight",
+            "come here a minute",
+        ],
+        ActionKind::WebSearch => &[
+            "I want to look something up",
+            "there's something I want to find out",
+            "I've a question I can't answer myself",
+            "I keep meaning to search for it",
+        ],
+        ActionKind::SendEmail => &[
+            "I should reach out to someone",
+            "I owe somebody a message",
+            "I've been meaning to write",
+            "there's a letter I keep not sending",
+        ],
+    }
+}
+
+/// How a need is said aloud, as against how it is thought.
+///
+/// The monologue says "I'm increasingly feeling my hunger", which is a
+/// sentence nobody says. These are. They keep *which* need it is,
+/// because dropping that to get variety would lose what the speaker
+/// actually told the listener -- the point is to vary the wording, not
+/// to say less.
+fn spoken_need(name: &str, value: f64) -> &'static [&'static str] {
+    let pressing = value >= 0.75;
+    match (name, pressing) {
+        ("hunger", false) => &[
+            "I'm getting hungry",
+            "I could eat",
+            "my stomach's starting to talk to me",
+        ],
+        ("hunger", true) => &[
+            "I'm starving, honestly",
+            "I can't think past how hungry I am",
+            "I need to eat, properly, soon",
+        ],
+        ("thirst", false) => &["I'm thirsty", "I could do with a drink", "my mouth's dry"],
+        ("thirst", true) => &[
+            "I'm parched",
+            "I need water, not in a minute",
+            "I can't get past how dry I am",
+        ],
+        ("fatigue", false) => &["I'm tired", "I'm flagging a bit", "I've been going a while"],
+        (_, true) => &[
+            "I'm exhausted",
+            "I'm dead on my feet",
+            "I can't keep my eyes open much longer",
+        ],
+        (_, false) => &[
+            "it's starting to get to me",
+            "I'm feeling it",
+            "it's been building all day",
+        ],
+    }
+}
+
+/// One spoken line from `mind`, chosen with the pair's own seeded draw.
+///
+/// This is deliberately *not* `thought::generate_thought`. A spoken line
+/// used to be the internal monologue verbatim, and because that function
+/// is contractually a pure function of state with no RNG -- the dashboard
+/// needs a monologue that does not flicker -- the same state forced the
+/// same sentence. A founder's day of 2,042 lines held 32 distinct ones,
+/// each said about sixty-four times. That was D36.
+///
+/// The determinism that mattered is kept and nothing is weakened: the
+/// draw comes from the same seeded `RngRegistry` and the same per-pair,
+/// per-tick key the greetings and questions have always used, so the same
+/// two people at the same tick still say exactly the same thing. What
+/// changes is that two ticks with identical state no longer have to.
+fn said_aloud(mind: &super::thought::Mind, rng: &RngRegistry, key: RngKey) -> String {
+    // A computer outcome quotes a real query or recipient; there is
+    // nothing to vary in a fact, so it is said as it is.
+    if let Some(outcome) = &mind.outcome {
+        return format!("{outcome}.");
+    }
+    let mut clauses = vec![pick(rng, key, spoken_action(mind.action)).to_string()];
+    if let Some((name, value)) = mind.need {
+        // A second draw, so the need's phrasing is not locked to the
+        // action's -- otherwise the pair would move together and the
+        // variety would be a quarter of what it looks like.
+        let need_key = RngKey::new(key.subsystem, key.chunk, key.epoch + 64, key.tick);
+        clauses.push(pick(rng, need_key, spoken_need(name, value)).to_string());
+    }
+    format!("{}.", clauses.join(", and "))
+}
+
 /// Generate one two-line exchange between `a` and `b` at `tick`. Pure
 /// function of `a`/`b`'s own already-stepped state (including what each
 /// remembers of earlier conversations) plus the seeded registry — the same
@@ -179,15 +372,26 @@ pub fn generate_conversation(
     let chunk = pair_chunk(a.profile.human_id, b.profile.human_id);
     let key = |epoch: u32| RngKey::new(SubsystemId::Dialogue, chunk, epoch, tick);
 
-    // Opener: greeting, recollection, monologue, question.
+    // Opener: greeting, recollection, what they say about themselves,
+    // question.
+    //
+    // The spoken part and the remembered part are now different strings
+    // from the same state. `a_gist` stays the monologue, because that is
+    // what a listener remembers of somebody -- the substance, not the
+    // wording -- and it is what `remembered_gist` quotes back later.
+    // `a_said` is how it came out of their mouth this time. Before D36
+    // these were one string, so a speaker said their inner voice verbatim
+    // and said it identically whenever their state repeated.
+    let a_mind = super::thought::read(a);
     let a_gist = super::thought::generate_thought(a);
+    let a_said = said_aloud(&a_mind, rng_registry, key(3));
     let mut opener = vec![pick(rng_registry, key(0), greeting_templates(relationship))
         .replace("{name}", b.agent_id())];
     if let Some(recalled) = remembered_gist(a, b) {
         // Quoted as said: the gist is the listener's own first person.
         opener.push(format!("Last time you told me, \"{recalled}\""));
     }
-    opener.push(a_gist.clone());
+    opener.push(a_said);
     opener.push(pick(rng_registry, key(1), question_templates(relationship)).to_string());
 
     // Reply: a reaction to how the opener sounded, then b's own monologue.
@@ -204,7 +408,9 @@ pub fn generate_conversation(
         )
         .to_string(),
     };
+    let b_mind = super::thought::read(b);
     let b_gist = super::thought::generate_thought(b);
+    let b_said = said_aloud(&b_mind, rng_registry, key(4));
 
     ConversationEvent {
         tick,
@@ -224,7 +430,7 @@ pub fn generate_conversation(
             DialogueLine {
                 speaker_id: b.profile.human_id,
                 speaker_name: b.agent_id().to_string(),
-                text: format!("{reaction} {b_gist}"),
+                text: format!("{reaction} {b_said}"),
                 gist: b_gist,
             },
         ],
@@ -254,7 +460,15 @@ mod tests {
     }
 
     #[test]
-    fn lines_voice_each_speakers_own_monologue() {
+    fn what_a_listener_remembers_of_a_speaker_is_that_speakers_own_monologue() {
+        // This used to assert that the spoken line *contained* the
+        // monologue verbatim, which is what D36 turned out to be: a
+        // person saying their inner voice word for word, and saying it
+        // identically whenever their state repeated. The spoken line is
+        // its own rendering now. What a listener carries away is still
+        // the monologue, because what you remember of somebody is the
+        // substance rather than the wording, and `remembered_gist` quotes
+        // exactly this back in a later conversation.
         let a = HumanBeing::new("dialogue-e".to_string(), BiologicalSex::Female);
         let b = HumanBeing::new("dialogue-f".to_string(), BiologicalSex::Male);
         let event = generate_conversation(&a, &b, ConversationRelationship::Other, &registry(), 3);
@@ -265,10 +479,56 @@ mod tests {
             event.lines[0].text.contains("dialogue-f"),
             "greets the listener"
         );
-        assert!(event.lines[0].text.contains(&a_thought));
-        assert_eq!(event.lines[0].gist, a_thought);
-        assert!(event.lines[1].text.ends_with(&b_thought));
-        assert_eq!(event.lines[1].gist, b_thought);
+        assert_eq!(event.lines[0].gist, a_thought, "a's memory is a's mind");
+        assert_eq!(event.lines[1].gist, b_thought, "b's memory is b's mind");
+        for line in &event.lines {
+            // An opener ends on its question, a reply on a statement, so
+            // either closing mark is right -- what matters is that a line
+            // is finished rather than trailing off.
+            assert!(
+                line.text.ends_with('.') || line.text.ends_with('?'),
+                "a spoken line is a finished sentence: {}",
+                line.text
+            );
+            assert!(!line.text.trim().is_empty());
+        }
+    }
+
+    /// D36, from the side that matters: a speaker whose state has not
+    /// moved does not say the same sentence over and over.
+    ///
+    /// This is the test that would have failed before speech was given
+    /// its own phrasings. The human here is never stepped, so their state
+    /// is byte-identical at every tick -- which used to force one
+    /// sentence, because the monologue is contractually a pure function
+    /// of state with no RNG and the spoken line *was* the monologue.
+    #[test]
+    fn a_speaker_whose_state_has_not_moved_still_does_not_repeat_one_sentence() {
+        let a = HumanBeing::new("dialogue-i".to_string(), BiologicalSex::Female);
+        let b = HumanBeing::new("dialogue-j".to_string(), BiologicalSex::Male);
+        let rng = registry();
+
+        let said: std::collections::BTreeSet<String> = (0..200)
+            .map(|tick| {
+                generate_conversation(&a, &b, ConversationRelationship::Other, &rng, tick).lines[0]
+                    .text
+                    .clone()
+            })
+            .collect();
+
+        assert!(
+            said.len() > 1,
+            "two hundred ticks of identical state produced one sentence: {said:?}"
+        );
+        // And the monologue they are all renderings of has not moved,
+        // which is what makes this a phrasing fix rather than the state
+        // being quietly shaken up to manufacture variety.
+        let thought = super::super::thought::generate_thought(&a);
+        assert_eq!(
+            super::super::thought::generate_thought(&a),
+            thought,
+            "the mind behind the words is unchanged"
+        );
     }
 
     #[test]

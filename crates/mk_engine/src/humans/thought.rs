@@ -133,31 +133,70 @@ fn emotion_clause(emotion_name: &str, emotion_value: f64) -> Option<String> {
     ))
 }
 
+/// What this human's mind holds right now, in pieces.
+///
+/// The monologue joins these one way. Speech needs the same state said a
+/// different way -- a person's voice is not their inner voice read aloud
+/// -- so the pieces are exposed rather than only the finished sentence.
+/// Everything here is already-stepped state: reading it changes nothing
+/// and can be done any number of times a tick.
+pub struct Mind {
+    /// What they last actually did.
+    pub action: ActionKind,
+    /// How a computer action turned out, when the last one was one.
+    /// Already a whole clause, because it quotes a real query or
+    /// recipient and there is nothing to vary in those.
+    pub outcome: Option<String>,
+    /// The strongest unmet drive, if it is strong enough to mention.
+    pub need: Option<(&'static str, f64)>,
+    /// The dominant emotion, if it is strong enough to notice.
+    pub emotion: Option<(String, f64)>,
+    /// The most active pathology's presenting symptom.
+    pub pathology: Option<String>,
+    /// Whether this mind narrates itself at all beyond the action.
+    pub verbose: bool,
+}
+
+/// Read `human`'s mind into its pieces. Pure function of already-stepped
+/// state, like everything else in this module.
+pub fn read(human: &HumanBeing) -> Mind {
+    let (need_name, need_value) = dominant_need(human);
+    let (emotion_name, emotion_value) = human.emotion.current.dominant();
+    let verbose = human.consciousness.narrative_coherence >= 0.5;
+    Mind {
+        action: human.autonomous_mind.last_action.kind,
+        outcome: computer_action_outcome_clause(human),
+        need: (verbose && need_value >= 0.35).then_some((need_name, need_value)),
+        emotion: (verbose && emotion_value.abs() >= 0.25)
+            .then(|| (emotion_name.to_string(), emotion_value)),
+        pathology: verbose.then(|| pathology_clause(human)).flatten(),
+        verbose,
+    }
+}
+
 /// Generate this tick's internal-monologue line for `human`. Pure function
 /// of `human`'s own already-stepped state — safe to call any number of
 /// times per tick without side effects or drift.
 pub fn generate_thought(human: &HumanBeing) -> String {
-    let action = human.autonomous_mind.last_action.kind;
-    let (need_name, need_value) = dominant_need(human);
-    let (emotion_name, emotion_value) = human.emotion.current.dominant();
-    let verbose = human.consciousness.narrative_coherence >= 0.5;
+    let mind = read(human);
 
     let mut clauses: Vec<String> = Vec::with_capacity(4);
-    if let Some(outcome) = computer_action_outcome_clause(human) {
-        clauses.push(outcome);
-    } else {
-        clauses.push(action_phrase(action).to_string());
+    match &mind.outcome {
+        Some(outcome) => clauses.push(outcome.clone()),
+        None => clauses.push(action_phrase(mind.action).to_string()),
     }
-    if verbose {
-        if let Some(need) = need_clause(need_name, need_value) {
+    if let Some((name, value)) = mind.need {
+        if let Some(need) = need_clause(name, value) {
             clauses.push(need);
         }
-        if let Some(emotion) = emotion_clause(emotion_name, emotion_value) {
+    }
+    if let Some((name, value)) = &mind.emotion {
+        if let Some(emotion) = emotion_clause(name, *value) {
             clauses.push(emotion);
         }
-        if let Some(pathology) = pathology_clause(human) {
-            clauses.push(pathology);
-        }
+    }
+    if let Some(pathology) = mind.pathology {
+        clauses.push(pathology);
     }
 
     format!("{}.", clauses.join(", and "))

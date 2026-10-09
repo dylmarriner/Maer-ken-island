@@ -21,7 +21,18 @@ const DAY: u64 = 86_400;
 /// processes. Changing any Phase 1-3 behaviour changes it: update it
 /// deliberately, in the commit that changes the behaviour.
 ///
-/// Last changed by the other half of D35: a pair who speak again on the
+/// Last changed by D36: speech was given its own phrasings instead of
+/// being the speaker's internal monologue verbatim, so the words in a
+/// week of conversation differ and the relationship memory built from
+/// them differs with it. Audited the same way as every other change to
+/// this constant, by deferring the assertion and running the rest:
+/// audits closed 196 against a required 196, food and water shortfalls
+/// both zero, Gem-D at 13.0 kg of body carbon against an expected 13.0
+/// and Gem-K at 10.4 against 10.4, temperate-forest NPP at 707 g
+/// C/m2/yr inside the pack's 400-900. Nothing physical moved; only the
+/// hash did.
+///
+/// Before that, by the other half of D35: a pair who speak again on the
 /// next tick now carry the same exchange on rather than opening a new
 /// one, so `ConversationEvent` gained a `last_tick`, and the logs that
 /// hold those exchanges are bounded by lines rather than by an entry
@@ -49,7 +60,7 @@ const DAY: u64 = 86_400;
 /// island no parent/child pair is matched at a distance in a week, so
 /// giving them a distance rule costs the reference island nothing and
 /// only silences the conversations that were never audible.
-const WEEK_DIGEST: &str = "3abe2f425ee72565171c8b196468061d1926c2add8a8e366ca770dfb5b1d70b8";
+const WEEK_DIGEST: &str = "b597a162395e5e76fb36520ceb87e0b44e25af1468dd657a418195a71af96d63";
 
 fn repo(path: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))

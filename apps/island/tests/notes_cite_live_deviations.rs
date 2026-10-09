@@ -64,13 +64,13 @@ fn the_conversations_note_cites_a_deviation_that_is_still_open() {
     // what a reader sees is what is served. A constant renamed or no
     // longer used would pass a test written against the constant.
     let note = island::serve::server::conversations_note();
-    let ids = cited(note);
-    assert!(
-        !ids.is_empty(),
-        "the note no longer cites any deviation; if that is deliberate, delete this test, but \
-         do not leave a reader an explanation with nothing behind it:\n{note}"
-    );
-    for id in ids {
+    // Citing nothing is allowed, and became the right answer the first
+    // time this test fired in anger: D36 was fixed, so the note stopped
+    // having a known limitation to point at. An earlier version of this
+    // demanded a citation always exist, which would have forced a note to
+    // keep pointing somewhere after there was nowhere true to point --
+    // the failure this file exists to prevent, wearing the other face.
+    for id in cited(note) {
         let status = status_of(&id)
             .unwrap_or_else(|| panic!("the note cites {id}, which is not in the register"));
         assert_eq!(
