@@ -278,6 +278,29 @@ reading the backend with the read token:
 
 Three processes, three machines' worth of separation, one island.
 
+**The shape is re-proved whenever the wire changes**, because the wire is
+the only thing holding those three processes together and a schema that
+parses locally can still be wrong across a network. Re-run after the
+conversation and dimension fields were added, against separately built
+backend and desktop binaries:
+
+| Asked of the backend over HTTP | Answer |
+|---|---|
+| `/api/world/estate/layout` | 84 items, **84 of 84 carrying a real size**; 5 buildings, **5 of 5 carrying a real height**, each with its source |
+| `/api/conversations`, after the island had run to tick 444 | **one** exchange spanning **ticks 1-420** — not 420 conversations |
+| the same exchange's lines | **840 said, 12 sent**, and `lines_said` never smaller than the lines it was sent with |
+| `island-ui --server … --view estate` | "the estate: 5 buildings, 14 rooms, 84 things (52 with models of their own)", frame at 3,458 colours |
+
+That `840 said, 12 sent` is the whole of D35's second half and its payload
+bound, working between two processes rather than inside one. Before the
+merge the same stretch of talking was 420 separate conversations of two
+lines each.
+
+Version skew is checked separately and does not need a running island:
+`crates/mk_island_api/tests/version_skew.rs` reads hand-written payloads
+from older backends and from a backend newer than the types, because
+frontends and backends are not upgraded at the same moment.
+
 ## What the backend costs
 
 Measured on the development machine, from `benchmarks/`:
