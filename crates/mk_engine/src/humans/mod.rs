@@ -560,9 +560,10 @@ impl HumanSystem {
     /// in the population (humans are bucketed by grid cell and each looks at
     /// a bounded window of eligible candidates):
     ///
-    /// * **Family pairs** — the founders, every living child with each living
-    ///   parent (at any distance), and adjacent siblings — outrank everyone
-    ///   else. Among themselves they are ordered by a hash of the tick and
+    /// * **Family pairs** — the founders, and every adjacent child/parent and
+    ///   adjacent sibling pair — outrank everyone else. "Adjacent" is
+    ///   Manhattan distance 1 or less, the same test throughout: people have
+    ///   to be near each other to talk. Among themselves they are ordered by a hash of the tick and
     ///   the two ids, so no family pair monopolises a person: over time the
     ///   founders talk to each other *and* to their children.
     /// * **Neighbour pairs** — humans in the same or an edge-adjacent cell
@@ -666,8 +667,25 @@ impl HumanSystem {
             }
         }
 
-        // Family: children and their living parents, wherever they are; and
-        // the living children of each parent, to find siblings.
+        // Family: children and their living parents, near enough to be
+        // heard; and the living children of each parent, to find siblings.
+        //
+        // This is D34, and the rule is the one siblings already use rather
+        // than a new one: Manhattan distance 1 or less. A parent and child
+        // used to be matched at *any* distance, which on a 2 km grid meant
+        // a pair 400 cells apart -- 800 km -- holding a conversation, and
+        // feeding the relationship memory and social state behind it. No
+        // number is invented here, because inventing a range for how far a
+        // voice carries would be worse than using the one the model already
+        // applies to two siblings standing in a field.
+        //
+        // What this gives up is the shortcut where a parent and child find
+        // each other without moving. That was never real: seeking somebody
+        // out is movement, and `SocialApproach` is how this model does
+        // movement toward a person. A spread family will now talk less
+        // until they walk to each other, which is the correct answer to
+        // "can these two hear one another" even though it is the quieter
+        // one.
         let mut children_of: HashMap<String, Vec<usize>> = HashMap::new();
         for &child in &living {
             let Some((father_id, mother_id)) = parent_agent_ids(&humans[child]) else {
@@ -675,7 +693,7 @@ impl HumanSystem {
             };
             for parent_id in [father_id, mother_id] {
                 if let Some(parent) = self.registry.position_of(&parent_id) {
-                    if parent != child && available(parent) {
+                    if parent != child && available(parent) && manhattan(child, parent) <= 1 {
                         add_edge(child, parent, Relationship::ParentChild, false);
                     }
                 }
@@ -2627,13 +2645,18 @@ mod tests {
     }
 
     #[test]
-    fn a_parent_and_child_converse_from_opposite_ends_of_the_island() {
-        // Pins down D34. Siblings must be adjacent to talk; parent and
-        // child have no distance test at all, so this pair converses with
-        // 400 cells -- 800 km on the island's 2 km grid -- between them.
-        // Asserting the real behaviour rather than the desired one, so
-        // that whoever gives the pair a distance rule has to come here
-        // and say so.
+    fn a_parent_and_child_do_not_converse_from_opposite_ends_of_the_island() {
+        // This is me coming here and saying so, which is what the earlier
+        // version of this test asked whoever gave the pair a distance rule
+        // to do. It used to assert the opposite -- that 400 cells, 800 km
+        // on the island's 2 km grid, did not stop a parent and child
+        // talking -- and it said it was pinning the real behaviour rather
+        // than the desired one.
+        //
+        // The behaviour changed because that one was not defensible as
+        // realism: two people 800 km apart cannot hear each other, and no
+        // amount of being related changes it. They now get the same
+        // adjacency test siblings always had.
         let mut system = HumanSystem::new();
         let mut parent = HumanBeing::new("far-parent".to_string(), BiologicalSex::Female);
         let mut child = HumanBeing::new("far-child".to_string(), BiologicalSex::Male);
@@ -2669,11 +2692,57 @@ mod tests {
         system.step_dialogue(&mk_core::rng::RngRegistry::new([11u8; 32]), 2);
 
         let events: Vec<_> = system.conversation_log().collect();
-        assert_eq!(
-            events.len(),
-            1,
-            "distance does not stop a parent and child conversing"
+        assert!(
+            events.is_empty(),
+            "a parent and child 800 km apart held a conversation: {:?}",
+            events
+                .iter()
+                .map(|event| event.relationship)
+                .collect::<Vec<_>>()
         );
+    }
+
+    /// The same pair, standing next to each other, must still talk --
+    /// otherwise the change above would read as a fix while having
+    /// silenced families altogether.
+    #[test]
+    fn a_parent_and_child_standing_together_still_converse() {
+        let mut system = HumanSystem::new();
+        let mut parent = HumanBeing::new("near-parent".to_string(), BiologicalSex::Female);
+        let mut child = HumanBeing::new("near-child".to_string(), BiologicalSex::Male);
+
+        for h in [&mut parent, &mut child] {
+            if h.profile.canonical_schema.is_none() {
+                h.profile.canonical_schema = Some(HumanSchema::canonical_minimal(h.agent_id()));
+            }
+        }
+        child
+            .profile
+            .canonical_schema
+            .as_mut()
+            .unwrap()
+            .reproductive_systems
+            .genetics_system
+            .birth_records
+            .push(mk_core::human::schema::BirthRecordSchema {
+                birth_id: "birth_near-child".to_string(),
+                genotype_id: "genotype_near-child".to_string(),
+                father_id: "unknown-father".to_string(),
+                mother_id: "near-parent".to_string(),
+                birth_timestamp: "tick-0".to_string(),
+                agent_id: "near-child".to_string(),
+                mutations: vec![],
+            });
+
+        parent.set_runtime_position(GridPosition::new(10, 10));
+        child.set_runtime_position(GridPosition::new(10, 11));
+        system.registry.add_human_no_storage(parent);
+        system.registry.add_human_no_storage(child);
+
+        system.step_dialogue(&mk_core::rng::RngRegistry::new([11u8; 32]), 2);
+
+        let events: Vec<_> = system.conversation_log().collect();
+        assert_eq!(events.len(), 1, "a parent and child in the next cell talk");
         assert_eq!(
             events[0].relationship,
             dialogue::ConversationRelationship::ParentChild
@@ -2682,9 +2751,11 @@ mod tests {
 
     #[test]
     fn siblings_that_far_apart_do_not_converse() {
-        // The other half of D34, and the reason it is an inconsistency
-        // rather than a blanket choice: the same distance that leaves a
-        // parent and child talking silences two siblings.
+        // This was the other half of D34, and the reason it read as an
+        // inconsistency rather than a blanket choice: the same distance
+        // that silenced two siblings left a parent and child talking.
+        // Both are silent now, which is what made the inconsistency go
+        // away -- by levelling up to the stricter rule, not down.
         let mut system = HumanSystem::new();
         for (name, col) in [("far-sib-a", 0), ("far-sib-b", 400)] {
             let mut human = HumanBeing::new(name.to_string(), BiologicalSex::Female);
@@ -2857,17 +2928,27 @@ mod tests {
     #[test]
     fn founders_and_their_child_all_get_to_talk() {
         let mut system = HumanSystem::new();
+        // All three in one cell. They used to be forty cells apart, which
+        // worked only because a parent and child were matched at any
+        // distance (D34). The property under test is the rotation -- that
+        // no family pair monopolises a person -- and that has nothing to
+        // do with distance, so the household is now a household.
+        //
+        // One cell rather than three touching ones, because under
+        // Manhattan distance 1 no three cells are all adjacent to each
+        // other: putting the child a step from each parent leaves the
+        // parents two steps apart. A 2 km cell is a house and then some,
+        // so a family sharing one is the ordinary case, not a contrivance.
+        let home = GridPosition::new(20, 20);
         let mut gem_d = HumanBeing::gem_d_founder();
         let mut gem_k = HumanBeing::gem_k_founder();
-        gem_d.set_runtime_position(GridPosition::new(0, 0));
-        gem_k.set_runtime_position(GridPosition::new(40, 40));
+        gem_d.set_runtime_position(home);
+        gem_k.set_runtime_position(home);
         system.registry.add_human_no_storage(gem_d);
         system.registry.add_human_no_storage(gem_k);
-        system.registry.add_human_no_storage(kin(
-            "first-child",
-            ("Gem-D", "Gem-K"),
-            GridPosition::new(20, 20),
-        ));
+        system
+            .registry
+            .add_human_no_storage(kin("first-child", ("Gem-D", "Gem-K"), home));
         let rng = mk_core::rng::RngRegistry::new([3u8; 32]);
 
         for tick in 0..60 {
@@ -2891,7 +2972,41 @@ mod tests {
     }
 
     #[test]
-    fn a_child_talks_to_its_distant_parent_rather_than_a_nearby_stranger() {
+    fn a_child_talks_to_its_parent_rather_than_a_stranger_beside_them() {
+        // Family outranks a neighbour reaching out, which is the property
+        // this has always been about. It used to prove it with a parent
+        // thirty cells away, because distance did not count against a
+        // parent then (D34). Now both are in earshot and the ranking is
+        // what decides it, which is what the name claims.
+        let mut system = HumanSystem::new();
+        system.registry.add_human_no_storage({
+            let mut parent = HumanBeing::new("near-parent".to_string(), BiologicalSex::Male);
+            parent.set_runtime_position(GridPosition::new(2, 1));
+            parent
+        });
+        system.registry.add_human_no_storage(kin(
+            "kid",
+            ("near-parent", "unknown-mother"),
+            GridPosition::new(2, 2),
+        ));
+        let mut stranger = HumanBeing::new("stranger".to_string(), BiologicalSex::Male);
+        stranger.set_runtime_position(GridPosition::new(2, 3));
+        stranger.economy_action.kind = ActionKind::SocialApproach;
+        system.registry.add_human_no_storage(stranger);
+
+        system.step_dialogue(&mk_core::rng::RngRegistry::new([2u8; 32]), 5);
+
+        assert_eq!(talked_with(&system, "near-parent"), 1);
+        assert_eq!(talked_with(&system, "kid"), 1);
+        assert_eq!(talked_with(&system, "stranger"), 0);
+    }
+
+    /// And the consequence of D34's fix that is worth stating out loud: a
+    /// child whose parent is far away is not left silent in a crowd. They
+    /// talk to whoever is actually there, which is both what the matcher
+    /// does and what a person does.
+    #[test]
+    fn a_child_whose_parent_is_far_away_talks_to_the_neighbour_who_is_there() {
         let mut system = HumanSystem::new();
         system.registry.add_human_no_storage({
             let mut parent = HumanBeing::new("far-parent".to_string(), BiologicalSex::Male);
@@ -2910,9 +3025,17 @@ mod tests {
 
         system.step_dialogue(&mk_core::rng::RngRegistry::new([2u8; 32]), 5);
 
-        assert_eq!(talked_with(&system, "far-parent"), 1);
+        assert_eq!(
+            talked_with(&system, "far-parent"),
+            0,
+            "a parent 56 km away is not in the conversation"
+        );
         assert_eq!(talked_with(&system, "kid"), 1);
-        assert_eq!(talked_with(&system, "stranger"), 0);
+        assert_eq!(
+            talked_with(&system, "stranger"),
+            1,
+            "the child talks to the person standing next to them"
+        );
     }
 
     #[test]

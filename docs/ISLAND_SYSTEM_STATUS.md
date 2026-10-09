@@ -192,9 +192,9 @@ limit looks like; it is the first thing to check. Until it is, every figure here
 Every known departure from reality is in `docs/island/DEVIATIONS.md` (D1-D36). The largest open
 ones: no sea/land breezes (D3); storm structure is parametric (D4); river channels have no
 in-channel storage (D28); the regional tick audits tidal heat only (D29); biomass residence times
-are round estimates (D30); production ignores soil nutrients (D31); a parent and child converse
-at any distance while siblings need adjacency (D34); kin repeat themselves, because a dialogue
-line is composed from state that barely moves in a minute (D36); every human action still takes exactly one
+are round estimates (D30); production ignores soil nutrients (D31); kin repeat themselves,
+because a spoken line is the speaker's internal monologue and that is deliberately the same
+whenever their state is (D36); every human action still takes exactly one
 tick whatever it is (D9); the actions with no Compendium row cost the resting baseline (D22);
 who harvests and when is the routine's choice rather than each person's (D10); machine use off
 the estate's electrical system is still free (D13).

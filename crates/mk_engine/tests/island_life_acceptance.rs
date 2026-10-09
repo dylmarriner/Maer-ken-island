@@ -42,6 +42,13 @@ const DAY: u64 = 86_400;
 /// (1.05x) and an action-gated harvest (0.90x) both failed — and the
 /// temperate-forest NPP at 707 g C/m2/yr inside the ecology pack's
 /// 400-900. Nothing physical moved; only the hash did.
+///
+/// D34's fix -- a parent and child now need the same adjacency as
+/// everyone else -- did *not* move this digest, which is worth recording
+/// because it is evidence rather than an argument: on the reference
+/// island no parent/child pair is matched at a distance in a week, so
+/// giving them a distance rule costs the reference island nothing and
+/// only silences the conversations that were never audible.
 const WEEK_DIGEST: &str = "3abe2f425ee72565171c8b196468061d1926c2add8a8e366ca770dfb5b1d70b8";
 
 fn repo(path: &str) -> PathBuf {
