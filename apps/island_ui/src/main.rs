@@ -145,6 +145,58 @@ fn flag(args: &[String], name: &str) -> Option<String> {
     args.windows(2).find(|w| w[0] == name).map(|w| w[1].clone())
 }
 
+/// Every flag this application reads. The list exists so that one it
+/// does *not* read can be refused.
+const FLAGS: [&str; 10] = [
+    "--server",
+    "--token",
+    "--scenario",
+    "--snapshot",
+    "--data-dir",
+    "--assets",
+    "--speed",
+    "--view",
+    "--detail",
+    "--measure",
+];
+
+/// Refuse an argument this build does not understand.
+///
+/// `flag` looks for the flags it is asked about and ignores everything
+/// else, which means a flag that is not read is a flag that is silently
+/// discarded. That is not hypothetical: measuring `--detail` against a
+/// binary built before `--detail` existed produced four identical frame
+/// rates and no complaint at all, and the conclusion drawn from them --
+/// "decimating the terrain buys nothing" -- was about to be written
+/// down. The binary had ignored the flag four times without a word.
+///
+/// A typo does the same thing to a person: `--detial 4` would draw at
+/// full detail while they believed otherwise. So an unknown argument is
+/// an error now, which is the only way a flag that does nothing can be
+/// told from one that did something invisible.
+fn refuse_unknown_arguments(args: &[String]) {
+    let mut index = 0;
+    while index < args.len() {
+        let argument = &args[index];
+        if !argument.starts_with("--") {
+            // A value belonging to the flag before it, which the loop
+            // has already stepped past, or a stray word. Either way it
+            // is not a flag and is not this function's business.
+            index += 1;
+            continue;
+        }
+        if !FLAGS.contains(&argument.as_str()) {
+            eprintln!(
+                "`{argument}` is not an option this build knows. It reads {}.",
+                FLAGS.join(", ")
+            );
+            usage()
+        }
+        // Step over the flag and the value it takes.
+        index += 2;
+    }
+}
+
 /// The island, kept where Bevy's systems can reach it.
 #[derive(Resource)]
 struct TheIsland(Island);
@@ -227,6 +279,7 @@ fn main() {
     {
         help();
     }
+    refuse_unknown_arguments(&args);
 
     let island = match (
         flag(&args, "--server"),
@@ -707,11 +760,30 @@ struct Detail(usize);
 /// message says so rather than leaving a reader to infer it from a frame
 /// rate.
 ///
-/// The device kind is compared as its printed name rather than against
-/// the `wgpu` enum, because that enum is not re-exported through Bevy's
-/// public surface at this version and reaching into the dependency to
-/// name it would tie this file to a version of `wgpu` it does not
-/// otherwise depend on.
+/// Two signals, because either alone misses a case.
+///
+/// `wgpu`'s `DeviceType` is not re-exported through Bevy's public
+/// surface at this version -- `settings` re-exports `Backends`,
+/// `PowerPreference` and a handful more, not this -- so the kind is read
+/// as its printed name. That would be fragile as a bare `== "Cpu"`: a
+/// change to `wgpu`'s `Debug` output would stop the warning firing and
+/// say nothing, which is the worst way for a check to fail. So every
+/// variant it can print is named and anything else is reported as
+/// unrecognised, turning a drift into a message rather than a silence.
+/// (The alternative, a direct `wgpu-types` pin here, buys compile-time
+/// safety for a version coupling a window does not otherwise need.)
+///
+/// The adapter's *name* is checked as well, and not merely as a
+/// backstop: a software rasteriser does not always admit to being one.
+/// lavapipe reports `Cpu` honestly; SwiftShader and some virtualised
+/// stacks report `VirtualGpu` or `Other` while rasterising on the CPU
+/// just the same.
+fn drawing_on_the_cpu(kind: &str, name: &str) -> bool {
+    const SOFTWARE: [&str; 4] = ["llvmpipe", "lavapipe", "swiftshader", "softpipe"];
+    let lowered = name.to_ascii_lowercase();
+    kind == "Cpu" || SOFTWARE.iter().any(|known| lowered.contains(known))
+}
+
 fn say_what_is_drawing(
     adapter: Res<bevy::render::renderer::RenderAdapterInfo>,
     mut said: Local<bool>,
@@ -722,7 +794,17 @@ fn say_what_is_drawing(
     *said = true;
     let info = &**adapter;
     let kind = format!("{:?}", info.device_type);
-    if kind == "Cpu" {
+    if !matches!(
+        kind.as_str(),
+        "Cpu" | "DiscreteGpu" | "IntegratedGpu" | "VirtualGpu" | "Other"
+    ) {
+        warn!(
+            "this adapter reports its kind as `{kind}`, which is not one this build knows. \
+             The software-rasteriser check may be looking for the wrong word -- see \
+             `drawing_on_the_cpu`."
+        );
+    }
+    if drawing_on_the_cpu(&kind, &info.name) {
         warn!(
             "drawing on the CPU: `{}` ({}) is a software rasteriser, not a GPU. The island \
              view runs at about 0.6 frames a second this way, against 10.8 for the estate. \
@@ -1281,5 +1363,79 @@ fn ask(island: &Island, request: mk_island_api::ControlRequest) -> String {
     match island.client().control(&request) {
         Ok(accepted) => format!("Asked; command {}.", accepted.command),
         Err(err) => err.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod adapter_tests {
+    use super::drawing_on_the_cpu;
+
+    #[test]
+    fn a_software_rasteriser_is_recognised_however_it_describes_itself() {
+        // The honest case: lavapipe says `Cpu`, which is what this
+        // container reports and what every frame rate in
+        // `RENDER_STACK.md` was measured on.
+        assert!(drawing_on_the_cpu(
+            "Cpu",
+            "llvmpipe (LLVM 20.1.2, 256 bits)"
+        ));
+        // The case the device kind alone would miss: a software stack
+        // calling itself a virtual GPU, which SwiftShader does.
+        assert!(drawing_on_the_cpu("VirtualGpu", "SwiftShader Device"));
+        assert!(drawing_on_the_cpu("Other", "lavapipe"));
+    }
+
+    #[test]
+    fn a_real_gpu_is_not_warned_about() {
+        assert!(!drawing_on_the_cpu(
+            "DiscreteGpu",
+            "NVIDIA GeForce RTX 4080"
+        ));
+        assert!(!drawing_on_the_cpu("IntegratedGpu", "AMD Radeon Graphics"));
+        assert!(!drawing_on_the_cpu("DiscreteGpu", "Apple M3 Max"));
+    }
+
+    #[test]
+    fn a_renamed_variant_does_not_silently_pass_as_a_gpu() {
+        // If `wgpu` renamed `Cpu`, the kind check stops matching and the
+        // name check is what keeps the warning firing. That is the whole
+        // reason there are two of them rather than one.
+        assert!(drawing_on_the_cpu("SomeNewVariant", "llvmpipe (LLVM 20)"));
+    }
+}
+
+#[cfg(test)]
+mod argument_tests {
+    use super::{flag, FLAGS};
+
+    #[test]
+    fn every_flag_the_usage_text_offers_is_one_this_build_reads() {
+        // The two lists drifting apart is how `--detail` came to be
+        // accepted-and-ignored in the first place. This pins them
+        // together: anything `--help` offers must be in `FLAGS`, or
+        // `refuse_unknown_arguments` will reject a flag the help text
+        // just told somebody to use.
+        for line in super::USAGE.lines() {
+            let trimmed = line.trim_start();
+            let Some(rest) = trimmed.strip_prefix("--") else {
+                continue;
+            };
+            let name = format!("--{}", rest.split_whitespace().next().unwrap_or(""));
+            assert!(
+                FLAGS.contains(&name.as_str()),
+                "`--help` offers {name}, which this build does not read"
+            );
+        }
+    }
+
+    #[test]
+    fn a_flag_still_finds_its_value() {
+        let args: Vec<String> = ["--detail", "4", "--speed", "60"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        assert_eq!(flag(&args, "--detail"), Some("4".to_string()));
+        assert_eq!(flag(&args, "--speed"), Some("60".to_string()));
+        assert_eq!(flag(&args, "--view"), None);
     }
 }

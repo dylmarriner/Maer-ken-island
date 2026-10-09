@@ -70,6 +70,43 @@ numbers are single-digit metres and the step is half a micrometre.
 `the_estate_frame_keeps_precision_a_bedroom_needs` asserts the 7.8 mm
 figure, so this paragraph cannot drift from the arithmetic.
 
+### The estate's things are their real size
+
+The sizes come from the island, not from this renderer. `PlacedItem`
+carries `size_m` and `size_source` on the wire, filled by
+`mk_engine::organisms::dimensions`, which answers how big a thing
+actually is and where that figure came from:
+
+| thing | size (m) | from |
+|---|---|---|
+| Ford Raptor 4x4 Ute | 5.381 × 2.028 × 1.922 | Ranger Raptor 2023- spec tables |
+| Fendt 1000 Vario | 6.350 × 2.750 × 3.606 | Fendt's own brochure |
+| Fendt 900 Vario | 5.655 × 2.750 × 3.372 | the 939 Vario — see below |
+| Polaris RZR Pro R | 3.470 × 1.880 × 1.850 | Polaris specification |
+| Network Equipment Rack | 1.000 × 0.600 × 1.991 | 42U EIA-310 cabinet |
+| King Size Bed | 2.030 × 1.670 | New Zealand king |
+| TV, 75in and 55in | from the diagonal | 16:9 geometry |
+
+Three rules, the first of which is enforced by a test:
+
+1. **Every figure carries its source in the value**, not in a comment,
+   so one can be checked without reading the other. A fallback's source
+   must begin `"convention:"` — asserted — so a drawing convention
+   cannot be mistaken for a figure with a citation.
+2. **Named products get published figures.** The Fendt 900 is the
+   honest edge case: Fendt publishes no overall dimensions for the Gen7,
+   so the figure is the preceding 939 Vario and the source says exactly
+   that instead of implying otherwise.
+3. **Derived, never stored.** Nothing enters `WorldState`, so nothing
+   enters the canonical digest. A size is a fact *about* an item, not
+   something the simulation evolves.
+
+A fact the invented sizes had hidden: **a Fendt 1000 Vario is 3.6 m tall
+and this estate draws its buildings at 3 m.** The tractor does not fit
+in the shed it is parked in. Building heights are still
+`WALL_HEIGHT_M`, a drawing convention the island holds no data for, and
+that disagreement is now visible because one side of it became real.
+
 ### The estate, and the models on it
 
 `/api/world/estate/layout` is the estate as geometry: the patch rectangle,
@@ -203,19 +240,81 @@ application:
 - Reading a real island end to end, both ways:
   `tests/reading_an_island.rs`.
 
+### It answers a mouse and a keyboard
+
+`scripts/interaction-smoke.sh` drives the application with synthetic X11
+input and asserts the picture changed the way each gesture should change
+it. CI runs it on every push and uploads the frames. Measured:
+
+| gesture | moved |
+|---|---|
+| a held 480 px left-drag (orbit) | 39.74% |
+| five scroll notches (zoom) | 58.98% |
+| the `e` key (to the estate) | 59.45% |
+| the `i` key (back to the island) | 29.37% |
+| clicking the panel's "the estate" | 29.36% |
+
+It took three attempts, and **every failure was a fault in the test
+rather than in the application** — which is what should be expected when
+the application has been exercised and the harness has not. All three
+are recorded in the script's header, because each is a property of the
+thing being tested:
+
+- **A gesture must span frames.** `drive_the_camera` samples
+  `buttons.pressed` once per frame. An `xdotool` mousedown-move-up
+  finishes in milliseconds, so at 0.6 FPS the whole drag landed inside
+  one 1.7-second frame: Bevy saw press and release in the same update,
+  `pressed()` was false, and the motion was discarded.
+- **Panel coordinates move with the panel's contents.** A y measured
+  from a screenshot of a *remote* run put the click on the wrong button
+  in an *embedded* one, which prints an extra line above it. The script
+  now finds the row by its selection-blue highlight.
+- **A bare Xvfb has no focused window.** `xdotool getwindowfocus`
+  answers "the focused window of 1", which is the X server saying none.
+  Mouse events are delivered by position and arrived fine; every
+  keypress went nowhere. Focusing the window first fixed it.
+
+### What a frame costs
+
+`island-ui --measure N` draws for N seconds, skips 60 warm-up frames —
+the early ones carry shader compilation and the terrain upload — and
+prints the rate achieved. Measured here, 1600×1000, four cores, no GPU:
+
+| view | `--speed max` | `--speed 60` |
+|---|---|---|
+| island | 0.5 FPS | 0.6 FPS |
+| estate | 8.9 FPS | 10.8 FPS |
+
+Pacing the island bought 21% on the estate and essentially nothing on
+the island. That corrects an assumption: the island view is
+**drawing-bound, not contention-bound**. 285 chunks is about 2.3 M
+triangles at 1600×1000, and 1.7 seconds a frame is what a CPU takes over
+that.
+
+**The plain conclusion: at the island scale this needs a GPU.** Not a
+hedge — a measurement. The application already asks for one (Bevy
+defaults to `PowerPreference::HighPerformance` across every backend), so
+there is nothing to configure; what it lacked was saying which adapter
+it got, and it now does. On a software one it says so and names the
+remedy, because 0.6 frames a second with no explanation looks like a bug
+in the renderer rather than a missing driver.
+
+That check reads two signals, and the second is not merely a backstop:
+lavapipe reports its device type as `Cpu` honestly, but SwiftShader and
+some virtualised stacks report `VirtualGpu` while rasterising on the CPU
+just the same. It also names every device type `wgpu` can print and
+reports anything else as unrecognised, so a change to that enum becomes
+a message rather than a silently-dead check.
+
 ### Still not verified
 
-- **How it feels.** Nobody has used this with a mouse. The camera's
-  sensitivities, the panel layout at other window sizes and whether the
-  controls are pleasant are unanswered, and a screenshot cannot answer
-  them.
-- **Frame rate on real hardware.** Everything above was rendered by
-  **lavapipe**, a software rasteriser, which Bevy warns about on startup
-  and which is slower than any GPU by orders of magnitude. That it draws
-  at all on a CPU is a good sign for a GPU; it is not a measurement of
-  one, and no frame-rate figure is claimed here.
-- **Anything beyond the first frame under interaction.** The smoke test
-  photographs a settled frame; it does not drag, zoom or click.
+- **How it feels.** The gestures are shown to *work*; whether the
+  sensitivities are pleasant under a real hand is a judgement, not a
+  measurement, and no script settles it.
+- **Frame rate on a GPU.** Every figure above was rasterised by
+  **lavapipe** on the CPU. What a real adapter does is not inferable
+  from them and is not claimed.
+- **Other window sizes.** Everything is measured at 1600×1000.
 
 ### A correction worth recording
 
