@@ -1357,7 +1357,23 @@ fn panels(
             if panels.show_conversations {
                 egui::ScrollArea::vertical().show(ui, |ui| {
                     for talk in snapshot.conversations.iter().take(12) {
-                        ui.label(format!("tick {} — {}", talk.tick, talk.relationship));
+                        // A conversation is the whole exchange between a
+                        // pair, so it spans ticks and the island sends the
+                        // last few lines of it. Say both, or twelve lines of
+                        // a thousand read as the whole conversation.
+                        let when = if talk.last_tick > talk.tick {
+                            format!("ticks {}-{}", talk.tick, talk.last_tick)
+                        } else {
+                            format!("tick {}", talk.tick)
+                        };
+                        ui.label(format!("{when} — {}", talk.relationship));
+                        if talk.lines_said > talk.lines.len() {
+                            ui.label(format!(
+                                "  the last {} of {} lines",
+                                talk.lines.len(),
+                                talk.lines_said
+                            ));
+                        }
                         for line in &talk.lines {
                             ui.label(format!("  {}: {}", line.speaker_name, line.text));
                         }

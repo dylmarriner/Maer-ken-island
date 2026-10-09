@@ -1,23 +1,34 @@
 //! How often the islanders actually talk, and what that does to the memory
 //! that is supposed to hold a lifetime of it.
 //!
-//! D35's open half is the rate: waking family pairs are matched on every
-//! tick, which is once a simulated minute. Whether that should be a
-//! cooldown, a chosen action, or something else is a decision about the
-//! model. This measures the consequence so the decision can be made on
-//! numbers instead of impressions.
+//! This began as a measurement of D35's open half: waking family pairs were
+//! matched on every tick, once a simulated minute, and each minute was filed
+//! as a separate remembered conversation. The measurement is what decided
+//! the fix. Counted in *words* rather than conversations the rate was never
+//! the defect -- the founders talk about 1.8x as much as the average person
+//! Mehl et al. recorded, which is inside the range those recorders observed.
+//! What was wrong was the division: an unbroken afternoon was being cut into
+//! minute-long fragments and each fragment remembered separately.
 //!
-//! The number that matters is `CONVERSATION_HISTORY_MAX_ENTRIES`, whose own
-//! comment says it is "sized like a lifetime of remembered exchanges rather
-//! than a shared display ring buffer, per the user's explicit
-//! 'conversations should be remembered, not a rolling log' constraint". At
-//! one conversation per tick that intent and that cap cannot both hold.
+//! So `HumanSystem::step_dialogue` now carries an exchange on when the same
+//! pair speak again on the next tick, and this test guards the result from
+//! both sides. It asserts that the founders talk at all, that a day no
+//! longer eats the cap and fits inside the line budget, and it prints the
+//! word count beside a real measurement of human speech so the rate stays
+//! arguable on numbers.
+//!
+//! The number that matters is no longer `CONVERSATION_HISTORY_MAX_ENTRIES`.
+//! Merging does not reduce how much is said -- a day is 2,042 lines either
+//! way -- so once an entry became a whole exchange, an entry count stopped
+//! bounding anything and `CONVERSATION_HISTORY_MAX_LINES` is the real
+//! limit. This prints what a day costs against it, in days, because days
+//! are the unit the question was always asked in.
 
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use mk_core::canon::CanonLocked;
-use mk_engine::humans::CONVERSATION_HISTORY_MAX_ENTRIES;
+use mk_engine::humans::{CONVERSATION_HISTORY_MAX_ENTRIES, CONVERSATION_HISTORY_MAX_LINES};
 use mk_engine::regional::life::IslandLife;
 use mk_island::IslandScenario;
 
@@ -52,11 +63,9 @@ fn slow_how_long_a_lifetime_of_remembered_conversation_actually_lasts() {
         println!("{id}: {held} conversations remembered");
     }
     let most = per_human.iter().map(|(_, n)| *n).max().expect("a founder");
-    println!("cap: {CONVERSATION_HISTORY_MAX_ENTRIES}");
-    if most > 0 {
-        let days = CONVERSATION_HISTORY_MAX_ENTRIES as f64 / most as f64;
-        println!("the cap holds about {days:.1} of these days before it evicts");
-    }
+    println!(
+        "caps: {CONVERSATION_HISTORY_MAX_ENTRIES} entries, {CONVERSATION_HISTORY_MAX_LINES} lines"
+    );
 
     // And the same day in words, which is the figure a real measurement
     // of human talking can be set beside. Mehl et al., *Science* 317:82
@@ -74,14 +83,24 @@ fn slow_how_long_a_lifetime_of_remembered_conversation_actually_lasts() {
     let gem_d = w.humans.registry.get_human("Gem-D").expect("a founder");
     let mut words = 0usize;
     let mut lines = 0usize;
+    // How much of it is the same thing said again. The lines are
+    // composed from state that barely moves in sixty seconds, so a day
+    // of talking draws on a small stock of sentences; counting the
+    // distinct ones says how small. This is D36's figure.
+    let mut said = std::collections::BTreeSet::new();
     for event in &gem_d.conversation_history {
         for line in &event.lines {
             lines += 1;
             words += line.text.split_whitespace().count();
+            said.insert(line.text.clone());
         }
     }
     let per_founder = words as f64;
     println!("\nGem-D: {lines} lines, {words} words across the day");
+    println!(
+        "{} of those {lines} lines are distinct sentences",
+        said.len()
+    );
     println!("about {per_founder:.0} words in a 36-hour day");
     // 17 waking hours in Mehl's 24-hour day; the island's day is 36, so
     // the hours awake scale with it unless the sleep model says
@@ -99,18 +118,48 @@ fn slow_how_long_a_lifetime_of_remembered_conversation_actually_lasts() {
         );
     }
 
-    // Asserting the shape of the problem, not a target. If a day's talking
-    // ever stops filling a meaningful share of a cap meant to last a
-    // lifetime, the rate has been given one and this test should be
-    // revisited along with D35.
     assert!(
         most > 0,
         "the founders are adjacent kin and should talk at all"
     );
+
+    // The guard that D35's open half stays closed. Before the merge a
+    // single day filled about a thousand of the two thousand entries, so
+    // a cap meant to hold a lifetime held two days. A day's talking is
+    // now a couple of unbroken exchanges -- the waking stretches either
+    // side of sleep -- and the cap holds hundreds of days.
+    //
+    // A tenth of the cap is the line the earlier version of this test
+    // drew, from the other side: it failed while a day took *more* than
+    // a tenth. Keeping the same line keeps the two readings comparable
+    // rather than inventing a new threshold to pass.
     assert!(
-        most * 10 > CONVERSATION_HISTORY_MAX_ENTRIES,
-        "a single day fills {most} of {CONVERSATION_HISTORY_MAX_ENTRIES}, under a tenth of the \
-         cap; if that is now true the conversation rate has been given a limit and D35's open \
-         half may be closed"
+        most * 10 <= CONVERSATION_HISTORY_MAX_ENTRIES,
+        "a single day fills {most} of {CONVERSATION_HISTORY_MAX_ENTRIES} entries, over a tenth of \
+         the cap; conversations are being fragmented again"
+    );
+
+    // Entries stopped being the real bound when an entry became a whole
+    // exchange, so this is the one that decides how long the memory
+    // reaches: lines. Printed in days, which is the unit the question was
+    // ever asked in.
+    println!(
+        "a day costs {lines} lines of a {CONVERSATION_HISTORY_MAX_LINES}-line budget, which \
+         holds about {:.1} days",
+        CONVERSATION_HISTORY_MAX_LINES as f64 / lines.max(1) as f64
+    );
+    assert!(
+        lines < CONVERSATION_HISTORY_MAX_LINES,
+        "a single day's talking is {lines} lines against a {CONVERSATION_HISTORY_MAX_LINES}-line \
+         budget, so a person cannot remember even one day of it"
+    );
+
+    // And from the other side, so this cannot be passed by the founders
+    // falling silent: the day has to hold a real amount of talking. One
+    // line a minute of waking life would be far more than anyone says;
+    // this only asks that the day is not empty of words.
+    assert!(
+        words > 1_000,
+        "a whole day produced only {words} words, which is not two people living together"
     );
 }

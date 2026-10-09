@@ -54,11 +54,31 @@ pub struct DialogueLine {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConversationEvent {
+    /// When they started talking.
+    ///
+    /// Not when this line was said: an exchange that carries on across
+    /// ticks keeps the tick it opened on, which is what makes it one
+    /// conversation rather than one per minute. See `last_tick`.
     pub tick: Tick,
     pub participant_a_id: HumanId,
     pub participant_b_id: HumanId,
     pub relationship: ConversationRelationship,
     pub lines: Vec<DialogueLine>,
+    /// When the most recent line was said.
+    ///
+    /// Equal to `tick` for an exchange that lasted a single tick, and
+    /// later for one still going. `HumanSystem::step_dialogue` uses it
+    /// to decide whether the pair are continuing or starting again:
+    /// talking on the tick after the last line continues this
+    /// conversation, and any longer gap begins another.
+    ///
+    /// `#[serde(default)]` because snapshots written before conversations
+    /// could span ticks have no such field; those load with `last_tick`
+    /// at 0, which simply means the first exchange after a load starts a
+    /// new conversation rather than joining a pre-existing one. That is
+    /// the right answer for a world that was paused and resumed anyway.
+    #[serde(default)]
+    pub last_tick: Tick,
 }
 
 /// Emotions that read as a good mood when dominant.
@@ -188,6 +208,9 @@ pub fn generate_conversation(
 
     ConversationEvent {
         tick,
+        // A freshly generated exchange begins and ends on this tick;
+        // `step_dialogue` moves `last_tick` forward if the pair carry on.
+        last_tick: tick,
         participant_a_id: a.profile.human_id,
         participant_b_id: b.profile.human_id,
         relationship,

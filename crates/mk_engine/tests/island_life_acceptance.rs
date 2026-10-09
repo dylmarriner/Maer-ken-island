@@ -21,11 +21,16 @@ const DAY: u64 = 86_400;
 /// processes. Changing any Phase 1-3 behaviour changes it: update it
 /// deliberately, in the commit that changes the behaviour.
 ///
-/// Last changed by the sleep gate on `humans::step_dialogue` (D35): family
-/// pairs used to be matched on `alive` alone and so held a conversation on
-/// every tick of every night, and they no longer do. A week of island life
-/// therefore contains different conversations, different relationship
-/// memory and a different digest.
+/// Last changed by the other half of D35: a pair who speak again on the
+/// next tick now carry the same exchange on rather than opening a new
+/// one, so `ConversationEvent` gained a `last_tick`, and the logs that
+/// hold those exchanges are bounded by lines rather than by an entry
+/// count that stopped meaning anything once an entry became a whole
+/// conversation. A week of island life therefore holds different
+/// conversation records and different relationship memory. (The half
+/// before it was the sleep gate on `humans::step_dialogue`, which
+/// stopped family pairs being matched on `alive` alone and so talking
+/// through every night.)
 ///
 /// It was changed only after checking that everything this test measures
 /// about the week still holds, because a pinned digest is the easiest
@@ -35,9 +40,9 @@ const DAY: u64 = 86_400;
 /// Gem-D at 13.0 kg of body carbon against an expected 13.0 and Gem-K at
 /// 10.4 against 10.4 — inside the 0.98-1.02 band that a fixed portion
 /// (1.05x) and an action-gated harvest (0.90x) both failed — and the
-/// temperate-forest NPP still inside the ecology pack. Nothing physical
-/// moved; only the hash did.
-const WEEK_DIGEST: &str = "860d8035e28c26585b00d094f89e6e25cd81058f9eba143bfde799c53ddb11f6";
+/// temperate-forest NPP at 707 g C/m2/yr inside the ecology pack's
+/// 400-900. Nothing physical moved; only the hash did.
+const WEEK_DIGEST: &str = "3abe2f425ee72565171c8b196468061d1926c2add8a8e366ca770dfb5b1d70b8";
 
 fn repo(path: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))

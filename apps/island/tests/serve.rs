@@ -1576,6 +1576,31 @@ async fn properties_economy_and_timeline_serve_what_the_island_really_holds() {
         ticks.windows(2).all(|w| w[0] >= w[1]),
         "newest first: {ticks:?}"
     );
+    // A conversation is the whole exchange between a pair, which can run
+    // for a waking stretch and hold hundreds of lines. The feed carries
+    // the tail of it, and must say how long the whole thing was: a card
+    // that showed twelve lines of a thousand without saying so would
+    // misrepresent what happened on the island.
+    for conversation in conversations {
+        let shown = conversation["lines"].as_array().expect("lines").len();
+        let said = conversation["lines_said"]
+            .as_u64()
+            .expect("how many lines were really said") as usize;
+        assert!(
+            shown <= island::serve::projection::LINES_SHOWN,
+            "a card was sent {shown} lines: {conversation}"
+        );
+        assert!(
+            said >= shown,
+            "a conversation says it holds {said} lines but {shown} were sent"
+        );
+        let last = conversation["last_tick"].as_u64().expect("a last tick");
+        let started = conversation["tick"].as_u64().expect("a tick");
+        assert!(
+            last >= started,
+            "a conversation ended at {last}, before it started at {started}"
+        );
+    }
 
     let (_, response) = get(port, "/api/timeline").await;
     let body: serde_json::Value = serde_json::from_str(body_of(&response)).unwrap();

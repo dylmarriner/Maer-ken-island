@@ -258,11 +258,30 @@ pub struct ConversationLine {
 /// simulation did.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Conversation {
+    /// When the two of them started talking.
     pub tick: u64,
+    /// When the most recent line was said. Equal to `tick` for an
+    /// exchange that lasted one tick; an exchange that carried on is one
+    /// conversation spanning `tick..=last_tick`, not one per tick.
+    #[serde(default)]
+    pub last_tick: u64,
     /// `founders`, `parent and child`, `siblings` or `neighbours` — the
     /// register the engine picked, in words rather than an enum name.
     pub relationship: String,
+    /// The most recent lines of the exchange, newest last — at most
+    /// `LINES_SHOWN` of them. A conversation that ran all day holds
+    /// about a thousand lines and nothing useful is served by sending
+    /// them all to a dashboard card.
     pub lines: Vec<ConversationLine>,
+    /// How many lines the whole exchange holds, which is what `lines` is
+    /// a tail of. A frontend that shows fewer lines than this should say
+    /// so rather than let a reader think the conversation was short.
+    ///
+    /// `#[serde(default)]` for backends written before conversations
+    /// could span ticks; those send no field and it reads 0, which a
+    /// frontend treats as "no count given" rather than "no lines".
+    #[serde(default)]
+    pub lines_said: usize,
 }
 
 /// One tree, as a map draws it.

@@ -341,15 +341,37 @@ const talkPanelEl = document.getElementById("talk-panel");
 const talkEl = document.getElementById("talk");
 const talkNoteEl = document.getElementById("talk-note");
 
-/// One conversation, as a short exchange with the speakers named.
+/// One conversation, as the end of an exchange with the speakers named.
+///
+/// A conversation is the whole exchange between a pair, not the minute of
+/// it that happened on one tick, so it spans `tick` to `last_tick` and can
+/// hold hundreds of lines. The backend sends the most recent of them and
+/// `lines_said` says how many there really are; this card shows that span
+/// and that count, so nobody reads a tail as the whole thing.
 function conversationCard(conversation) {
   const card = el("article", null, { class: "talk-card" });
   const head = el("p", null, { class: "talk-head" });
+  const last = conversation.last_tick ?? conversation.tick;
+  const when =
+    last > conversation.tick
+      ? `ticks ${conversation.tick}-${last}`
+      : `tick ${conversation.tick}`;
   head.append(
-    el("span", `tick ${conversation.tick}`, { class: "talk-tick" }),
+    el("span", when, { class: "talk-tick" }),
     el("span", conversation.relationship, { class: "talk-rel" }),
   );
   card.append(head);
+  // `lines_said` is 0 from a backend too old to send it, which means "no
+  // count given" rather than "nothing was said" -- so only say the lines
+  // are a tail when the count is there and is actually larger.
+  const linesSaid = conversation.lines_said ?? 0;
+  if (linesSaid > conversation.lines.length) {
+    card.append(
+      el("p", `the last ${conversation.lines.length} of ${linesSaid} lines`, {
+        class: "talk-more",
+      }),
+    );
+  }
   for (const line of conversation.lines) {
     const said = el("p", null, { class: "talk-line" });
     // The name the engine used. When a person has no typed-in name it is

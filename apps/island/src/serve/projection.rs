@@ -42,6 +42,15 @@ pub use mk_island_api::{
 /// page takes this many from the newest end and says so.
 pub const CONVERSATIONS_SHOWN: usize = 40;
 
+/// How many lines of each conversation the dashboard is sent.
+///
+/// A conversation is the whole exchange between a pair, so one can run
+/// for a waking stretch and hold about a thousand lines. A card showing
+/// a thousand lines is not a card, and a reader opening the page wants
+/// what was just said. So the feed carries the most recent lines and
+/// `Conversation::lines_said` says how many there really are.
+pub const LINES_SHOWN: usize = 12;
+
 /// The island at one moment, as the dashboard sees it.
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct IslandProjection {
@@ -113,8 +122,8 @@ pub struct IslandProjection {
     /// cadence -- `TREES_EVERY`, a simulated day, rather than the hourly
     /// one the records and the economy ride. The patch holds about
     /// 200,000 of them at 56 bytes apiece, so this copy is eleven
-    /// megabytes where the conversation feed is forty short strings;
-    /// `tests/tree_cost.rs` measures it.
+    /// megabytes where the conversation feed is forty exchanges of at
+    /// most `LINES_SHOWN` lines each; `tests/tree_cost.rs` measures it.
     ///
     /// Skipped from the status body, and harder than the other skips: a
     /// page polling the clock every second must not be handed two hundred
@@ -698,16 +707,25 @@ impl IslandProjection {
                 .take(CONVERSATIONS_SHOWN)
                 .map(|event| Conversation {
                     tick: event.tick,
+                    last_tick: event.last_tick,
                     relationship: relationship_name(event.relationship).to_string(),
+                    // The tail, not the whole thing. A conversation is now
+                    // the whole exchange between a pair rather than the
+                    // minute of it that happened on one tick, and a
+                    // founders' exchange runs for a waking stretch: about a
+                    // thousand lines. `lines_said` carries the real length
+                    // so the tail cannot be mistaken for the conversation.
                     lines: event
                         .lines
                         .iter()
+                        .skip(event.lines.len().saturating_sub(LINES_SHOWN))
                         .map(|line| ConversationLine {
                             speaker_id: line.speaker_id.to_string(),
                             speaker_name: line.speaker_name.clone(),
                             text: line.text.clone(),
                         })
                         .collect(),
+                    lines_said: event.lines.len(),
                 })
                 .collect(),
         )

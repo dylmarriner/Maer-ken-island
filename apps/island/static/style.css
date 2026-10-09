@@ -635,6 +635,7 @@ button.link {
 .talk-tick { color: var(--muted); font-size: 0.82rem; font-variant-numeric: tabular-nums; }
 .talk-rel { color: var(--muted); font-size: 0.82rem; font-style: italic; }
 .talk-line { margin: 0 0 0.3rem; line-height: 1.45; }
+.talk-more { color: var(--muted); font-size: 0.82rem; margin: 0 0 0.45rem; }
 .talk-who { font-weight: 600; }
 
 /* A server-side failure the page must not show silently. */
