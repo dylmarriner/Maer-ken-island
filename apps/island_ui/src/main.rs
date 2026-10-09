@@ -315,13 +315,20 @@ fn main() {
     let assets = asset_root(flag(&args, "--assets"));
     println!("Models from {}.", assets.display());
 
-    // `--view estate` on an island that serves no estate would hide the
-    // ground, find nothing to show in its place and leave the camera
-    // where the island view had put it: a black window with no
-    // explanation. The panel already refuses that switch -- the button is
-    // disabled when there is no layout -- and a flag should not be able
-    // to reach a state the interface deliberately prevents. So it says so
-    // and opens on the island instead.
+    // `--view estate` on an island that serves no estate layout would
+    // hide the ground, find nothing to show in its place and leave the
+    // camera where the island view had put it: a black window with no
+    // explanation. The panel already refuses that switch -- its button is
+    // disabled when there is no layout -- and a flag should not reach a
+    // state the interface deliberately prevents.
+    //
+    // A backend with no world at all is caught further up and never gets
+    // here. The case this is for is a backend that *has* an island and
+    // does not serve `/api/world/estate/layout`: an older `island serve`,
+    // or one whose layout fetch failed, which `source.rs` deliberately
+    // treats as survivable. Seen for real against a backend built before
+    // that endpoint existed, which logged "this island served no estate
+    // layout" and drew nothing.
     let mut showing = Showing::asked_for(flag(&args, "--view"));
     if showing == Showing::Estate && island.estate().is_none() {
         eprintln!(
