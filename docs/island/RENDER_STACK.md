@@ -205,11 +205,11 @@ could not find. That half has teeth, measured against a run with an empty
 
 | frame | colours | yard | light text | models |
 |---|---|---|---|---|
-| with `assets/` | 3,226 | 12.7% | 2.18% | 52, none missing |
-| with an empty `assets/` | 2,063 | 12.5% | 2.29% | 52 asked for, 13 named missing |
+| with `assets/` | 3,457 | 12.5% | 2.57% | 52, none missing |
+| with an empty `assets/` | 2,172 | 12.5% | 2.29% | 52 asked for, 13 named missing |
 
 The picture alone would not have failed that second run — the yard and the
-text are indistinguishable, and 2,063 colours clears the blankness
+text are indistinguishable, and 2,172 colours clears the blankness
 threshold comfortably. The log is what fails it, by name, thirteen times.
 
 What a rendered frame shows, against the full 1,200 × 960 island: the
@@ -326,10 +326,18 @@ plausible, but a missing line of output. An unknown argument is an error
 now.
 
 **The plain conclusion: at the island scale this needs a GPU.** Not a
-hedge — a measurement. The application already asks for one (Bevy
-defaults to `PowerPreference::HighPerformance` across every backend), so
-there is nothing to configure; what it lacked was saying which adapter
-it got, and it now does. On a software one it says so and names the
+hedge — a measurement. The application asks for the best adapter a
+machine has, in its own words: `wants_the_best_gpu` sets
+`PowerPreference::HighPerformance` on the `RenderPlugin`, and a test
+holds it there. That is already Bevy's default, so it changes no
+behaviour today — the point is that a default is somebody else's
+decision. A Bevy upgrade that changed it would quietly move this
+application onto the integrated adapter of every laptop that has both,
+and the only symptom would be a frame rate nobody could explain. Asking
+out loud costs four lines and makes it a fact of this crate.
+
+What the application also lacked was saying which adapter it actually
+got, and it now does. On a software one it says so and names the
 remedy, because 0.6 frames a second with no explanation looks like a bug
 in the renderer rather than a missing driver.
 

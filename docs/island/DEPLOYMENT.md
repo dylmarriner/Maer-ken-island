@@ -186,13 +186,17 @@ It draws both, and CI checks both on every push by rendering each frame on
 a virtual screen and asserting the picture is of something. The estate's
 check reads the application's log as well, because a photograph cannot
 tell a loaded model from the box underneath it: measured, an empty
-`assets/` takes that frame from 3,226 colours to 2,063, which the picture
+`assets/` takes that frame from 3,457 colours to 2,172, which the picture
 alone would not have failed, while the log names thirteen missing models.
 
-What has **not** been established is how it feels with a mouse, or what it
-costs on a GPU: every frame so far was rasterised by lavapipe on the CPU,
-and no frame-rate figure is claimed. `docs/island/RENDER_STACK.md` is the
-full account.
+A mouse and a keyboard are answered: five gestures are driven against the
+running application and measured, from a held drag that moves 39.8% of the
+pixels to a panel click that moves 59.5%.
+
+What has **not** been established is what it costs on a GPU: every frame so
+far was rasterised by lavapipe on the CPU, and no frame-rate figure from
+real hardware is claimed. `docs/island/RENDER_STACK.md` is the full
+account.
 
 On a machine with no screen it says so in a sentence and exits 1, after
 telling you whether the backend was reachable — so a headless operator

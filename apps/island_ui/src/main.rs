@@ -447,6 +447,10 @@ fn main() {
     let mut app = App::new();
     app.add_plugins(
         DefaultPlugins
+            .set(bevy::render::RenderPlugin {
+                render_creation: wants_the_best_gpu().into(),
+                ..default()
+            })
             .set(AssetPlugin {
                 file_path: assets.to_string_lossy().into_owned(),
                 ..default()
@@ -757,11 +761,32 @@ type OnlyIn<'w, 's, Marker, NotA, NotB> =
 #[derive(Resource, Clone, Copy)]
 struct Detail(usize);
 
+/// Ask for the best graphics adapter the machine has, in this
+/// repository's own words.
+///
+/// `PowerPreference::HighPerformance` is already Bevy's default, so this
+/// changes no behaviour today. It is here because a default is somebody
+/// else's decision: a Bevy upgrade that changed it would quietly move
+/// this application onto an integrated adapter on every laptop that has
+/// both, and the only symptom would be a frame rate nobody could explain.
+/// Asking out loud costs four lines and makes that a compile-time fact
+/// of this crate rather than a property of a dependency.
+///
+/// What it cannot do is conjure hardware. On a machine with no GPU this
+/// still resolves to a software rasteriser, which is what
+/// `say_what_is_drawing` exists to announce.
+fn wants_the_best_gpu() -> bevy::render::settings::WgpuSettings {
+    bevy::render::settings::WgpuSettings {
+        power_preference: bevy::render::settings::PowerPreference::HighPerformance,
+        ..default()
+    }
+}
+
 /// Say which graphics adapter this actually got, once, at startup.
 ///
-/// Bevy asks for `PowerPreference::HighPerformance` and every backend by
-/// default, so this application already takes the best GPU a machine
-/// has. What it did not do was *say* which one it ended up with -- and
+/// `wants_the_best_gpu` asks for `PowerPreference::HighPerformance`, so
+/// this application takes the best GPU a machine has. What it did not do
+/// was *say* which one it ended up with -- and
 /// the difference between a GPU and a software rasteriser is not subtle.
 /// Measured on this island at 1600x1000 under lavapipe: 0.6 frames per
 /// second on the island view and 10.8 on the estate. Somebody whose
@@ -1397,7 +1422,21 @@ fn ask(island: &Island, request: mk_island_api::ControlRequest) -> String {
 
 #[cfg(test)]
 mod adapter_tests {
-    use super::drawing_on_the_cpu;
+    use super::{drawing_on_the_cpu, wants_the_best_gpu};
+
+    /// The point of asking out loud is that the ask is this crate's, not
+    /// a dependency's default. A test is the only thing that keeps it
+    /// that way: without one, a later edit could drop the setting and
+    /// nothing would fail until somebody wondered why their laptop was
+    /// slow.
+    #[test]
+    fn this_application_asks_for_the_best_adapter_the_machine_has() {
+        assert_eq!(
+            wants_the_best_gpu().power_preference,
+            bevy::render::settings::PowerPreference::HighPerformance,
+            "the renderer must ask for the high-performance adapter"
+        );
+    }
 
     #[test]
     fn a_software_rasteriser_is_recognised_however_it_describes_itself() {
