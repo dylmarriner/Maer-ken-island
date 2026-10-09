@@ -58,8 +58,9 @@ island-ui (--scenario <path> | --snapshot <path>) [--data-dir <dir>] [--speed re
                    whoever started it, and the controls can change it.
   --view WHICH     island (the default) or estate: which of the two frames
                    to open on. The panel switches between them at any
-                   time; this is for opening straight onto the estate, and
-                   for a headless render that has nobody to press it.
+                   time, as do the `i` and `e` keys; this is for opening
+                   straight onto the estate, and for a headless render
+                   that has nobody to press anything.
   --measure N      draw for N seconds, print the frame rate achieved, and
                    exit. For putting a number on what this costs on the
                    machine it is actually running on, rather than
@@ -348,10 +349,10 @@ fn main() {
     // How long to draw for before reporting a frame rate, if anybody
     // asked. Rejected rather than ignored when it is not a number, for
     // the same reason `--view` refuses a word it does not know.
-    let measure = flag(&args, "--measure").map(|seconds| match seconds.parse::<f32>() {
+    let measure = flag(&args, "--measure").map(|asked| match asked.parse::<f32>() {
         Ok(seconds) if seconds > 0.0 => seconds,
         _ => {
-            eprintln!("--measure takes a number of seconds, not `{seconds}`.");
+            eprintln!("--measure takes a number of seconds, not `{asked}`.");
             usage()
         }
     });
@@ -415,6 +416,7 @@ fn main() {
         Update,
         (
             read_the_island,
+            pick_a_view,
             drive_the_camera,
             place_islanders,
             show_what_was_chosen,
@@ -772,14 +774,47 @@ fn read_the_island(
     }
 }
 
-/// Mouse and keyboard into the camera, through the tested arithmetic.
+/// `i` and `e` pick which frame to look at.
+///
+/// Its own system rather than two more branches inside
+/// `drive_the_camera`, because picking a frame is not the camera's job
+/// -- and because that system was already at seven parameters, which is
+/// the number above which clippy stops accepting them and a reasonable
+/// place to notice a function has grown a second subject. Adding the
+/// keys there took it to nine and `-D warnings` refused it, which is the
+/// lint doing exactly what it is for.
+///
+/// Keys work whether or not the pointer is over a panel: they are how
+/// somebody gets back to a known view after losing themselves, and a
+/// panel is the easiest thing to lose a pointer behind. `i` recentres
+/// the island as well as selecting it, because pressing it while already
+/// on the island is what somebody lost does.
+fn pick_a_view(
+    keys: Res<ButtonInput<KeyCode>>,
+    mut showing: ResMut<Showing>,
+    mut view: ResMut<View>,
+    island: Res<TheIsland>,
+) {
+    if keys.just_pressed(KeyCode::KeyI) {
+        *showing = Showing::Island;
+        view.0.look_at(Point::new(0.0, 0.0, 0.0), 320.0);
+    }
+    // Ignored rather than obeyed when there is no estate, for the same
+    // reason `--view estate` is refused: hiding the ground and finding
+    // nothing to show in its place is a black window with no
+    // explanation. The panel's own button is disabled in that case too.
+    if keys.just_pressed(KeyCode::KeyE) && island.0.estate().is_some() {
+        *showing = Showing::Estate;
+    }
+}
+
+/// Mouse into the camera, through the tested arithmetic.
 fn drive_the_camera(
     mut view: ResMut<View>,
     mut camera: Query<&mut Transform, With<Camera3d>>,
     mut wheel: MessageReader<bevy::input::mouse::MouseWheel>,
     mut motion: MessageReader<bevy::input::mouse::MouseMotion>,
     buttons: Res<ButtonInput<MouseButton>>,
-    keys: Res<ButtonInput<KeyCode>>,
     mut contexts: EguiContexts,
 ) {
     // A drag that started on a panel belongs to the panel. Without this
@@ -810,12 +845,6 @@ fn drive_the_camera(
             // camera is over the island or over a bedroom.
             view.0.zoom(0.9_f32.powf(zoom));
         }
-    }
-
-    // Keys work whether or not the pointer is over a panel: they are how
-    // somebody gets back to a known view after losing themselves.
-    if keys.just_pressed(KeyCode::KeyI) {
-        view.0.look_at(Point::new(0.0, 0.0, 0.0), 320.0);
     }
 
     if let Ok(mut transform) = camera.single_mut() {

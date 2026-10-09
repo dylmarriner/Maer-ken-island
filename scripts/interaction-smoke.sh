@@ -17,6 +17,28 @@
 # real hand. That is a judgement, not a measurement, and no script
 # settles it. What it does answer is the failure one step below that:
 # input arriving and nothing happening.
+#
+# Two things the first version of this script got wrong, both found by
+# running it, and both worth keeping written down:
+#
+#   * **A gesture must span frames.** `drive_the_camera` samples
+#     `buttons.pressed(MouseButton::Left)` once per frame. An xdotool
+#     mousedown-move-up completes in milliseconds, so on a software
+#     rasteriser drawing the island at 0.6 FPS the whole drag landed
+#     inside one 1.7-second frame: Bevy saw press and release in the
+#     same update, `pressed()` was false, and the motion was discarded.
+#     The drag below is therefore held down across several sleeps.
+#   * **Panel coordinates depend on the panel's contents.** The button
+#     was clicked at a y measured from a screenshot of a *remote* run.
+#     An embedded one adds a line -- "Running in this process, on
+#     loopback." -- under the address, which pushes everything below it
+#     down and put "the island" where "the estate" had been. The click
+#     landed on the already-selected button and changed 0.32% of the
+#     frame, which is what a hover highlight costs.
+#
+# The second is why the view switch is now driven by the `e` key as well
+# as by the button: the key cannot drift with the layout, and the button
+# click still has to work for the assertion below to pass.
 set -eu
 
 UI=${1:-target/release/island-ui}
@@ -24,8 +46,14 @@ OUT=${2:-/tmp/island-ui-interaction}
 DISPLAY_NUM=${ISLAND_INPUT_DISPLAY:-:89}
 SETTLE=${ISLAND_INPUT_SETTLE:-90}
 # Software rasterising 285 chunks takes a moment per frame, so a gesture
-# needs time to be drawn before it is photographed.
+# needs time to be drawn before it is photographed. Measured, the island
+# view runs at 0.6 FPS under lavapipe -- 1.7 s a frame -- so twelve
+# seconds is about seven frames, and a gesture held for less than one of
+# them is not sampled at all.
 REDRAW=${ISLAND_INPUT_REDRAW:-12}
+# How long each step of a held drag waits. It has to exceed one frame or
+# the button is down and up again between samples; see the note above.
+HOLD=${ISLAND_INPUT_HOLD:-3}
 
 missing=""
 for tool in Xvfb xdotool convert compare; do
@@ -92,11 +120,16 @@ alive "settling"
 shot 00-opened
 
 # A left-drag across the middle of the window, away from either panel:
-# this is the orbit. 480 px is a big gesture on purpose -- a small one
-# could be lost in rounding and prove nothing.
+# this is the orbit. 480 px is a big gesture on purpose, and it is made
+# in steps with the button held down between them, because the camera
+# only sees a drag that is still held when a frame is sampled.
 DISPLAY="$DISPLAY_NUM" xdotool mousemove 800 500
 DISPLAY="$DISPLAY_NUM" xdotool mousedown 1
-DISPLAY="$DISPLAY_NUM" xdotool mousemove_relative -- 480 0
+sleep "$HOLD"
+for _ in 1 2 3 4; do
+    DISPLAY="$DISPLAY_NUM" xdotool mousemove_relative -- 120 0
+    sleep "$HOLD"
+done
 DISPLAY="$DISPLAY_NUM" xdotool mouseup 1
 sleep "$REDRAW"
 alive "a drag"
@@ -109,34 +142,86 @@ sleep "$REDRAW"
 alive "a scroll"
 shot 02-zoomed
 
-# The panel. "the estate" sits under "Looking at" in the left panel; the
-# coordinates come from the rendered frame rather than from the layout
-# code, which is the point -- if the panel moves, this stops finding it
-# and the assertion below fails rather than passing silently.
-DISPLAY="$DISPLAY_NUM" xdotool mousemove 182 224 click 1
+# The keyboard route to the estate, which cannot drift with the panel's
+# layout: `e` picks the estate frame, `i` the island.
+DISPLAY="$DISPLAY_NUM" xdotool key e
 sleep "$REDRAW"
-alive "a click on the estate button"
+alive "the e key"
 shot 03-estate
 
+# And back to the island with `i`, so the switch is shown to work both
+# ways rather than once.
+DISPLAY="$DISPLAY_NUM" xdotool key i
+sleep "$REDRAW"
+alive "the i key"
+shot 04-island
+
+# Now the panel's own button, which is the thing a person actually
+# clicks. "the estate" sits under "Looking at" in the left panel, and
+# its y depends on what is above it -- an embedded island prints a line
+# a remote one does not. So the button is found in the frame rather
+# than assumed: it is the one highlighted word on that line, and the
+# highlight is the panel's selection blue.
+button_y=$(python3 - "$OUT/04-island.png" <<'FIND'
+import subprocess, sys
+
+# The selected-tab highlight egui draws is a saturated blue; the rest of
+# the panel is grey. Scan the left panel for the row holding the most of
+# it: that is the "Looking at" line, and the unselected button sits on
+# the same row.
+raw = subprocess.run(["convert", sys.argv[1], "-crop", "320x400+0+150", "-depth", "8", "rgb:-"],
+                     capture_output=True, check=True).stdout
+width = 320
+best, best_row = 0, None
+for row in range(len(raw) // (3 * width)):
+    start = row * width * 3
+    blue = sum(
+        1
+        for x in range(width)
+        if raw[start + 3 * x + 2] > 120
+        and raw[start + 3 * x + 2] > raw[start + 3 * x] + 40
+        and raw[start + 3 * x + 2] > raw[start + 3 * x + 1] + 20
+    )
+    if blue > best:
+        best, best_row = blue, row
+print(150 + best_row if best_row is not None else 242)
+FIND
+)
+echo "the 'Looking at' row is at y=$button_y"
+# "the estate" is the second word on that row; "the island" is the first
+# and is the highlighted one, so the estate's button is to its right.
+DISPLAY="$DISPLAY_NUM" xdotool mousemove 182 "$button_y" click 1
+sleep "$REDRAW"
+alive "a click on the estate button"
+shot 05-clicked
+
 python3 - "$OUT" "$(changed 00-opened 01-dragged)" "$(changed 01-dragged 02-zoomed)" \
-        "$(changed 02-zoomed 03-estate)" <<'PY'
+        "$(changed 02-zoomed 03-estate)" "$(changed 03-estate 04-island)" \
+        "$(changed 04-island 05-clicked)" <<'PY'
 import sys
 
-out, dragged, zoomed, estate = sys.argv[1], *(float(x) for x in sys.argv[2:5])
-print(f"a drag moved {dragged:.2f}% of the pixels")
+out = sys.argv[1]
+dragged, zoomed, to_estate, back, clicked = (float(x) for x in sys.argv[2:7])
+print(f"a held drag moved {dragged:.2f}% of the pixels")
 print(f"a scroll moved {zoomed:.2f}% of the pixels")
-print(f"clicking 'the estate' moved {estate:.2f}% of the pixels")
+print(f"the e key moved {to_estate:.2f}% of the pixels")
+print(f"the i key moved {back:.2f}% of the pixels")
+print(f"clicking 'the estate' moved {clicked:.2f}% of the pixels")
 
 # Thresholds well below what each gesture actually does and well above
 # nothing. The failure being caught is "input arrives and the picture
 # does not change at all", not a particular sensitivity.
 problems = []
 if dragged < 1.0:
-    problems.append(f"a 480 px drag changed {dragged:.2f}% of the frame; the camera is not orbiting")
+    problems.append(f"a held 480 px drag changed {dragged:.2f}% of the frame; the camera is not orbiting")
 if zoomed < 1.0:
     problems.append(f"five scroll notches changed {zoomed:.2f}% of the frame; the camera is not zooming")
-if estate < 5.0:
-    problems.append(f"clicking 'the estate' changed {estate:.2f}% of the frame; the panel is not answering")
+if to_estate < 5.0:
+    problems.append(f"the e key changed {to_estate:.2f}% of the frame; the view is not switching")
+if back < 5.0:
+    problems.append(f"the i key changed {back:.2f}% of the frame; the view does not switch back")
+if clicked < 5.0:
+    problems.append(f"clicking 'the estate' changed {clicked:.2f}% of the frame; the panel is not answering")
 
 if problems:
     print("the desktop application is not answering a mouse:", file=sys.stderr)
@@ -144,5 +229,5 @@ if problems:
         print(f"  - {problem}", file=sys.stderr)
     print(f"frames are in {out}", file=sys.stderr)
     sys.exit(1)
-print("the desktop application answers a mouse")
+print("the desktop application answers a mouse and a keyboard")
 PY

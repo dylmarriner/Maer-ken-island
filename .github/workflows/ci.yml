@@ -119,12 +119,24 @@ jobs:
       - name: What a frame costs here
         run: |
           # Its own screen: the smoke scripts start and stop theirs, so
-          # by here there is none left to draw on.
+          # by here there is none left to draw on. Stopped again
+          # afterwards rather than left to the runner's teardown, the
+          # same way the smoke scripts stop theirs.
           Xvfb :87 -screen 0 1600x1000x24 >/dev/null 2>&1 &
+          screen=$!
+          trap 'kill "$screen" 2>/dev/null || true' EXIT INT TERM
           sleep 2
+          # Paced rather than `--speed max`, so the figure is about
+          # drawing rather than about the simulation competing for the
+          # same cores. Measured, that distinction is smaller than it
+          # sounds and not uniform: the estate view went 8.9 -> 10.8 FPS
+          # when the island was paced, and the island view 0.5 -> 0.6.
+          # The island view is drawing-bound -- 285 chunks is roughly
+          # 2.3 M triangles at 1600x1000 -- so what the simulation does
+          # with the spare cores barely registers.
           DISPLAY=:87 ./target/release/island-ui \
             --scenario fixtures/island/default_scenario.json \
-            --data-dir "$RUNNER_TEMP/fps" --speed max --measure 20 \
+            --data-dir "$RUNNER_TEMP/fps" --speed 60 --measure 20 \
             || echo "the frame-rate measurement did not complete"
       - uses: actions/upload-artifact@v4
         if: always()
