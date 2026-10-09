@@ -518,16 +518,34 @@ fn default_tree_cap() -> usize {
 
 /// Said in `/api/conversations`, because a reader needs to know what these
 /// lines are and, just as much, what they are not.
+///
+/// Kept true as the model changes, which has caught it twice: it told
+/// readers the islanders talked "awake or asleep" after the sleep gate
+/// had stopped that, and pointed at D35 after D35 was resolved. A note
+/// that explains a limitation the code no longer has is worse than no
+/// note, because a reader has no way to tell it is out of date.
 const CONVERSATIONS_ARE_COMPOSED: &str =
     "What the islanders have said to each other, newest first. Every line is composed by the \
      engine from state it had already computed: the speaker's own emotion and internal \
      monologue, and what the listener said to them last time these two spoke. No language \
      model is involved, and the same two people at the same tick always say the same thing. \
      This is the whole island's recent feed, not one person's memory: each islander keeps their \
-     own, far longer, history. Expect repetition: a family pair converses on every tick, which \
-     is once a simulated minute, awake or asleep, and the state the lines are composed from \
-     barely moves in that time. That is a known limit of the model rather than of this page \
-     (D35 in the deviation register), and it is shown as it is rather than tidied up.";
+     own, far longer, history. A conversation here is the whole exchange between a pair, not \
+     the minute of it that happened on one tick, so one can span hours and hold hundreds of \
+     lines; the last few of them are shown and the count says how many there really were. \
+     Expect repetition within one: a waking pair converses on every tick, which is once a \
+     simulated minute, and a line is the speaker's internal monologue, which is deliberately \
+     the same whenever their state is the same. That is a known limit of the model rather than \
+     of this page (D36 in the deviation register), and it is shown as it is rather than tidied \
+     up.";
+
+/// The note served with `/api/conversations`, for the test that keeps its
+/// citation honest. Exposed rather than duplicated: a test written against
+/// its own copy of this text would pass while the served one went stale,
+/// which is the exact failure it exists to catch.
+pub fn conversations_note() -> &'static str {
+    CONVERSATIONS_ARE_COMPOSED
+}
 
 /// Headers every response carries. The pages load nothing from anywhere but
 /// this server, so the policy can say exactly that: no third-party script,
