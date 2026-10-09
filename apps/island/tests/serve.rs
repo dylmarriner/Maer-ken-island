@@ -3,7 +3,7 @@
 //! one proves `island serve` itself answers.
 
 mod common;
-use common::a_running_dashboard;
+use common::{a_running_dashboard, a_shared_dashboard};
 use island::serve::auth::ControlAuth;
 use island::serve::server;
 use std::sync::{Arc, Mutex};
@@ -626,7 +626,7 @@ async fn the_island_can_be_paused_and_sped_up_without_changing_it() {
 /// Each part of the world on its own path, and an unknown one named.
 #[tokio::test]
 async fn the_world_serves_its_parts_separately() {
-    let (world, port, server) = a_running_dashboard().await;
+    let port = a_shared_dashboard();
 
     for (part, expect) in [
         ("estate", "battery_capacity_kwh"),
@@ -648,9 +648,6 @@ async fn the_world_serves_its_parts_separately() {
         response.contains("weather"),
         "the refusal does not name it: {response}"
     );
-
-    world.stop();
-    server.abort();
 }
 
 /// People stored before there was a world can be carried into one.
@@ -1133,7 +1130,7 @@ async fn a_replay_log_that_cannot_be_written_is_said_on_the_page() {
 
 #[tokio::test]
 async fn a_cell_of_the_island_can_be_asked_about_by_row_and_column() {
-    let (world, port, server) = a_running_dashboard().await;
+    let port = a_shared_dashboard();
 
     // The estate's cell, read two independent ways. `/api/world` derives
     // the estate's coordinates from its position in metres; `/api/cell`
@@ -1183,14 +1180,11 @@ async fn a_cell_of_the_island_can_be_asked_about_by_row_and_column() {
         "says why: {}",
         body_of(&response)
     );
-
-    world.stop();
-    server.abort();
 }
 
 #[tokio::test]
 async fn the_islands_individual_trees_can_be_asked_for_by_the_box() {
-    let (world, port, server) = a_running_dashboard().await;
+    let port = a_shared_dashboard();
 
     // Everything there is. The default box is the whole domain, so this
     // is the island's entire stock of individual stems.
@@ -1303,14 +1297,11 @@ async fn the_islands_individual_trees_can_be_asked_for_by_the_box() {
         Some(total),
         "an empty box does not mean an empty island: {empty}"
     );
-
-    world.stop();
-    server.abort();
 }
 
 #[tokio::test]
 async fn the_islands_vegetation_is_served_at_two_resolutions() {
-    let (world, port, server) = a_running_dashboard().await;
+    let port = a_shared_dashboard();
 
     // The island's standing vegetation, one pixel per medium cell, the
     // same shape as the elevation render it sits beside. The dashboard
@@ -1355,9 +1346,6 @@ async fn the_islands_vegetation_is_served_at_two_resolutions() {
          must be the finer picture or it is not worth serving"
     );
     assert_eq!(pw, ph, "the patch is square: {pw} by {ph}");
-
-    world.stop();
-    server.abort();
 }
 
 /// Width and height out of a PNG's IHDR, which is always the first chunk.
@@ -1373,7 +1361,7 @@ fn png_size(bytes: &[u8]) -> (u32, u32) {
 
 #[tokio::test]
 async fn the_island_is_served_as_a_picture_of_itself() {
-    let (world, port, server) = a_running_dashboard().await;
+    let port = a_shared_dashboard();
 
     let (status, head, body) = get_bytes(port, "/api/map.png").await;
     assert_eq!(status, 200, "{head}");
@@ -1397,9 +1385,6 @@ async fn the_island_is_served_as_a_picture_of_itself() {
         "a drawn island, not a blank one: {} bytes",
         body.len()
     );
-
-    world.stop();
-    server.abort();
 }
 
 #[tokio::test]
@@ -1714,7 +1699,7 @@ async fn the_terrain_is_served_as_numbers_a_renderer_can_use() {
     // will -- including against the island's own `/api/world`, so a
     // mismatch between the two is caught here rather than as terrain that
     // is subtly the wrong size.
-    let (world, port, server) = a_running_dashboard().await;
+    let port = a_shared_dashboard();
 
     let (status, head, body) = get_bytes(port, "/api/elevation.bin").await;
     assert_eq!(status, 200, "{head}");
@@ -1816,14 +1801,11 @@ async fn the_terrain_is_served_as_numbers_a_renderer_can_use() {
             .expect("the gzip stream is well formed");
     }
     assert_eq!(inflated, body, "the two encodings are not the same island");
-
-    world.stop();
-    server.abort();
 }
 
 #[tokio::test]
 async fn a_client_is_told_what_this_backend_can_do_before_it_asks_for_anything() {
-    let (world, port, server) = a_running_dashboard().await;
+    let port = a_shared_dashboard();
     let (status, response) = get(port, "/api/version").await;
     assert_eq!(status, 200);
     let version: mk_island_api::ServerVersion =
@@ -1837,6 +1819,4 @@ async fn a_client_is_told_what_this_backend_can_do_before_it_asks_for_anything()
         "this fixture was started with no snapshot directory, and saying it \
          could write one would send an operator to a button that refuses"
     );
-    world.stop();
-    server.abort();
 }

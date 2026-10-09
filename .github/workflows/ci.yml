@@ -45,10 +45,98 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Format
         run: cargo fmt --all -- --check
+      # `--exclude island_ui` on the two that compile. Without it this job
+      # builds Bevy -- 392 crates, about nine minutes -- and the point of
+      # splitting the desktop application into its own job is that a
+      # formatting mistake is reported in a couple of minutes instead.
+      # `island_ui`'s own clippy, build and tests are in that job.
       - name: Clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy --workspace --exclude island_ui --all-targets -- -D warnings
       - name: Fast tests
-        run: cargo test --workspace
+        run: cargo test --workspace --exclude island_ui
+
+  # The desktop application, in its own job because it pulls in Bevy: 392
+  # crates and about nine minutes from cold. Keeping it out of `check`
+  # means a formatting mistake is still reported in a couple of minutes
+  # rather than after a Bevy build.
+  desktop:
+    name: desktop application
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned toolchain
+        run: rustup show
+      - uses: Swatinem/rust-cache@v2
+      # Bevy's default features need alsa and libudev. This crate turns
+      # both off -- there is no sound and there are no gamepads on this
+      # island -- so nothing is installed here, and that is the point: if
+      # this job ever needs a system package, a feature has crept back in.
+      - name: Clippy
+        run: cargo clippy -p island_ui --all-targets --locked -- -D warnings
+      - name: Build
+        run: cargo build -p island_ui --locked
+      # Everything that is not the renderer. No windowed test runs here,
+      # because a CI runner has no display and neither did the machine
+      # this was written on; `docs/island/RENDER_STACK.md` says which half
+      # that leaves unverified.
+      - name: Tests
+        run: cargo test -p island_ui --locked
+      # The headless binary must stay buildable on a machine with no
+      # graphics packages at all, which means it must not acquire Bevy
+      # through a dependency.
+      - name: The backend links no Bevy
+        run: |
+          if cargo tree -p island | grep -q '^.*bevy'; then
+            echo "apps/island has picked up a dependency on bevy" >&2
+            cargo tree -p island | grep bevy >&2
+            exit 1
+          fi
+
+  # The opt-in bridge to the outside. Its own job because it is Node, and
+  # a short one because the service is small.
+  computer-service:
+    name: computer service
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: services/computer-service/package-lock.json
+      - name: Install
+        run: npm ci
+        working-directory: services/computer-service
+      - name: Tests
+        run: npm test
+        working-directory: services/computer-service
+
+  # The dashboard's own scripts. There is no bundler and no test runner
+  # for them, and there does not need to be -- but a syntax error in a
+  # module the server embeds is a page that loads and does nothing, and
+  # that is worth two seconds to catch.
+  web:
+    name: web dashboard
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Every module parses
+        run: |
+          set -eu
+          for file in apps/island/static/*.js; do
+            cp "$file" "/tmp/$(basename "$file" .js).mjs"
+            node --check "/tmp/$(basename "$file" .js).mjs"
+            echo "ok $file"
+          done
 
   slow:
     name: slow tests (nightly)

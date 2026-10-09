@@ -11,12 +11,9 @@ use island::serve::auth::ControlAuth;
 use island::serve::server;
 use std::sync::{Arc, Mutex};
 
-/// A dashboard with a small island running on it, and its port.
-pub async fn a_running_dashboard() -> (
-    island::serve::sim::SimHandle,
-    u16,
-    tokio::task::JoinHandle<()>,
-) {
+/// The island every fixture here runs: small, seeded to pass its own
+/// shape rules, and paced rather than flat out.
+pub fn a_small_island() -> island::serve::sim::SimHandle {
     use island::serve::sim::{spawn, SimSpeed};
     use std::path::PathBuf;
 
@@ -64,11 +61,21 @@ pub async fn a_running_dashboard() -> (
     // digests out. `Times(600)` runs a 60-second step every 100 ms, so a
     // digest lands every six seconds rather than every half one, and a
     // test needing sixty ticks still gets them well inside its deadline.
-    let world = spawn(life, SimSpeed::Times(600));
+    spawn(life, SimSpeed::Times(600))
+}
 
+/// A stored population and a listener on a free loopback port.
+async fn a_dashboard_for(
+    world: &island::serve::sim::SimHandle,
+    seed: u8,
+) -> (
+    u16,
+    tokio::net::TcpListener,
+    impl warp::Filter<Extract = (impl warp::Reply,), Error = std::convert::Infallible> + Clone,
+) {
     let data_dir = Box::leak(Box::new(tempfile::tempdir().unwrap()));
     let (population, _) =
-        island_humans::IslandHumanPopulation::open(data_dir.path(), [11u8; 32]).unwrap();
+        island_humans::IslandHumanPopulation::open(data_dir.path(), [seed; 32]).unwrap();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let port = listener.local_addr().unwrap().port();
     let routes = server::routes_with_world(
@@ -76,6 +83,17 @@ pub async fn a_running_dashboard() -> (
         ControlAuth::LoopbackOnly,
         Some(world.clone()),
     );
+    (port, listener, routes)
+}
+
+/// A dashboard with an island of its very own, for a test that changes it.
+pub async fn a_running_dashboard() -> (
+    island::serve::sim::SimHandle,
+    u16,
+    tokio::task::JoinHandle<()>,
+) {
+    let world = a_small_island();
+    let (port, listener, routes) = a_dashboard_for(&world, 11).await;
     let server = tokio::spawn(async move { warp::serve(routes).incoming(listener).run().await });
     (world, port, server)
 }
@@ -105,4 +123,66 @@ pub async fn a_remote_backend(
     );
     let server = tokio::spawn(async move { warp::serve(routes).incoming(listener).run().await });
     (world, port, server)
+}
+
+/// One island, built once, shared by every test that only reads it.
+///
+/// `serve.rs` used to bootstrap an island per test -- eighteen of them on
+/// a four-core machine, each with its own simulation thread. The dominant
+/// cost is not the stepping but the grids: two 1,152,000-cell grids built
+/// on every bootstrap and hashed on every `DIGEST_EVERY`, which
+/// `tree_cap` does not shrink. A dozen of those starve the tokio runtime
+/// answering the HTTP the tests make, and
+/// `a_new_person_can_be_read_the_moment_they_exist` missed its deadline
+/// between one run in three and every run.
+///
+/// Two things were done about it. The first, already in place, was the
+/// small profile -- 240 x 192 medium cells, 25x fewer. This is the
+/// second, and the one `docs/ISLAND_SYSTEM_STATUS.md` named as the real
+/// fix: the tests that only *read* an island share one, so the suite
+/// builds seven fewer.
+///
+/// It lives on a thread of its own with its own runtime, and is never
+/// stopped: it has to outlive every test that might still be reading it,
+/// and the process ending is what stops it. That is also why this hands
+/// back no join handle -- there is nothing a caller should abort.
+///
+/// **Only for tests that do not change it.** A test that creates a
+/// person, pauses the clock or intervenes must call
+/// [`a_running_dashboard`] and get its own, because the next test to read
+/// this one would see what it did.
+///
+/// It hands back the port and nothing else, deliberately. A `SimHandle`
+/// would let a caller pause this island or step it, which is exactly what
+/// must not happen to one several tests are reading -- and a test that
+/// needs a handle needs its own island, so failing to compile is the
+/// right answer rather than a comment asking nicely.
+pub fn a_shared_dashboard() -> u16 {
+    use std::sync::OnceLock;
+    // The handle is kept inside the cell, not handed out: something has
+    // to own it or the simulation thread's channel closes and the island
+    // stops after one step.
+    static SHARED: OnceLock<(island::serve::sim::SimHandle, u16)> = OnceLock::new();
+    SHARED
+        .get_or_init(|| {
+            let (ready, started) = std::sync::mpsc::channel();
+            std::thread::Builder::new()
+                .name("shared-island".into())
+                .spawn(move || {
+                    let runtime = tokio::runtime::Builder::new_multi_thread()
+                        .worker_threads(2)
+                        .enable_all()
+                        .build()
+                        .expect("a runtime for the shared island");
+                    runtime.block_on(async move {
+                        let world = a_small_island();
+                        let (port, listener, routes) = a_dashboard_for(&world, 13).await;
+                        ready.send((world, port)).expect("the test is waiting");
+                        warp::serve(routes).incoming(listener).run().await;
+                    });
+                })
+                .expect("a thread for the shared island");
+            started.recv().expect("the shared island starts")
+        })
+        .1
 }
