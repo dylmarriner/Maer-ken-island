@@ -346,8 +346,28 @@ a message rather than a silently-dead check.
   sensitivities are pleasant under a real hand is a judgement, not a
   measurement, and no script settles it.
 - **Frame rate on a GPU.** Every figure above was rasterised by
-  **lavapipe** on the CPU. What a real adapter does is not inferable
-  from them and is not claimed.
+  **lavapipe** on the CPU, because this container has no GPU in it. What
+  a real adapter *costs* is not inferable from these numbers and is not
+  claimed anywhere.
+
+  What does carry across is correctness, and that is an argument rather
+  than an assumption, so it is worth setting out. `wgpu` is the
+  abstraction: the same commands go to a software rasteriser and to a
+  discrete card, and this application never chooses between them.
+  Nothing in `terrain.rs`, `scene.rs`, `estate.rs`, `camera.rs`,
+  `property.rs` or `source.rs` reads the adapter at all — no fast path,
+  no fallback geometry, no `cfg!` gate. The only code that asks what it
+  is drawing on is the startup message that says so.
+
+  So what the smoke tests prove under lavapipe is a property of the
+  meshes, the winding, the materials and the camera, and those are the
+  same on any adapter. `nothing_that_builds_a_frame_asks_what_it_is_drawn_on`
+  holds that: the moment a fast path for real hardware appears, the
+  argument stops working and the test fails, rather than the claim
+  quietly becoming false.
+
+  That is the strongest honest statement available without a GPU to run
+  on. It is not a substitute for one.
 - **Other window sizes.** Everything is measured at 1600×1000.
 
 ### A correction worth recording
