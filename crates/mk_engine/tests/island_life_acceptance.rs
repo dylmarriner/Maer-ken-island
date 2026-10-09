@@ -21,7 +21,14 @@ const DAY: u64 = 86_400;
 /// processes. Changing any Phase 1-3 behaviour changes it: update it
 /// deliberately, in the commit that changes the behaviour.
 ///
-/// Last changed by D36: speech was given its own phrasings instead of
+/// Last changed by giving a spoken sentence a capital letter: most of
+/// D36's phrasings are written as clauses, because that is how they read
+/// mid-sentence, and whichever is drawn first has to open one. The
+/// People page was showing `... "I want to be close to someone right
+/// now." come here a minute`, which no test saw and no reader could
+/// miss. Capitalising changes the text, so it changes the hash.
+///
+/// Before that, by D36 itself: speech was given its own phrasings instead of
 /// being the speaker's internal monologue verbatim, so the words in a
 /// week of conversation differ and the relationship memory built from
 /// them differs with it. Audited the same way as every other change to
@@ -60,7 +67,7 @@ const DAY: u64 = 86_400;
 /// island no parent/child pair is matched at a distance in a week, so
 /// giving them a distance rule costs the reference island nothing and
 /// only silences the conversations that were never audible.
-const WEEK_DIGEST: &str = "b597a162395e5e76fb36520ceb87e0b44e25af1468dd657a418195a71af96d63";
+const WEEK_DIGEST: &str = "5fc08dfd0b15efe14e567a55a13cf6a86c98401fa0d355ae78e35f4833b501a6";
 
 fn repo(path: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))

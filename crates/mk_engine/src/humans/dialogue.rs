@@ -355,7 +355,27 @@ fn said_aloud(mind: &super::thought::Mind, rng: &RngRegistry, key: RngKey) -> St
         let need_key = RngKey::new(key.subsystem, key.chunk, key.epoch + 64, key.tick);
         clauses.push(pick(rng, need_key, spoken_need(name, value)).to_string());
     }
-    format!("{}.", clauses.join(", and "))
+    sentence(&clauses.join(", and "))
+}
+
+/// Make `clause` a sentence: a capital at the front, a full stop at the
+/// back.
+///
+/// The phrasings above are written as clauses because most of them read
+/// better mid-sentence, and whichever is drawn first has to start one.
+/// Without this the dashboard showed `... "I want to be close to someone
+/// right now." come here a minute`, which is the kind of thing a test
+/// does not see and a reader cannot miss.
+fn sentence(clause: &str) -> String {
+    let mut chars = clause.chars();
+    match chars.next() {
+        None => String::new(),
+        Some(first) => format!(
+            "{}{}.",
+            first.to_uppercase(),
+            chars.as_str().trim_end_matches('.')
+        ),
+    }
 }
 
 /// Generate one two-line exchange between `a` and `b` at `tick`. Pure
@@ -491,6 +511,37 @@ mod tests {
                 line.text
             );
             assert!(!line.text.trim().is_empty());
+        }
+    }
+
+    #[test]
+    fn a_spoken_line_starts_with_a_capital_whatever_phrasing_was_drawn() {
+        // Most of the phrasings read better as clauses, so plenty of them
+        // begin in lower case; whichever is drawn first has to open a
+        // sentence. The browser caught this one, not a test: the People
+        // page showed `... "I want to be close to someone right now."
+        // come here a minute`.
+        assert_eq!(sentence("come here a minute"), "Come here a minute.");
+        assert_eq!(sentence("I'm tired"), "I'm tired.");
+        assert_eq!(sentence("I'm tired."), "I'm tired.", "no doubled stop");
+        assert_eq!(sentence(""), "", "nothing said is nothing shown");
+
+        // Asserted on the rendering itself rather than on the assembled
+        // line: a line also carries the listener's name, and a test
+        // agent is called "dialogue-l", which is lower case for reasons
+        // that have nothing to do with this.
+        let a = HumanBeing::new("dialogue-k".to_string(), BiologicalSex::Female);
+        let rng = registry();
+        let mind = super::super::thought::read(&a);
+        for tick in 0..200u64 {
+            let key = RngKey::new(SubsystemId::Dialogue, 7, 3, tick);
+            let said = said_aloud(&mind, &rng, key);
+            let first = said.chars().next().expect("something was said");
+            assert!(
+                !first.is_lowercase(),
+                "a spoken sentence begins in lower case at tick {tick}: {said}"
+            );
+            assert!(said.ends_with('.'), "and ends without a stop: {said}");
         }
     }
 
