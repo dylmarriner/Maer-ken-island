@@ -920,25 +920,7 @@ impl HumanSystem {
             if observation.shelter_quality >= autonomy::SEEK_SATISFIED_ACCESS {
                 human.home = Some(human.position);
             }
-            human.autonomous_mind.learn_from_outcome(
-                &human.needs,
-                &observation,
-                tick,
-                human.last_action_success,
-            );
-            human.economy_action = human.autonomous_mind.choose_action(
-                &human.needs,
-                &observation,
-                &human.genetics,
-                &human.carrying,
-                &human.dark_triad,
-                &human.core_systems,
-                &human.reproduction,
-                &human.neurochemistry,
-                human.profile.human_id.0,
-                tick,
-                rng_registry,
-            );
+            human.decide(&observation, tick, rng_registry);
             // Wanting intimacy with nobody within reach (the same or an
             // adjacent cell) means going to someone first: what this human
             // actually does, and learns from, is approaching them.
@@ -1441,13 +1423,21 @@ fn step_by(
 ///
 /// Returns whether the attempt succeeded.
 fn apply_intimacy(initiator: &mut HumanBeing, target: &mut HumanBeing) -> bool {
+    // Willing is the target's own desire: their attraction, and their libido
+    // less what their last act still satisfies. Consent that ignored their
+    // satiety made every one of the initiator's whims an act, the partner as
+    // satisfied as they were.
+    let desire =
+        target.reproduction.libido * (1.0 - target.reproduction.satisfaction.clamp(0.0, 1.0));
     let willing =
-        target.reproduction.attraction_average >= 0.4 && target.reproduction.libido >= 0.3;
+        target.reproduction.attraction_average >= 0.4 && desire >= reproduction::CONSENT_DESIRE;
 
     if willing {
         for person in [&mut *initiator, &mut *target] {
-            person.reproduction.satisfaction =
-                (person.reproduction.satisfaction + 0.4).clamp(0.0, 1.0);
+            // An act satisfies both partners fully; the satisfaction wears
+            // off over days (`ReproductiveSystemSnapshot::step`), and desire
+            // returns as it does.
+            person.reproduction.satisfaction = 1.0;
             person.reproduction.frustration =
                 (person.reproduction.frustration - 0.3).clamp(0.0, 1.0);
             person.reproduction.bonding_average =
@@ -1681,6 +1671,36 @@ pub(crate) fn deterministic_human_id(agent_id: &str) -> u64 {
 }
 
 impl HumanBeing {
+    /// This human's mind takes in how its last choice turned out and chooses
+    /// what to do next, from what it can see (`observation`): the decision
+    /// every step of the runtime starts from.
+    pub fn decide(
+        &mut self,
+        observation: &AgentWorldObservation,
+        tick: u64,
+        rng_registry: &mk_core::rng::RngRegistry,
+    ) {
+        self.autonomous_mind.learn_from_outcome(
+            &self.needs,
+            observation,
+            tick,
+            self.last_action_success,
+        );
+        self.economy_action = self.autonomous_mind.choose_action(
+            &self.needs,
+            observation,
+            &self.genetics,
+            &self.carrying,
+            &self.dark_triad,
+            &self.core_systems,
+            &self.reproduction,
+            &self.neurochemistry,
+            self.profile.human_id.0,
+            tick,
+            rng_registry,
+        );
+    }
+
     /// A new first-generation human with no authored birth data.
     ///
     /// The person is sampled by [`HumanSchema::sample_individual`] from an RNG

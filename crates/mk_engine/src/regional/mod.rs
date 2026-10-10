@@ -21,6 +21,7 @@ pub mod labour;
 pub mod levels;
 pub mod life;
 pub mod local_vegetation;
+pub mod maritime;
 pub mod materials;
 pub mod ocean;
 pub mod par;

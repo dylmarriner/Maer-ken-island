@@ -157,6 +157,116 @@
       }
     },
     {
+      "key": "npp_and_biomass_by_biome",
+      "description": "Mean net primary production and mean plant biomass by ecosystem type, dry matter",
+      "unit": "NPP g / m2 / yr; biomass kg / m2",
+      "source": "whittaker1975",
+      "confidence": "high",
+      "value": {
+        "table": {
+          "row_label": "biome",
+          "columns": [
+            "npp_g_m2_yr",
+            "biomass_kg_m2"
+          ],
+          "rows": [
+            {
+              "label": "tropical_rain_forest",
+              "values": [
+                2200.0,
+                45.0
+              ]
+            },
+            {
+              "label": "tropical_seasonal_forest",
+              "values": [
+                1600.0,
+                35.0
+              ]
+            },
+            {
+              "label": "temperate_evergreen_forest",
+              "values": [
+                1300.0,
+                35.0
+              ]
+            },
+            {
+              "label": "temperate_deciduous_forest",
+              "values": [
+                1200.0,
+                30.0
+              ]
+            },
+            {
+              "label": "boreal_forest",
+              "values": [
+                800.0,
+                20.0
+              ]
+            },
+            {
+              "label": "woodland_and_shrubland",
+              "values": [
+                700.0,
+                6.0
+              ]
+            },
+            {
+              "label": "savanna",
+              "values": [
+                900.0,
+                4.0
+              ]
+            },
+            {
+              "label": "temperate_grassland",
+              "values": [
+                600.0,
+                1.6
+              ]
+            },
+            {
+              "label": "tundra_and_alpine",
+              "values": [
+                140.0,
+                0.6
+              ]
+            },
+            {
+              "label": "desert_and_semidesert_scrub",
+              "values": [
+                90.0,
+                0.7
+              ]
+            },
+            {
+              "label": "extreme_desert_rock_sand_ice",
+              "values": [
+                3.0,
+                0.02
+              ]
+            },
+            {
+              "label": "cultivated_land",
+              "values": [
+                650.0,
+                1.0
+              ]
+            },
+            {
+              "label": "swamp_and_marsh",
+              "values": [
+                2000.0,
+                15.0
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Whittaker & Likens (1975) Table 15-1 means. Both are dry matter, so biomass / NPP is a residence time in years independent of the carbon fraction. Ranges within each type span roughly an order of magnitude in both columns."
+    },
+    {
       "key": "chave_agb",
       "description": "Pantropical aboveground biomass allometry AGB = a * (rho * D^2 * H)^b (Chave et al. 2014 eq. 4)",
       "unit": "AGB kg; rho g/cm3; D cm; H m",

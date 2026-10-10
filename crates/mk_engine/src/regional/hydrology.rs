@@ -490,3 +490,41 @@ pub fn freshwater_to_coarse_ocean_kg(
     }
     Grid2::from_data(&domain.storage_spec(coarse), out)
 }
+
+/// Move fresh water that [`freshwater_to_coarse_ocean_kg`] put on coarse
+/// land cells to the nearest coarse sea cell (`coarse_elevation_m <= 0`).
+///
+/// A river reaches the sea at a medium-grid outlet, but the 2 km outlet can
+/// sit inside a coarse cell that is mostly land; the ocean keeps columns only
+/// on sea cells, so water left there would leave the books (deviation D29).
+/// Nearest is by straight-line distance between cell centres, ties to the
+/// lower index. With no sea cell at all the grid is returned unchanged.
+pub fn route_to_coarse_sea(water_kg: &Grid2<f64>, coarse_elevation_m: &Grid2<f64>) -> Grid2<f64> {
+    let (rows, cols) = (water_kg.nlat(), water_kg.nlon());
+    let elevation = coarse_elevation_m.data();
+    let sea: Vec<usize> = (0..rows * cols).filter(|&i| elevation[i] <= 0.0).collect();
+    if sea.is_empty() {
+        return water_kg.clone();
+    }
+    let mut out = water_kg.data().to_vec();
+    for i in 0..rows * cols {
+        if elevation[i] <= 0.0 || out[i] == 0.0 {
+            continue;
+        }
+        let (r, c) = ((i / cols) as f64, (i % cols) as f64);
+        let nearest = sea
+            .iter()
+            .copied()
+            .min_by(|&a, &b| {
+                let d = |j: usize| {
+                    let (jr, jc) = ((j / cols) as f64, (j % cols) as f64);
+                    (jr - r).powi(2) + (jc - c).powi(2)
+                };
+                d(a).total_cmp(&d(b)).then(a.cmp(&b))
+            })
+            .expect("sea is not empty");
+        out[nearest] += out[i];
+        out[i] = 0.0;
+    }
+    Grid2::from_data(&water_kg.spec(), out)
+}

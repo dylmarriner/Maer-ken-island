@@ -32,6 +32,7 @@ pub mod insolation;
 pub mod interventions;
 pub mod io;
 pub mod long_horizon_verification;
+pub mod materials;
 pub mod mki_declaration;
 pub mod ocean;
 pub mod orbit;

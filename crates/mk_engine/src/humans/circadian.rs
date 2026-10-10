@@ -93,6 +93,33 @@ const MAX_SUBSTEP_HOURS: f64 = 0.1;
 /// integrated (hours): beyond two days only the cost grows.
 const MAX_INTEGRATED_HOURS: f64 = 48.0;
 
+/// What light can reach a human's eyes during a step.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Light {
+    /// Outdoor daylight, as a fraction of full sun (0..1).
+    pub daylight_fraction: f64,
+    /// Fraction of outdoor daylight reaching the eye where the human is:
+    /// 1 outdoors, the room's daylight factor indoors.
+    pub daylight_factor: f64,
+    /// Electric light at the eye (lux), zero where there is none.
+    pub lamp_lux: f64,
+    /// Indoors, a human at bedtime puts the lamp out and draws the
+    /// curtains; outdoors there is no curtain to draw.
+    pub indoors: bool,
+}
+
+impl Light {
+    /// Outdoors under `daylight_fraction` of full sun, no lamp.
+    pub fn outdoors(daylight_fraction: f64) -> Self {
+        Self {
+            daylight_fraction,
+            daylight_factor: 1.0,
+            lamp_lux: 0.0,
+            indoors: false,
+        }
+    }
+}
+
 /// One human's circadian pacemaker state and sleep/wake state.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CircadianClock {
@@ -149,14 +176,45 @@ impl CircadianClock {
         self.xc.atan2(self.x)
     }
 
-    /// Illuminance reaching this human's eyes: daylight when awake, none
-    /// with eyes closed.
-    pub fn eye_lux(&self, daylight_fraction: f64) -> f64 {
-        if self.asleep {
-            0.0
-        } else {
-            daylight_fraction.clamp(0.0, 1.0) * OUTDOOR_DAYLIGHT_LUX
+    /// Illuminance reaching this human's eyes: the brighter of the
+    /// daylight that reaches them and the lamp, when awake; none with eyes
+    /// closed. Indoors at bedtime ([`Self::is_bedtime`] with `fatigue`) the
+    /// lamp is out and the curtains drawn, so none either.
+    pub fn eye_lux(&self, light: &Light, fatigue: f64) -> f64 {
+        if self.asleep || (light.indoors && self.is_bedtime(fatigue)) {
+            return 0.0;
         }
+        let daylight = light.daylight_fraction.clamp(0.0, 1.0)
+            * light.daylight_factor.clamp(0.0, 1.0)
+            * OUTDOOR_DAYLIGHT_LUX;
+        daylight.max(light.lamp_lux.max(0.0))
+    }
+
+    /// Whether this human has reached bedtime: the clock's night signal as
+    /// it would be in the dark, plus weighted sleep pressure `fatigue`, has
+    /// crossed the sleep-onset threshold.
+    ///
+    /// It matters only indoors. Room light suppresses the melatonin that
+    /// opens the sleep gate (Gooley et al. 2011), so someone kept under a
+    /// lamp until sleep took them would barely sleep at all -- the model,
+    /// run that way, gives under three hours a day at 200 lux. Nobody does
+    /// that: they feel the evening come on, put the light out and draw the
+    /// curtains, and the melatonin rises in the dark. This is that moment,
+    /// from the same thresholds the sleep gate uses, so the room goes dark
+    /// where the gate would have opened in darkness. On Marr'Kena, whose
+    /// day is 36 hours, the curtains are what let a body keep its own
+    /// night while the sun is still up.
+    pub fn is_bedtime(&self, fatigue: f64) -> bool {
+        let fatigue = fatigue.clamp(0.0, 1.0);
+        self.melatonin_target(0.0) + SLEEP_PRESSURE_WEIGHT * fatigue > SLEEP_ONSET_THRESHOLD
+            || fatigue >= INVOLUNTARY_SLEEP_PRESSURE
+    }
+
+    /// Whether this human wants their lamp on: awake and not yet at
+    /// bedtime. (Whether it is dark enough to need it is the room's
+    /// business, not the clock's.)
+    pub fn wants_lamp(&self, fatigue: f64) -> bool {
+        !self.asleep && !self.is_bedtime(fatigue)
     }
 
     fn derivatives(&self, state: [f64; 3], lux: f64) -> [f64; 3] {
@@ -200,8 +258,8 @@ impl CircadianClock {
     }
 
     /// Advance the clock and the sleep pressure `fatigue` (0..1) by
-    /// `dt_hours` under constant `daylight_fraction`, switching between sleep
-    /// and wake as the two processes dictate. Returns the new fatigue.
+    /// `dt_hours` under constant `light`, switching between sleep and wake
+    /// as the two processes dictate. Returns the new fatigue.
     ///
     /// `pressure_rate_factor` scales how fast pressure builds while awake
     /// (individual sleep need, `NeedsSnapshot::sleep_pressure_rate_factor`);
@@ -209,7 +267,7 @@ impl CircadianClock {
     /// in sleep: sleeping rough is less restorative.
     pub fn step(
         &mut self,
-        daylight_fraction: f64,
+        light: Light,
         fatigue: f64,
         dt_hours: f64,
         pressure_rate_factor: f64,
@@ -241,7 +299,7 @@ impl CircadianClock {
         let mut remaining = total;
         while remaining > 1e-12 {
             let h = remaining.min(MAX_SUBSTEP_HOURS);
-            let lux = self.eye_lux(daylight_fraction);
+            let lux = self.eye_lux(&light, fatigue);
             self.rk4(lux, h);
             let target = self.melatonin_target(lux);
             self.melatonin +=
@@ -284,7 +342,7 @@ mod tests {
     #[test]
     fn long_steps_cost_at_most_two_days_of_integration_and_stay_finite() {
         let mut clock = CircadianClock::default();
-        let fatigue = clock.step(0.5, 0.2, 24.0 * 365.0, 1.0, 1.0);
+        let fatigue = clock.step(Light::outdoors(0.5), 0.2, 24.0 * 365.0, 1.0, 1.0);
         assert!(clock.x.is_finite() && clock.xc.is_finite());
         assert!((0.0..=1.0).contains(&fatigue));
     }
@@ -293,7 +351,42 @@ mod tests {
     fn a_zero_step_changes_nothing() {
         let mut clock = CircadianClock::default();
         let before = clock.clone();
-        assert_eq!(clock.step(1.0, 0.4, 0.0, 1.0, 1.0), 0.4);
+        assert_eq!(clock.step(Light::outdoors(1.0), 0.4, 0.0, 1.0, 1.0), 0.4);
         assert_eq!(clock, before);
     }
+
+    #[test]
+    fn at_bedtime_a_room_goes_dark_and_the_open_air_does_not() {
+        let mut clock = CircadianClock::default();
+        let indoors = Light {
+            daylight_fraction: 1.0,
+            daylight_factor: 0.015,
+            lamp_lux: ROOM_LIGHT_TEST_LUX,
+            indoors: true,
+        };
+        // Rested: the lamp and the window both reach the eye, the brighter
+        // winning (150 lux of daylight against a 200 lux lamp).
+        assert!(!clock.is_bedtime(0.0));
+        assert_eq!(clock.eye_lux(&indoors, 0.0), ROOM_LIGHT_TEST_LUX);
+        let window_only = Light {
+            lamp_lux: 0.0,
+            ..indoors
+        };
+        assert!((clock.eye_lux(&window_only, 0.0) - 150.0).abs() < 1e-9);
+        // Exhausted: bedtime whatever the clock says, and indoors that is
+        // darkness -- outdoors it is still the sun.
+        assert!(clock.is_bedtime(1.0));
+        assert_eq!(clock.eye_lux(&indoors, 1.0), 0.0);
+        assert_eq!(
+            clock.eye_lux(&Light::outdoors(1.0), 1.0),
+            OUTDOOR_DAYLIGHT_LUX
+        );
+        assert!(!clock.wants_lamp(1.0));
+        assert!(clock.wants_lamp(0.0));
+        clock.asleep = true;
+        assert!(!clock.wants_lamp(0.0), "asleep, nobody wants a lamp");
+        assert_eq!(clock.eye_lux(&Light::outdoors(1.0), 0.0), 0.0);
+    }
+
+    const ROOM_LIGHT_TEST_LUX: f64 = 200.0;
 }

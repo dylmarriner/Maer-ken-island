@@ -54,6 +54,11 @@
       "key": "hoskins2002",
       "citation": "Hoskins, B. J. and Hodges, K. I. (2002). New perspectives on the Northern Hemisphere winter storm tracks. Journal of the Atmospheric Sciences 59, 1041-1061.",
       "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "niwa_climate_series",
+      "citation": "Chappell, P. R. (2013-2016). The climate and weather of [Wellington, Canterbury, Otago, Southland, West Coast ...]. NIWA Science and Technology Series. National Institute of Water and Atmospheric Research, Wellington.",
+      "licence": "Facts cited with attribution"
     }
   ],
   "items": [
@@ -168,6 +173,21 @@
       "source": "hoskins2002",
       "confidence": "medium",
       "value": { "range": { "min": 8.0, "max": 15.0, "typical": 11.0 } }
+    },
+    {
+      "key": "maritime_land_annual_temperature_range",
+      "description": "Annual range (warmest minus coldest monthly mean) of near-surface air temperature at lowland stations of a mid-latitude oceanic island, New Zealand 40-46 degrees S",
+      "unit": "K",
+      "source": "niwa_climate_series",
+      "confidence": "low",
+      "value": {
+        "range": {
+          "min": 7.0,
+          "max": 16.0,
+          "typical": 10.0
+        }
+      },
+      "note": "About 8 K at exposed coasts (Wellington) and 10-11 K on the plains (Christchurch), rising to about 15-16 K in the most sheltered inland basins (Central Otago), the most continental climate in New Zealand. Coldest-month lowland means are about 2-9 C."
     }
   ]
 }

@@ -1,0 +1,999 @@
+{
+  "id": "material_properties",
+  "domain": "geology",
+  "title": "Density and hardness of the island's materials",
+  "retrieved": "2026-10-10",
+  "licence": "Numerical values cited as facts with attribution; no text, figures or datasets reproduced.",
+  "sources": [
+    {
+      "key": "hom",
+      "citation": "Anthony, J. W., Bideaux, R. A., Bladh, K. W. and Nichols, M. C. (eds) (1990-2003). Handbook of Mineralogy, vols I-V. Mineralogical Society of America, Chantilly, VA.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "crc",
+      "citation": "Haynes, W. M. (ed.) (2016). CRC Handbook of Chemistry and Physics, 97th edn. CRC Press, Boca Raton.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "asm",
+      "citation": "ASM International (1990). ASM Handbook, vol. 1 (Properties and Selection: Irons, Steels) and vol. 2 (Nonferrous Alloys); with standard values for fired clay brick and soda-lime glass.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "schon",
+      "citation": "Sch\u00f6n, J. H. (2011). Physical Properties of Rocks: A Workbook. Handbook of Petroleum Exploration and Production 8. Elsevier, Amsterdam.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "hillel",
+      "citation": "Hillel, D. (1998). Environmental Soil Physics. Academic Press, San Diego.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "wood",
+      "citation": "Forest Products Laboratory (2010). Wood Handbook: Wood as an Engineering Material. General Technical Report FPL-GTR-190. USDA Forest Service, Madison, WI.",
+      "licence": "Public domain (U.S. Government work)"
+    },
+    {
+      "key": "food",
+      "citation": "Mohsenin, N. N. (1986). Physical Properties of Plant and Animal Materials, 2nd edn. Gordon and Breach, New York.",
+      "licence": "Facts cited with attribution"
+    }
+  ],
+  "items": [
+    {
+      "key": "material_density_intrinsic",
+      "description": "Density of the material itself, without pore space: minerals, rocks, metals, fuels and dense organic matter",
+      "unit": "kg / m3",
+      "source": "hom",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "material",
+          "columns": [
+            "density_kg_m3"
+          ],
+          "rows": [
+            {
+              "label": "gold_ore",
+              "values": [
+                2700.0
+              ]
+            },
+            {
+              "label": "placer_gold",
+              "values": [
+                19300.0
+              ]
+            },
+            {
+              "label": "silver_ore",
+              "values": [
+                7200.0
+              ]
+            },
+            {
+              "label": "platinum_group_concentrate",
+              "values": [
+                21450.0
+              ]
+            },
+            {
+              "label": "iron_ore",
+              "values": [
+                5260.0
+              ]
+            },
+            {
+              "label": "magnetite_ore",
+              "values": [
+                5180.0
+              ]
+            },
+            {
+              "label": "ironsand",
+              "values": [
+                5000.0
+              ]
+            },
+            {
+              "label": "copper_ore",
+              "values": [
+                4190.0
+              ]
+            },
+            {
+              "label": "tin_ore",
+              "values": [
+                6990.0
+              ]
+            },
+            {
+              "label": "lead_ore",
+              "values": [
+                7580.0
+              ]
+            },
+            {
+              "label": "zinc_ore",
+              "values": [
+                4050.0
+              ]
+            },
+            {
+              "label": "nickel_ore",
+              "values": [
+                4800.0
+              ]
+            },
+            {
+              "label": "chromite",
+              "values": [
+                4790.0
+              ]
+            },
+            {
+              "label": "tungsten_ore",
+              "values": [
+                7300.0
+              ]
+            },
+            {
+              "label": "molybdenite",
+              "values": [
+                4730.0
+              ]
+            },
+            {
+              "label": "cinnabar",
+              "values": [
+                8100.0
+              ]
+            },
+            {
+              "label": "uraninite",
+              "values": [
+                9000.0
+              ]
+            },
+            {
+              "label": "lithium_ore",
+              "values": [
+                3150.0
+              ]
+            },
+            {
+              "label": "bauxite",
+              "values": [
+                2380.0
+              ]
+            },
+            {
+              "label": "diamond",
+              "values": [
+                3515.0
+              ]
+            },
+            {
+              "label": "ruby",
+              "values": [
+                4000.0
+              ]
+            },
+            {
+              "label": "sapphire",
+              "values": [
+                4000.0
+              ]
+            },
+            {
+              "label": "emerald",
+              "values": [
+                2760.0
+              ]
+            },
+            {
+              "label": "topaz",
+              "values": [
+                3530.0
+              ]
+            },
+            {
+              "label": "tourmaline",
+              "values": [
+                3060.0
+              ]
+            },
+            {
+              "label": "garnet",
+              "values": [
+                4300.0
+              ]
+            },
+            {
+              "label": "opal",
+              "values": [
+                2090.0
+              ]
+            },
+            {
+              "label": "nephrite",
+              "values": [
+                2970.0
+              ]
+            },
+            {
+              "label": "quartz_crystal",
+              "values": [
+                2650.0
+              ]
+            },
+            {
+              "label": "amethyst",
+              "values": [
+                2650.0
+              ]
+            },
+            {
+              "label": "agate",
+              "values": [
+                2600.0
+              ]
+            },
+            {
+              "label": "chalcedony",
+              "values": [
+                2600.0
+              ]
+            },
+            {
+              "label": "obsidian",
+              "values": [
+                2400.0
+              ]
+            },
+            {
+              "label": "granite",
+              "values": [
+                2650.0
+              ]
+            },
+            {
+              "label": "basalt",
+              "values": [
+                2950.0
+              ]
+            },
+            {
+              "label": "limestone",
+              "values": [
+                2550.0
+              ]
+            },
+            {
+              "label": "marble",
+              "values": [
+                2700.0
+              ]
+            },
+            {
+              "label": "sandstone",
+              "values": [
+                2350.0
+              ]
+            },
+            {
+              "label": "slate",
+              "values": [
+                2750.0
+              ]
+            },
+            {
+              "label": "flint",
+              "values": [
+                2600.0
+              ]
+            },
+            {
+              "label": "stone",
+              "values": [
+                2650.0
+              ]
+            },
+            {
+              "label": "sulfur",
+              "values": [
+                2070.0
+              ]
+            },
+            {
+              "label": "gypsum",
+              "values": [
+                2310.0
+              ]
+            },
+            {
+              "label": "phosphate_rock",
+              "values": [
+                3190.0
+              ]
+            },
+            {
+              "label": "feldspar",
+              "values": [
+                2560.0
+              ]
+            },
+            {
+              "label": "mica",
+              "values": [
+                2820.0
+              ]
+            },
+            {
+              "label": "graphite",
+              "values": [
+                2160.0
+              ]
+            },
+            {
+              "label": "zeolite",
+              "values": [
+                2150.0
+              ]
+            },
+            {
+              "label": "serpentine",
+              "values": [
+                2550.0
+              ]
+            },
+            {
+              "label": "kyanite",
+              "values": [
+                3610.0
+              ]
+            },
+            {
+              "label": "pyrite",
+              "values": [
+                5010.0
+              ]
+            },
+            {
+              "label": "coal",
+              "values": [
+                1300.0
+              ]
+            },
+            {
+              "label": "crude_oil",
+              "values": [
+                870.0
+              ]
+            },
+            {
+              "label": "natural_gas",
+              "values": [
+                0.717
+              ]
+            },
+            {
+              "label": "rock_salt",
+              "values": [
+                2170.0
+              ]
+            },
+            {
+              "label": "sea_salt",
+              "values": [
+                2170.0
+              ]
+            },
+            {
+              "label": "wood",
+              "values": [
+                500.0
+              ]
+            },
+            {
+              "label": "resin",
+              "values": [
+                1080.0
+              ]
+            },
+            {
+              "label": "fibre",
+              "values": [
+                1500.0
+              ]
+            },
+            {
+              "label": "fruit",
+              "values": [
+                1000.0
+              ]
+            },
+            {
+              "label": "nuts",
+              "values": [
+                1000.0
+              ]
+            },
+            {
+              "label": "fungi",
+              "values": [
+                1000.0
+              ]
+            },
+            {
+              "label": "plant_food",
+              "values": [
+                1000.0
+              ]
+            },
+            {
+              "label": "honey",
+              "values": [
+                1420.0
+              ]
+            },
+            {
+              "label": "beeswax",
+              "values": [
+                960.0
+              ]
+            },
+            {
+              "label": "seaweed",
+              "values": [
+                1000.0
+              ]
+            },
+            {
+              "label": "meat",
+              "values": [
+                1050.0
+              ]
+            },
+            {
+              "label": "hide",
+              "values": [
+                1100.0
+              ]
+            },
+            {
+              "label": "bone",
+              "values": [
+                1900.0
+              ]
+            },
+            {
+              "label": "feather",
+              "values": [
+                1300.0
+              ]
+            },
+            {
+              "label": "fish",
+              "values": [
+                1050.0
+              ]
+            },
+            {
+              "label": "shellfish",
+              "values": [
+                1050.0
+              ]
+            },
+            {
+              "label": "water",
+              "values": [
+                1000.0
+              ]
+            },
+            {
+              "label": "planks",
+              "values": [
+                500.0
+              ]
+            },
+            {
+              "label": "masonry",
+              "values": [
+                1900.0
+              ]
+            },
+            {
+              "label": "fuel",
+              "values": [
+                832.0
+              ]
+            },
+            {
+              "label": "quicklime",
+              "values": [
+                3340.0
+              ]
+            },
+            {
+              "label": "glass",
+              "values": [
+                2500.0
+              ]
+            },
+            {
+              "label": "gold_ingot",
+              "values": [
+                19320.0
+              ]
+            },
+            {
+              "label": "silver_ingot",
+              "values": [
+                10490.0
+              ]
+            },
+            {
+              "label": "copper_ingot",
+              "values": [
+                8960.0
+              ]
+            },
+            {
+              "label": "tin_ingot",
+              "values": [
+                7265.0
+              ]
+            },
+            {
+              "label": "lead_ingot",
+              "values": [
+                11340.0
+              ]
+            },
+            {
+              "label": "zinc_ingot",
+              "values": [
+                7140.0
+              ]
+            },
+            {
+              "label": "iron_ingot",
+              "values": [
+                7874.0
+              ]
+            },
+            {
+              "label": "steel",
+              "values": [
+                7850.0
+              ]
+            },
+            {
+              "label": "bronze",
+              "values": [
+                8800.0
+              ]
+            },
+            {
+              "label": "brass",
+              "values": [
+                8500.0
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Per-row sources -- hom: minerals and gems; crc: metals, salts, water, fuels, bone, keratin, resin, beeswax, quicklime; asm: alloys, brick, glass; schon: rocks; wood: air-dry softwood; food: plant and animal produce. Low-confidence rows (order of magnitude only): uraninite, fruit, nuts, fungi, plant_food, seaweed, hide, feather, shellfish. Natural gas is methane at 0 C and 1 atm. Rock values are typical mid-range: granite 2.6-2.75, basalt 2.8-3.0, limestone 2.3-2.7, sandstone 2.2-2.6 g/cm3."
+    },
+    {
+      "key": "material_density_bulk",
+      "description": "Bulk density of granular or porous material as gathered, pore space and water included",
+      "unit": "kg / m3",
+      "source": "hillel",
+      "confidence": "low",
+      "value": {
+        "table": {
+          "row_label": "material",
+          "columns": [
+            "density_kg_m3"
+          ],
+          "rows": [
+            {
+              "label": "pumice",
+              "values": [
+                600.0
+              ]
+            },
+            {
+              "label": "clay",
+              "values": [
+                1800.0
+              ]
+            },
+            {
+              "label": "kaolin",
+              "values": [
+                1600.0
+              ]
+            },
+            {
+              "label": "sand",
+              "values": [
+                1600.0
+              ]
+            },
+            {
+              "label": "silica_sand",
+              "values": [
+                1600.0
+              ]
+            },
+            {
+              "label": "gravel",
+              "values": [
+                1800.0
+              ]
+            },
+            {
+              "label": "peat",
+              "values": [
+                1000.0
+              ]
+            },
+            {
+              "label": "charcoal",
+              "values": [
+                250.0
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Sediments from soil physics (hillel): loose sand 1.4-1.7, clay as dug 1.6-2.0, gravel 1.5-1.9 t/m3; pumice (schon) 0.4-0.9 with its vesicles; lump charcoal (wood) 0.2-0.3; peat as cut and wet about the density of water. Bulk densities vary with moisture and packing by tens of percent."
+    },
+    {
+      "key": "mohs_hardness",
+      "description": "Mohs scratch hardness, the middle of each mineral's stated range",
+      "unit": "Mohs",
+      "source": "hom",
+      "confidence": "high",
+      "value": {
+        "table": {
+          "row_label": "material",
+          "columns": [
+            "mohs"
+          ],
+          "rows": [
+            {
+              "label": "gold_ore",
+              "values": [
+                7.0
+              ]
+            },
+            {
+              "label": "placer_gold",
+              "values": [
+                2.75
+              ]
+            },
+            {
+              "label": "silver_ore",
+              "values": [
+                2.25
+              ]
+            },
+            {
+              "label": "platinum_group_concentrate",
+              "values": [
+                4.25
+              ]
+            },
+            {
+              "label": "iron_ore",
+              "values": [
+                6.0
+              ]
+            },
+            {
+              "label": "magnetite_ore",
+              "values": [
+                6.0
+              ]
+            },
+            {
+              "label": "ironsand",
+              "values": [
+                5.5
+              ]
+            },
+            {
+              "label": "copper_ore",
+              "values": [
+                3.75
+              ]
+            },
+            {
+              "label": "tin_ore",
+              "values": [
+                6.5
+              ]
+            },
+            {
+              "label": "lead_ore",
+              "values": [
+                2.5
+              ]
+            },
+            {
+              "label": "zinc_ore",
+              "values": [
+                3.75
+              ]
+            },
+            {
+              "label": "nickel_ore",
+              "values": [
+                3.75
+              ]
+            },
+            {
+              "label": "chromite",
+              "values": [
+                5.5
+              ]
+            },
+            {
+              "label": "tungsten_ore",
+              "values": [
+                4.25
+              ]
+            },
+            {
+              "label": "molybdenite",
+              "values": [
+                1.25
+              ]
+            },
+            {
+              "label": "cinnabar",
+              "values": [
+                2.25
+              ]
+            },
+            {
+              "label": "uraninite",
+              "values": [
+                5.5
+              ]
+            },
+            {
+              "label": "lithium_ore",
+              "values": [
+                6.75
+              ]
+            },
+            {
+              "label": "bauxite",
+              "values": [
+                2.75
+              ]
+            },
+            {
+              "label": "diamond",
+              "values": [
+                10.0
+              ]
+            },
+            {
+              "label": "ruby",
+              "values": [
+                9.0
+              ]
+            },
+            {
+              "label": "sapphire",
+              "values": [
+                9.0
+              ]
+            },
+            {
+              "label": "emerald",
+              "values": [
+                7.75
+              ]
+            },
+            {
+              "label": "topaz",
+              "values": [
+                8.0
+              ]
+            },
+            {
+              "label": "tourmaline",
+              "values": [
+                7.25
+              ]
+            },
+            {
+              "label": "garnet",
+              "values": [
+                7.0
+              ]
+            },
+            {
+              "label": "opal",
+              "values": [
+                5.75
+              ]
+            },
+            {
+              "label": "nephrite",
+              "values": [
+                6.25
+              ]
+            },
+            {
+              "label": "quartz_crystal",
+              "values": [
+                7.0
+              ]
+            },
+            {
+              "label": "amethyst",
+              "values": [
+                7.0
+              ]
+            },
+            {
+              "label": "agate",
+              "values": [
+                6.75
+              ]
+            },
+            {
+              "label": "chalcedony",
+              "values": [
+                6.75
+              ]
+            },
+            {
+              "label": "obsidian",
+              "values": [
+                5.25
+              ]
+            },
+            {
+              "label": "flint",
+              "values": [
+                7.0
+              ]
+            },
+            {
+              "label": "sulfur",
+              "values": [
+                2.0
+              ]
+            },
+            {
+              "label": "gypsum",
+              "values": [
+                2.0
+              ]
+            },
+            {
+              "label": "phosphate_rock",
+              "values": [
+                5.0
+              ]
+            },
+            {
+              "label": "feldspar",
+              "values": [
+                6.0
+              ]
+            },
+            {
+              "label": "mica",
+              "values": [
+                2.5
+              ]
+            },
+            {
+              "label": "graphite",
+              "values": [
+                1.5
+              ]
+            },
+            {
+              "label": "zeolite",
+              "values": [
+                3.75
+              ]
+            },
+            {
+              "label": "serpentine",
+              "values": [
+                3.75
+              ]
+            },
+            {
+              "label": "kyanite",
+              "values": [
+                5.75
+              ]
+            },
+            {
+              "label": "pyrite",
+              "values": [
+                6.25
+              ]
+            },
+            {
+              "label": "rock_salt",
+              "values": [
+                2.5
+              ]
+            },
+            {
+              "label": "sea_salt",
+              "values": [
+                2.5
+              ]
+            },
+            {
+              "label": "glass",
+              "values": [
+                5.5
+              ]
+            },
+            {
+              "label": "gold_ingot",
+              "values": [
+                2.75
+              ]
+            },
+            {
+              "label": "silver_ingot",
+              "values": [
+                2.75
+              ]
+            },
+            {
+              "label": "copper_ingot",
+              "values": [
+                3.0
+              ]
+            },
+            {
+              "label": "tin_ingot",
+              "values": [
+                1.5
+              ]
+            },
+            {
+              "label": "lead_ingot",
+              "values": [
+                1.5
+              ]
+            },
+            {
+              "label": "zinc_ingot",
+              "values": [
+                2.5
+              ]
+            },
+            {
+              "label": "iron_ingot",
+              "values": [
+                4.0
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

@@ -51,8 +51,9 @@ pub struct Placed {
     pub size_m: (f32, f32, f32),
     /// Turned, in degrees, about the vertical.
     pub rotation_deg: f32,
-    /// The model, if one is named for it. `is_really_this` false means a
-    /// placeholder, and the key says so.
+    /// The model, if one exists for it. `None` for the three kinds nothing
+    /// models -- `property::WITHOUT_MODELS` -- which are drawn at the size
+    /// the island gives them and nothing else.
     pub model: Option<Model>,
 }
 
@@ -92,7 +93,7 @@ pub fn buildings(layout: &EstateLayout) -> Vec<Placed> {
                     building.rect_m.depth_m() as f32,
                 ),
                 rotation_deg: building.rotation_deg as f32,
-                model: Some(property::building(&building.kind)),
+                model: property::building(&building.kind),
             }
         })
         .collect()
@@ -149,7 +150,7 @@ pub fn things(layout: &EstateLayout) -> Vec<Placed> {
                 ),
                 size_m: size,
                 rotation_deg: 0.0,
-                model: Some(property::item(&item.kind, &item.name)),
+                model: property::item(&item.kind, &item.name),
             }
         })
         .collect()
@@ -355,8 +356,7 @@ mod tests {
                 machine.at,
                 room.at
             );
-            let model = machine.model.expect("a machine has a model");
-            assert!(model.is_really_this, "{} has no model", machine.name);
+            assert!(machine.model.is_some(), "{} has no model", machine.name);
         }
     }
 

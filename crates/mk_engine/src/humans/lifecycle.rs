@@ -5,7 +5,7 @@
 use super::genetics::GeneticsSnapshot;
 use super::registry::HumanRegistry;
 use super::reproduction::ReproductiveTimeline;
-use super::{BiologicalSex, HumanBeing, HumanStatus};
+use super::{ActionKind, BiologicalSex, HumanBeing, HumanStatus};
 use crate::io::HumanStorageError;
 use chrono::Utc;
 use mk_core::rng::{RngExt, RngKey, RngRegistry, SubsystemId};
@@ -313,46 +313,33 @@ pub fn step_lifecycle(
     // at 1.0, so the needs model never drains slower than its 1.5 MET
     // calibration. Lowering that floor would move survival times the realism
     // suite pins, so it is a separate, deliberate change.
-    let activity_met = match human.economy_action.kind {
-        // "walking_4_8_kmh_level": going somewhere on foot is what these are.
-        super::ActionKind::Move
-        | super::ActionKind::Explore
-        | super::ActionKind::SeekFood
-        | super::ActionKind::SeekWater
-        | super::ActionKind::SeekShelter => Some(WALKING_MET),
-        // "hand_mining".
-        super::ActionKind::Mine => Some(HAND_MINING_MET),
-        // "carpentry_general": building and crafting are both working timber
-        // and tools by hand, and the pack's row covers the activity rather
-        // than the product.
-        super::ActionKind::Build | super::ActionKind::Craft => Some(CARPENTRY_MET),
-        // Gathering wild food is walking and stooping, not the sustained
-        // cultivation "farming_manual" measures, so it is costed as the
-        // walking it mostly is. Leaving it at the baseline would be the
-        // stranger claim: a human pays to walk to the food and then picks it
-        // for free.
-        super::ActionKind::Gather => Some(WALKING_MET),
-        // Carrying, social approach, harm, intimacy, idling, resting and
-        // working at a computer have no row that fits them — the pack's
-        // "carrying_heavy_load" is a load this model does not track, and the
-        // rest are brief or sub-baseline — so they cost what they cost today.
-        _ => None,
-    };
+    let activity_met = activity_met_for(human.economy_action.kind, observation);
     let activity = activity_met.map_or(1.0, |met| {
         (met / super::super::regional::labour::BASELINE_MET).max(1.0)
     });
+    // On a step short enough to tell one meal from the next (the body
+    // clock's resolution, `circadian::MAX_RESOLVED_STEP_HOURS`), food and
+    // water come only from choosing to eat and drink; a longer step has its
+    // meals and drinks inside it.
+    let dt_hours = dt_years.max(0.0) / super::rates::HOUR_YEARS;
+    let meals = meals_for(human.economy_action.kind, dt_hours);
+    let drinks = drinks_for(human.economy_action.kind, dt_hours);
     let effort = match human.economy_action.kind {
         super::ActionKind::SeekFood | super::ActionKind::Gather => super::needs::EffortFocus {
             food: 1.5,
             water: 1.0,
             shelter: 1.0,
             activity,
+            meals,
+            drinks,
         },
         super::ActionKind::SeekWater => super::needs::EffortFocus {
             food: 1.0,
             water: 1.5,
             shelter: 1.0,
             activity,
+            meals,
+            drinks,
         },
         super::ActionKind::SeekShelter | super::ActionKind::Rest | super::ActionKind::Build => {
             super::needs::EffortFocus {
@@ -360,19 +347,27 @@ pub fn step_lifecycle(
                 water: 1.0,
                 shelter: 1.5,
                 activity,
+                meals,
+                drinks,
             }
         }
         _ => super::needs::EffortFocus {
             activity,
+            meals,
+            drinks,
             ..super::needs::EffortFocus::none()
         },
     };
     // The body clock and sleep pressure run first: whether this human is
     // asleep this step decides what light reaches their eyes and whether
     // their sleep pressure builds or dissipates.
-    let dt_hours = dt_years.max(0.0) / super::rates::HOUR_YEARS;
     human.needs.fatigue = human.circadian.step(
-        observation.daylight_fraction,
+        super::circadian::Light {
+            daylight_fraction: observation.daylight_fraction,
+            daylight_factor: observation.daylight_factor,
+            lamp_lux: observation.lamp_lux,
+            indoors: observation.indoors,
+        },
         human.needs.fatigue,
         dt_hours,
         human.needs.sleep_pressure_rate_factor(),
@@ -577,6 +572,90 @@ pub fn step_lifecycle(
 pub const WALKING_MET: f64 = 3.55;
 pub const HAND_MINING_MET: f64 = 6.75;
 pub const CARPENTRY_MET: f64 = 3.5;
+pub const SEXUAL_ACTIVITY_MET: f64 = 2.05;
+
+/// How food reaches a human over a step of `dt_hours` while doing `action`
+/// (see [`super::needs::Meals`]). Steps longer than the body clock resolves
+/// keep their meals implicit; shorter ones feed only someone who chose to
+/// eat (`SeekFood`). Gathering is collecting resources, not a meal.
+pub fn meals_for(action: ActionKind, dt_hours: f64) -> super::needs::Meals {
+    use super::needs::Meals;
+    if dt_hours > super::circadian::MAX_RESOLVED_STEP_HOURS {
+        Meals::Implicit
+    } else if is_eating(action) {
+        Meals::Eating
+    } else {
+        Meals::NotEating
+    }
+}
+
+/// Whether `action` is one a human eats during.
+pub fn is_eating(action: ActionKind) -> bool {
+    matches!(action, ActionKind::SeekFood)
+}
+
+/// How water reaches a human over a step of `dt_hours` while doing `action`
+/// (see [`super::needs::Drinks`]): as [`meals_for`], for drinking.
+pub fn drinks_for(action: ActionKind, dt_hours: f64) -> super::needs::Drinks {
+    use super::needs::Drinks;
+    if dt_hours > super::circadian::MAX_RESOLVED_STEP_HOURS {
+        Drinks::Implicit
+    } else if is_drinking(action) {
+        Drinks::Drinking
+    } else {
+        Drinks::NotDrinking
+    }
+}
+
+/// Whether `action` is one a human drinks during.
+pub fn is_drinking(action: ActionKind) -> bool {
+    matches!(action, ActionKind::SeekWater)
+}
+
+/// The metabolic equivalent of `action` where the packs give one, given what
+/// this human can see (`observation`), or `None` for the resting baseline.
+fn activity_met_for(action: ActionKind, observation: &super::AgentWorldObservation) -> Option<f64> {
+    // Seeking a resource is walking only while it is being looked for. Where
+    // it is already at hand -- the access at which `autonomy` has the human
+    // stay put and use it -- seeking food is eating, seeking water drinking
+    // and seeking shelter staying in it, at the resting baseline. Charging
+    // a whole step of walking for eating where one stands made seeking food
+    // in plenty a death spiral: 2.4 times the drain against a 1.5 times
+    // intake, so a hungry human in a cell full of food grew hungrier the
+    // more they sought it, until they died of it.
+    let at_hand = |access: f64| access >= super::autonomy::SEEK_SATISFIED_ACCESS;
+    match action {
+        ActionKind::SeekFood if at_hand(observation.caloric_access) => None,
+        ActionKind::SeekWater if at_hand(observation.hydration_access) => None,
+        ActionKind::SeekShelter if at_hand(observation.shelter_quality) => None,
+        // "walking_4_8_kmh_level": going somewhere on foot is what these are.
+        ActionKind::Move
+        | ActionKind::Explore
+        | ActionKind::SeekFood
+        | ActionKind::SeekWater
+        | ActionKind::SeekShelter => Some(WALKING_MET),
+        // "hand_mining".
+        ActionKind::Mine => Some(HAND_MINING_MET),
+        // "carpentry_general": building and crafting are both working timber
+        // and tools by hand, and the pack's row covers the activity rather
+        // than the product.
+        ActionKind::Build | ActionKind::Craft => Some(CARPENTRY_MET),
+        // Gathering wild food is walking and stooping, not the sustained
+        // cultivation "farming_manual" measures, so it is costed as the
+        // walking it mostly is. Leaving it at the baseline would be the
+        // stranger claim: a human pays to walk to the food and then picks it
+        // for free.
+        ActionKind::Gather => Some(WALKING_MET),
+        // "sexual_activity": the Compendium's codes from passive to
+        // vigorous effort.
+        ActionKind::Intimacy => Some(SEXUAL_ACTIVITY_MET),
+        // Carrying, social approach, harm, idling, resting and working at a
+        // computer have no row that fits them — the pack's
+        // "carrying_heavy_load" is a load this model does not track, and the
+        // rest are brief or sub-baseline — so they cost what they cost today.
+        _ => None,
+    }
+}
 
 /// Gompertz baseline hazard (per year) extrapolated to age 0, and its
 /// exponential rate of increase with age: human adult mortality doubles
@@ -1307,6 +1386,58 @@ mod tests {
             shelter_quality: 0.9,
             ..super::super::AgentWorldObservation::default()
         }
+    }
+
+    #[test]
+    fn seeking_what_is_at_hand_is_using_it_not_walking() {
+        // The death spiral this guards: a whole step of seeking was charged
+        // as walking, 2.4 times the baseline drain, against a 1.5 times
+        // intake, so a hungry human of reduced capacity in a cell full of
+        // food grew hungrier the more they sought it, and died of it.
+        use super::super::ActionKind::*;
+        let plenty = benign_observation();
+        let scarce = super::super::AgentWorldObservation {
+            caloric_access: 0.2,
+            hydration_access: 0.2,
+            shelter_quality: 0.2,
+            ..super::super::AgentWorldObservation::default()
+        };
+        for seek in [SeekFood, SeekWater, SeekShelter] {
+            assert_eq!(activity_met_for(seek, &plenty), None, "{seek:?} at hand");
+            assert_eq!(
+                activity_met_for(seek, &scarce),
+                Some(WALKING_MET),
+                "{seek:?} out looking"
+            );
+        }
+        // Going somewhere is walking wherever one is.
+        assert_eq!(activity_met_for(Explore, &plenty), Some(WALKING_MET));
+        assert_eq!(activity_met_for(Move, &plenty), Some(WALKING_MET));
+    }
+
+    #[test]
+    fn only_a_human_who_chooses_to_eat_or_drink_does_so_on_a_short_step() {
+        use super::super::needs::Meals;
+        use super::super::ActionKind::*;
+        let resolved = super::super::circadian::MAX_RESOLVED_STEP_HOURS;
+        assert_eq!(meals_for(SeekFood, 1.0 / 60.0), Meals::Eating);
+        assert_eq!(meals_for(SeekFood, resolved), Meals::Eating);
+        for other in [Gather, Rest, Explore, SeekWater, SeekShelter, Build] {
+            assert_eq!(meals_for(other, 1.0 / 60.0), Meals::NotEating, "{other:?}");
+        }
+        // A day-long step has its meals inside it, whatever was chosen.
+        assert_eq!(meals_for(Rest, 24.0), Meals::Implicit);
+        assert_eq!(meals_for(SeekFood, 24.0), Meals::Implicit);
+        use super::super::needs::Drinks;
+        assert_eq!(drinks_for(SeekWater, 1.0 / 60.0), Drinks::Drinking);
+        for other in [SeekFood, Gather, Rest, Explore] {
+            assert_eq!(
+                drinks_for(other, 1.0 / 60.0),
+                Drinks::NotDrinking,
+                "{other:?}"
+            );
+        }
+        assert_eq!(drinks_for(Rest, 24.0), Drinks::Implicit);
     }
 
     #[test]

@@ -25,6 +25,16 @@ pub const HYDRATION_LOSS_PER_DAY: f64 = 0.2;
 /// Access scales it, so even modest water access (a stream, rain) keeps
 /// a person hydrated, as it does in reality; only near-zero access kills.
 pub const MAX_DRINKING_PER_DAY: f64 = 10.0 * HYDRATION_LOSS_PER_DAY;
+/// The hydration reserve in litres: the lethal deficit of ~15% of body mass
+/// for a 70 kg adult (Adolph 1947), as [`HYDRATION_LOSS_PER_DAY`] reckons it.
+pub const HYDRATION_RESERVE_L: f64 = 10.5;
+/// How fast a person drinks water: healthy adults swallow over 10 mL/s in
+/// the timed water swallow test (Nathadwarawala, Nicklin & Wiles 1992,
+/// *J Neurol Neurosurg Psychiatry* 55:822-825).
+pub const DRINKING_ML_PER_SECOND: f64 = 10.0;
+/// Water a person takes in while actually drinking, in reserves per day.
+pub const DRINKING_RATE_PER_DAY: f64 =
+    DRINKING_ML_PER_SECOND * 86_400.0 / (HYDRATION_RESERVE_L * 1_000.0);
 /// Air temperature above which sweating raises water loss (°C).
 const SWEATING_ONSET_C: f64 = 25.0;
 /// Extra water loss per °C above `SWEATING_ONSET_C`, as a multiple of the
@@ -49,10 +59,20 @@ pub const STORED_ENERGY_DAYS: f64 = 60.0;
 /// al. 1950). Foraging access scales it, so a moderately productive
 /// biome feeds a person; only barren ground starves them.
 pub const MAX_EATING_DAYS_PER_DAY: f64 = 3.0;
+/// Minutes a day adults spend eating and drinking as their main activity:
+/// 64.5 (American Time Use Survey 2014-16, Eating & Health Module; USDA
+/// ERS Economic Information Bulletin 213).
+pub const EATING_MINUTES_PER_DAY: f64 = 64.5;
+/// Food a person takes in while actually eating, in days of expenditure per
+/// day: the day's ceiling ([`MAX_EATING_DAYS_PER_DAY`]) eaten in the time
+/// people spend at it. A meal refills an empty glycogen store in about
+/// twenty minutes.
+pub const MEAL_RATE_DAYS_PER_DAY: f64 =
+    MAX_EATING_DAYS_PER_DAY * 24.0 * 60.0 / EATING_MINUTES_PER_DAY;
 /// Glycogen level that fat and protein mobilisation (gluconeogenesis,
 /// ketosis) defends while stores last: fasting humans stay hungry and weak
 /// but functional until the stores run out.
-const FASTING_GLUCOSE_FLOOR: f64 = 0.15;
+pub const FASTING_GLUCOSE_FLOOR: f64 = 0.15;
 /// Fraction of surplus food energy stored as fat (the rest is the
 /// metabolic cost of storage; Flatt 1987).
 const FAT_STORAGE_EFFICIENCY: f64 = 0.75;
@@ -86,6 +106,41 @@ pub struct EffortFocus {
     /// `regional::labour::effort_for_met`).
     #[serde(default)]
     pub activity: f64,
+    /// Whether food is taken in over this step (see [`Meals`]).
+    #[serde(default)]
+    pub meals: Meals,
+    /// Whether water is taken in over this step (see [`Drinks`]).
+    #[serde(default)]
+    pub drinks: Drinks,
+}
+
+/// How water reaches a person over a step.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Drinks {
+    /// A step too long to resolve one drink from the next: drinking is
+    /// within it, at the day's rate wherever there is water.
+    #[default]
+    Implicit,
+    /// The person is drinking, at [`DRINKING_RATE_PER_DAY`] scaled by the
+    /// water within reach.
+    Drinking,
+    /// The person is doing something else: no water this step.
+    NotDrinking,
+}
+
+/// How food reaches a person over a step.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Meals {
+    /// A step too long to resolve one meal from the next: meals are within
+    /// it, at the day's rate wherever there is food. The rate the drain was
+    /// calibrated with, and the only meaningful one for a day-long step.
+    #[default]
+    Implicit,
+    /// The person is eating, at [`MEAL_RATE_DAYS_PER_DAY`] scaled by the
+    /// food within reach.
+    Eating,
+    /// The person is doing something else: no food this step.
+    NotEating,
 }
 
 impl EffortFocus {
@@ -97,6 +152,8 @@ impl EffortFocus {
             water: 1.0,
             shelter: 1.0,
             activity: 1.0,
+            meals: Meals::Implicit,
+            drinks: Drinks::Implicit,
         }
     }
 }
@@ -253,12 +310,20 @@ impl NeedsSnapshot {
             * activity
             * dt
             / GLYCOGEN_DAYS;
-        let glucose_gain = observation.caloric_access
-            * MAX_EATING_DAYS_PER_DAY
-            * capacity
-            * effort.food.clamp(1.0, 1.5)
-            * dt
-            / GLYCOGEN_DAYS;
+        let glucose_gain = match effort.meals {
+            Meals::Implicit => {
+                observation.caloric_access
+                    * MAX_EATING_DAYS_PER_DAY
+                    * capacity
+                    * effort.food.clamp(1.0, 1.5)
+                    * dt
+                    / GLYCOGEN_DAYS
+            }
+            Meals::Eating => {
+                observation.caloric_access * MEAL_RATE_DAYS_PER_DAY * capacity * dt / GLYCOGEN_DAYS
+            }
+            Meals::NotEating => 0.0,
+        };
         let mut glucose = self.glucose - glucose_drain + glucose_gain;
         let mut energy_reserve = self.energy_reserve.clamp(0.0, 1.0);
         // One unit of glycogen is this fraction of the fat/protein stores.
@@ -283,11 +348,19 @@ impl NeedsSnapshot {
             * (1.0 + WATER_LOSS_PER_EXTRA_ACTIVITY * (activity - 1.0));
         let thirst_drain =
             (self.thirst_sensitivity / THIRST_SENSITIVITY_BASELINE) * water_loss_per_day * dt;
-        let hydration_gain = observation.hydration_access
-            * capacity
-            * effort.water.clamp(1.0, 1.5)
-            * MAX_DRINKING_PER_DAY
-            * dt;
+        let hydration_gain = match effort.drinks {
+            Drinks::Implicit => {
+                observation.hydration_access
+                    * capacity
+                    * effort.water.clamp(1.0, 1.5)
+                    * MAX_DRINKING_PER_DAY
+                    * dt
+            }
+            Drinks::Drinking => {
+                observation.hydration_access * capacity * DRINKING_RATE_PER_DAY * dt
+            }
+            Drinks::NotDrinking => 0.0,
+        };
         let hydration = (self.hydration - thirst_drain + hydration_gain).clamp(0.0, 1.0);
 
         let fatigue = self.fatigue;
@@ -431,6 +504,8 @@ mod tests {
             water: 1.0,
             shelter: 1.0,
             activity: 1.0,
+            meals: Meals::Implicit,
+            drinks: Drinks::Implicit,
         };
 
         // Hourly steps: over longer ones both humans would fill their
@@ -446,5 +521,69 @@ mod tests {
         assert!(food_focused.glucose > unfocused.glucose);
         // Focus on food specifically shouldn't also boost hydration.
         assert!((food_focused.hydration - unfocused.hydration).abs() < 1e-9);
+    }
+
+    #[test]
+    fn eating_refills_glycogen_in_a_meal_and_not_eating_takes_in_nothing() {
+        let observation = AgentWorldObservation {
+            caloric_access: 1.0,
+            hydration_access: 1.0,
+            shelter_quality: 1.0,
+            ..AgentWorldObservation::default()
+        };
+        let minute = crate::humans::rates::HOUR_YEARS / 60.0;
+        let mut hungry = NeedsSnapshot::from_profile(&profile());
+        hungry.glucose = 0.3;
+        let eating = EffortFocus {
+            meals: Meals::Eating,
+            ..EffortFocus::none()
+        };
+        let not_eating = EffortFocus {
+            meals: Meals::NotEating,
+            ..EffortFocus::none()
+        };
+        let mut fed = hungry.clone();
+        let mut unfed = hungry.clone();
+        for _ in 0..20 {
+            fed = fed.step(&observation, 1.0, eating, minute);
+            unfed = unfed.step(&observation, 1.0, not_eating, minute);
+        }
+        // Twenty minutes at the table takes an empty-ish store most of the
+        // way to full; twenty minutes of anything else only drains it.
+        assert!(fed.glucose > 0.9, "fed {}", fed.glucose);
+        assert!(unfed.glucose < hungry.glucose);
+        // 64.5 minutes of eating a day carries the day's intake ceiling.
+        let day_at_table = MEAL_RATE_DAYS_PER_DAY * EATING_MINUTES_PER_DAY / (24.0 * 60.0);
+        assert!((day_at_table - MAX_EATING_DAYS_PER_DAY).abs() < 1e-12);
+    }
+
+    #[test]
+    fn drinking_takes_water_at_swallowing_speed_and_not_drinking_none() {
+        let observation = AgentWorldObservation {
+            caloric_access: 1.0,
+            hydration_access: 1.0,
+            shelter_quality: 1.0,
+            ..AgentWorldObservation::default()
+        };
+        let minute = crate::humans::rates::HOUR_YEARS / 60.0;
+        let mut thirsty = NeedsSnapshot::from_profile(&profile());
+        thirsty.hydration = 0.5;
+        let drinking = EffortFocus {
+            drinks: Drinks::Drinking,
+            ..EffortFocus::none()
+        };
+        let not_drinking = EffortFocus {
+            drinks: Drinks::NotDrinking,
+            ..EffortFocus::none()
+        };
+        let drunk = thirsty.step(&observation, 1.0, drinking, minute);
+        let dry = thirsty.step(&observation, 1.0, not_drinking, minute);
+        // A minute at 10 mL/s is 0.6 L of a 10.5 L reserve.
+        let gained = drunk.hydration - dry.hydration;
+        assert!(
+            (gained - 0.6 / HYDRATION_RESERVE_L).abs() < 1e-9,
+            "gained {gained}"
+        );
+        assert!(dry.hydration < thirsty.hydration);
     }
 }

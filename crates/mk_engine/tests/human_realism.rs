@@ -4,7 +4,7 @@
 
 use mk_core::human::{BiologicalSex, HumanId, HumanProfile, HumanSchema};
 use mk_core::rng::RngRegistry;
-use mk_engine::humans::circadian::CircadianClock;
+use mk_engine::humans::circadian::{CircadianClock, Light};
 use mk_engine::humans::lifecycle::{
     step_lifecycle, GOMPERTZ_AGING_RATE_PER_YEAR, GOMPERTZ_BASELINE_HAZARD_PER_YEAR,
 };
@@ -174,7 +174,7 @@ fn clock_period(tau: f64, day_hours: f64, light_hours: f64, lux_fraction: f64, d
             0.0
         };
         clock.asleep = false;
-        clock.step(daylight, 0.0, h, 1.0, 1.0);
+        clock.step(Light::outdoors(daylight), 0.0, h, 1.0, 1.0);
         clock.asleep = false;
         t += h;
         if t >= start {
@@ -246,14 +246,20 @@ fn a_bright_light_pulse_shifts_the_clock_within_the_published_limits() {
         let mut t = 0.0;
         // Spin up 10 days in darkness.
         while t < 240.0 {
-            clock.step(0.0, 0.0, h, 1.0, 1.0);
+            clock.step(Light::outdoors(0.0), 0.0, h, 1.0, 1.0);
             clock.asleep = false;
             t += h;
         }
         let mut s = 0.0;
         while s < hours {
             let lit = pulse.is_some_and(|(start, len)| s >= start && s < start + len);
-            clock.step(if lit { 1.0 } else { 0.0 }, 0.0, h, 1.0, 1.0);
+            clock.step(
+                Light::outdoors(if lit { 1.0 } else { 0.0 }),
+                0.0,
+                h,
+                1.0,
+                1.0,
+            );
             clock.asleep = false;
             s += h;
         }
@@ -279,6 +285,20 @@ fn a_bright_light_pulse_shifts_the_clock_within_the_published_limits() {
 /// sleep gate active, and the hour (relative to lights-off) of the last
 /// sleep onset.
 fn sleep_per_day(day_hours: f64, light_hours: f64, lux_fraction: f64, days: f64) -> (f64, f64) {
+    sleep_per_day_in(day_hours, light_hours, lux_fraction, None, days)
+}
+
+/// As [`sleep_per_day`], for a human who stays indoors in a room with
+/// `room = Some((daylight_factor, lamp_lux))`: daylight reaches them
+/// through the windows, a lamp is there when they want it, and at bedtime
+/// the room goes dark.
+fn sleep_per_day_in(
+    day_hours: f64,
+    light_hours: f64,
+    lux_fraction: f64,
+    room: Option<(f64, f64)>,
+    days: f64,
+) -> (f64, f64) {
     let mut clock = CircadianClock::with_tau(24.0);
     let mut fatigue = 0.3;
     let h = 0.1;
@@ -292,7 +312,16 @@ fn sleep_per_day(day_hours: f64, light_hours: f64, lux_fraction: f64, days: f64)
             0.0
         };
         let was_asleep = clock.asleep;
-        fatigue = clock.step(daylight, fatigue, h, 1.0, 1.0);
+        let light = match room {
+            Some((daylight_factor, lamp_lux)) => Light {
+                daylight_fraction: daylight,
+                daylight_factor,
+                lamp_lux,
+                indoors: true,
+            },
+            None => Light::outdoors(daylight),
+        };
+        fatigue = clock.step(light, fatigue, h, 1.0, 1.0);
         if clock.asleep && !was_asleep {
             onset = t % day_hours - light_hours;
         }
@@ -342,7 +371,7 @@ fn sleep_cannot_be_resisted_forever() {
     let mut fatigue = 0.1;
     let mut hours = 0.0;
     while !clock.asleep && hours < 72.0 {
-        fatigue = clock.step(1.0, fatigue, 0.1, 1.0, 1.0);
+        fatigue = clock.step(Light::outdoors(1.0), fatigue, 0.1, 1.0, 1.0);
         hours += 0.1;
     }
     assert!(clock.asleep && hours <= 50.0, "awake for {hours} h");
@@ -353,7 +382,8 @@ fn a_living_human_sleeps_at_night_through_the_whole_runtime() {
     // The full lifecycle pipeline, half-hourly steps for 16 days under a
     // 24 h day: after ten days to entrain (a new human's clock starts at an
     // arbitrary phase, like jet lag), the clock drives the brain into sleep
-    // each night.
+    // each night. Their mind decides each step, as the runtime's does: on
+    // steps this short, eating and drinking are its choices.
     let mut human = HumanBeing::new("realism-sleeper".into(), BiologicalSex::Female);
     let rng = RngRegistry::new([7u8; 32]);
     let dt = 0.5 * HOUR_YEARS;
@@ -375,6 +405,7 @@ fn a_living_human_sleeps_at_night_through_the_whole_runtime() {
             daylight_fraction: daylight,
             ..AgentWorldObservation::default()
         };
+        human.decide(&obs, step as u64, &rng);
         step_lifecycle(&mut human, dt, step as u64, &obs, &rng, (0, 0));
         if step >= 10 * 48 && human.neurochemistry.asleep {
             asleep_steps += 1;
@@ -442,7 +473,9 @@ fn adult_mortality_follows_the_reference_life_table() {
 /// change how hungry walking makes someone.
 #[test]
 fn action_costs_match_the_compendium_rows_they_came_from() {
-    use mk_engine::humans::lifecycle::{CARPENTRY_MET, HAND_MINING_MET, WALKING_MET};
+    use mk_engine::humans::lifecycle::{
+        CARPENTRY_MET, HAND_MINING_MET, SEXUAL_ACTIVITY_MET, WALKING_MET,
+    };
     use mk_engine::regional::labour::LabourTable;
 
     let table = LabourTable::load_default().expect("the labour packs load");
@@ -450,6 +483,7 @@ fn action_costs_match_the_compendium_rows_they_came_from() {
         (WALKING_MET, "walking_4_8_kmh_level", "walking"),
         (HAND_MINING_MET, "hand_mining", "mining by hand"),
         (CARPENTRY_MET, "carpentry_general", "carpentry"),
+        (SEXUAL_ACTIVITY_MET, "sexual_activity", "intimacy"),
     ] {
         let packed = table.met(row).unwrap_or_else(|e| panic!("{row}: {e:?}"));
         assert!(
@@ -640,5 +674,89 @@ fn a_resting_adult_still_dies_of_thirst_within_the_published_range() {
     assert!(
         days >= lo && days <= hi,
         "a resting adult ran dry after {days} days, outside the published {lo}-{hi}"
+    );
+}
+
+#[test]
+fn a_house_with_lamps_and_curtains_keeps_its_own_night_on_marr_kena() {
+    // D23. Out of doors a body cannot keep a night on a 36 h day: the sun
+    // is up when its clock says sleep, and nothing puts it out. In the
+    // house, daylight comes through windows at the room's daylight factor,
+    // a lamp gives room light after dark, and at bedtime the lamp goes out
+    // and the curtains are drawn -- and sleep comes back to the adult
+    // reference of 7-9 h.
+    use mk_engine::regional::energy::ROOM_LIGHT_LUX;
+    use mk_engine::regional::humans::{BEDROOM_DAYLIGHT_FACTOR, LIVING_ROOM_DAYLIGHT_FACTOR};
+    let lib = reference();
+    let table = lib
+        .item(ReferenceDomain::Humans, "sleep_need_by_age")
+        .unwrap()
+        .table()
+        .unwrap();
+    let lo = table.get("adult_18_64_years", "min").unwrap();
+    let hi = table.get("adult_18_64_years", "max").unwrap();
+    let (outdoors, _) = sleep_per_day(36.0, 24.0, 1.0, 20.0);
+    assert!(outdoors < lo, "outdoors on a 36 h day {outdoors} h");
+    for factor in [BEDROOM_DAYLIGHT_FACTOR, LIVING_ROOM_DAYLIGHT_FACTOR] {
+        for light_hours in [18.0, 24.0] {
+            let (indoors, _) =
+                sleep_per_day_in(36.0, light_hours, 1.0, Some((factor, ROOM_LIGHT_LUX)), 20.0);
+            assert!(
+                (lo..=hi).contains(&indoors),
+                "indoors at daylight factor {factor}, {light_hours} h of daylight: {indoors} h"
+            );
+        }
+    }
+    // And the same house on a 24 h day takes nothing away.
+    let (home, _) = sleep_per_day_in(
+        24.0,
+        16.0,
+        1.0,
+        Some((LIVING_ROOM_DAYLIGHT_FACTOR, ROOM_LIGHT_LUX)),
+        20.0,
+    );
+    assert!((lo..=hi).contains(&home), "{home} h");
+}
+
+#[test]
+fn the_lighting_figures_are_the_reference_packs() {
+    use mk_engine::regional::energy::{
+        LED_LAMP_LUMENS_PER_W, ROOM_LIGHT_LUX, ROOM_UTILISATION_FACTOR,
+    };
+    use mk_engine::regional::humans::{
+        BEDROOM_DAYLIGHT_FACTOR, KITCHEN_DAYLIGHT_FACTOR, LIVING_ROOM_DAYLIGHT_FACTOR,
+    };
+    let lib = reference();
+    let point = |domain, key| lib.item(domain, key).unwrap().point().unwrap();
+    assert_eq!(
+        ROOM_LIGHT_LUX,
+        point(ReferenceDomain::Humans, "room_light_illuminance")
+    );
+    assert_eq!(
+        LED_LAMP_LUMENS_PER_W,
+        point(ReferenceDomain::Labour, "led_lamp_efficacy")
+    );
+    assert_eq!(
+        Some(ROOM_UTILISATION_FACTOR),
+        lib.item(ReferenceDomain::Labour, "room_utilisation_factor")
+            .unwrap()
+            .central()
+    );
+    let factors = lib
+        .item(ReferenceDomain::Labour, "room_daylight_factor")
+        .unwrap()
+        .table()
+        .unwrap();
+    assert_eq!(
+        factors.get("bedroom", "daylight_factor"),
+        Some(BEDROOM_DAYLIGHT_FACTOR)
+    );
+    assert_eq!(
+        factors.get("living_room", "daylight_factor"),
+        Some(LIVING_ROOM_DAYLIGHT_FACTOR)
+    );
+    assert_eq!(
+        factors.get("kitchen", "daylight_factor"),
+        Some(KITCHEN_DAYLIGHT_FACTOR)
     );
 }

@@ -10,8 +10,9 @@
 //! Patch terrain is the medium-cell elevation, bilinearly interpolated,
 //! plus bounded deterministic detail ([`DETAIL_AMPLITUDE_M`]); it never
 //! changes the regional elevation. A cell is **buildable** if it is dry
-//! land (above [`MIN_BUILDABLE_ELEVATION_M`]), not in a lake or a river,
-//! and no steeper than [`MAX_SLOPE`] (2 m rise over the patch's 5 m
+//! land (above [`MIN_BUILDABLE_ELEVATION_M`]), not in a lake, not in a
+//! river's channel or the esplanade reserve beside it
+//! ([`ESPLANADE_RESERVE_M`]), and no steeper than [`MAX_SLOPE`] (2 m rise over the patch's 5 m
 //! spacing: upstream's `MAX_CLIMB_HEIGHT_M` applied at patch resolution).
 //!
 //! Site selection is deterministic: of all positions where the whole
@@ -24,12 +25,19 @@ use mk_core::grid::Grid2;
 use mk_island::{DomainLevel, IslandDomain, LocalPatchSpec};
 use serde::{Deserialize, Serialize};
 
+use super::ecology::river_width_m;
 use super::hydrology::{discharge_m3_s, RIVER_MIN_DISCHARGE_M3_S};
 use super::physical::RegionalPhysicalState;
 use crate::organisms::property::{PropertyBuildingKind, StarterProperty};
 
 /// Highest rise per metre a building may stand on: 2 m over 5 m.
 pub const MAX_SLOPE: f64 = 2.0 / 5.0;
+/// Width (m) of the esplanade reserve kept along each bank of a river
+/// whose bed averages 3 m or more: New Zealand's Resource Management Act
+/// 1991, s230(3). By Leopold & Maddock's `w = 3 Q^0.5` a 3 m bed carries
+/// 1 m^3/s, which is exactly the island's river threshold
+/// ([`RIVER_MIN_DISCHARGE_M3_S`]), so every river here takes a reserve.
+pub const ESPLANADE_RESERVE_M: f64 = 20.0;
 /// Lowest ground (m above sea level) counted as dry.
 pub const MIN_BUILDABLE_ELEVATION_M: f64 = 1.0;
 /// Peak size (m) of the deterministic detail added to patch terrain.
@@ -310,6 +318,9 @@ fn buildable_cells(
     let net = physical.flow_network();
     let (rows, cols) = (patch.rows, patch.cols);
     let mut ok = vec![false; rows * cols];
+    // Patch cells in each medium cell that carries a river, for the channel
+    // pass below.
+    let mut river_cells: BTreeMap<(usize, usize), Vec<usize>> = BTreeMap::new();
     for r in 0..rows {
         for c in 0..cols {
             let h = *terrain.get(r, c);
@@ -321,10 +332,11 @@ fn buildable_cells(
                 ((y / size) as usize).min(domain.rows(medium) - 1),
                 ((x / size) as usize).min(domain.cols(medium) - 1),
             );
-            if net.lake_depth_m(mr, mc) > 0.0
-                || discharge_m3_s(&physical.hydrology, domain, mr, mc) >= RIVER_MIN_DISCHARGE_M3_S
-            {
+            if net.lake_depth_m(mr, mc) > 0.0 {
                 continue;
+            }
+            if discharge_m3_s(&physical.hydrology, domain, mr, mc) >= RIVER_MIN_DISCHARGE_M3_S {
+                river_cells.entry((mr, mc)).or_default().push(r * cols + c);
             }
             // Steepest rise to a 4-neighbour, per metre.
             let mut steepest: f64 = 0.0;
@@ -336,6 +348,24 @@ fn buildable_cells(
                 }
             }
             ok[r * cols + c] = steepest <= MAX_SLOPE;
+        }
+    }
+    // A river takes its channel and the esplanade beside it, not the whole
+    // 2 km cell it flows through: a 1 m^3/s stream is 3 m wide. The channel
+    // runs along the cell's valley floor, so the lowest patch cells within
+    // it, in the share of the cell's width that channel and setback span,
+    // are not buildable.
+    for ((mr, mc), mut cells) in river_cells {
+        let width = river_width_m(discharge_m3_s(&physical.hydrology, domain, mr, mc));
+        let share = ((width + 2.0 * ESPLANADE_RESERVE_M) / size).clamp(0.0, 1.0);
+        let taken = ((cells.len() as f64) * share).ceil() as usize;
+        cells.sort_by(|&a, &b| {
+            terrain.data()[a]
+                .total_cmp(&terrain.data()[b])
+                .then(a.cmp(&b))
+        });
+        for &i in cells.iter().take(taken) {
+            ok[i] = false;
         }
     }
     ok

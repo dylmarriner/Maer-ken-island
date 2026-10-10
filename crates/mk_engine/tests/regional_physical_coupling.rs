@@ -161,6 +161,14 @@ fn thirty_days_change_the_weather_stay_finite_conserve_water_and_replay_exactly(
     let worst = closure.iter().cloned().fold(0.0, f64::max);
     assert!(worst <= 1e-9, "worst budget closure error {worst:e}");
     assert!(a.river_water_to_ocean_kg >= 0.0);
+    // And the sea is credited with exactly what the land sent it, every
+    // outlet's water reaching a sea column (D29).
+    let sent = a.hydrology.budget.surface_to_ocean_kg;
+    assert!(
+        (a.river_water_to_ocean_kg - sent).abs() <= 1e-9 * sent.max(1.0),
+        "ocean credited {} of the {sent} kg the land sent",
+        a.river_water_to_ocean_kg
+    );
 
     // Identical replay: the same final bits.
     let (again, _) = run(b, 30);
@@ -237,6 +245,8 @@ fn slow_a_year_of_island_weather_matches_the_reference_packs() {
     let (mut temp, mut rain, mut u, mut v) =
         (vec![0.0; n], vec![0.0; n], vec![0.0; n], vec![0.0; n]);
     let mut sst_by_day = Vec::new();
+    // Monthly mean surface temperature per cell: twelve thirty-day months.
+    let mut monthly = vec![vec![0.0; n]; 12];
     let (mut precip_kg, mut to_sea_kg, mut deep_kg) = (0.0, 0.0, 0.0);
     for day in 1..=steps {
         s.step(
@@ -253,6 +263,8 @@ fn slow_a_year_of_island_weather_matches_the_reference_packs() {
             for c in 0..cols {
                 let i = r * cols + c;
                 temp[i] += s.climate.surface_temperature.data()[i] / steps as f64;
+                let month = (((day - 1) * 12) / steps).min(11) as usize;
+                monthly[month][i] += s.climate.surface_temperature.data()[i] * 12.0 / steps as f64;
                 rain[i] += s.weather.precipitation.data()[i] * (local_day as f64 / 86_400.0);
                 let w = s.weather.wind.get(r, c);
                 u[i] += w.u_east / steps as f64;
@@ -357,6 +369,54 @@ fn slow_a_year_of_island_weather_matches_the_reference_packs() {
         - sst_by_day.iter().cloned().fold(f64::MAX, f64::min);
     println!("SST seasonal range {sst_range:.2} K");
     assert!((3.0..=6.0).contains(&sst_range), "SST range {sst_range}");
+
+    // 6. The year over lowland: warmest minus coldest monthly mean, median
+    //    over land cells below 300 m. New Zealand's lowland stations at
+    //    the same latitudes run 7-16 K (NIWA; `maritime_land_annual_
+    //    temperature_range`), the top of that only in sheltered inland
+    //    basins; tolerance x1.25 on the top, for 12 km cells that average
+    //    coast and interior. Before deviation D37's maritime air this was
+    //    ~46 K.
+    let mut lowland_ranges: Vec<f64> = (0..n)
+        .filter(|&i| elev.data()[i] > 0.0 && elev.data()[i] < 300.0)
+        .map(|i| {
+            let months: Vec<f64> = monthly.iter().map(|m| m[i]).collect();
+            months.iter().cloned().fold(f64::MIN, f64::max)
+                - months.iter().cloned().fold(f64::MAX, f64::min)
+        })
+        .collect();
+    lowland_ranges.sort_by(f64::total_cmp);
+    let median_range = lowland_ranges[lowland_ranges.len() / 2];
+    println!(
+        "lowland annual range: median {median_range:.1} K over {} cells (min {:.1}, max {:.1})",
+        lowland_ranges.len(),
+        lowland_ranges[0],
+        lowland_ranges[lowland_ranges.len() - 1]
+    );
+    assert!(
+        (7.0..=16.0 * 1.25).contains(&median_range),
+        "lowland annual range {median_range} K"
+    );
+
+    // 7. Rain on the land: every part of a mid-latitude maritime island is
+    //    watered. New Zealand's driest leeward basin gets 360 mm a year
+    //    (Alexandra, `orographic_precipitation_southern_alps`); the island's
+    //    median land cell must get at least that, and its driest tenth at
+    //    least half of it (D38 records the residual). Before the vapour
+    //    budget the median was 183 mm and the driest tenth 58.
+    let mut land_rain: Vec<f64> = (0..n)
+        .filter(|&i| elev.data()[i] > 0.0)
+        .map(|i| rain[i])
+        .collect();
+    land_rain.sort_by(f64::total_cmp);
+    let median_rain = land_rain[land_rain.len() / 2];
+    let driest_tenth = land_rain[land_rain.len() / 10];
+    println!("land rain: median {median_rain:.0} mm, driest tenth {driest_tenth:.0} mm");
+    assert!(median_rain >= 360.0, "median land rain {median_rain} mm");
+    assert!(
+        driest_tenth >= 180.0,
+        "driest tenth of land {driest_tenth} mm"
+    );
 
     // 5. Runoff: of the rain on land, the share that reaches the sea or
     //    recharges groundwater (Budyko, Fu omega 2.6) is 0.2-0.85 across

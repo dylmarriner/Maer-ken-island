@@ -461,8 +461,12 @@ async fn the_estate_is_served_as_geometry_a_renderer_can_place() {
                 building.rect_m.width_m(),
                 building.rect_m.depth_m()
             );
-            let model = island_ui_model(&building.kind);
-            assert!(!model.is_empty(), "{} has no model path", building.kind);
+            assert!(
+                island_ui_model(&building.kind).is_some()
+                    || WITHOUT_MODELS.contains(&building.kind.as_str()),
+                "{} is a building kind the renderer does not know",
+                building.kind
+            );
         }
         // The computer room is a *building* to the engine and a *room
         // inside the house* on the ground: `house_plan` is given the
@@ -587,14 +591,19 @@ async fn the_estate_is_served_as_geometry_a_renderer_can_place() {
 /// the backend has no business linking a renderer, and what this test
 /// needs is only that the kinds the island serves are kinds that table
 /// knows. `island_ui`'s own tests check the files exist.
-fn island_ui_model(kind: &str) -> &'static str {
+fn island_ui_model(kind: &str) -> Option<&'static str> {
     match kind {
-        "House" => "property/buildings/homestead_house.glb",
-        "Shed" => "property/buildings/equipment_shed.glb",
-        "Workshop" => "property/buildings/building_workshop.glb",
-        "Armoury" => "property/buildings/secure_armoury.glb",
-        "ComputerRoom" => "property/buildings/computer_room.glb",
-        "Garage" => "property/placeholder.glb",
-        _ => "",
+        "House" => Some("property/buildings/homestead_house.glb"),
+        "Shed" => Some("property/buildings/equipment_shed.glb"),
+        "Workshop" => Some("property/buildings/building_workshop.glb"),
+        "Armoury" => Some("property/buildings/secure_armoury.glb"),
+        "ComputerRoom" => Some("property/buildings/computer_room.glb"),
+        _ => None,
     }
 }
+
+/// Building kinds `island_ui` draws at their real size with no model on
+/// top (its `property::WITHOUT_MODELS`): there is no model of a garage, and
+/// drawing some other building's in its place would be a lie nobody could
+/// see.
+const WITHOUT_MODELS: [&str; 1] = ["Garage"];

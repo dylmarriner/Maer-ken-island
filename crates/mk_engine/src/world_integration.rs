@@ -1894,6 +1894,11 @@ impl WorldState {
                 resource_abundance,
                 computer_access: 0.0,
                 computer_bridge_available: 0.0,
+                // The planetary world has no wired buildings or rooms:
+                // electric light and windows are the island estate's.
+                lamp_lux: 0.0,
+                daylight_factor: 1.0,
+                indoors: false,
             };
 
             let audit = self.agents_state.agents[i].step(&observation, &self.rng);
@@ -2134,6 +2139,12 @@ impl WorldState {
                             )
                     }),
                     computer_bridge_available,
+                    // No estate layout or electricity on the planetary
+                    // grid: electric light and windows are the island
+                    // estate's.
+                    lamp_lux: 0.0,
+                    daylight_factor: 1.0,
+                    indoors: false,
                 },
             )
         };

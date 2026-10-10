@@ -30,8 +30,8 @@ use super::geophysics::{
     bootstrap_regional_geophysics, RegionalGeophysics, RegionalGeophysicsError,
 };
 use super::hydrology::{
-    bootstrap_regional_hydrology, freshwater_to_coarse_ocean_kg, step_regional_hydrology_on,
-    FlowNetwork,
+    bootstrap_regional_hydrology, freshwater_to_coarse_ocean_kg, route_to_coarse_sea,
+    step_regional_hydrology_on, FlowNetwork,
 };
 use super::levels::aggregate_medium_to_coarse;
 use super::ocean::step_regional_ocean;
@@ -249,6 +249,7 @@ impl RegionalPhysicalState {
             &self.zonal_background,
             &self.boundaries.atmosphere,
             &self.boundaries.ocean,
+            &self.weather.wind,
         );
     }
 
@@ -351,6 +352,7 @@ impl RegionalPhysicalState {
             &self.zonal_background,
             &self.boundaries.atmosphere,
             &self.boundaries.ocean,
+            &self.weather.wind,
         );
 
         // 6-7. Synoptic systems, then weather: the diagnostic field,
@@ -395,7 +397,12 @@ impl RegionalPhysicalState {
             &self.network,
             dt,
         );
-        let river_kg = freshwater_to_coarse_ocean_kg(&self.hydrology, &self.network, domain, dt);
+        // Every outlet's water reaches a sea column, even where the outlet
+        // sits in a coarse cell that is mostly land.
+        let river_kg = route_to_coarse_sea(
+            &freshwater_to_coarse_ocean_kg(&self.hydrology, &self.network, domain, dt),
+            &self.elevation_coarse_m,
+        );
         self.river_water_to_ocean_kg = river_kg.data().iter().sum();
         let coarse_area = domain.cell_area_m2(coarse);
         let mut ocean_precipitation = self.weather.precipitation.clone();

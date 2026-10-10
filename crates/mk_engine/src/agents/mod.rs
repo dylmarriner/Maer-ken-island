@@ -381,6 +381,25 @@ pub struct AgentWorldObservation {
     /// internet access still needs a real machine to sit at.
     #[serde(default)]
     pub computer_bridge_available: f64,
+    /// Electric light where this human stands (lux): the room's lamps when
+    /// it has lighting and the estate has power to run it, zero outdoors or
+    /// anywhere unwired. Read by the circadian clock alongside daylight.
+    /// `#[serde(default)]`: an observation recorded before lamps existed
+    /// had none.
+    #[serde(default)]
+    pub lamp_lux: f64,
+    /// Fraction of outdoor daylight reaching this human's eyes: 1 outdoors,
+    /// the room's daylight factor indoors. Defaults to 1, which is what an
+    /// observation recorded before rooms had windows meant.
+    #[serde(default = "full_daylight")]
+    pub daylight_factor: f64,
+    /// Inside a room that can be darkened (a lamp put out, curtains drawn).
+    #[serde(default)]
+    pub indoors: bool,
+}
+
+fn full_daylight() -> f64 {
+    1.0
 }
 
 impl Default for AgentWorldObservation {
@@ -398,6 +417,9 @@ impl Default for AgentWorldObservation {
             resource_abundance: 0.5,
             computer_access: 0.0,
             computer_bridge_available: 0.0,
+            lamp_lux: 0.0,
+            daylight_factor: 1.0,
+            indoors: false,
         }
     }
 }

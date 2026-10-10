@@ -772,6 +772,7 @@ fn people(life: &IslandLife) -> Vec<Person> {
                     (x >= 0.0 && y >= 0.0).then(|| ((y / size) as usize, (x / size) as usize))
                 }),
                 body_carbon_kg: life.materials.body_carbon_kg(id),
+                height_m: human.body.height_cm / 100.0,
             }
         })
         .collect()

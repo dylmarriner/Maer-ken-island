@@ -76,6 +76,14 @@ fn spin(elevation_of: impl Fn(&IslandDomain) -> Grid2<f64>) -> Run {
         &background,
         &boundaries.atmosphere,
         &boundaries.ocean,
+        // Calm: no air carried in, the energy balance on its own.
+        &mk_core::grid::Grid2::new(
+            &spec,
+            mk_engine::weather::WindVector {
+                u_east: 0.0,
+                v_north: 0.0,
+            },
+        ),
     );
     let mut seasonal = Vec::new();
     for step in 1..=4 * STEPS_PER_ORBIT {
@@ -102,6 +110,7 @@ fn spin(elevation_of: impl Fn(&IslandDomain) -> Grid2<f64>) -> Run {
             &background,
             &boundaries.atmosphere,
             &boundaries.ocean,
+            &calm(&domain),
         );
         if step > 3 * STEPS_PER_ORBIT {
             seasonal.push((
@@ -257,6 +266,7 @@ fn extreme_edge_forcing_stays_finite_and_physical() {
         &run.background,
         &b.atmosphere,
         &b.ocean,
+        &calm(&run.domain),
     );
     assert!(next
         .surface_temperature
@@ -296,6 +306,7 @@ fn extreme_edge_forcing_stays_finite_and_physical() {
         &run.background,
         &run.boundaries.atmosphere,
         &run.boundaries.ocean,
+        &calm(&run.domain),
     );
     assert_eq!(
         serde_json::to_string(&same).unwrap(),
@@ -348,7 +359,7 @@ fn weather_rows_carry_the_backgrounds_rain_without_spherical_weights() {
 }
 
 #[test]
-fn a_ridge_in_westerlies_wets_its_west_flank_and_keeps_the_total() {
+fn a_ridge_in_westerlies_wets_its_west_flank_and_dries_the_air_beyond_it() {
     // A north-south ridge, 2.5 km high and ~60 km wide, in open ocean.
     let ridge = |d: &IslandDomain| {
         elevation(d, |_, c| {
@@ -369,30 +380,56 @@ fn a_ridge_in_westerlies_wets_its_west_flank_and_keeps_the_total() {
         &run.background,
         &run.boundaries.atmosphere,
     );
-    let before: f64 = weather.precipitation.data().iter().sum();
+    let plain = weather.clone();
     apply_orographic_precipitation(&mut weather, &run.elevation, &run.domain);
-    let after: f64 = weather.precipitation.data().iter().sum();
-    assert!(
-        (after - before).abs() <= 0.01 * before,
-        "{before} -> {after}"
-    );
 
-    let flank = |cols: std::ops::Range<usize>| {
+    // Nothing changes over the sea, and nothing is taken from it: the rain
+    // the ridge wrings out is vapour that would have passed on, so the
+    // total rises rather than being moved from elsewhere (deviation D38).
+    for (i, (&h, (&before, &after))) in run
+        .elevation
+        .data()
+        .iter()
+        .zip(
+            plain
+                .precipitation
+                .data()
+                .iter()
+                .zip(weather.precipitation.data()),
+        )
+        .enumerate()
+    {
+        if h <= 0.0 {
+            assert_eq!(before, after, "sea cell {i} changed");
+        }
+    }
+    let before: f64 = plain.precipitation.data().iter().sum();
+    let after: f64 = weather.precipitation.data().iter().sum();
+    assert!(after > before, "{before} -> {after}");
+
+    let flank = |field: &mk_engine::weather::WeatherState, cols: std::ops::Range<usize>| {
         let mut sum = 0.0;
         let mut n = 0.0;
         for r in 60..100 {
             for c in cols.clone() {
-                sum += weather.precipitation.get(r, c);
+                sum += field.precipitation.get(r, c);
                 n += 1.0;
             }
         }
         sum / n
     };
-    let (west, east) = (flank(95..99), flank(101..105));
+    let (west, east) = (flank(&weather, 95..99), flank(&weather, 101..105));
     assert!(west > east, "west {west:.2} mm/day, east {east:.2} mm/day");
     // The reference pack's windward/leeward ratio for a barrier is 3-8; a
     // 60 km ridge on a 12 km grid should at least double the contrast.
     assert!(west / east >= 2.0, "ratio {:.2}", west / east);
+    // And the lee is drier than it would have been with no ridge upwind:
+    // its air lost vapour on the way over.
+    assert!(
+        east < flank(&plain, 101..105),
+        "the lee is not in a shadow: {east:.3} against {:.3}",
+        flank(&plain, 101..105)
+    );
 }
 
 #[test]
@@ -462,4 +499,15 @@ fn the_diurnal_range_follows_the_surface_and_the_daily_mean_is_unchanged() {
         let mean: f64 = clear.iter().map(|g| *g.get(r, c)).sum::<f64>() / samples as f64;
         assert!(mean.abs() < 1e-9, "daily mean offset {mean} at ({r},{c})");
     }
+}
+
+/// No wind: no air carried in, the energy balance on its own.
+fn calm(domain: &IslandDomain) -> Grid2<mk_engine::weather::WindVector> {
+    Grid2::new(
+        &domain.storage_spec(C),
+        mk_engine::weather::WindVector {
+            u_east: 0.0,
+            v_north: 0.0,
+        },
+    )
 }
