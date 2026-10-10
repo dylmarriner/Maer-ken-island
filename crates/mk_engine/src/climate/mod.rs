@@ -281,6 +281,51 @@ impl Climatology {
         self.recompute_means();
     }
 
+    /// The mean temperature of the warmest of the twelve phase bins at cell
+    /// `i` (K): the warmest "month", which is what Köppen's classification
+    /// is defined on.
+    ///
+    /// The annual mean when no bins have been filled yet -- a world that has
+    /// not been stepped -- because that is the only temperature there is,
+    /// and NaN for a cell outside the grid rather than a number that looks
+    /// like a temperature.
+    pub fn warmest_month_k(&self, i: usize) -> f64 {
+        self.bin_temperature_k
+            .iter()
+            .filter_map(|bin| bin.get(i).copied())
+            .fold(None, |warmest: Option<f64>, t| {
+                Some(warmest.map_or(t, |w| w.max(t)))
+            })
+            .unwrap_or_else(|| self.temperature_k.get(i).copied().unwrap_or(f64::NAN))
+    }
+
+    /// Mean temperature (K) of phase bin `month` (`0..CLIMATOLOGY_PHASE_BINS`)
+    /// at cell `i`.
+    ///
+    /// Falls back to the annual mean, as [`Self::warmest_month_k`] does, when
+    /// the bins have not been filled; NaN outside the grid.
+    pub fn month_temperature_k(&self, month: usize, i: usize) -> f64 {
+        Self::month_or_mean(&self.bin_temperature_k, &self.temperature_k, month, i)
+    }
+
+    /// Mean precipitation (mm/day) of phase bin `month` at cell `i`, with
+    /// the same fallbacks as [`Self::month_temperature_k`].
+    pub fn month_precipitation_mm_day(&self, month: usize, i: usize) -> f64 {
+        Self::month_or_mean(
+            &self.bin_precipitation_mm_day,
+            &self.precipitation_mm_day,
+            month,
+            i,
+        )
+    }
+
+    fn month_or_mean(bins: &[Vec<f64>], mean: &[f64], month: usize, i: usize) -> f64 {
+        match bins.get(month) {
+            Some(bin) => bin.get(i).copied().unwrap_or(f64::NAN),
+            None => mean.get(i).copied().unwrap_or(f64::NAN),
+        }
+    }
+
     fn recompute_means(&mut self) {
         let mean_of = |bins: &[Vec<f64>]| -> Vec<f64> {
             let cells = bins.first().map_or(0, Vec::len);
@@ -621,6 +666,69 @@ fn cell(grid: &Grid2<f64>, row: usize, col: usize) -> f64 {
         *grid.get(row, col)
     } else {
         0.0
+    }
+}
+
+#[cfg(test)]
+mod warmest_month_tests {
+    use super::*;
+
+    fn grid(value: f64) -> Grid2<f64> {
+        Grid2::from_data(
+            &mk_core::grid::GridSpec::new(1, 2),
+            vec![value, value + 1.0],
+        )
+    }
+
+    #[test]
+    fn the_warmest_month_is_the_warmest_bin_not_the_mean() {
+        let mut c = Climatology::default();
+        let rain = grid(1.0);
+        // Twelve months, one per bin, rising to a peak in the seventh.
+        for month in 0..CLIMATOLOGY_PHASE_BINS {
+            let t = 280.0 + 10.0 * (1.0 - ((month as f64 - 6.0).abs() / 6.0));
+            c.update(&grid(t), &rain, 1.0, (month as f64 + 0.5) / 12.0);
+        }
+        assert!(
+            (c.warmest_month_k(0) - 290.0).abs() < 1e-9,
+            "{}",
+            c.warmest_month_k(0)
+        );
+        assert!((c.warmest_month_k(1) - 291.0).abs() < 1e-9);
+        assert!(
+            c.warmest_month_k(0) > c.temperature_k[0],
+            "the warmest month must be warmer than the annual mean"
+        );
+    }
+
+    #[test]
+    fn each_month_reads_back_what_was_folded_into_its_bin() {
+        let mut c = Climatology::default();
+        for month in 0..CLIMATOLOGY_PHASE_BINS {
+            let m = month as f64;
+            c.update(&grid(270.0 + m), &grid(m), 1.0, (m + 0.5) / 12.0);
+        }
+        for month in 0..CLIMATOLOGY_PHASE_BINS {
+            let m = month as f64;
+            assert!((c.month_temperature_k(month, 0) - (270.0 + m)).abs() < 1e-9);
+            assert!((c.month_temperature_k(month, 1) - (271.0 + m)).abs() < 1e-9);
+            assert!((c.month_precipitation_mm_day(month, 0) - m).abs() < 1e-9);
+        }
+        assert!(c.month_temperature_k(0, 2).is_nan());
+    }
+
+    #[test]
+    fn an_unstepped_climatology_falls_back_to_the_only_temperature_it_has() {
+        let c = Climatology {
+            temperature_k: vec![285.0],
+            ..Climatology::default()
+        };
+        assert_eq!(c.warmest_month_k(0), 285.0);
+        assert_eq!(c.month_temperature_k(4, 0), 285.0);
+        assert!(
+            c.warmest_month_k(7).is_nan(),
+            "outside the grid is not a temperature"
+        );
     }
 }
 
