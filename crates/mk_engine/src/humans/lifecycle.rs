@@ -572,6 +572,7 @@ pub fn step_lifecycle(
 pub const WALKING_MET: f64 = 3.55;
 pub const HAND_MINING_MET: f64 = 6.75;
 pub const CARPENTRY_MET: f64 = 3.5;
+pub const SEXUAL_ACTIVITY_MET: f64 = 2.05;
 
 /// How food reaches a human over a step of `dt_hours` while doing `action`
 /// (see [`super::needs::Meals`]). Steps longer than the body clock resolves
@@ -645,8 +646,11 @@ fn activity_met_for(action: ActionKind, observation: &super::AgentWorldObservati
         // stranger claim: a human pays to walk to the food and then picks it
         // for free.
         ActionKind::Gather => Some(WALKING_MET),
-        // Carrying, social approach, harm, intimacy, idling, resting and
-        // working at a computer have no row that fits them — the pack's
+        // "sexual_activity": the Compendium's codes from passive to
+        // vigorous effort.
+        ActionKind::Intimacy => Some(SEXUAL_ACTIVITY_MET),
+        // Carrying, social approach, harm, idling, resting and working at a
+        // computer have no row that fits them — the pack's
         // "carrying_heavy_load" is a load this model does not track, and the
         // rest are brief or sub-baseline — so they cost what they cost today.
         _ => None,

@@ -161,6 +161,14 @@ fn thirty_days_change_the_weather_stay_finite_conserve_water_and_replay_exactly(
     let worst = closure.iter().cloned().fold(0.0, f64::max);
     assert!(worst <= 1e-9, "worst budget closure error {worst:e}");
     assert!(a.river_water_to_ocean_kg >= 0.0);
+    // And the sea is credited with exactly what the land sent it, every
+    // outlet's water reaching a sea column (D29).
+    let sent = a.hydrology.budget.surface_to_ocean_kg;
+    assert!(
+        (a.river_water_to_ocean_kg - sent).abs() <= 1e-9 * sent.max(1.0),
+        "ocean credited {} of the {sent} kg the land sent",
+        a.river_water_to_ocean_kg
+    );
 
     // Identical replay: the same final bits.
     let (again, _) = run(b, 30);

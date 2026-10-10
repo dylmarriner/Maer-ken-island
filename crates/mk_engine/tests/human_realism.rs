@@ -473,7 +473,9 @@ fn adult_mortality_follows_the_reference_life_table() {
 /// change how hungry walking makes someone.
 #[test]
 fn action_costs_match_the_compendium_rows_they_came_from() {
-    use mk_engine::humans::lifecycle::{CARPENTRY_MET, HAND_MINING_MET, WALKING_MET};
+    use mk_engine::humans::lifecycle::{
+        CARPENTRY_MET, HAND_MINING_MET, SEXUAL_ACTIVITY_MET, WALKING_MET,
+    };
     use mk_engine::regional::labour::LabourTable;
 
     let table = LabourTable::load_default().expect("the labour packs load");
@@ -481,6 +483,7 @@ fn action_costs_match_the_compendium_rows_they_came_from() {
         (WALKING_MET, "walking_4_8_kmh_level", "walking"),
         (HAND_MINING_MET, "hand_mining", "mining by hand"),
         (CARPENTRY_MET, "carpentry_general", "carpentry"),
+        (SEXUAL_ACTIVITY_MET, "sexual_activity", "intimacy"),
     ] {
         let packed = table.met(row).unwrap_or_else(|e| panic!("{row}: {e:?}"));
         assert!(

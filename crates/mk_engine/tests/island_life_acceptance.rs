@@ -99,7 +99,7 @@ const DAY: u64 = 86_400;
 /// Audited: 196 of 196, no shortfalls, 13.0 and 10.4 kg against 13.0 and
 /// 10.4, Gem-D asleep 56 of 168 hours (48 at home), Gem-K 54 (46),
 /// temperate-forest NPP 567.
-const WEEK_DIGEST: &str = "372a04e8301edb401e038e8e2636ec18caed2ad080cca1b6b01e62cc486ea032";
+const WEEK_DIGEST: &str = "c6a56a7ea7097370c6b4b264d422d98379c77fcca7581166cc8be0d2855cf700";
 
 fn repo(path: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))

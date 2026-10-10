@@ -1423,8 +1423,14 @@ fn step_by(
 ///
 /// Returns whether the attempt succeeded.
 fn apply_intimacy(initiator: &mut HumanBeing, target: &mut HumanBeing) -> bool {
+    // Willing is the target's own desire: their attraction, and their libido
+    // less what their last act still satisfies. Consent that ignored their
+    // satiety made every one of the initiator's whims an act, the partner as
+    // satisfied as they were.
+    let desire =
+        target.reproduction.libido * (1.0 - target.reproduction.satisfaction.clamp(0.0, 1.0));
     let willing =
-        target.reproduction.attraction_average >= 0.4 && target.reproduction.libido >= 0.3;
+        target.reproduction.attraction_average >= 0.4 && desire >= reproduction::CONSENT_DESIRE;
 
     if willing {
         for person in [&mut *initiator, &mut *target] {

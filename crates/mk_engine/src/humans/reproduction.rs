@@ -41,19 +41,25 @@ fn default_baseline_libido() -> f64 {
     DEFAULT_LIBIDO
 }
 
-/// Time constant (days) over which sexual satisfaction wears off after an
-/// act, so desire returns. Calibrated so a willing couple left to their own
-/// choices are intimate about as often as couples measured by the General
-/// Social Survey: some 55 times a year for married and cohabiting adults in
-/// 2014 and 80 for adults in their twenties (Twenge, Sherman & Wells 2017,
-/// Arch. Sex. Behav. 46:2389). `humans_choose_intimacy_about_as_often_as_
-/// couples_do` measures it.
-pub const SEXUAL_SATIETY_TIME_CONSTANT_DAYS: f64 = 20.0;
 /// Mean interval (days) between acts for married and cohabiting couples:
-/// 365.25 / 55, the same survey (Twenge et al. 2017). A step at least this
-/// long holds a whole interval, so a regular couple's desire has returned
-/// within it whatever the satiety's decay says.
+/// 365.25 / 55, from the General Social Survey (Twenge, Sherman & Wells
+/// 2017, Arch. Sex. Behav. 46:2389; 80 a year for adults in their
+/// twenties). A step at least this long holds a whole interval, so a
+/// regular couple's desire has returned within it whatever the satiety's
+/// decay says.
 pub const MEAN_INTERVAL_BETWEEN_ACTS_DAYS: f64 = 365.25 / 55.0;
+/// Desire (libido less what the last act still satisfies) a partner needs
+/// to be willing (`humans::apply_intimacy`).
+pub const CONSENT_DESIRE: f64 = 0.3;
+/// Time constant (days) over which sexual satisfaction wears off after an
+/// act, so desire returns. An act satisfies both partners fully, and a
+/// partner of the default libido is willing again once satisfaction has
+/// fallen to `1 - CONSENT_DESIRE / DEFAULT_LIBIDO` = one half; setting that
+/// moment at the survey's mean interval gives `interval / ln 2`, about 9.6
+/// days. `humans_choose_intimacy_about_as_often_as_couples_do` measures
+/// the frequency it produces.
+pub const SEXUAL_SATIETY_TIME_CONSTANT_DAYS: f64 =
+    MEAN_INTERVAL_BETWEEN_ACTS_DAYS / std::f64::consts::LN_2;
 
 fn default_baseline_arousal() -> f64 {
     DEFAULT_AROUSAL
@@ -716,5 +722,13 @@ mod tests {
         }
 
         assert!(starved.libido <= fed.libido);
+    }
+
+    #[test]
+    fn desire_returns_to_consent_at_the_surveys_mean_interval() {
+        let satisfied =
+            (-MEAN_INTERVAL_BETWEEN_ACTS_DAYS / SEXUAL_SATIETY_TIME_CONSTANT_DAYS).exp();
+        let desire = DEFAULT_LIBIDO * (1.0 - satisfied);
+        assert!((desire - CONSENT_DESIRE).abs() < 1e-12, "desire {desire}");
     }
 }
