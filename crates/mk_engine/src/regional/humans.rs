@@ -24,7 +24,7 @@ use mk_core::rng::RngRegistry;
 use serde::{Deserialize, Serialize};
 
 use super::ecology::RegionalEcologyState;
-use super::energy::EstateEnergy;
+use super::energy::{EstateEnergy, ROOM_LIGHT_LUX};
 use super::estate_layout::{EstateLayout, Space, SpaceKind};
 use super::levels::sample_coarse_at_medium;
 use super::physical::RegionalPhysicalState;
@@ -99,6 +99,28 @@ pub struct RegionalHumanContext<'a> {
     /// which means the island stops being reproducible, deliberately, and
     /// is why this is opt-in and why `replay`/`inspect` never attach it.
     pub computer_bridge: Option<&'a dyn crate::humans::computer_bridge::ComputerBridge>,
+}
+
+/// Minimum average daylight factors of BS 8206-2:2008 (daylighting code
+/// of practice): the fraction of outdoor daylight a room's windows admit
+/// (`fixtures/reference/labour`, `room_daylight_factor`). They are the
+/// standard's recommended minimums for a dwelling, which an ordinary house
+/// meets or exceeds.
+pub const BEDROOM_DAYLIGHT_FACTOR: f64 = 0.01;
+pub const LIVING_ROOM_DAYLIGHT_FACTOR: f64 = 0.015;
+pub const KITCHEN_DAYLIGHT_FACTOR: f64 = 0.02;
+
+/// The daylight factor of a house space from its label: bedrooms and the
+/// kitchen have their own figures, and every other room -- lounge,
+/// bathroom, computer room, hall -- the living-room one.
+pub fn room_daylight_factor(label: &str) -> f64 {
+    if label.contains("Bedroom") {
+        BEDROOM_DAYLIGHT_FACTOR
+    } else if label == "Kitchen" {
+        KITCHEN_DAYLIGHT_FACTOR
+    } else {
+        LIVING_ROOM_DAYLIGHT_FACTOR
+    }
 }
 
 fn founders_estate(property: &PropertySystem) -> Option<&StarterProperty> {
@@ -271,6 +293,23 @@ pub fn observe(
     });
     let gate = founders_estate(ctx.property).is_some_and(|p| property_grants_computer(p, agent_id));
     let powered = ctx.energy.has_stored_supply(ctx.solar_kw);
+    // In the house, daylight comes through the windows and a lamp is
+    // there after dark while the estate has supply (the hourly energy step
+    // switches and charges it); at bedtime the room can be made dark.
+    // Elsewhere -- outdoors, and the working buildings with their wide
+    // doors -- the light is the day's.
+    let house_room = here.and_then(|p| match p.space {
+        Space::Inside(id) if ctx.energy.is_wired(id) => {
+            ctx.layout.spaces.iter().find(|s| s.id == id)
+        }
+        _ => None,
+    });
+    let lamp_lux = if house_room.is_some() && powered {
+        ROOM_LIGHT_LUX
+    } else {
+        0.0
+    };
+    let daylight_factor = house_room.map_or(1.0, |room| room_daylight_factor(&room.label));
     let coarse_r =
         ((domain.cell_center_m(medium, r, c).1) / domain.cell_size_m(DomainLevel::Coarse)) as usize;
     let coarse_c =
@@ -295,6 +334,9 @@ pub fn observe(
         } else {
             0.0
         },
+        lamp_lux,
+        daylight_factor,
+        indoors: house_room.is_some(),
     })
 }
 

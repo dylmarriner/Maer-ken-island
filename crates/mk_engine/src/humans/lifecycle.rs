@@ -372,7 +372,12 @@ pub fn step_lifecycle(
     // their sleep pressure builds or dissipates.
     let dt_hours = dt_years.max(0.0) / super::rates::HOUR_YEARS;
     human.needs.fatigue = human.circadian.step(
-        observation.daylight_fraction,
+        super::circadian::Light {
+            daylight_fraction: observation.daylight_fraction,
+            daylight_factor: observation.daylight_factor,
+            lamp_lux: observation.lamp_lux,
+            indoors: observation.indoors,
+        },
         human.needs.fatigue,
         dt_hours,
         human.needs.sleep_pressure_rate_factor(),

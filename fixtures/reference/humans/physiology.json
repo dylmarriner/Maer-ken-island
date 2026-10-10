@@ -79,6 +79,11 @@
       "key": "naismith1892",
       "citation": "Naismith, W. W. (1892). Excursions: Cruach Ardran, Stobinian, and Ben More. Scottish Mountaineering Club Journal 2, 136 (Naismith's rule).",
       "licence": "Public domain"
+    },
+    {
+      "key": "gooley2011",
+      "citation": "Gooley, J. J., Chamberlain, K., Smith, K. A., Khalsa, S. B. S., Rajaratnam, S. M. W., Van Reen, E., Zeitzer, J. M., Czeisler, C. A. and Lockley, S. W. (2011). Exposure to room light before bedtime suppresses melatonin onset and shortens melatonin duration in humans. Journal of Clinical Endocrinology & Metabolism 96, E463-E472.",
+      "licence": "Facts cited with attribution"
     }
   ],
   "items": [
@@ -292,6 +297,17 @@
       "confidence": "medium",
       "value": { "range": { "min": 0.3, "max": 0.45, "typical": 0.33 } },
       "note": "About one third of body mass for sustained marching; loads above ~45% sharply raise injury and energy cost."
+    },
+    {
+      "key": "room_light_illuminance",
+      "description": "Illuminance at the eye of ordinary indoor room light in the evening",
+      "unit": "lux",
+      "source": "gooley2011",
+      "confidence": "medium",
+      "value": {
+        "point": 200.0
+      },
+      "note": "The room-light condition of Gooley et al. (2011) was < 200 lux against < 3 lux dim light; 200 lux is its upper bound. Room light before bedtime suppressed melatonin and delayed its onset by ~90 min against dim light."
     }
   ]
 }

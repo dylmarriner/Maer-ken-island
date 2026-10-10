@@ -17,17 +17,25 @@
 //!   stoichiometry. The hydrogen's water is not booked until Task 3's
 //!   material ledger exists.
 //!
+//! - **Lighting**: every room of the house is wired for lamps, sized by
+//!   the lumen method to give ordinary room light (Gooley et al. 2011's
+//!   < 200 lux) over the room's own floor. A room's lamps are on while
+//!   someone is awake in it and daylight is dimmer than they are, and
+//!   draw from the same supply as everything else.
+//!
 //! There is no refinery: fuel is finite until Phase 4b's production route
 //! (deviation D16).
 
 use std::collections::BTreeSet;
+
+use super::estate_layout::{EstateLayout, SpaceId};
 
 use mk_core::flux::{FluxEntry, FluxKind, Ledger, Reservoir};
 use mk_island::EstateEnergyConfig;
 use serde::{Deserialize, Serialize};
 
 use crate::conservation::O2_PER_CARBON;
-use crate::organisms::property::{PropertyItemKind, StarterProperty};
+use crate::organisms::property::{PropertyBuildingKind, PropertyItemKind, StarterProperty};
 
 /// Lower heating value of diesel (kWh per litre): 35.9 MJ/L.
 pub const DIESEL_KWH_PER_LITRE: f64 = 9.97;
@@ -50,6 +58,26 @@ const INITIAL_TANK_FRACTION: f64 = 0.25;
 /// Rated power (kW) while in use of each load class.
 const COMPUTER_KW: f64 = 0.2;
 const POWER_TOOL_KW: f64 = 1.5;
+/// Illuminance of ordinary room light at the eye (lux): the room-light
+/// condition of Gooley et al. (2011), J. Clin. Endocrinol. Metab. 96:E463,
+/// "< 200 lux", at its upper bound (`fixtures/reference/humans`,
+/// `room_light_illuminance`).
+pub const ROOM_LIGHT_LUX: f64 = 200.0;
+/// Luminous efficacy of the lamps (lm/W): the ENERGY STAR Lamps v2.0
+/// minimum for an omnidirectional LED lamp (`fixtures/reference/labour`,
+/// `led_lamp_efficacy`).
+pub const LED_LAMP_LUMENS_PER_W: f64 = 80.0;
+/// Fraction of lamp output that reaches the working plane of a small
+/// domestic room: the lumen method's utilisation factor, CIBSE (2012)
+/// typical 0.5 (`room_utilisation_factor`).
+pub const ROOM_UTILISATION_FACTOR: f64 = 0.5;
+
+/// Electric power (kW) of lamps giving [`ROOM_LIGHT_LUX`] over `floor_m2`:
+/// the lumen method, `E A = F UF`, at the lamps' efficacy.
+pub fn room_lighting_kw(floor_m2: f64) -> f64 {
+    ROOM_LIGHT_LUX * floor_m2.max(0.0) / (LED_LAMP_LUMENS_PER_W * ROOM_UTILISATION_FACTOR) / 1_000.0
+}
+
 /// Diesel density and composition (average C₁₂H₂₃) and petrol (C₈H₁₅).
 const MOLAR_MASS_C: f64 = 12.011;
 const MOLAR_MASS_H: f64 = 1.008;
@@ -130,6 +158,22 @@ pub struct Load {
     pub name: String,
     pub kw: f64,
     pub in_use: bool,
+}
+
+/// One room's lamps.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RoomLighting {
+    pub space: SpaceId,
+    pub label: String,
+    pub kw: f64,
+    pub in_use: bool,
+}
+
+/// What draws in a step: an item, or a room's lamps.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum Draw {
+    Item(u64),
+    Room(SpaceId),
 }
 
 /// How a vehicle burns fuel.
@@ -279,8 +323,15 @@ pub struct EstateEnergy {
     pub batteries: Vec<Battery>,
     pub loads: Vec<Load>,
     pub vehicles: Vec<EstateVehicle>,
+    /// The house's lamps, room by room. `#[serde(default)]`: an estate
+    /// saved before lighting was wired had none.
+    #[serde(default)]
+    pub lighting: Vec<RoomLighting>,
     /// Loads fully served in the last step.
     powered: BTreeSet<u64>,
+    /// Rooms whose lamps were fully served in the last step.
+    #[serde(default)]
+    lit: BTreeSet<SpaceId>,
 }
 
 impl EstateEnergy {
@@ -350,7 +401,9 @@ impl EstateEnergy {
             }],
             loads,
             vehicles,
+            lighting: Vec::new(),
             powered: BTreeSet::new(),
+            lit: BTreeSet::new(),
         };
         // Vehicles start part-filled, drawn from the store.
         let ids: Vec<u64> = energy.vehicles.iter().map(|v| v.item_id).collect();
@@ -363,6 +416,52 @@ impl EstateEnergy {
             energy.refuel(id, want);
         }
         energy
+    }
+
+    /// Wire lamps into every space of the house (its rooms, its hall and
+    /// the computer room inside it), each sized by [`room_lighting_kw`]
+    /// from the space's floor in `layout`. Other buildings are workplaces
+    /// and stores, used by day, and are left unwired.
+    pub fn wire_lighting(&mut self, layout: &EstateLayout, property: &StarterProperty) {
+        self.lighting = layout
+            .spaces
+            .iter()
+            .filter(|space| {
+                property.buildings.iter().any(|b| {
+                    b.id == space.building_id
+                        && matches!(
+                            b.kind,
+                            PropertyBuildingKind::House | PropertyBuildingKind::ComputerRoom
+                        )
+                })
+            })
+            .map(|space| RoomLighting {
+                space: space.id,
+                label: space.label.clone(),
+                kw: room_lighting_kw(
+                    (space.rect_m.x1 - space.rect_m.x0) * (space.rect_m.y1 - space.rect_m.y0),
+                ),
+                in_use: false,
+            })
+            .collect();
+        self.lit.clear();
+    }
+
+    /// Whether `space` has lamps.
+    pub fn is_wired(&self, space: SpaceId) -> bool {
+        self.lighting.iter().any(|l| l.space == space)
+    }
+
+    /// Switch a room's lamps on or off. A space without lamps is ignored.
+    pub fn set_lit(&mut self, space: SpaceId, on: bool) {
+        if let Some(room) = self.lighting.iter_mut().find(|l| l.space == space) {
+            room.in_use = on;
+        }
+    }
+
+    /// Whether a room's lamps are on and were fully served in the last step.
+    pub fn is_lit(&self, space: SpaceId) -> bool {
+        self.lighting.iter().any(|l| l.space == space && l.in_use) && self.lit.contains(&space)
     }
 
     fn store_mut(&mut self, fuel: FuelKind) -> Option<&mut FuelStore> {
@@ -402,20 +501,32 @@ impl EstateEnergy {
     }
 
     /// Supply the in-use loads for `dt_seconds`: solar (`solar_kw`
-    /// available), then battery, then the generator. Loads are served in
-    /// item order; one the supply cannot cover stops. Fuel burned is
+    /// available), then battery, then the generator. Item loads are served
+    /// in item order, then the lit rooms in space order; one the supply
+    /// cannot cover stops. Fuel burned is
     /// booked in `ledger`.
     pub fn step(&mut self, dt_seconds: f64, solar_kw: f64, ledger: &mut Ledger) -> EnergyStep {
         self.powered.clear();
+        self.lit.clear();
         if !(dt_seconds.is_finite() && dt_seconds > 0.0) {
             return EnergyStep::default();
         }
         let hours = dt_seconds / 3_600.0;
-        let mut active: Vec<&Load> = self.loads.iter().filter(|l| l.in_use).collect();
-        active.sort_by_key(|l| l.item_id);
-        let demand_kwh: f64 = active.iter().map(|l| l.kw * hours).sum();
-        let active_ids: Vec<(u64, f64)> =
-            active.iter().map(|l| (l.item_id, l.kw * hours)).collect();
+        let mut active: Vec<(Draw, f64)> = self
+            .loads
+            .iter()
+            .filter(|l| l.in_use)
+            .map(|l| (Draw::Item(l.item_id), l.kw * hours))
+            .chain(
+                self.lighting
+                    .iter()
+                    .filter(|l| l.in_use)
+                    .map(|l| (Draw::Room(l.space), l.kw * hours)),
+            )
+            .collect();
+        active.sort_by_key(|(draw, _)| *draw);
+        let demand_kwh: f64 = active.iter().map(|(_, kwh)| kwh).sum();
+        let active_ids = active;
 
         let solar_kwh = solar_kw.max(0.0) * hours;
         let solar_used = solar_kwh.min(demand_kwh);
@@ -478,10 +589,17 @@ impl EstateEnergy {
         // Serve loads in order while the supply lasts.
         let supplied = demand_kwh - deficit.max(0.0);
         let mut left = supplied;
-        for (id, need) in active_ids {
+        for (draw, need) in active_ids {
             if need <= left + 1e-12 {
                 left -= need;
-                self.powered.insert(id);
+                match draw {
+                    Draw::Item(id) => {
+                        self.powered.insert(id);
+                    }
+                    Draw::Room(space) => {
+                        self.lit.insert(space);
+                    }
+                }
             }
         }
         EnergyStep {
@@ -570,5 +688,140 @@ impl EstateEnergy {
             },
         );
         run
+    }
+}
+
+#[cfg(test)]
+mod lighting_tests {
+    use super::*;
+    use crate::regional::estate_layout::{Rect, SpaceKind, SpaceLayout};
+    use mk_core::flux::Ledger;
+
+    fn building(property: &StarterProperty, kind: PropertyBuildingKind) -> u64 {
+        property
+            .buildings
+            .iter()
+            .find(|b| b.kind == kind)
+            .unwrap_or_else(|| panic!("the estate has a {kind:?}"))
+            .id
+    }
+
+    fn space(id: u32, building_id: u64, label: &str, w: f64, h: f64) -> SpaceLayout {
+        SpaceLayout {
+            id: SpaceId(id),
+            building_id,
+            label: label.to_string(),
+            kind: SpaceKind::Room,
+            rect_m: Rect {
+                x0: 0.0,
+                y0: 0.0,
+                x1: w,
+                y1: h,
+            },
+        }
+    }
+
+    /// The founders' estate with a house of a 5 x 5 m lounge, the 5 x 5 m
+    /// computer room inside it, and a shed.
+    fn wired() -> (EstateEnergy, StarterProperty) {
+        let property = StarterProperty::founders_estate((0, 0));
+        let house = building(&property, PropertyBuildingKind::House);
+        let computers = building(&property, PropertyBuildingKind::ComputerRoom);
+        let shed = building(&property, PropertyBuildingKind::Shed);
+        let layout = EstateLayout {
+            property_id: 0,
+            patch: mk_island::LocalPatchSpec {
+                origin_x_m: 0.0,
+                origin_y_m: 0.0,
+                width_m: 5.0,
+                height_m: 5.0,
+                cell_size_m: 5.0,
+                rows: 1,
+                cols: 1,
+            },
+            terrain_m: mk_core::grid::Grid2::new(&mk_core::grid::GridSpec::new(1, 1), 0.0),
+            buildings: Vec::new(),
+            spaces: vec![
+                space(1, house, "Lounge", 5.0, 5.0),
+                space(2, computers, "Computer Room", 5.0, 5.0),
+                space(3, shed, "Digging Tools", 4.0, 6.0),
+            ],
+            doors: Vec::new(),
+            items: Vec::new(),
+            yard: Rect {
+                x0: 0.0,
+                y0: 0.0,
+                x1: 1.0,
+                y1: 1.0,
+            },
+        };
+        let mut energy = EstateEnergy::from_config(&EstateEnergyConfig::default(), &property);
+        energy.wire_lighting(&layout, &property);
+        (energy, property)
+    }
+
+    #[test]
+    fn a_room_is_lit_by_the_lumen_method() {
+        // 200 lux over 25 m^2 is 5,000 lm on the floor; at a utilisation
+        // factor of 0.5 the lamps emit 10,000 lm, which at 80 lm/W is
+        // 125 W.
+        assert!((room_lighting_kw(25.0) - 0.125).abs() < 1e-12);
+        assert_eq!(room_lighting_kw(-1.0), 0.0);
+    }
+
+    #[test]
+    fn the_house_is_wired_and_the_shed_is_not() {
+        let (energy, _) = wired();
+        assert!(energy.is_wired(SpaceId(1)), "the lounge has lamps");
+        assert!(
+            energy.is_wired(SpaceId(2)),
+            "the computer room is a room of the house"
+        );
+        assert!(!energy.is_wired(SpaceId(3)), "the shed is worked by day");
+        assert!(energy.lighting.iter().all(|l| (l.kw - 0.125).abs() < 1e-12));
+    }
+
+    #[test]
+    fn a_lit_room_draws_its_lamps_from_the_supply() {
+        let (mut energy, _) = wired();
+        let mut ledger = Ledger::new();
+        energy.set_lit(SpaceId(1), true);
+        energy.set_lit(SpaceId(3), true); // not wired: ignored
+        let night = energy.step(3_600.0, 0.0, &mut ledger);
+        assert!((night.demand_kwh - 0.125).abs() < 1e-12, "{night:?}");
+        assert!((night.battery_discharged_kwh - 0.125).abs() < 1e-12);
+        assert!(energy.is_lit(SpaceId(1)));
+        assert!(!energy.is_lit(SpaceId(2)), "nobody switched it on");
+        energy.set_lit(SpaceId(1), false);
+        let dark = energy.step(3_600.0, 0.0, &mut ledger);
+        assert_eq!(dark.demand_kwh, 0.0);
+        assert!(!energy.is_lit(SpaceId(1)));
+    }
+
+    #[test]
+    fn with_no_supply_left_the_lamps_go_out() {
+        let (mut energy, _) = wired();
+        let mut ledger = Ledger::new();
+        for b in &mut energy.batteries {
+            b.charge_kwh = 0.0;
+        }
+        for s in &mut energy.fuel_stores {
+            s.litres = 0.0;
+        }
+        energy.set_lit(SpaceId(1), true);
+        let step = energy.step(3_600.0, 0.0, &mut ledger);
+        assert!((step.unmet_kwh - 0.125).abs() < 1e-12, "{step:?}");
+        assert!(!energy.is_lit(SpaceId(1)));
+    }
+
+    #[test]
+    fn an_estate_saved_before_lamps_reads_with_none() {
+        let (energy, _) = wired();
+        let mut json = serde_json::to_value(&energy).unwrap();
+        let object = json.as_object_mut().unwrap();
+        object.remove("lighting");
+        object.remove("lit");
+        let old: EstateEnergy = serde_json::from_value(json).unwrap();
+        assert!(old.lighting.is_empty());
     }
 }

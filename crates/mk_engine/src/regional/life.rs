@@ -28,8 +28,8 @@ use mk_island::{
 };
 
 use super::ecology::{RegionalEcologyError, RegionalEcologyState};
-use super::energy::{solar_output_kw, EstateEnergy};
-use super::estate_layout::Space;
+use super::energy::{solar_output_kw, EstateEnergy, ROOM_LIGHT_LUX};
+use super::estate_layout::{Space, SpaceId};
 use super::human_store::{open_run, HumanStore, HumanStoreError, RunId};
 use super::humans::{
     bootstrap_regional_humans, step_regional_humans, HumanEstatePositions, RegionalHumanContext,
@@ -51,8 +51,9 @@ use crate::topology::GridTopology;
 /// Physical Activities: sleeping 0.9-1.0 MET against 1.0-1.3 sitting
 /// quietly), and the circadian clock already knows which of the two this
 /// human is doing, so the tick asks it rather than assuming one rate all
-/// day. On a 36-hour day that difference is not academic: sleep is already
-/// short and broken here (D23), and expenditure has to follow it.
+/// day. On a 36-hour day that difference is not academic: how long a person
+/// sleeps depends on whether they are in a house they can darken (D23), and
+/// expenditure has to follow it.
 const ASLEEP_ACTIVITY: &str = "sleeping";
 const AWAKE_AT_HOME_ACTIVITY: &str = "sitting_quietly";
 
@@ -240,7 +241,8 @@ impl IslandLife {
             .iter()
             .find(|p| p.owner_agent_ids.iter().any(|i| i == "Gem-D"))
             .expect("the estate was placed");
-        let energy = EstateEnergy::from_config(&scenario.estate_energy, estate);
+        let mut energy = EstateEnergy::from_config(&scenario.estate_energy, estate);
+        energy.wire_lighting(&placed.layout, estate);
 
         let mut materials = MaterialLedger::new();
         for h in humans.registry.iter() {
@@ -310,6 +312,20 @@ impl IslandLife {
         // A log says which scenario it belongs to, so replaying it against
         // a different island refuses rather than reproducing nothing and
         // looking like it had.
+        if life.energy.lighting.is_empty() {
+            // Saved before the house was wired for lamps: wire it now, from
+            // the layout the snapshot carries, so a reload is not an island
+            // in the dark.
+            if let Some(estate) = life
+                .placed
+                .property
+                .properties
+                .iter()
+                .find(|p| p.owner_agent_ids.iter().any(|i| i == "Gem-D"))
+            {
+                life.energy.wire_lighting(&life.placed.layout, estate);
+            }
+        }
         life.replay_log = super::replay::IslandReplayLog::new(life.scenario_digest_hex());
         Ok(life)
     }
@@ -616,6 +632,38 @@ impl IslandLife {
             .map(|s| solar_output_kw(s.rated_kw, toa, cloud))
             .sum();
         let founders = self.founders();
+        // Lamps: a room is lit while someone in it wants light -- awake and
+        // not yet at bedtime -- and less daylight comes through its windows
+        // than the lamps give. Nobody deliberates over it; it is what people
+        // do with a switch by the door.
+        let daylight_lux = crate::perception::daylight_fraction(&self.physical.insolation, cr, cc)
+            * crate::humans::circadian::OUTDOOR_DAYLIGHT_LUX;
+        let wanted: std::collections::BTreeSet<SpaceId> = self
+            .humans
+            .registry
+            .iter()
+            .filter(|h| matches!(h.profile.status, mk_core::human::HumanStatus::Alive))
+            .filter(|h| h.circadian.wants_lamp(h.needs.fatigue))
+            .filter_map(|h| match self.positions.0.get(h.agent_id())?.space {
+                Space::Inside(space) => Some(space),
+                Space::Outdoors => None,
+            })
+            .filter(|space| {
+                self.placed
+                    .layout
+                    .spaces
+                    .iter()
+                    .find(|s| s.id == *space)
+                    .is_some_and(|room| {
+                        daylight_lux * super::humans::room_daylight_factor(&room.label)
+                            < ROOM_LIGHT_LUX
+                    })
+            })
+            .collect();
+        let rooms: Vec<SpaceId> = self.energy.lighting.iter().map(|l| l.space).collect();
+        for space in rooms {
+            self.energy.set_lit(space, wanted.contains(&space));
+        }
         let dt_physical = self.scenario.cadences.weather_ocean_seconds;
         let asleep_met = self
             .labour
