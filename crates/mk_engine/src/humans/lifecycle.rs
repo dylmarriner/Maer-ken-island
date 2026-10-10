@@ -317,18 +317,25 @@ pub fn step_lifecycle(
     let activity = activity_met.map_or(1.0, |met| {
         (met / super::super::regional::labour::BASELINE_MET).max(1.0)
     });
+    // On a step short enough to tell one meal from the next (the body
+    // clock's resolution, `circadian::MAX_RESOLVED_STEP_HOURS`), food comes
+    // only from choosing to eat it; a longer step has its meals inside it.
+    let dt_hours = dt_years.max(0.0) / super::rates::HOUR_YEARS;
+    let meals = meals_for(human.economy_action.kind, dt_hours);
     let effort = match human.economy_action.kind {
         super::ActionKind::SeekFood | super::ActionKind::Gather => super::needs::EffortFocus {
             food: 1.5,
             water: 1.0,
             shelter: 1.0,
             activity,
+            meals,
         },
         super::ActionKind::SeekWater => super::needs::EffortFocus {
             food: 1.0,
             water: 1.5,
             shelter: 1.0,
             activity,
+            meals,
         },
         super::ActionKind::SeekShelter | super::ActionKind::Rest | super::ActionKind::Build => {
             super::needs::EffortFocus {
@@ -336,17 +343,18 @@ pub fn step_lifecycle(
                 water: 1.0,
                 shelter: 1.5,
                 activity,
+                meals,
             }
         }
         _ => super::needs::EffortFocus {
             activity,
+            meals,
             ..super::needs::EffortFocus::none()
         },
     };
     // The body clock and sleep pressure run first: whether this human is
     // asleep this step decides what light reaches their eyes and whether
     // their sleep pressure builds or dissipates.
-    let dt_hours = dt_years.max(0.0) / super::rates::HOUR_YEARS;
     human.needs.fatigue = human.circadian.step(
         super::circadian::Light {
             daylight_fraction: observation.daylight_fraction,
@@ -558,6 +566,26 @@ pub fn step_lifecycle(
 pub const WALKING_MET: f64 = 3.55;
 pub const HAND_MINING_MET: f64 = 6.75;
 pub const CARPENTRY_MET: f64 = 3.5;
+
+/// How food reaches a human over a step of `dt_hours` while doing `action`
+/// (see [`super::needs::Meals`]). Steps longer than the body clock resolves
+/// keep their meals implicit; shorter ones feed only someone who chose to
+/// eat (`SeekFood`). Gathering is collecting resources, not a meal.
+pub fn meals_for(action: ActionKind, dt_hours: f64) -> super::needs::Meals {
+    use super::needs::Meals;
+    if dt_hours > super::circadian::MAX_RESOLVED_STEP_HOURS {
+        Meals::Implicit
+    } else if is_eating(action) {
+        Meals::Eating
+    } else {
+        Meals::NotEating
+    }
+}
+
+/// Whether `action` is one a human eats during.
+pub fn is_eating(action: ActionKind) -> bool {
+    matches!(action, ActionKind::SeekFood)
+}
 
 /// The metabolic equivalent of `action` where the packs give one, given what
 /// this human can see (`observation`), or `None` for the resting baseline.
@@ -1357,6 +1385,21 @@ mod tests {
         // Going somewhere is walking wherever one is.
         assert_eq!(activity_met_for(Explore, &plenty), Some(WALKING_MET));
         assert_eq!(activity_met_for(Move, &plenty), Some(WALKING_MET));
+    }
+
+    #[test]
+    fn only_a_human_who_chooses_to_eat_takes_in_food_on_a_short_step() {
+        use super::super::needs::Meals;
+        use super::super::ActionKind::*;
+        let resolved = super::super::circadian::MAX_RESOLVED_STEP_HOURS;
+        assert_eq!(meals_for(SeekFood, 1.0 / 60.0), Meals::Eating);
+        assert_eq!(meals_for(SeekFood, resolved), Meals::Eating);
+        for other in [Gather, Rest, Explore, SeekWater, SeekShelter, Build] {
+            assert_eq!(meals_for(other, 1.0 / 60.0), Meals::NotEating, "{other:?}");
+        }
+        // A day-long step has its meals inside it, whatever was chosen.
+        assert_eq!(meals_for(Rest, 24.0), Meals::Implicit);
+        assert_eq!(meals_for(SeekFood, 24.0), Meals::Implicit);
     }
 
     #[test]

@@ -167,7 +167,13 @@ impl AutonomousMind {
             {
                 continue;
             }
-            let score = self.preference(action)
+            // What was learned about an action that serves a need is worth
+            // only as much as the need is felt now (alliesthesia; see
+            // [`incentive`]): without it a learned taste for eating outbids
+            // everything else even on a full stomach.
+            let learned = (self.preference(action) + self.context_preference(action, observation))
+                * incentive(action, needs);
+            let score = learned
                 + drive_for(
                     action,
                     needs,
@@ -178,7 +184,6 @@ impl AutonomousMind {
                     core_systems,
                     reproduction,
                 )
-                + self.context_preference(action, observation)
                 + (rng.gen_f64_01() - 0.5) * self.exploration_rate;
             if score > best_score {
                 best_score = score;
@@ -380,6 +385,22 @@ impl AutonomousMind {
 
 fn default_action_success() -> bool {
     true
+}
+
+/// How much of what has been learned about `action` the body's present
+/// state lets count. Eating and drinking are rewarding in proportion to the
+/// hunger or thirst they relieve: the pleasantness of food and drink
+/// follows internal state, so the same stimulus a hungry person finds good
+/// is indifferent or unpleasant to a sated one (alliesthesia; Cabanac 1971,
+/// *Science* 173:1103-1107). Every other action keeps its learned value
+/// whole.
+fn incentive(action: ActionKind, needs: &NeedsSnapshot) -> f64 {
+    match action {
+        ActionKind::SeekFood => needs.hunger,
+        ActionKind::SeekWater => needs.thirst,
+        _ => 1.0,
+    }
+    .clamp(0.0, 1.0)
 }
 
 fn fitness(needs: &NeedsSnapshot) -> f64 {
@@ -599,6 +620,66 @@ mod tests {
         ] {
             assert_in_actions(kind);
         }
+    }
+
+    #[test]
+    fn a_learned_taste_for_eating_does_not_outbid_a_full_stomach() {
+        let profile = HumanProfile::from_canonical_schema(
+            HumanId::new(1),
+            HumanSchema::canonical_minimal("autonomy_test"),
+        );
+        let mut sated = NeedsSnapshot::from_profile(&profile);
+        sated.glucose = 1.0;
+        sated.hunger = 0.0;
+        let mut hungry = sated.clone();
+        hungry.glucose = 0.3;
+        hungry.hunger = 0.7;
+        // Eating has been nothing but rewarding: the strongest preference
+        // a mind can hold.
+        let mut mind = AutonomousMind::default();
+        for preference in mind.preferences.iter_mut() {
+            if preference.action == ActionKind::SeekFood {
+                preference.value = 1.0;
+            }
+        }
+        assert_eq!(incentive(ActionKind::SeekFood, &sated), 0.0);
+        assert_eq!(incentive(ActionKind::SeekFood, &hungry), 0.7);
+        assert_eq!(incentive(ActionKind::Explore, &sated), 1.0);
+        let registry = RngRegistry::new([7; 32]);
+        let observation = AgentWorldObservation {
+            caloric_access: 1.0,
+            ..AgentWorldObservation::default()
+        };
+        let genetics = GeneticsSnapshot::from_profile(&profile);
+        let carrying = CarryingState::new();
+        let dark_triad = DarkTriadSnapshot::from_profile(&profile);
+        let core_systems = CoreSystemsSnapshot::from_profile(&profile);
+        let reproduction = ReproductiveSystemSnapshot::from_profile(&profile);
+        let neurochemistry = NeurochemistrySnapshot::from_profile(&profile);
+        let (mut sated_meals, mut hungry_meals) = (0, 0);
+        for tick in 0..200 {
+            for (needs, meals) in [(&sated, &mut sated_meals), (&hungry, &mut hungry_meals)] {
+                let action = mind.clone().choose_action(
+                    needs,
+                    &observation,
+                    &genetics,
+                    &carrying,
+                    &dark_triad,
+                    &core_systems,
+                    &reproduction,
+                    &neurochemistry,
+                    1,
+                    tick,
+                    &registry,
+                );
+                *meals += usize::from(action.kind == ActionKind::SeekFood);
+            }
+        }
+        assert_eq!(sated_meals, 0, "ate {sated_meals} times on a full stomach");
+        assert!(
+            hungry_meals > 100,
+            "hungry, ate only {hungry_meals} of 200 times"
+        );
     }
 
     #[test]

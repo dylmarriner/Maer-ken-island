@@ -695,6 +695,60 @@ impl IslandLife {
         })
     }
 
+    /// Feed every living founder who is eating right now — the ones whose
+    /// own choice this substep was to go and eat
+    /// (`humans::lifecycle::is_eating`), the same choice that lets their
+    /// needs take in food.
+    ///
+    /// A meal is what its eater has actually burned since the last one, not
+    /// a fixed portion: the hourly tick records the carbon each of them
+    /// respires, and the harvest asks the food cell for exactly the plant
+    /// matter that carbon takes to replace. Intake and expenditure come from
+    /// one model, so an adult who eats holds steady by construction, and one
+    /// who does not carries the debt until they do.
+    fn meals(&mut self) -> Result<(), IslandLifeError> {
+        let eaters: Vec<(String, f64)> = self
+            .humans
+            .registry
+            .iter()
+            .filter(|h| matches!(h.profile.status, mk_core::human::HumanStatus::Alive))
+            .filter(|h| crate::humans::lifecycle::is_eating(h.economy_action.kind))
+            .filter_map(|h| {
+                let owed = self.respired_since_meal.get(h.agent_id()).copied()?;
+                (owed > 0.0).then(|| (h.agent_id().to_string(), owed))
+            })
+            .collect();
+        if eaters.is_empty() {
+            return Ok(());
+        }
+        let area = self.domain.cell_area_m2(DomainLevel::Medium);
+        let carbon_per_kg = composition(Material::PlantFood).carbon_per_kg;
+        self.audited(|life, ledger| {
+            for (id, owed_kgc) in &eaters {
+                match life.materials.gather_biotic(
+                    Material::PlantFood,
+                    owed_kgc / carbon_per_kg,
+                    &mut life.ecology,
+                    life.food_cell,
+                    area,
+                    ledger,
+                ) {
+                    Ok(kg) => {
+                        if life
+                            .materials
+                            .eat(id, Material::PlantFood, kg, ledger)
+                            .is_ok()
+                        {
+                            let left = (owed_kgc - kg * carbon_per_kg).max(0.0);
+                            life.respired_since_meal.insert(id.clone(), left);
+                        }
+                    }
+                    Err(_) => life.shortfalls.food += 1,
+                }
+            }
+        })
+    }
+
     fn six_hourly(&mut self) -> Result<(), IslandLifeError> {
         let dt_ecology = self.scenario.cadences.hydrology_ecology_resource_seconds;
         self.ecology.step(dt_ecology as f64, None, None);
@@ -703,67 +757,26 @@ impl IslandLife {
         let area = self.domain.cell_area_m2(DomainLevel::Medium);
         self.audited(|life, ledger| {
             for (id, _, _) in &founders {
-                // A meal is what this human has actually burned since the
-                // last one, not a fixed portion: the hourly tick records the
-                // carbon each of them respires, and the harvest asks the food
-                // cell for exactly the plant matter that carbon takes to
-                // replace. Intake and expenditure therefore come from one
-                // model instead of two, and an adult's body carbon holds
-                // steady by construction rather than by a constant that
-                // happened to be close.
-                //
-                // Which human harvests is still the routine's choice, not
-                // theirs — see D10.
-                let owed_kgc = life.respired_since_meal.get(id).copied().unwrap_or(0.0);
-                let wanted_kg = owed_kgc / composition(Material::PlantFood).carbon_per_kg;
-                if wanted_kg > 0.0 {
-                    match life.materials.gather_biotic(
-                        Material::PlantFood,
-                        wanted_kg,
-                        &mut life.ecology,
-                        life.food_cell,
-                        area,
-                        ledger,
-                    ) {
-                        Ok(kg) => {
-                            if life
-                                .materials
-                                .eat(id, Material::PlantFood, kg, ledger)
-                                .is_ok()
-                            {
-                                let eaten_kgc = kg * composition(Material::PlantFood).carbon_per_kg;
-                                let left = (owed_kgc - eaten_kgc).max(0.0);
-                                life.respired_since_meal.insert(id.clone(), left);
-                            }
-                        }
-                        Err(_) => life.shortfalls.food += 1,
+                let drawn = life
+                    .water_cell
+                    .ok_or(MaterialError::DryCell)
+                    .and_then(|cell| {
+                        life.materials.gather_water(
+                            WATER_KG_PER_DRINK,
+                            &mut life.physical.hydrology,
+                            cell,
+                            area,
+                            ledger,
+                        )
+                    });
+                match drawn {
+                    Ok(kg) => {
+                        let _ = life.materials.drink(id, kg);
+                        let _ =
+                            life.materials
+                                .lose_water(id, kg, EXCRETION_TO_SOIL_FRACTION, ledger);
                     }
-                }
-                {
-                    let drawn = life
-                        .water_cell
-                        .ok_or(MaterialError::DryCell)
-                        .and_then(|cell| {
-                            life.materials.gather_water(
-                                WATER_KG_PER_DRINK,
-                                &mut life.physical.hydrology,
-                                cell,
-                                area,
-                                ledger,
-                            )
-                        });
-                    match drawn {
-                        Ok(kg) => {
-                            let _ = life.materials.drink(id, kg);
-                            let _ = life.materials.lose_water(
-                                id,
-                                kg,
-                                EXCRETION_TO_SOIL_FRACTION,
-                                ledger,
-                            );
-                        }
-                        Err(_) => life.shortfalls.water += 1,
-                    }
+                    Err(_) => life.shortfalls.water += 1,
                 }
             }
         })
@@ -849,6 +862,7 @@ impl IslandLife {
                 // what the next hour and the next meal would have cost.
                 self.respired_since_meal.remove(&id);
             }
+            self.meals()?;
             // A death is written at once: every other record can lag a
             // cadence and catch up, but a dead person's folder never will.
             for id in died {

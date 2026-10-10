@@ -99,7 +99,7 @@ const DAY: u64 = 86_400;
 /// Audited: 196 of 196, no shortfalls, 13.0 and 10.4 kg against 13.0 and
 /// 10.4, Gem-D asleep 56 of 168 hours (48 at home), Gem-K 54 (46),
 /// temperate-forest NPP 567.
-const WEEK_DIGEST: &str = "f550a4afa3b7dee0d1e113a9032afc1bfdb61d3c8e550f212c6e27881802b6c9";
+const WEEK_DIGEST: &str = "201bb5ac65e2ed7048c73f4f9072499e5051d6acc578ad81ad4acadf76c2965e";
 
 fn repo(path: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -198,16 +198,28 @@ fn slow_a_week_on_the_island_matches_the_reference_packs() {
     use mk_engine::validation::{default_reference_dir, ReferenceDomain, ReferenceLibrary};
     let lib = ReferenceLibrary::load(&default_reference_dir()).unwrap();
     let mut w = life();
-    // An hour at a time, which steps the island exactly as one week-long
+    // A minute at a time, which steps the island exactly as one week-long
     // advance does (`island_scheduler.rs`), so where the founders are can
-    // be watched: (asleep samples, asleep in the estate, farthest cells).
+    // be watched each hour -- (asleep samples, asleep in the estate,
+    // farthest cells) -- and what they eat each minute.
     let estate = w.placed.location;
     let mut watched: std::collections::BTreeMap<&str, (u32, u32, i32)> =
         std::collections::BTreeMap::new();
-    for _ in 0..(7 * 24) {
-        w.advance(3_600).unwrap();
+    // (minutes spent eating, lowest glycogen seen): food reaches them only
+    // when they choose to eat, so both are theirs.
+    let mut fed: std::collections::BTreeMap<&str, (u32, f64)> = std::collections::BTreeMap::new();
+    for minute in 1..=(7 * 24 * 60) {
+        w.advance(60).unwrap();
         for id in ["Gem-D", "Gem-K"] {
             let h = w.humans.registry.get_human(id).unwrap();
+            let meals = fed.entry(id).or_insert((0, 1.0));
+            meals.0 += u32::from(mk_engine::humans::lifecycle::is_eating(
+                h.economy_action.kind,
+            ));
+            meals.1 = meals.1.min(h.needs.glucose);
+            if minute % 60 != 0 {
+                continue;
+            }
             let away = (h.position.row - estate.0 as i32)
                 .abs()
                 .max((h.position.col - estate.1 as i32).abs());
@@ -247,10 +259,28 @@ fn slow_a_week_on_the_island_matches_the_reference_packs() {
             "{id} slept at home {at_home} of {asleep} sleeping hours"
         );
         assert!(farthest <= 5, "{id} went {farthest} cells from home");
-        // Alive is the needs model's answer; this is the ledger's. Harvesting
-        // follows each human's own chosen action, so a week in which nobody
-        // ever chose to look for food would still leave them "alive" here
-        // while their body carbon drained away. It must not have.
+        // They feed themselves: with food at hand, choosing when to eat
+        // never lets glycogen fall to the level only fasting reaches, and
+        // takes about as long a day as people spend eating -- within a
+        // factor of two of the 64.5 minutes the American Time Use Survey
+        // measures. A sated mind that kept eating (a learned taste outbidding
+        // a full stomach) spent fourteen hours a day at it.
+        let (eating, lowest) = fed[id];
+        let per_day = f64::from(eating) / 7.0;
+        println!("{id}: eating {per_day:.0} minutes a day, lowest glycogen {lowest:.2}");
+        assert!(
+            lowest > mk_engine::humans::needs::FASTING_GLUCOSE_FLOOR,
+            "{id} went hungry to {lowest:.2} with food at hand"
+        );
+        let atus = mk_engine::humans::needs::EATING_MINUTES_PER_DAY;
+        assert!(
+            (0.5 * atus..=2.0 * atus).contains(&per_day),
+            "{id} ate {per_day:.0} minutes a day"
+        );
+        // Alive is the needs model's answer; this is the ledger's. A meal is
+        // harvested only when its eater chooses to eat, so a week in which
+        // nobody ever did would leave their body carbon drained. It must not
+        // have.
         let carbon = w
             .materials
             .body_carbon_kg(id)
@@ -261,8 +291,9 @@ fn slow_a_week_on_the_island_matches_the_reference_packs() {
         // A meal replaces exactly the carbon its eater has burned since the
         // last one, so an adult's body carbon should not move at all over a
         // week. The band is tight on purpose: a fixed portion sat at 1.05x
-        // and 1.10x, and gating the harvest on chosen actions at 0.90x, and
-        // both would pass anything looser.
+        // and 1.10x, and gating the harvest on chosen actions while the
+        // needs model still fed them regardless at 0.90x, and both would
+        // pass anything looser.
         assert!(
             (0.98 * expected..=1.02 * expected).contains(&carbon),
             "{id} holds {carbon:.2} kg of carbon against an expected {expected:.2}: what they eat \

@@ -49,10 +49,20 @@ pub const STORED_ENERGY_DAYS: f64 = 60.0;
 /// al. 1950). Foraging access scales it, so a moderately productive
 /// biome feeds a person; only barren ground starves them.
 pub const MAX_EATING_DAYS_PER_DAY: f64 = 3.0;
+/// Minutes a day adults spend eating and drinking as their main activity:
+/// 64.5 (American Time Use Survey 2014-16, Eating & Health Module; USDA
+/// ERS Economic Information Bulletin 213).
+pub const EATING_MINUTES_PER_DAY: f64 = 64.5;
+/// Food a person takes in while actually eating, in days of expenditure per
+/// day: the day's ceiling ([`MAX_EATING_DAYS_PER_DAY`]) eaten in the time
+/// people spend at it. A meal refills an empty glycogen store in about
+/// twenty minutes.
+pub const MEAL_RATE_DAYS_PER_DAY: f64 =
+    MAX_EATING_DAYS_PER_DAY * 24.0 * 60.0 / EATING_MINUTES_PER_DAY;
 /// Glycogen level that fat and protein mobilisation (gluconeogenesis,
 /// ketosis) defends while stores last: fasting humans stay hungry and weak
 /// but functional until the stores run out.
-const FASTING_GLUCOSE_FLOOR: f64 = 0.15;
+pub const FASTING_GLUCOSE_FLOOR: f64 = 0.15;
 /// Fraction of surplus food energy stored as fat (the rest is the
 /// metabolic cost of storage; Flatt 1987).
 const FAT_STORAGE_EFFICIENCY: f64 = 0.75;
@@ -86,6 +96,24 @@ pub struct EffortFocus {
     /// `regional::labour::effort_for_met`).
     #[serde(default)]
     pub activity: f64,
+    /// Whether food is taken in over this step (see [`Meals`]).
+    #[serde(default)]
+    pub meals: Meals,
+}
+
+/// How food reaches a person over a step.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Meals {
+    /// A step too long to resolve one meal from the next: meals are within
+    /// it, at the day's rate wherever there is food. The rate the drain was
+    /// calibrated with, and the only meaningful one for a day-long step.
+    #[default]
+    Implicit,
+    /// The person is eating, at [`MEAL_RATE_DAYS_PER_DAY`] scaled by the
+    /// food within reach.
+    Eating,
+    /// The person is doing something else: no food this step.
+    NotEating,
 }
 
 impl EffortFocus {
@@ -97,6 +125,7 @@ impl EffortFocus {
             water: 1.0,
             shelter: 1.0,
             activity: 1.0,
+            meals: Meals::Implicit,
         }
     }
 }
@@ -253,12 +282,20 @@ impl NeedsSnapshot {
             * activity
             * dt
             / GLYCOGEN_DAYS;
-        let glucose_gain = observation.caloric_access
-            * MAX_EATING_DAYS_PER_DAY
-            * capacity
-            * effort.food.clamp(1.0, 1.5)
-            * dt
-            / GLYCOGEN_DAYS;
+        let glucose_gain = match effort.meals {
+            Meals::Implicit => {
+                observation.caloric_access
+                    * MAX_EATING_DAYS_PER_DAY
+                    * capacity
+                    * effort.food.clamp(1.0, 1.5)
+                    * dt
+                    / GLYCOGEN_DAYS
+            }
+            Meals::Eating => {
+                observation.caloric_access * MEAL_RATE_DAYS_PER_DAY * capacity * dt / GLYCOGEN_DAYS
+            }
+            Meals::NotEating => 0.0,
+        };
         let mut glucose = self.glucose - glucose_drain + glucose_gain;
         let mut energy_reserve = self.energy_reserve.clamp(0.0, 1.0);
         // One unit of glycogen is this fraction of the fat/protein stores.
@@ -431,6 +468,7 @@ mod tests {
             water: 1.0,
             shelter: 1.0,
             activity: 1.0,
+            meals: Meals::Implicit,
         };
 
         // Hourly steps: over longer ones both humans would fill their
@@ -446,5 +484,39 @@ mod tests {
         assert!(food_focused.glucose > unfocused.glucose);
         // Focus on food specifically shouldn't also boost hydration.
         assert!((food_focused.hydration - unfocused.hydration).abs() < 1e-9);
+    }
+
+    #[test]
+    fn eating_refills_glycogen_in_a_meal_and_not_eating_takes_in_nothing() {
+        let observation = AgentWorldObservation {
+            caloric_access: 1.0,
+            hydration_access: 1.0,
+            shelter_quality: 1.0,
+            ..AgentWorldObservation::default()
+        };
+        let minute = crate::humans::rates::HOUR_YEARS / 60.0;
+        let mut hungry = NeedsSnapshot::from_profile(&profile());
+        hungry.glucose = 0.3;
+        let eating = EffortFocus {
+            meals: Meals::Eating,
+            ..EffortFocus::none()
+        };
+        let not_eating = EffortFocus {
+            meals: Meals::NotEating,
+            ..EffortFocus::none()
+        };
+        let mut fed = hungry.clone();
+        let mut unfed = hungry.clone();
+        for _ in 0..20 {
+            fed = fed.step(&observation, 1.0, eating, minute);
+            unfed = unfed.step(&observation, 1.0, not_eating, minute);
+        }
+        // Twenty minutes at the table takes an empty-ish store most of the
+        // way to full; twenty minutes of anything else only drains it.
+        assert!(fed.glucose > 0.9, "fed {}", fed.glucose);
+        assert!(unfed.glucose < hungry.glucose);
+        // 64.5 minutes of eating a day carries the day's intake ceiling.
+        let day_at_table = MEAL_RATE_DAYS_PER_DAY * EATING_MINUTES_PER_DAY / (24.0 * 60.0);
+        assert!((day_at_table - MAX_EATING_DAYS_PER_DAY).abs() < 1e-12);
     }
 }
