@@ -221,3 +221,59 @@ fn the_numbers_behave_like_matter() {
     assert!((cat.mass_kg(IronIngot, 1e-3).unwrap() - 7.874).abs() < 1e-9);
     assert!((cat.mass_kg(Sand, 1.0).unwrap() - 1_600.0).abs() < 1e-9);
 }
+
+#[test]
+fn every_mineral_material_comes_out_of_the_ground_somewhere() {
+    use mk_engine::regional::deposits::DepositKind;
+    use CatalogueItem::*;
+    use MaterialCategory as C;
+    // Geological materials that come from somewhere other than a primary
+    // deposit, and where: placers are secondary (eroded out of a primary
+    // deposit and carried by rivers and surf), rubble is any rock, sea salt
+    // is the sea's, and loose sediment -- clay, sand, gravel, peat -- is
+    // dug from soils, river beds, beaches and bogs (kaolin, the one
+    // sediment a deposit model yields, comes with building stone). Bauxite
+    // forms only by tropical laterite weathering, which a mid-latitude
+    // island's climate does not do.
+    let elsewhere = [
+        PlacerGold, Ironsand, Stone, SeaSalt, Bauxite, Clay, Sand, SilicaSand, Gravel, Peat,
+    ];
+    let yielded: std::collections::BTreeSet<CatalogueItem> = DepositKind::ALL
+        .iter()
+        .flat_map(|kind| kind.yields().iter().copied())
+        .collect();
+    for item in ALL_ITEMS {
+        let geological = matches!(
+            item.category(),
+            C::PreciousMetalOre
+                | C::BaseMetalOre
+                | C::Gem
+                | C::Crystal
+                | C::Stone
+                | C::Sediment
+                | C::IndustrialMineral
+                | C::FossilFuel
+                | C::Salt
+        );
+        if !geological {
+            assert!(
+                !yielded.contains(&item),
+                "{item:?} is not geological but a deposit yields it"
+            );
+            continue;
+        }
+        assert!(
+            yielded.contains(&item) != elsewhere.contains(&item),
+            "{item:?}: yielded {}, listed elsewhere {}",
+            yielded.contains(&item),
+            elsewhere.contains(&item)
+        );
+    }
+    // Each deposit yields something, its ore first and no material twice.
+    for kind in DepositKind::ALL {
+        let y = kind.yields();
+        assert!(!y.is_empty(), "{kind:?}");
+        let unique: std::collections::BTreeSet<_> = y.iter().collect();
+        assert_eq!(unique.len(), y.len(), "{kind:?} lists a material twice");
+    }
+}
