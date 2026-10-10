@@ -67,7 +67,18 @@ const DAY: u64 = 86_400;
 /// island no parent/child pair is matched at a distance in a week, so
 /// giving them a distance rule costs the reference island nothing and
 /// only silences the conversations that were never audible.
-const WEEK_DIGEST: &str = "5fc08dfd0b15efe14e567a55a13cf6a86c98401fa0d355ae78e35f4833b501a6";
+///
+/// Re-pinned for D32, D30 and D23 together: biomes by Köppen-Geiger on
+/// monthly bins, residence times from Whittaker & Likens, and a house
+/// with lamps, windows and curtains. The deferred audit gave audits 196 of
+/// 196, food and water shortfalls zero, Gem-D 13.0 kg of body carbon
+/// against 13.0 and Gem-K 10.4 against 10.4. Temperate-forest NPP fell
+/// from 707 to 350 g C/m2/yr -- inside this test's 0.5x tolerance but
+/// under the pack's 400-900 -- because Köppen now puts hemiboreal forest
+/// on cold continental cells (annual mean ~2 C) that the old rule called
+/// tundra; that is the too-continental year of D37 showing through, not
+/// a production error.
+const WEEK_DIGEST: &str = "d4208cda25aa68bdee7eced1afd2791215b056c5230fece808f614d162c22f64";
 
 fn repo(path: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
