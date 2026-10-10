@@ -249,6 +249,7 @@ impl RegionalPhysicalState {
             &self.zonal_background,
             &self.boundaries.atmosphere,
             &self.boundaries.ocean,
+            &self.weather.wind,
         );
     }
 
@@ -351,6 +352,7 @@ impl RegionalPhysicalState {
             &self.zonal_background,
             &self.boundaries.atmosphere,
             &self.boundaries.ocean,
+            &self.weather.wind,
         );
 
         // 6-7. Synoptic systems, then weather: the diagnostic field,

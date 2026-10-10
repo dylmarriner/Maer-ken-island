@@ -76,6 +76,14 @@ fn spin(elevation_of: impl Fn(&IslandDomain) -> Grid2<f64>) -> Run {
         &background,
         &boundaries.atmosphere,
         &boundaries.ocean,
+        // Calm: no air carried in, the energy balance on its own.
+        &mk_core::grid::Grid2::new(
+            &spec,
+            mk_engine::weather::WindVector {
+                u_east: 0.0,
+                v_north: 0.0,
+            },
+        ),
     );
     let mut seasonal = Vec::new();
     for step in 1..=4 * STEPS_PER_ORBIT {
@@ -102,6 +110,7 @@ fn spin(elevation_of: impl Fn(&IslandDomain) -> Grid2<f64>) -> Run {
             &background,
             &boundaries.atmosphere,
             &boundaries.ocean,
+            &calm(&domain),
         );
         if step > 3 * STEPS_PER_ORBIT {
             seasonal.push((
@@ -257,6 +266,7 @@ fn extreme_edge_forcing_stays_finite_and_physical() {
         &run.background,
         &b.atmosphere,
         &b.ocean,
+        &calm(&run.domain),
     );
     assert!(next
         .surface_temperature
@@ -296,6 +306,7 @@ fn extreme_edge_forcing_stays_finite_and_physical() {
         &run.background,
         &run.boundaries.atmosphere,
         &run.boundaries.ocean,
+        &calm(&run.domain),
     );
     assert_eq!(
         serde_json::to_string(&same).unwrap(),
@@ -462,4 +473,15 @@ fn the_diurnal_range_follows_the_surface_and_the_daily_mean_is_unchanged() {
         let mean: f64 = clear.iter().map(|g| *g.get(r, c)).sum::<f64>() / samples as f64;
         assert!(mean.abs() < 1e-9, "daily mean offset {mean} at ({r},{c})");
     }
+}
+
+/// No wind: no air carried in, the energy balance on its own.
+fn calm(domain: &IslandDomain) -> Grid2<mk_engine::weather::WindVector> {
+    Grid2::new(
+        &domain.storage_spec(C),
+        mk_engine::weather::WindVector {
+            u_east: 0.0,
+            v_north: 0.0,
+        },
+    )
 }

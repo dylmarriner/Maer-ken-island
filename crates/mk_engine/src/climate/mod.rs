@@ -490,6 +490,13 @@ pub struct RegionalClimateTerms<'a> {
     /// for none. The regional lapse rate enters here, so it relaxes in
     /// with the heat capacity rather than accumulating step to step.
     pub equilibrium_offset_k: &'a [f64],
+    /// Air over each cell (K) and the sensible-heat conductance between it
+    /// and the ground (W/m²/K), row-major; empty for none. A cell with a
+    /// conductance is held toward that air as well as toward its radiative
+    /// equilibrium, in proportion to the two restoring strengths -- the
+    /// island's maritime air (`regional::maritime`, deviation D37).
+    pub boundary_air_k: &'a [f64],
+    pub sensible_conductance_w_m2_k: &'a [f64],
 }
 
 /// Step climate forward from `previous` under `forcing`.
@@ -625,7 +632,21 @@ pub fn step_climate_on(
                 + offset;
             let heat_capacity = surface_heat_capacity_j_m2_k(cell(forcing.elevation_m, row, col));
             // Linearised radiative restoring strength at this temperature.
-            let feedback = (4.0 * emission * equilibrium.max(1.0).powi(3)).max(1e-9);
+            let radiative_feedback = (4.0 * emission * equilibrium.max(1.0).powi(3)).max(1e-9);
+            // Air carried over the cell holds it too: the ground settles
+            // where radiative and sensible restoring balance.
+            let air = regional.and_then(|t| {
+                let g = *t.sensible_conductance_w_m2_k.get(idx)?;
+                let a = *t.boundary_air_k.get(idx)?;
+                (g > 0.0 && a.is_finite()).then_some((g, a))
+            });
+            let (equilibrium, feedback) = match air {
+                Some((g, a)) => (
+                    (radiative_feedback * equilibrium + g * a) / (radiative_feedback + g),
+                    radiative_feedback + g,
+                ),
+                None => (equilibrium, radiative_feedback),
+            };
             let keep = (-forcing.dt_seconds.max(0.0) * feedback / heat_capacity).exp();
             let prior = cell(&previous.surface_temperature, row, col);
             let temperature = equilibrium + (prior - equilibrium) * keep;

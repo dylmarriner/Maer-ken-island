@@ -78,7 +78,12 @@ const DAY: u64 = 86_400;
 /// on cold continental cells (annual mean ~2 C) that the old rule called
 /// tundra; that is the too-continental year of D37 showing through, not
 /// a production error.
-const WEEK_DIGEST: &str = "d4208cda25aa68bdee7eced1afd2791215b056c5230fece808f614d162c22f64";
+///
+/// Re-pinned again for D37, maritime air carried over the land: the same
+/// audit gave 196 of 196, shortfalls zero, 13.0 and 10.4 kg against 13.0
+/// and 10.4, and temperate-forest NPP back inside the pack at 595 g
+/// C/m2/yr, the forests now standing in a maritime year.
+const WEEK_DIGEST: &str = "1925a6b99a5c568145354bc3b34bb4fb6b9f5fe8f2e81c333be43e8aafb2bcd6";
 
 fn repo(path: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))

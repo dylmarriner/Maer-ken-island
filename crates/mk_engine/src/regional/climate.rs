@@ -23,8 +23,10 @@ use mk_island::{AtmosphereBoundaryForcing, DomainLevel, Edge, IslandDomain, Ocea
 use serde::{Deserialize, Serialize};
 
 use super::edge::relax_to_edges;
+use super::maritime::{boundary_layer_air_k, sensible_conductance_w_m2_k};
 use super::zonal::ZonalBackgroundState;
 use crate::climate::{step_climate_on, ClimateForcing, ClimateState, RegionalClimateTerms};
+use crate::weather::WindVector;
 
 /// Environmental lapse rate (K/m): 6.5 K/km, the US Standard Atmosphere.
 pub const LAPSE_RATE_K_PER_M: f64 = 6.5e-3;
@@ -98,6 +100,7 @@ pub fn step_regional_climate(
     background: &ZonalBackgroundState,
     atmosphere: &AtmosphereBoundaryForcing,
     ocean_edge: &OceanBoundaryForcing,
+    wind: &Grid2<WindVector>,
 ) -> ClimateState {
     if forcing.dt_seconds.is_nan() || forcing.dt_seconds <= 0.0 {
         return previous.clone();
@@ -105,11 +108,37 @@ pub fn step_regional_climate(
     let spec = domain.storage_spec(DomainLevel::Coarse);
     let (rows, cols) = (spec.nlat, spec.nlon);
     let offsets = lapse_offsets_k(forcing.elevation_m);
+    // The sea's air, carried over the land by the wind the island had last
+    // step (deviation D37).
+    let air = boundary_layer_air_k(
+        previous.surface_temperature.data(),
+        forcing.elevation_m.data(),
+        wind,
+        rows,
+        cols,
+        domain.cell_size_m(DomainLevel::Coarse),
+    );
+    let conductance: Vec<f64> = (0..rows * cols)
+        .map(|i| {
+            if forcing.elevation_m.data()[i] > 0.0 {
+                let w = wind.data()[i];
+                sensible_conductance_w_m2_k(
+                    forcing.surface_pressure_pa,
+                    air[i],
+                    w.u_east.hypot(w.v_north),
+                )
+            } else {
+                0.0
+            }
+        })
+        .collect();
     let terms = RegionalClimateTerms {
         co2_ppm: background.atmospheric_co2_ppm,
         global_mean_radiative_k: background.global_mean_radiative_temperature_k,
         mean_absorbed_flux_w_m2: background.mean_absorbed_flux_w_m2,
         equilibrium_offset_k: &offsets,
+        boundary_air_k: &air,
+        sensible_conductance_w_m2_k: &conductance,
     };
     let stepped = step_climate_on(
         previous,
