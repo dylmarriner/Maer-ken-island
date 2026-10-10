@@ -33,10 +33,26 @@ fn scenario() -> IslandScenario {
 /// The patch is what makes a full island slow to serialize, and nothing in
 /// the file's framing cares how many stems there are. The full-size round
 /// trip is the slow tier's job, at the bottom of this file.
-fn small_island() -> IslandLife {
+fn bootstrap_small_island() -> IslandLife {
     let mut scenario = scenario();
     scenario.estate_patch.tree_cap = 200;
     IslandLife::bootstrap(scenario, canon()).expect("the island bootstraps")
+}
+
+/// Every test here starts from the same island, and bootstrapping spins its
+/// climate up for two orbits -- about half a minute in a debug build. So it
+/// is bootstrapped once and each test gets its own copy restored from the
+/// snapshot, which brings an island back exactly (`island_snapshot.rs`).
+fn small_island() -> IslandLife {
+    static BOOTSTRAPPED: std::sync::OnceLock<mk_engine::regional::life::IslandLifeSnapshot> =
+        std::sync::OnceLock::new();
+    let snapshot = BOOTSTRAPPED
+        .get_or_init(|| bootstrap_small_island().snapshot())
+        .clone();
+    let canon = std::sync::Arc::new(
+        mk_core::canon::CanonLocked::load(&repo("fixtures/island/canon.json")).expect("canon"),
+    );
+    IslandLife::restore(canon, snapshot).expect("the island restores")
 }
 
 fn hex(d: [u8; 32]) -> String {

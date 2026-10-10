@@ -116,6 +116,59 @@ pub fn carry_from_sea(
 ) -> Vec<f64> {
     let length = adjustment_length_m();
     let mut air = ground.to_vec();
+    // What each land cell takes from upwind is fixed for the whole solve --
+    // the wind and the ground do not change while the air settles -- so the
+    // neighbours, weights and the share kept across the cell are worked out
+    // once rather than on every sweep.
+    struct Link {
+        cell: usize,
+        from_col: usize,
+        from_row: usize,
+        u: f64,
+        v: f64,
+        weight: f64,
+        kept: f64,
+    }
+    let links: Vec<Option<Link>> = (0..rows * cols)
+        .map(|i| {
+            if !land[i] {
+                return None;
+            }
+            let (row, col) = (i / cols, i % cols);
+            let w = *wind.get(row, col);
+            let (u, v) = (w.u_east, w.v_north);
+            let speed = u.hypot(v);
+            let weight = u.abs() + v.abs();
+            if speed <= f64::EPSILON || weight <= f64::EPSILON {
+                // Calm: the cell keeps its own ground.
+                return None;
+            }
+            // The neighbours the air comes from, clamped at the domain edge
+            // (which is sea).
+            let up_col = if u > 0.0 {
+                col.saturating_sub(1)
+            } else {
+                (col + 1).min(cols - 1)
+            };
+            let up_row = if v > 0.0 {
+                row.saturating_sub(1)
+            } else {
+                (row + 1).min(rows - 1)
+            };
+            // Path across the cell along the wind: one cell for a wind along
+            // a grid axis, up to sqrt(2) on a diagonal.
+            let crossing = cell_m * weight / speed;
+            Some(Link {
+                cell: i,
+                from_col: row * cols + up_col,
+                from_row: up_row * cols + col,
+                u: u.abs(),
+                v: v.abs(),
+                weight,
+                kept: (-crossing / length).exp(),
+            })
+        })
+        .collect();
     let orders: [(bool, bool); 4] = [(false, false), (true, false), (false, true), (true, true)];
     // Fast sweeping: each round sweeps the grid in all four orderings, so
     // air moving along any quadrant of wind crosses it in one sweep; a
@@ -133,38 +186,13 @@ pub fn carry_from_sea(
                 let row = if rows_back { rows - 1 - ri } else { ri };
                 for ci in 0..cols {
                     let col = if cols_back { cols - 1 - ci } else { ci };
-                    let i = row * cols + col;
-                    if !land[i] {
+                    let Some(link) = &links[row * cols + col] else {
                         continue;
-                    }
-                    let w = *wind.get(row, col);
-                    let (u, v) = (w.u_east, w.v_north);
-                    let speed = u.hypot(v);
-                    let weight = u.abs() + v.abs();
-                    if speed <= f64::EPSILON || weight <= f64::EPSILON {
-                        air[i] = ground[i];
-                        continue;
-                    }
-                    // The neighbours the air comes from, clamped at the
-                    // domain edge (which is sea).
-                    let up_col = if u > 0.0 {
-                        col.saturating_sub(1)
-                    } else {
-                        (col + 1).min(cols - 1)
                     };
-                    let up_row = if v > 0.0 {
-                        row.saturating_sub(1)
-                    } else {
-                        (row + 1).min(rows - 1)
-                    };
-                    let arriving = (u.abs() * air[row * cols + up_col]
-                        + v.abs() * air[up_row * cols + col])
-                        / weight;
-                    // Path across the cell along the wind: one cell for a
-                    // wind along a grid axis, up to sqrt(2) on a diagonal.
-                    let crossing = cell_m * weight / speed;
-                    let kept = (-crossing / length).exp();
-                    let updated = ground[i] + (arriving - ground[i]) * kept;
+                    let i = link.cell;
+                    let arriving =
+                        (link.u * air[link.from_col] + link.v * air[link.from_row]) / link.weight;
+                    let updated = ground[i] + (arriving - ground[i]) * link.kept;
                     largest_change = largest_change.max((updated - air[i]).abs());
                     air[i] = updated;
                 }
