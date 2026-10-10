@@ -390,23 +390,68 @@ pub fn step_regional_humans(
         (patch.origin_y_m / size).round() as i32,
         (patch.origin_x_m / size).round() as i32,
     );
+    // Reconcile the estate side-table with where everyone now stands. A
+    // human outside the estate block has no estate position. One inside it
+    // who is asleep, at bedtime by their own clock, or seeking shelter goes
+    // to their own bedroom -- going home to bed, which is what lets the
+    // house's curtains and lamps (D23) reach them at all; anyone else in
+    // the block stands outdoors at their cell's centre. A human who walked
+    // out and came back is let back in: the table used to keep out anyone
+    // who had once left it, so after a founder's first walk the house
+    // stopped existing for them.
+    let mut moves: Vec<(String, GridPosition, EstatePosition)> = Vec::new();
+    let mut leaving: Vec<String> = Vec::new();
     for human in humans.registry.iter() {
         let id = human.agent_id();
         let now = human.position;
         let in_block = (row0..row0 + 2).contains(&now.row) && (col0..col0 + 2).contains(&now.col);
         if !in_block {
-            positions.0.remove(id);
-        } else if before.get(id) != Some(&now) && positions.0.contains_key(id) {
+            leaving.push(id.to_string());
+            continue;
+        }
+        let to_bed = human.circadian.asleep
+            || human.circadian.is_bedtime(human.needs.fatigue)
+            || human.economy_action.kind == crate::humans::ActionKind::SeekShelter;
+        let bedroom = to_bed
+            .then(|| {
+                let label = format!("{id}'s Bedroom");
+                ctx.layout.spaces.iter().find(|s| s.label == label)
+            })
+            .flatten();
+        let current = positions.0.get(id).map(|p| p.space);
+        if let Some(room) = bedroom {
+            if current != Some(Space::Inside(room.id)) {
+                let at = centre(&room.rect_m);
+                moves.push((
+                    id.to_string(),
+                    medium_cell_of(ctx.domain, at),
+                    EstatePosition {
+                        space: Space::Inside(room.id),
+                        position_m: at,
+                    },
+                ));
+            }
+        } else if current.is_none() || before.get(id) != Some(&now) {
             let (x, y) =
                 ctx.domain
                     .cell_center_m(DomainLevel::Medium, now.row as usize, now.col as usize);
-            positions.0.insert(
+            moves.push((
                 id.to_string(),
+                now,
                 EstatePosition {
                     space: Space::Outdoors,
                     position_m: (x, y),
                 },
-            );
+            ));
         }
+    }
+    for id in leaving {
+        positions.0.remove(&id);
+    }
+    for (id, cell, place) in moves {
+        if let Some(human) = humans.registry.get_human_mut(&id) {
+            human.set_runtime_position(cell);
+        }
+        positions.0.insert(id, place);
     }
 }
