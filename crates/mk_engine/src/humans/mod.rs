@@ -1446,8 +1446,10 @@ fn apply_intimacy(initiator: &mut HumanBeing, target: &mut HumanBeing) -> bool {
 
     if willing {
         for person in [&mut *initiator, &mut *target] {
-            person.reproduction.satisfaction =
-                (person.reproduction.satisfaction + 0.4).clamp(0.0, 1.0);
+            // An act satisfies both partners fully; the satisfaction wears
+            // off over days (`ReproductiveSystemSnapshot::step`), and desire
+            // returns as it does.
+            person.reproduction.satisfaction = 1.0;
             person.reproduction.frustration =
                 (person.reproduction.frustration - 0.3).clamp(0.0, 1.0);
             person.reproduction.bonding_average =

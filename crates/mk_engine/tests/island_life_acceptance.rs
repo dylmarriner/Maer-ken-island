@@ -324,3 +324,39 @@ fn the_digest_notices_state_that_only_matters_later() {
         "an extra hour left the digest unchanged"
     );
 }
+
+/// Four weeks of the founders' own choices: a willing couple is intimate
+/// about as often as couples measured by the General Social Survey -- 55
+/// times a year for married and cohabiting adults in 2014, 80 for adults
+/// in their twenties (Twenge, Sherman & Wells 2017) -- not most of every
+/// waking minute, which is what a drive with no satiety gave. Two people
+/// over four weeks make a small sample, so the band is wide: 30-130 a
+/// year, which a satiety-free drive (thousands) and no desire at all (zero)
+/// both fail. Slow tier.
+#[test]
+#[ignore = "slow: four simulated weeks"]
+fn slow_humans_choose_intimacy_about_as_often_as_couples_do() {
+    let mut scenario =
+        IslandScenario::load(&repo("fixtures/island/default_scenario.json")).unwrap();
+    scenario.estate_patch.tree_cap = 200;
+    let canon = Arc::new(CanonLocked::load(&repo("fixtures/island/canon.json")).unwrap());
+    let mut w = IslandLife::bootstrap(scenario, canon).expect("the island bootstraps");
+    let count = |w: &IslandLife, id: &str| {
+        w.humans
+            .registry
+            .get_human(id)
+            .unwrap()
+            .reproduction
+            .sexual_activity_count
+    };
+    let before = count(&w, "Gem-D");
+    let days = 28.0;
+    w.advance((days * DAY as f64) as u64).unwrap();
+    let acts = (count(&w, "Gem-D") - before) as f64;
+    let per_year = acts * 365.25 / days;
+    println!("{acts} acts in {days} days: {per_year:.0} a year");
+    assert!(
+        (30.0..=130.0).contains(&per_year),
+        "{per_year:.0} acts a year against a measured 55-80"
+    );
+}

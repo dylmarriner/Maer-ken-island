@@ -470,11 +470,16 @@ fn drive_for(
         // couple alone together wants closeness no less than one in a crowd.
         // Libido is the trait-level desire, arousal the momentary state
         // (stepped in `reproduction`, suppressed by exhaustion); both drive it.
+        // Satiety holds it down after an act: desire is the drive less what
+        // the last act still satisfies, which wears off over days. Without
+        // it a willing couple chose intimacy more than half of every waking
+        // minute, where real couples manage about once a week.
         ActionKind::Intimacy => {
-            reproduction.libido * 0.5
+            (reproduction.libido * 0.5
                 + reproduction.arousal * 0.3
                 + reproduction.attraction_average * 0.3
-                + willed_urge(core_systems.chaotic_urges.reproduction) * 0.2
+                + willed_urge(core_systems.chaotic_urges.reproduction) * 0.2)
+                * (1.0 - reproduction.satisfaction.clamp(0.0, 1.0))
         }
         // Curiosity proxy: same `exploration` willed urge and
         // `novelty_seek` trait that drive physical `Explore`, gated by

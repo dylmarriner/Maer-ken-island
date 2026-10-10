@@ -41,6 +41,15 @@ fn default_baseline_libido() -> f64 {
     DEFAULT_LIBIDO
 }
 
+/// Time constant (days) over which sexual satisfaction wears off after an
+/// act, so desire returns. Calibrated so a willing couple left to their own
+/// choices are intimate about as often as couples measured by the General
+/// Social Survey: some 55 times a year for married and cohabiting adults in
+/// 2014 and 80 for adults in their twenties (Twenge, Sherman & Wells 2017,
+/// Arch. Sex. Behav. 46:2389). `humans_choose_intimacy_about_as_often_as_
+/// couples_do` measures it.
+pub const SEXUAL_SATIETY_TIME_CONSTANT_DAYS: f64 = 20.0;
+
 fn default_baseline_arousal() -> f64 {
     DEFAULT_AROUSAL
 }
@@ -391,6 +400,10 @@ impl ReproductiveSystemSnapshot {
             (self.baseline_arousal * (1.0 - deprivation_suppression * 0.6)).clamp(0.0, 1.0);
         let libido = lerp(self.libido, libido_target, blend);
         let arousal = lerp(self.arousal, arousal_target, blend);
+        // Satisfaction after an act wears off, and with it the satiety that
+        // holds desire down (see `SEXUAL_SATIETY_TIME_CONSTANT_DAYS`).
+        let satisfaction =
+            self.satisfaction * (-dt * 365.25 / SEXUAL_SATIETY_TIME_CONSTANT_DAYS).exp();
 
         let bonding_blend = (0.15 * dt).clamp(0.0, 1.0);
         let bonding_average = lerp(
@@ -428,6 +441,7 @@ impl ReproductiveSystemSnapshot {
             fertility_level,
             libido,
             arousal,
+            satisfaction,
             bonding_average,
             fertility_cycle,
             pregnancy,
