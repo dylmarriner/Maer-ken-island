@@ -212,14 +212,12 @@ pub fn apply_orographic_precipitation(
         }
     }
     let budget = carry_vapour(&land, &condensing, &weather.wind, rows, cols, size);
-    for idx in 0..rows * cols {
-        if !land[idx] {
-            continue;
+    let columns = weather.moisture.data().to_vec();
+    for (idx, rain) in weather.precipitation.data_mut().iter_mut().enumerate() {
+        if land[idx] {
+            let wrung = columns[idx].max(0.0) * budget.condensed[idx] * SECONDS_PER_DAY;
+            *rain = *rain * budget.remaining[idx] + wrung;
         }
-        let column = weather.moisture.data()[idx].max(0.0);
-        let base = weather.precipitation.data()[idx] * budget.remaining[idx];
-        let wrung = column * budget.condensed[idx] * SECONDS_PER_DAY;
-        weather.precipitation.data_mut()[idx] = base + wrung;
     }
 }
 

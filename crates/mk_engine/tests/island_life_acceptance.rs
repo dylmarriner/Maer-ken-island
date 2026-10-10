@@ -83,7 +83,13 @@ const DAY: u64 = 86_400;
 /// audit gave 196 of 196, shortfalls zero, 13.0 and 10.4 kg against 13.0
 /// and 10.4, and temperate-forest NPP back inside the pack at 595 g
 /// C/m2/yr, the forests now standing in a maritime year.
-const WEEK_DIGEST: &str = "1925a6b99a5c568145354bc3b34bb4fb6b9f5fe8f2e81c333be43e8aafb2bcd6";
+///
+/// And for D38: the sea's humidity carried over the land, rain from a
+/// vapour budget, and a river taking its channel and esplanade reserve
+/// rather than its whole 2 km cell (without which a watered island had no
+/// buildable estate site). Audited: 196 of 196, no shortfalls, 13.0 and
+/// 10.4 kg against 13.0 and 10.4, temperate-forest NPP 567 g C/m2/yr.
+const WEEK_DIGEST: &str = "125c320a0fdab7befc0859defa2da29a35bfd434b5ead5d394cb3f3622ddffec";
 
 fn repo(path: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
