@@ -38,7 +38,7 @@ pub const REGIONAL_METRES_PER_UNIT: f64 = 10_000.0;
 pub const REGIONAL_VERTICAL_EXAGGERATION: f64 = 20.0;
 
 /// Metres per render unit in the estate frame. One, so a four-metre room
-/// is four units and a person is 1.7 tall.
+/// is four units and a person stands at their own height.
 pub const ESTATE_METRES_PER_UNIT: f64 = 1.0;
 
 /// A point in render space: x east, y up, z **south**.
@@ -154,24 +154,42 @@ fn place_person(
     };
     let (row, col) = terrain.cell_at_m(x_m, y_m)?;
     let ground_m = f64::from(terrain.elevation_at(row, col)?.max(0.0));
-    // Head height above the ground they stand on. A placeholder for a
-    // real body height, and the renderer draws a figure around it rather
-    // than a point, so being a centimetre out does not matter -- being on
-    // the wrong cell would.
-    const STANDING_M: f64 = 1.7;
+    // The top of their head above the ground they stand on: their own
+    // height, as the island drew it for them.
+    let standing_m = stature_m(person);
     Some(PlacedPerson {
         agent_id: person.agent_id.clone(),
         alive: person.alive,
         asleep: person.asleep,
-        regional: regional_of(terrain, x_m, y_m, ground_m + STANDING_M),
+        regional: regional_of(terrain, x_m, y_m, ground_m + standing_m),
         // Only where they really have metres. A cell is 2 km across, so a
         // person known only by cell has no place in a frame where one unit
         // is a metre.
         estate: person
             .position_m
-            .map(|(x, y)| estate_of(estate_origin_m, x, y, STANDING_M)),
+            .map(|(x, y)| estate_of(estate_origin_m, x, y, standing_m)),
         space: person.space.clone(),
     })
+}
+
+/// The mean adult height of the population the island draws people from,
+/// for a backend too old to say how tall somebody is.
+///
+/// The island's own figures rather than a renderer's: `individual.rs`
+/// draws adult height from the NCD Risk Factor Collaboration's 2016 global
+/// means, 171.0 cm for men and 159.0 cm for women, and this is the middle
+/// of the two. Every frontend used to stand every person at 1.7 m, which
+/// was nobody's height in particular and the island's for no one.
+const POPULATION_MEAN_HEIGHT_M: f64 = (1.710 + 1.590) / 2.0;
+
+/// How tall to draw `person`: what the island says, or -- only when an
+/// older backend says nothing -- the mean of the population it draws from.
+fn stature_m(person: &Person) -> f64 {
+    if person.height_m > 0.0 {
+        person.height_m
+    } else {
+        POPULATION_MEAN_HEIGHT_M
+    }
 }
 
 #[cfg(test)]
@@ -308,6 +326,7 @@ mod tests {
             position_m: position,
             cell,
             body_carbon_kg: Some(13.0),
+            height_m: 1.83,
         }
     }
 
@@ -320,8 +339,56 @@ mod tests {
         };
         let placed = place_people(&t, &world, (8_000.0, 6_000.0));
         assert_eq!(placed.len(), 1);
-        assert_eq!(placed[0].estate, Some(Point::new(0.0, 1.7, 0.0)));
+        assert_eq!(
+            placed[0].estate,
+            Some(Point::new(0.0, 1.83, 0.0)),
+            "a person stands at their own height, not one chosen for everybody"
+        );
         assert_eq!(placed[0].space.as_deref(), Some("Gem-D's Bedroom"));
+    }
+
+    #[test]
+    fn two_people_of_different_heights_stand_at_different_heights() {
+        let t = terrain();
+        let mut tall = a_person(Some((8_000.0, 6_000.0)), Some((3, 4)));
+        tall.height_m = 1.93;
+        let mut short = a_person(Some((8_000.0, 6_000.0)), Some((3, 4)));
+        short.agent_id = "Gem-K".to_string();
+        short.height_m = 1.52;
+        let world = World {
+            people: vec![tall, short],
+            ..Default::default()
+        };
+        let placed = place_people(&t, &world, (8_000.0, 6_000.0));
+        let head = |id: &str| {
+            placed
+                .iter()
+                .find(|p| p.agent_id == id)
+                .and_then(|p| p.estate)
+                .expect("placed on the estate")
+                .y
+        };
+        assert!(
+            (head("Gem-D") - head("Gem-K") - 0.41).abs() < 1e-5,
+            "a 1.93 m person and a 1.52 m person must stand 41 cm apart at the head"
+        );
+    }
+
+    #[test]
+    fn a_backend_that_sends_no_height_gets_the_islands_own_mean() {
+        let t = terrain();
+        let mut unsaid = a_person(Some((8_000.0, 6_000.0)), Some((3, 4)));
+        unsaid.height_m = 0.0;
+        let world = World {
+            people: vec![unsaid],
+            ..Default::default()
+        };
+        let placed = place_people(&t, &world, (8_000.0, 6_000.0));
+        let y = placed[0].estate.expect("placed").y;
+        assert!(
+            (f64::from(y) - 1.65).abs() < 1e-5,
+            "the middle of the NCD-RisC means the island draws from, not 1.7: {y}"
+        );
     }
 
     #[test]
