@@ -26,7 +26,7 @@ document was wrong about whether rendering here was possible at all.
 | Grid topology for human/organism movement, births and perception (Phase 3 Task 6) | Done; planetary results bit-identical | `topology.rs`, `tests/topology_hash_baseline.rs` |
 | Founders' estate laid out in metres (Phase 3 Task 5) | Done | `regional/estate_layout.rs`, `tests/island_estate_layout.rs` |
 | Canonical founders on the island: observation, bedrooms, computer rule (Phase 3 Task 8) | Done except Task-3-dependent hooks | `regional/humans.rs`, `humans/observation.rs`, `tests/island_human_runtime.rs` |
-| Physical materials: gather, hunt, burn, calcine, eat, respire, drink, build through the flux ledger (Phase 3 Task 3) | Model done and audited inside the island tick. A meal is the carbon its eater respired since the last one, eaten when the human chooses to eat (about 42 minutes a day), so adults hold at 1.00x of their expected body carbon over a week. Drinking is still on a six-hourly cadence (D10) | `regional/materials.rs`, `regional/life.rs`, `tests/island_material_flows.rs`, `tests/island_life_acceptance.rs` |
+| Physical materials: gather, hunt, burn, calcine, eat, respire, drink, build through the flux ledger (Phase 3 Task 3) | Model done and audited inside the island tick. A meal is the carbon its eater respired since the last one, eaten when the human chooses to eat (about 45 minutes a day), so adults hold at 1.00x of their expected body carbon over a week; drinking likewise puts back the water lost since the last drink, when they choose to drink (D10, resolved) | `regional/materials.rs`, `regional/life.rs`, `tests/island_material_flows.rs`, `tests/island_life_acceptance.rs` |
 | Timed, energy-costed work: tasks, BMR x MET, walking, load limits (Phase 3 Task 3b) | Model done. Energy is wired: the island tick costs resting metabolism at the body's BMR times the MET of sleeping or sitting, from the circadian clock, and `humans/lifecycle.rs` charges walking, mining and building their Compendium METs. Durations are not: every action still takes one tick, and the actions with no pack row cost the baseline (D9, D22) | `regional/labour.rs`, `regional/life.rs`, `humans/lifecycle.rs`, `tests/island_labour.rs`, `tests/human_realism.rs` |
 | Estate fuel and electricity (Phase 3 Task 4b) | Done | `regional/energy.rs`, `tests/island_energy.rs` |
 | Individual trees and stands on the estate patch (Phase 3 Task 7) | Done | `regional/local_vegetation.rs`, `tests/island_local_vegetation.rs` |
@@ -195,8 +195,7 @@ basin's 360 (D38); no sea/land breezes (D3); storm structure is parametric (D4);
 in-channel storage (D28); the regional tick audits tidal heat only (D29); production ignores soil
 nutrients (D31); infants and young adults lack their extrinsic mortality (D21); every human action still takes exactly one
 tick whatever it is, and none of them uses a machine (D9); the actions with no Compendium row
-cost the resting baseline (D22); drinking is on the tick's cadence rather than each person's
-choice (D10).
+cost the resting baseline (D22).
 
 ## Not done
 

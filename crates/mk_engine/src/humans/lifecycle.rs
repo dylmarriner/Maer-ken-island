@@ -318,10 +318,12 @@ pub fn step_lifecycle(
         (met / super::super::regional::labour::BASELINE_MET).max(1.0)
     });
     // On a step short enough to tell one meal from the next (the body
-    // clock's resolution, `circadian::MAX_RESOLVED_STEP_HOURS`), food comes
-    // only from choosing to eat it; a longer step has its meals inside it.
+    // clock's resolution, `circadian::MAX_RESOLVED_STEP_HOURS`), food and
+    // water come only from choosing to eat and drink; a longer step has its
+    // meals and drinks inside it.
     let dt_hours = dt_years.max(0.0) / super::rates::HOUR_YEARS;
     let meals = meals_for(human.economy_action.kind, dt_hours);
+    let drinks = drinks_for(human.economy_action.kind, dt_hours);
     let effort = match human.economy_action.kind {
         super::ActionKind::SeekFood | super::ActionKind::Gather => super::needs::EffortFocus {
             food: 1.5,
@@ -329,6 +331,7 @@ pub fn step_lifecycle(
             shelter: 1.0,
             activity,
             meals,
+            drinks,
         },
         super::ActionKind::SeekWater => super::needs::EffortFocus {
             food: 1.0,
@@ -336,6 +339,7 @@ pub fn step_lifecycle(
             shelter: 1.0,
             activity,
             meals,
+            drinks,
         },
         super::ActionKind::SeekShelter | super::ActionKind::Rest | super::ActionKind::Build => {
             super::needs::EffortFocus {
@@ -344,11 +348,13 @@ pub fn step_lifecycle(
                 shelter: 1.5,
                 activity,
                 meals,
+                drinks,
             }
         }
         _ => super::needs::EffortFocus {
             activity,
             meals,
+            drinks,
             ..super::needs::EffortFocus::none()
         },
     };
@@ -585,6 +591,24 @@ pub fn meals_for(action: ActionKind, dt_hours: f64) -> super::needs::Meals {
 /// Whether `action` is one a human eats during.
 pub fn is_eating(action: ActionKind) -> bool {
     matches!(action, ActionKind::SeekFood)
+}
+
+/// How water reaches a human over a step of `dt_hours` while doing `action`
+/// (see [`super::needs::Drinks`]): as [`meals_for`], for drinking.
+pub fn drinks_for(action: ActionKind, dt_hours: f64) -> super::needs::Drinks {
+    use super::needs::Drinks;
+    if dt_hours > super::circadian::MAX_RESOLVED_STEP_HOURS {
+        Drinks::Implicit
+    } else if is_drinking(action) {
+        Drinks::Drinking
+    } else {
+        Drinks::NotDrinking
+    }
+}
+
+/// Whether `action` is one a human drinks during.
+pub fn is_drinking(action: ActionKind) -> bool {
+    matches!(action, ActionKind::SeekWater)
 }
 
 /// The metabolic equivalent of `action` where the packs give one, given what
@@ -1388,7 +1412,7 @@ mod tests {
     }
 
     #[test]
-    fn only_a_human_who_chooses_to_eat_takes_in_food_on_a_short_step() {
+    fn only_a_human_who_chooses_to_eat_or_drink_does_so_on_a_short_step() {
         use super::super::needs::Meals;
         use super::super::ActionKind::*;
         let resolved = super::super::circadian::MAX_RESOLVED_STEP_HOURS;
@@ -1400,6 +1424,16 @@ mod tests {
         // A day-long step has its meals inside it, whatever was chosen.
         assert_eq!(meals_for(Rest, 24.0), Meals::Implicit);
         assert_eq!(meals_for(SeekFood, 24.0), Meals::Implicit);
+        use super::super::needs::Drinks;
+        assert_eq!(drinks_for(SeekWater, 1.0 / 60.0), Drinks::Drinking);
+        for other in [SeekFood, Gather, Rest, Explore] {
+            assert_eq!(
+                drinks_for(other, 1.0 / 60.0),
+                Drinks::NotDrinking,
+                "{other:?}"
+            );
+        }
+        assert_eq!(drinks_for(Rest, 24.0), Drinks::Implicit);
     }
 
     #[test]

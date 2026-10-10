@@ -382,7 +382,8 @@ fn a_living_human_sleeps_at_night_through_the_whole_runtime() {
     // The full lifecycle pipeline, half-hourly steps for 16 days under a
     // 24 h day: after ten days to entrain (a new human's clock starts at an
     // arbitrary phase, like jet lag), the clock drives the brain into sleep
-    // each night.
+    // each night. Their mind decides each step, as the runtime's does: on
+    // steps this short, eating and drinking are its choices.
     let mut human = HumanBeing::new("realism-sleeper".into(), BiologicalSex::Female);
     let rng = RngRegistry::new([7u8; 32]);
     let dt = 0.5 * HOUR_YEARS;
@@ -404,6 +405,7 @@ fn a_living_human_sleeps_at_night_through_the_whole_runtime() {
             daylight_fraction: daylight,
             ..AgentWorldObservation::default()
         };
+        human.decide(&obs, step as u64, &rng);
         step_lifecycle(&mut human, dt, step as u64, &obs, &rng, (0, 0));
         if step >= 10 * 48 && human.neurochemistry.asleep {
             asleep_steps += 1;

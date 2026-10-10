@@ -57,7 +57,11 @@ use crate::topology::GridTopology;
 const ASLEEP_ACTIVITY: &str = "sleeping";
 const AWAKE_AT_HOME_ACTIVITY: &str = "sitting_quietly";
 
-const WATER_KG_PER_DRINK: f64 = 0.65;
+/// Water an adult turns over per kcal they spend: 1 mL/kcal under average
+/// conditions (National Research Council 1989, *Recommended Dietary
+/// Allowances*, 10th ed., ch. 11). What a founder burns in an hour is what
+/// they lose in water, and what the next drink has to put back.
+pub const WATER_KG_PER_KCAL: f64 = 0.001;
 /// Share of the body's water loss that is excretion to the soil.
 const EXCRETION_TO_SOIL_FRACTION: f64 = 0.6;
 
@@ -123,6 +127,10 @@ pub struct IslandLifeSnapshot {
     pub audits_closed: u64,
     pub shortfalls: Shortfalls,
     pub respired_since_meal: BTreeMap<String, f64>,
+    #[serde(default)]
+    pub lost_since_drink: BTreeMap<String, f64>,
+    #[serde(default)]
+    pub water_drunk_kg: BTreeMap<String, f64>,
     pub sleep_seconds: BTreeMap<String, (f64, f64)>,
     pub food_cell: (usize, usize),
     pub water_cell: Option<(usize, usize)>,
@@ -148,6 +156,12 @@ pub struct IslandLife {
     /// Carbon each founder has respired since their last meal (kg), which is
     /// what the next meal has to put back.
     respired_since_meal: BTreeMap<String, f64>,
+    /// Water each founder has lost since their last drink (kg), which is
+    /// what the next drink has to put back.
+    lost_since_drink: BTreeMap<String, f64>,
+    /// Water each founder has drunk since the island began (kg): the record
+    /// the intake checks read.
+    pub water_drunk_kg: BTreeMap<String, f64>,
     /// Seconds each founder has spent asleep and awake since their
     /// respiration was last charged. The sleep state can turn over at any
     /// human substep, so sampling it once an hour would charge a whole hour
@@ -298,6 +312,8 @@ impl IslandLife {
             audits_closed: 0,
             shortfalls: Shortfalls::default(),
             respired_since_meal: BTreeMap::new(),
+            lost_since_drink: BTreeMap::new(),
+            water_drunk_kg: BTreeMap::new(),
             sleep_seconds: BTreeMap::new(),
             scheduler: IslandScheduler::new(scenario_cadences),
             labour: LabourTable::load_default().map_err(IslandLifeError::Labour)?,
@@ -365,6 +381,8 @@ impl IslandLife {
             audits_closed: self.audits_closed,
             shortfalls: self.shortfalls,
             respired_since_meal: self.respired_since_meal.clone(),
+            lost_since_drink: self.lost_since_drink.clone(),
+            water_drunk_kg: self.water_drunk_kg.clone(),
             sleep_seconds: self.sleep_seconds.clone(),
             food_cell: self.food_cell,
             water_cell: self.water_cell,
@@ -412,6 +430,8 @@ impl IslandLife {
             audits_closed: snapshot.audits_closed,
             shortfalls: snapshot.shortfalls,
             respired_since_meal: snapshot.respired_since_meal,
+            lost_since_drink: snapshot.lost_since_drink,
+            water_drunk_kg: snapshot.water_drunk_kg,
             sleep_seconds: snapshot.sleep_seconds,
             labour: LabourTable::load_default().map_err(IslandLifeError::Labour)?,
             // A restored island keeps no records until someone attaches
@@ -575,12 +595,14 @@ impl IslandLife {
 
     /// Drop every per-person accumulator for `id`.
     ///
-    /// The two of them are hashed into the state digest, so a person who
+    /// All of them are hashed into the state digest, so a person who
     /// has left the world has to leave these too or two islands that agree
     /// about who is alive will disagree about their digest. `advance`
     /// already does this for the dead; a removal needs the same.
     pub(super) fn forget_accumulators(&mut self, id: &str) {
         self.respired_since_meal.remove(id);
+        self.lost_since_drink.remove(id);
+        self.water_drunk_kg.remove(id);
         self.sleep_seconds.remove(id);
     }
 
@@ -691,22 +713,35 @@ impl IslandLife {
                 if let Ok(kgc) = life.materials.respire(id, kcal, ledger) {
                     *life.respired_since_meal.entry(id.clone()).or_insert(0.0) += kgc;
                 }
+                *life.lost_since_drink.entry(id.clone()).or_insert(0.0) += kcal * WATER_KG_PER_KCAL;
             }
         })
     }
 
-    /// Feed every living founder who is eating right now — the ones whose
-    /// own choice this substep was to go and eat
-    /// (`humans::lifecycle::is_eating`), the same choice that lets their
-    /// needs take in food.
+    /// Feed and water every living founder who is eating or drinking right
+    /// now — the ones whose own choice this substep was to go and eat
+    /// (`humans::lifecycle::is_eating`) or drink (`is_drinking`), the same
+    /// choice that lets their needs take in food or water.
     ///
     /// A meal is what its eater has actually burned since the last one, not
     /// a fixed portion: the hourly tick records the carbon each of them
     /// respires, and the harvest asks the food cell for exactly the plant
     /// matter that carbon takes to replace. Intake and expenditure come from
     /// one model, so an adult who eats holds steady by construction, and one
-    /// who does not carries the debt until they do.
+    /// who does not carries the debt until they do. A drink is the same for
+    /// water, at [`WATER_KG_PER_KCAL`] of what was burned.
     fn meals(&mut self) -> Result<(), IslandLifeError> {
+        let drinkers: Vec<(String, f64)> = self
+            .humans
+            .registry
+            .iter()
+            .filter(|h| matches!(h.profile.status, mk_core::human::HumanStatus::Alive))
+            .filter(|h| crate::humans::lifecycle::is_drinking(h.economy_action.kind))
+            .filter_map(|h| {
+                let owed = self.lost_since_drink.get(h.agent_id()).copied()?;
+                (owed > 0.0).then(|| (h.agent_id().to_string(), owed))
+            })
+            .collect();
         let eaters: Vec<(String, f64)> = self
             .humans
             .registry
@@ -718,7 +753,7 @@ impl IslandLife {
                 (owed > 0.0).then(|| (h.agent_id().to_string(), owed))
             })
             .collect();
-        if eaters.is_empty() {
+        if eaters.is_empty() && drinkers.is_empty() {
             return Ok(());
         }
         let area = self.domain.cell_area_m2(DomainLevel::Medium);
@@ -746,23 +781,17 @@ impl IslandLife {
                     Err(_) => life.shortfalls.food += 1,
                 }
             }
-        })
-    }
-
-    fn six_hourly(&mut self) -> Result<(), IslandLifeError> {
-        let dt_ecology = self.scenario.cadences.hydrology_ecology_resource_seconds;
-        self.ecology.step(dt_ecology as f64, None, None);
-        self.vegetation.step(&self.ecology, dt_ecology);
-        let founders = self.founders();
-        let area = self.domain.cell_area_m2(DomainLevel::Medium);
-        self.audited(|life, ledger| {
-            for (id, _, _) in &founders {
+            // The body's water in the ledger is what passes through it, not
+            // its standing stock, so a drink is drawn, drunk and its owed
+            // losses booked together: excretion to the soil, breath and
+            // sweat to the air.
+            for (id, owed_kg) in &drinkers {
                 let drawn = life
                     .water_cell
                     .ok_or(MaterialError::DryCell)
                     .and_then(|cell| {
                         life.materials.gather_water(
-                            WATER_KG_PER_DRINK,
+                            *owed_kg,
                             &mut life.physical.hydrology,
                             cell,
                             area,
@@ -771,15 +800,29 @@ impl IslandLife {
                     });
                 match drawn {
                     Ok(kg) => {
-                        let _ = life.materials.drink(id, kg);
-                        let _ =
-                            life.materials
-                                .lose_water(id, kg, EXCRETION_TO_SOIL_FRACTION, ledger);
+                        if life.materials.drink(id, kg).is_ok() {
+                            let _ = life.materials.lose_water(
+                                id,
+                                kg,
+                                EXCRETION_TO_SOIL_FRACTION,
+                                ledger,
+                            );
+                            *life.water_drunk_kg.entry(id.clone()).or_insert(0.0) += kg;
+                            life.lost_since_drink
+                                .insert(id.clone(), (owed_kg - kg).max(0.0));
+                        }
                     }
                     Err(_) => life.shortfalls.water += 1,
                 }
             }
         })
+    }
+
+    fn six_hourly(&mut self) -> Result<(), IslandLifeError> {
+        let dt_ecology = self.scenario.cadences.hydrology_ecology_resource_seconds;
+        self.ecology.step(dt_ecology as f64, None, None);
+        self.vegetation.step(&self.ecology, dt_ecology);
+        Ok(())
     }
 
     /// Advance by `seconds` of simulated time in human substeps; a
@@ -836,6 +879,7 @@ impl IslandLife {
                 if !alive {
                     if spent.remove(human.agent_id()).is_some()
                         || self.respired_since_meal.contains_key(human.agent_id())
+                        || self.lost_since_drink.contains_key(human.agent_id())
                     {
                         forget.push(human.agent_id().to_string());
                     }
@@ -861,6 +905,7 @@ impl IslandLife {
                 // to detritus when they died, and these only ever recorded
                 // what the next hour and the next meal would have cost.
                 self.respired_since_meal.remove(&id);
+                self.lost_since_drink.remove(&id);
             }
             self.meals()?;
             // A death is written at once: every other record can lag a
@@ -936,6 +981,8 @@ impl IslandLife {
         // and the cost of the next hour — so a digest without them would call
         // two states identical and then watch them diverge.
         h.update(canonical(&self.respired_since_meal).as_bytes());
+        h.update(canonical(&self.lost_since_drink).as_bytes());
+        h.update(canonical(&self.water_drunk_kg).as_bytes());
         h.update(canonical(&self.sleep_seconds).as_bytes());
         h.update(&self.sim_time_s.to_le_bytes());
         // Deliberately absent, and each for a reason that must stay true:
@@ -996,6 +1043,7 @@ mod tests {
             life.respired_since_meal.contains_key("Gem-K"),
             "nobody respired, so there is nothing to test"
         );
+        assert!(life.lost_since_drink.contains_key("Gem-K"));
 
         life.humans
             .registry
@@ -1012,6 +1060,10 @@ mod tests {
         assert!(
             !life.respired_since_meal.contains_key("Gem-K"),
             "a dead founder is still owed a meal"
+        );
+        assert!(
+            !life.lost_since_drink.contains_key("Gem-K"),
+            "a dead founder is still owed a drink"
         );
         // And the living are untouched.
         assert!(life.sleep_seconds.contains_key("Gem-D"));

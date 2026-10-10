@@ -187,6 +187,15 @@
       "note": "Heavy work in heat raises losses to 6-12 L/day (Adolph 1947)."
     },
     {
+      "key": "food_water_share",
+      "description": "Share of total water intake that comes from food rather than drinks, US adults",
+      "unit": "fraction",
+      "source": "iom2005",
+      "confidence": "medium",
+      "value": { "range": { "min": 0.19, "max": 0.22, "typical": 0.2 } },
+      "note": "NHANES III: food provided about 20% of total water intake (19% men, 22% women); the rest is beverages and drinking water."
+    },
+    {
       "key": "survival_without_water",
       "description": "Survival time without any water intake",
       "unit": "days",

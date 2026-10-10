@@ -99,7 +99,7 @@ const DAY: u64 = 86_400;
 /// Audited: 196 of 196, no shortfalls, 13.0 and 10.4 kg against 13.0 and
 /// 10.4, Gem-D asleep 56 of 168 hours (48 at home), Gem-K 54 (46),
 /// temperate-forest NPP 567.
-const WEEK_DIGEST: &str = "201bb5ac65e2ed7048c73f4f9072499e5051d6acc578ad81ad4acadf76c2965e";
+const WEEK_DIGEST: &str = "372a04e8301edb401e038e8e2636ec18caed2ad080cca1b6b01e62cc486ea032";
 
 fn repo(path: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -359,17 +359,38 @@ fn slow_a_week_on_the_island_matches_the_reference_packs() {
         );
     }
 
-    // Founders' water use: at least the pack's lower adequate intake, over a week.
+    // Founders' water use against the IOM's adequate intake. They drink when
+    // they choose to, and each drink puts back what they lost at 1 mL per
+    // kcal they burned, so this is their own expenditure and their own
+    // choices meeting the survey: drinks are the pack's share of total water
+    // not supplied by food, held to the half-to-one-and-a-half band the
+    // other pack comparisons here use.
     let intake = lib
         .item(ReferenceDomain::Humans, "total_water_adequate_intake")
         .unwrap()
         .table()
         .unwrap();
-    let drunk_per_founder_day = 4.0 * 0.65;
-    assert!(
-        drunk_per_founder_day >= intake.get("female", "value").unwrap() * 0.9,
-        "{drunk_per_founder_day} L/day"
-    );
+    let food_share = lib
+        .item(ReferenceDomain::Humans, "food_water_share")
+        .unwrap()
+        .central()
+        .unwrap();
+    for id in ["Gem-D", "Gem-K"] {
+        let h = w.humans.registry.get_human(id).unwrap();
+        let sex = match h.biological_sex() {
+            mk_core::human::BiologicalSex::Male => "male",
+            _ => "female",
+        };
+        let drinks = intake.get(sex, "value").unwrap() * (1.0 - food_share);
+        let drunk = w.water_drunk_kg.get(id).copied().unwrap_or(0.0) / 7.0;
+        println!(
+            "{id}: drank {drunk:.2} L a day against the {sex} adequate {drinks:.2} L from drinks"
+        );
+        assert!(
+            (0.5 * drinks..=1.5 * drinks).contains(&drunk),
+            "{id} drank {drunk:.2} L a day"
+        );
+    }
     assert_eq!(w.shortfalls.water, 0, "the founders found water every time");
     assert_eq!(deferred_digest, WEEK_DIGEST);
 }
