@@ -49,6 +49,11 @@ fn default_baseline_libido() -> f64 {
 /// Arch. Sex. Behav. 46:2389). `humans_choose_intimacy_about_as_often_as_
 /// couples_do` measures it.
 pub const SEXUAL_SATIETY_TIME_CONSTANT_DAYS: f64 = 20.0;
+/// Mean interval (days) between acts for married and cohabiting couples:
+/// 365.25 / 55, the same survey (Twenge et al. 2017). A step at least this
+/// long holds a whole interval, so a regular couple's desire has returned
+/// within it whatever the satiety's decay says.
+pub const MEAN_INTERVAL_BETWEEN_ACTS_DAYS: f64 = 365.25 / 55.0;
 
 fn default_baseline_arousal() -> f64 {
     DEFAULT_AROUSAL
@@ -402,8 +407,18 @@ impl ReproductiveSystemSnapshot {
         let arousal = lerp(self.arousal, arousal_target, blend);
         // Satisfaction after an act wears off, and with it the satiety that
         // holds desire down (see `SEXUAL_SATIETY_TIME_CONSTANT_DAYS`).
-        let satisfaction =
-            self.satisfaction * (-dt * 365.25 / SEXUAL_SATIETY_TIME_CONSTANT_DAYS).exp();
+        //
+        // A step that long cannot resolve one act from the next -- the
+        // circadian clock treats its long steps the same way -- so a
+        // decision made once per such step stands for a regular life:
+        // without the reset, a world stepped a week at a time would see a
+        // couple only every two or three weeks.
+        let dt_days = dt * 365.25;
+        let satisfaction = if dt_days >= MEAN_INTERVAL_BETWEEN_ACTS_DAYS {
+            0.0
+        } else {
+            self.satisfaction * (-dt_days / SEXUAL_SATIETY_TIME_CONSTANT_DAYS).exp()
+        };
 
         let bonding_blend = (0.15 * dt).clamp(0.0, 1.0);
         let bonding_average = lerp(

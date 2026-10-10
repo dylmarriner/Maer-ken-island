@@ -5,7 +5,7 @@
 use super::genetics::GeneticsSnapshot;
 use super::registry::HumanRegistry;
 use super::reproduction::ReproductiveTimeline;
-use super::{BiologicalSex, HumanBeing, HumanStatus};
+use super::{ActionKind, BiologicalSex, HumanBeing, HumanStatus};
 use crate::io::HumanStorageError;
 use chrono::Utc;
 use mk_core::rng::{RngExt, RngKey, RngRegistry, SubsystemId};
@@ -313,31 +313,7 @@ pub fn step_lifecycle(
     // at 1.0, so the needs model never drains slower than its 1.5 MET
     // calibration. Lowering that floor would move survival times the realism
     // suite pins, so it is a separate, deliberate change.
-    let activity_met = match human.economy_action.kind {
-        // "walking_4_8_kmh_level": going somewhere on foot is what these are.
-        super::ActionKind::Move
-        | super::ActionKind::Explore
-        | super::ActionKind::SeekFood
-        | super::ActionKind::SeekWater
-        | super::ActionKind::SeekShelter => Some(WALKING_MET),
-        // "hand_mining".
-        super::ActionKind::Mine => Some(HAND_MINING_MET),
-        // "carpentry_general": building and crafting are both working timber
-        // and tools by hand, and the pack's row covers the activity rather
-        // than the product.
-        super::ActionKind::Build | super::ActionKind::Craft => Some(CARPENTRY_MET),
-        // Gathering wild food is walking and stooping, not the sustained
-        // cultivation "farming_manual" measures, so it is costed as the
-        // walking it mostly is. Leaving it at the baseline would be the
-        // stranger claim: a human pays to walk to the food and then picks it
-        // for free.
-        super::ActionKind::Gather => Some(WALKING_MET),
-        // Carrying, social approach, harm, intimacy, idling, resting and
-        // working at a computer have no row that fits them — the pack's
-        // "carrying_heavy_load" is a load this model does not track, and the
-        // rest are brief or sub-baseline — so they cost what they cost today.
-        _ => None,
-    };
+    let activity_met = activity_met_for(human.economy_action.kind, observation);
     let activity = activity_met.map_or(1.0, |met| {
         (met / super::super::regional::labour::BASELINE_MET).max(1.0)
     });
@@ -582,6 +558,48 @@ pub fn step_lifecycle(
 pub const WALKING_MET: f64 = 3.55;
 pub const HAND_MINING_MET: f64 = 6.75;
 pub const CARPENTRY_MET: f64 = 3.5;
+
+/// The metabolic equivalent of `action` where the packs give one, given what
+/// this human can see (`observation`), or `None` for the resting baseline.
+fn activity_met_for(action: ActionKind, observation: &super::AgentWorldObservation) -> Option<f64> {
+    // Seeking a resource is walking only while it is being looked for. Where
+    // it is already at hand -- the access at which `autonomy` has the human
+    // stay put and use it -- seeking food is eating, seeking water drinking
+    // and seeking shelter staying in it, at the resting baseline. Charging
+    // a whole step of walking for eating where one stands made seeking food
+    // in plenty a death spiral: 2.4 times the drain against a 1.5 times
+    // intake, so a hungry human in a cell full of food grew hungrier the
+    // more they sought it, until they died of it.
+    let at_hand = |access: f64| access >= super::autonomy::SEEK_SATISFIED_ACCESS;
+    match action {
+        ActionKind::SeekFood if at_hand(observation.caloric_access) => None,
+        ActionKind::SeekWater if at_hand(observation.hydration_access) => None,
+        ActionKind::SeekShelter if at_hand(observation.shelter_quality) => None,
+        // "walking_4_8_kmh_level": going somewhere on foot is what these are.
+        ActionKind::Move
+        | ActionKind::Explore
+        | ActionKind::SeekFood
+        | ActionKind::SeekWater
+        | ActionKind::SeekShelter => Some(WALKING_MET),
+        // "hand_mining".
+        ActionKind::Mine => Some(HAND_MINING_MET),
+        // "carpentry_general": building and crafting are both working timber
+        // and tools by hand, and the pack's row covers the activity rather
+        // than the product.
+        ActionKind::Build | ActionKind::Craft => Some(CARPENTRY_MET),
+        // Gathering wild food is walking and stooping, not the sustained
+        // cultivation "farming_manual" measures, so it is costed as the
+        // walking it mostly is. Leaving it at the baseline would be the
+        // stranger claim: a human pays to walk to the food and then picks it
+        // for free.
+        ActionKind::Gather => Some(WALKING_MET),
+        // Carrying, social approach, harm, intimacy, idling, resting and
+        // working at a computer have no row that fits them — the pack's
+        // "carrying_heavy_load" is a load this model does not track, and the
+        // rest are brief or sub-baseline — so they cost what they cost today.
+        _ => None,
+    }
+}
 
 /// Gompertz baseline hazard (per year) extrapolated to age 0, and its
 /// exponential rate of increase with age: human adult mortality doubles
@@ -1312,6 +1330,33 @@ mod tests {
             shelter_quality: 0.9,
             ..super::super::AgentWorldObservation::default()
         }
+    }
+
+    #[test]
+    fn seeking_what_is_at_hand_is_using_it_not_walking() {
+        // The death spiral this guards: a whole step of seeking was charged
+        // as walking, 2.4 times the baseline drain, against a 1.5 times
+        // intake, so a hungry human of reduced capacity in a cell full of
+        // food grew hungrier the more they sought it, and died of it.
+        use super::super::ActionKind::*;
+        let plenty = benign_observation();
+        let scarce = super::super::AgentWorldObservation {
+            caloric_access: 0.2,
+            hydration_access: 0.2,
+            shelter_quality: 0.2,
+            ..super::super::AgentWorldObservation::default()
+        };
+        for seek in [SeekFood, SeekWater, SeekShelter] {
+            assert_eq!(activity_met_for(seek, &plenty), None, "{seek:?} at hand");
+            assert_eq!(
+                activity_met_for(seek, &scarce),
+                Some(WALKING_MET),
+                "{seek:?} out looking"
+            );
+        }
+        // Going somewhere is walking wherever one is.
+        assert_eq!(activity_met_for(Explore, &plenty), Some(WALKING_MET));
+        assert_eq!(activity_met_for(Move, &plenty), Some(WALKING_MET));
     }
 
     #[test]
