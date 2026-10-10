@@ -160,7 +160,7 @@ fn slow_a_week_on_the_island_matches_the_reference_packs() {
     let mut w = life();
     w.advance(7 * DAY).unwrap();
     println!("digest {}", hex(w.state_digest()));
-    assert_eq!(hex(w.state_digest()), WEEK_DIGEST);
+    let deferred_digest = hex(w.state_digest());
     println!(
         "audits {}, shortfalls food {} water {}, economy events {}, patch trees {}",
         w.audits_closed,
@@ -269,6 +269,7 @@ fn slow_a_week_on_the_island_matches_the_reference_packs() {
         "{drunk_per_founder_day} L/day"
     );
     assert_eq!(w.shortfalls.water, 0, "the founders found water every time");
+    assert_eq!(deferred_digest, WEEK_DIGEST);
 }
 
 /// The digest covers the state that decides what happens next.
