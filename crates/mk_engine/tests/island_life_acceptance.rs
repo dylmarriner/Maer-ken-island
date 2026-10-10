@@ -89,7 +89,17 @@ const DAY: u64 = 86_400;
 /// rather than its whole 2 km cell (without which a watered island had no
 /// buildable estate site). Audited: 196 of 196, no shortfalls, 13.0 and
 /// 10.4 kg against 13.0 and 10.4, temperate-forest NPP 567 g C/m2/yr.
-const WEEK_DIGEST: &str = "125c320a0fdab7befc0859defa2da29a35bfd434b5ead5d394cb3f3622ddffec";
+///
+/// And for the founders' behaviour: desire with satiety (they had chosen
+/// intimacy in most of every minute), seeking food where it is plentiful
+/// costed as eating rather than walking (it had been a death spiral), and
+/// a founder who walks out let back into the house. The founders now walk
+/// up to 4 km from home by day and sleep at home most nights, so the test
+/// checks that rather than where they stand at the week's last instant.
+/// Audited: 196 of 196, no shortfalls, 13.0 and 10.4 kg against 13.0 and
+/// 10.4, Gem-D asleep 56 of 168 hours (48 at home), Gem-K 54 (46),
+/// temperate-forest NPP 567.
+const WEEK_DIGEST: &str = "f550a4afa3b7dee0d1e113a9032afc1bfdb61d3c8e550f212c6e27881802b6c9";
 
 fn repo(path: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -136,11 +146,19 @@ fn a_day_on_the_island_keeps_everything_alive_inside_closed_books() {
 
     w.advance(DAY).unwrap();
 
-    // Both founders are alive and still in the estate layout.
+    // Both founders are alive and living at the estate.
     for id in ["Gem-D", "Gem-K"] {
         let h = w.humans.registry.get_human(id).unwrap();
         assert!(matches!(h.profile.status, HumanStatus::Alive), "{id} died");
-        assert!(w.in_estate(id), "{id} left the estate");
+        // Out on a walk is not leaving: within a day's foraging radius of
+        // home -- about 10 km on foot (Kelly 1995, *The Foraging Spectrum*),
+        // five of the island's 2 km cells. The week test watches where they
+        // sleep.
+        let estate = w.placed.location;
+        let away = (h.position.row - estate.0 as i32)
+            .abs()
+            .max((h.position.col - estate.1 as i32).abs());
+        assert!(away <= 5, "{id} is {away} cells from home after a day");
     }
     assert_eq!(w.humans.registry.iter().count(), 2);
     // The estate's inventory is intact.
@@ -180,7 +198,27 @@ fn slow_a_week_on_the_island_matches_the_reference_packs() {
     use mk_engine::validation::{default_reference_dir, ReferenceDomain, ReferenceLibrary};
     let lib = ReferenceLibrary::load(&default_reference_dir()).unwrap();
     let mut w = life();
-    w.advance(7 * DAY).unwrap();
+    // An hour at a time, which steps the island exactly as one week-long
+    // advance does (`island_scheduler.rs`), so where the founders are can
+    // be watched: (asleep samples, asleep in the estate, farthest cells).
+    let estate = w.placed.location;
+    let mut watched: std::collections::BTreeMap<&str, (u32, u32, i32)> =
+        std::collections::BTreeMap::new();
+    for _ in 0..(7 * 24) {
+        w.advance(3_600).unwrap();
+        for id in ["Gem-D", "Gem-K"] {
+            let h = w.humans.registry.get_human(id).unwrap();
+            let away = (h.position.row - estate.0 as i32)
+                .abs()
+                .max((h.position.col - estate.1 as i32).abs());
+            let entry = watched.entry(id).or_insert((0, 0, 0));
+            if h.circadian.asleep {
+                entry.0 += 1;
+                entry.1 += u32::from(w.in_estate(id));
+            }
+            entry.2 = entry.2.max(away);
+        }
+    }
     println!("digest {}", hex(w.state_digest()));
     let deferred_digest = hex(w.state_digest());
     println!(
@@ -197,7 +235,18 @@ fn slow_a_week_on_the_island_matches_the_reference_packs() {
             w.humans.registry.get_human(id).unwrap().profile.status,
             HumanStatus::Alive
         ));
-        assert!(w.in_estate(id), "{id} left the estate");
+        // They live there: asleep, they are mostly at home, and awake they
+        // never go beyond a day's foraging radius of it -- about 10 km for
+        // people on foot (Kelly 1995, *The Foraging Spectrum*), five of the
+        // island's 2 km cells. Being out on a walk at the moment the week
+        // ends is not leaving.
+        let (asleep, at_home, farthest) = watched[id];
+        println!("{id}: asleep at home {at_home} of {asleep} hours, farthest {farthest} cells");
+        assert!(
+            asleep > 0 && at_home * 2 >= asleep,
+            "{id} slept at home {at_home} of {asleep} sleeping hours"
+        );
+        assert!(farthest <= 5, "{id} went {farthest} cells from home");
         // Alive is the needs model's answer; this is the ledger's. Harvesting
         // follows each human's own chosen action, so a week in which nobody
         // ever chose to look for food would still leave them "alive" here
