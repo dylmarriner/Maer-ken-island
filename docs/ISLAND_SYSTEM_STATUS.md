@@ -190,8 +190,8 @@ limit looks like; it is the first thing to check. Until it is, every figure here
 ## Known fidelity limits
 
 Every known departure from reality is in `docs/island/DEVIATIONS.md` (D1-D38). The largest open
-ones: half the island gets under 183 mm of rain a year, several times drier than New Zealand's
-driest basin (D38); no sea/land breezes (D3); storm structure is parametric (D4); river channels have no
+ones: the driest tenth of the island gets ~250 mm of rain a year against New Zealand's driest
+basin's 360 (D38); no sea/land breezes (D3); storm structure is parametric (D4); river channels have no
 in-channel storage (D28); the regional tick audits tidal heat only (D29); production ignores soil
 nutrients (D31); infants and young adults lack their extrinsic mortality (D21); every human action still takes exactly one
 tick whatever it is (D9); the actions with no Compendium row cost the resting baseline (D22);

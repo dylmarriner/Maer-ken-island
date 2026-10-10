@@ -46,8 +46,9 @@ pub const AIR_SPECIFIC_HEAT_J_KG_K: f64 = 1_004.0;
 /// Specific gas constant of dry air (J/kg/K).
 pub const DRY_AIR_GAS_CONSTANT_J_KG_K: f64 = 287.05;
 /// The upwind solve stops when a full round of its four sweeps moves no
-/// cell's air by more than this (K).
-const CONVERGED_K: f64 = 1e-6;
+/// cell's value by more than this (K for temperature; relative humidity
+/// converges far inside it in absolute terms too).
+const CONVERGED: f64 = 1e-9;
 
 /// Distance (m) over which carried air approaches the ground's temperature.
 pub fn adjustment_length_m() -> f64 {
@@ -83,13 +84,38 @@ pub fn boundary_layer_air_k(
     cols: usize,
     cell_m: f64,
 ) -> Vec<f64> {
-    let length = adjustment_length_m();
     let lift = |i: usize| LAPSE_RATE_K_PER_M * elevation_m[i].max(0.0);
     let ground: Vec<f64> = (0..surface_k.len())
         .map(|i| surface_k[i] + lift(i))
         .collect();
     let land: Vec<bool> = elevation_m.iter().map(|&h| h > 0.0).collect();
-    let mut air = ground.clone();
+    let mut air = carry_from_sea(&ground, &land, wind, rows, cols, cell_m);
+    for (i, a) in air.iter_mut().enumerate() {
+        *a -= lift(i);
+    }
+    air
+}
+
+/// A property of the boundary-layer air carried from the sea along the
+/// wind: `ground` holds, per cell, the sea's value over the sea and the
+/// value the air would reach in equilibrium with the land over land. Each
+/// land cell takes the air arriving from upwind -- the cells it blows
+/// from, weighted by the wind's components -- moved toward its own ground
+/// value over the distance it crosses, by `exp(-crossing / L)` with
+/// `L = h / C` ([`adjustment_length_m`]). Heat and water vapour share `L`:
+/// their bulk transfer coefficients are equal in near-neutral air (the
+/// Reynolds analogy; Garratt 1992, §4.2). Where there is no wind, the air
+/// is the ground's: nothing carries the sea in.
+pub fn carry_from_sea(
+    ground: &[f64],
+    land: &[bool],
+    wind: &Grid2<WindVector>,
+    rows: usize,
+    cols: usize,
+    cell_m: f64,
+) -> Vec<f64> {
+    let length = adjustment_length_m();
+    let mut air = ground.to_vec();
     let orders: [(bool, bool); 4] = [(false, false), (true, false), (false, true), (true, true)];
     // Fast sweeping: each round sweeps the grid in all four orderings, so
     // air moving along any quadrant of wind crosses it in one sweep; a
@@ -144,12 +170,9 @@ pub fn boundary_layer_air_k(
                 }
             }
         }
-        if largest_change <= CONVERGED_K {
+        if largest_change <= CONVERGED {
             break;
         }
-    }
-    for (i, a) in air.iter_mut().enumerate() {
-        *a -= lift(i);
     }
     air
 }

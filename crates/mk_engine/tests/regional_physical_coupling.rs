@@ -390,6 +390,26 @@ fn slow_a_year_of_island_weather_matches_the_reference_packs() {
         "lowland annual range {median_range} K"
     );
 
+    // 7. Rain on the land: every part of a mid-latitude maritime island is
+    //    watered. New Zealand's driest leeward basin gets 360 mm a year
+    //    (Alexandra, `orographic_precipitation_southern_alps`); the island's
+    //    median land cell must get at least that, and its driest tenth at
+    //    least half of it (D38 records the residual). Before the vapour
+    //    budget the median was 183 mm and the driest tenth 58.
+    let mut land_rain: Vec<f64> = (0..n)
+        .filter(|&i| elev.data()[i] > 0.0)
+        .map(|i| rain[i])
+        .collect();
+    land_rain.sort_by(f64::total_cmp);
+    let median_rain = land_rain[land_rain.len() / 2];
+    let driest_tenth = land_rain[land_rain.len() / 10];
+    println!("land rain: median {median_rain:.0} mm, driest tenth {driest_tenth:.0} mm");
+    assert!(median_rain >= 360.0, "median land rain {median_rain} mm");
+    assert!(
+        driest_tenth >= 180.0,
+        "driest tenth of land {driest_tenth} mm"
+    );
+
     // 5. Runoff: of the rain on land, the share that reaches the sea or
     //    recharges groundwater (Budyko, Fu omega 2.6) is 0.2-0.85 across
     //    aridity 0.25-2 in the hydrology pack.
