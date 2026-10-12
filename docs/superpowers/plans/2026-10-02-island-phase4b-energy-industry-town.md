@@ -51,7 +51,9 @@
 - Create: `crates/mk_engine/src/regional/industry/sizing.rs`
 - Test: `crates/mk_engine/tests/industry_sizing.rs`
 
-- [ ] **Step 1:** Assemble cited reference values: turbine efficiency curves by type (Pelton, Turgo, Francis, Crossflow, Kaplan) and head range; penstock friction (Darcy–Weisbach); oil reservoir recovery factors and Arps decline parameters; crude assays (product yields for light and medium crude); refinery energy use and emissions per barrel; gas composition and processing yields; staffing per plant type and size; occupational wage ratios; household electricity, cooking and transport fuel demand.
+> **Status (2026-10-12):** the hydro half is done: `fixtures/reference/industry/hydro.json` and `regional/industry/hydro.rs` (`design_hydro` sizes the stage-1 and stage-2 plants from a river's own flows). The petroleum, refinery, gas, staffing, wage and demand tables arrive with the tasks that use them (4-8).
+
+- [x] **Step 1 (hydro part):** Assemble cited reference values: turbine efficiency curves by type (Pelton, Turgo, Francis, Crossflow, Kaplan) and head range; penstock friction (Darcy–Weisbach); oil reservoir recovery factors and Arps decline parameters; crude assays (product yields for light and medium crude); refinery energy use and emissions per barrel; gas composition and processing yields; staffing per plant type and size; occupational wage ratios; household electricity, cooking and transport fuel demand.
 - [ ] **Step 2:** Implement `size_plants(demand, river_reach, petroleum_deposit) -> PlantDesign` choosing equipment from the reference tables; test that the defaults above fall out for a ~200-person town.
 - [ ] **Step 3:** Commit `feat(industry): reference data and plant sizing`.
 
@@ -68,8 +70,10 @@
 - Estate placement now also requires a perennial river within 1 km of the estate block whose reach supports the stage-1 design with environmental flow left, and a site on the same river (up- or downstream) for stage 2. If none exists the scenario fails clearly (`NoHydroSite`) rather than inventing a river.
 - The Phase-1 gallery adds, per candidate island: best estate-with-hydro site, stage-2 capacity possible, and whether a petroleum basin exists.
 
-- [ ] **Step 1:** Tests: estate block lies within 1 km of the chosen river; stage-1 and stage-2 sites satisfy head/flow with environmental flow; an island with no suitable river returns `NoHydroSite`; gallery JSON includes the new fields.
-- [ ] **Step 2:** Implement; run `cargo test -p mk_engine --test hydro_sites` and `cargo test -p island_preview`; expect PASS.
+> **Status (2026-10-12):** done (`regional/industry/{flow_duration,hydro_sites}.rs`, `regional/property.rs`, `island_preview gallery --hydro`). A missing stage-2 site does not fail placement; it is reported as `town: None`, since the town is built only when its demand needs it.
+
+- [x] **Step 1:** Tests: estate block lies within 1 km of the chosen river; stage-1 and stage-2 sites satisfy head/flow with environmental flow; an island with no suitable river returns `NoHydroSite`; gallery JSON includes the new fields.
+- [x] **Step 2:** Implement; run `cargo test -p mk_engine --test hydro_sites` and `cargo test -p island_preview`; expect PASS. (The site tests live in `tests/island_property_scenario.rs`.)
 - [ ] **Step 3:** Commit `feat(industry): place the estate by a river that can run hydro`.
 
 ### Task 3: Hydro plants and the electricity grid
@@ -85,7 +89,9 @@
 - Produces: `Grid { nodes, lines: Vec<Line { from, to, kv, length_km, resistance }>, generators, loads }` solving a simple per-tick balance: generation dispatch (hydro first, then gas backup, then diesel), line losses `I²R`, and load shedding by priority (refinery, workshops, households, street lighting) when supply falls short.
 - Wear: turbines and generators lose condition with running hours and sediment; maintenance labour (Task 6) restores it using spare parts; at zero condition the unit fails until repaired.
 
-- [ ] **Step 1:** Tests: output matches `η·ρ·g·Q·H` for test flows; output falls in drought and stops below environmental flow; diverted water reappears at the tailrace and the water ledger closes; the bypassed reach carries reduced flow; grid balance holds within losses every tick; shortfall sheds the lowest-priority loads first; an unmaintained turbine eventually fails.
+> **Status (2026-10-12):** done but for wear (D39): `regional/industry/{hydro,grid}.rs`, the estate's `HydroSupply` in `regional/energy.rs`, `Diversion` in `regional/hydrology.rs`, `tests/hydro_grid.rs`. Wear needs cited overhaul intervals and Task 6's maintenance labour; flood closure of the intake has no cited threshold yet.
+
+- [x] **Step 1 (all but wear):** Tests: output matches `η·ρ·g·Q·H` for test flows; output falls in drought and stops below environmental flow; diverted water reappears at the tailrace and the water ledger closes; the bypassed reach carries reduced flow; grid balance holds within losses every tick; shortfall sheds the lowest-priority loads first; an unmaintained turbine eventually fails.
 - [ ] **Step 2:** Implement; run `cargo test -p mk_engine --test hydro_grid`; expect PASS.
 - [ ] **Step 3:** Commit `feat(industry): hydro power and island grid`.
 

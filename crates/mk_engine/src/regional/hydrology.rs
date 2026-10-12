@@ -284,6 +284,16 @@ pub fn step_regional_hydrology(
     )
 }
 
+/// Water a plant takes out of the river at `intake` (a medium cell's flat
+/// index) and returns at `tailrace` further down the same river: the reach
+/// between carries that much less. A hydro plant's penstock is one.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct Diversion {
+    pub intake: u32,
+    pub tailrace: u32,
+    pub flow_m3_s: f64,
+}
+
 /// [`step_regional_hydrology`] on a prebuilt `network`. `weather` and
 /// `climate` are **coarse** and sampled at each land cell. A zero or
 /// negative step returns `previous` with an empty budget.
@@ -297,6 +307,36 @@ pub fn step_regional_hydrology_on(
     domain: &IslandDomain,
     network: &FlowNetwork,
     dt_seconds: f64,
+) -> HydrologyState {
+    step_regional_hydrology_diverted(
+        canon,
+        previous,
+        weather,
+        climate,
+        topography,
+        domain,
+        network,
+        dt_seconds,
+        &[],
+    )
+}
+
+/// [`step_regional_hydrology_on`] with `diversions`: each takes up to its
+/// flow from what leaves its intake cell (never more than the river
+/// carries) and adds it to what reaches its tailrace cell, which must lie
+/// downstream. The intake's recorded `runoff` is the river arriving at the
+/// weir, before the plant takes its share.
+#[allow(clippy::too_many_arguments)]
+pub fn step_regional_hydrology_diverted(
+    canon: &CanonLocked,
+    previous: &HydrologyState,
+    weather: &WeatherState,
+    climate: &ClimateState,
+    topography: &Grid2<f64>,
+    domain: &IslandDomain,
+    network: &FlowNetwork,
+    dt_seconds: f64,
+    diversions: &[Diversion],
 ) -> HydrologyState {
     if !(dt_seconds.is_finite() && dt_seconds > 0.0) {
         return HydrologyState {
@@ -415,9 +455,17 @@ pub fn step_regional_hydrology_on(
         standing -= hillslope;
         let discharge = hillslope + if is_lake { 0.0 } else { channel_in[i] };
 
+        // A plant's intake takes its share before the river flows on; it
+        // returns at the tailrace downstream, still within this step.
+        let mut flowing_on = discharge;
+        for d in diversions.iter().filter(|d| d.intake as usize == i) {
+            let take = (d.flow_m3_s.max(0.0) * dt_seconds / cell_m2 * 1_000.0).min(flowing_on);
+            flowing_on -= take;
+            channel_in[d.tailrace as usize] += take;
+        }
         match to {
-            Receiver::Cell(j) => channel_in[j as usize] += discharge,
-            Receiver::Sea | Receiver::Edge => budget.surface_to_ocean_kg += discharge * cell_m2,
+            Receiver::Cell(j) => channel_in[j as usize] += flowing_on,
+            Receiver::Sea | Receiver::Edge => budget.surface_to_ocean_kg += flowing_on * cell_m2,
             Receiver::None => {}
         }
 

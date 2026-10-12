@@ -281,6 +281,7 @@ impl IslandLife {
             .expect("the estate was placed");
         let mut energy = EstateEnergy::from_config(&scenario.estate_energy, estate);
         energy.wire_lighting(&placed.layout, estate);
+        attach_estate_hydro(&mut energy, &placed, &domain);
 
         let mut materials = MaterialLedger::new();
         for h in humans.registry.iter() {
@@ -367,6 +368,10 @@ impl IslandLife {
             {
                 life.energy.wire_lighting(&life.placed.layout, estate);
             }
+        }
+        if life.energy.hydro.is_empty() {
+            // Saved before the river's plant was connected.
+            attach_estate_hydro(&mut life.energy, &life.placed, &life.domain);
         }
         life.replay_log = super::replay::IslandReplayLog::new(life.scenario_digest_hex());
         Ok(life)
@@ -656,6 +661,23 @@ impl IslandLife {
     }
 
     fn hourly(&mut self) -> Result<(), IslandLifeError> {
+        // The estate's plants take their water this hour at the flow they
+        // last measured, returning it at their tailraces.
+        let cols = self.domain.cols(DomainLevel::Medium);
+        self.physical.diversions = self
+            .energy
+            .hydro
+            .iter()
+            .map(|plant| {
+                let (ir, ic) = plant.site.intake_cell;
+                let (tr, tc) = plant.site.powerhouse_cell;
+                super::hydrology::Diversion {
+                    intake: (ir * cols + ic) as u32,
+                    tailrace: (tr * cols + tc) as u32,
+                    flow_m3_s: plant.diverted_m3_s(),
+                }
+            })
+            .collect();
         self.physical
             .step(
                 &self.canon,
@@ -727,6 +749,16 @@ impl IslandLife {
             .labour
             .met(AWAKE_AT_HOME_ACTIVITY)
             .map_err(IslandLifeError::Labour)?;
+        // Each plant runs on the river's present flow at its intake.
+        let cols = self.domain.cols(DomainLevel::Medium);
+        for plant in &mut self.energy.hydro {
+            let (r, c) = plant.site.intake_cell;
+            plant.river_m3_s = if r * cols + c < self.physical.hydrology.runoff.data().len() {
+                super::hydrology::discharge_m3_s(&self.physical.hydrology, &self.domain, r, c)
+            } else {
+                0.0
+            };
+        }
         self.audited(|life, ledger| {
             life.energy.step(dt_physical as f64, solar_kw, ledger);
             for (id, body, _) in &founders {
@@ -1178,6 +1210,25 @@ mod erased {
             serde_json::to_value(self).expect("state serialises")
         }
     }
+}
+
+/// Connect the estate's micro-hydro plant, if its placement found one, by
+/// an overhead line from the powerhouse cell's centre to the estate block's
+/// centre (the shared corner of its four cells).
+fn attach_estate_hydro(energy: &mut EstateEnergy, placed: &PlacedEstate, domain: &IslandDomain) {
+    let Some(hydro) = &placed.hydro else {
+        return;
+    };
+    let medium = DomainLevel::Medium;
+    let size = domain.cell_size_m(medium);
+    let (row, col) = placed.location;
+    let (bx, by) = ((col + 1) as f64 * size, (row + 1) as f64 * size);
+    let (px, py) = domain.cell_center_m(
+        medium,
+        hydro.estate.powerhouse_cell.0,
+        hydro.estate.powerhouse_cell.1,
+    );
+    energy.attach_hydro(hydro.estate.clone(), (px - bx).hypot(py - by) / 1_000.0);
 }
 
 #[cfg(test)]

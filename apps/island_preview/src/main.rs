@@ -2,7 +2,7 @@
 //!
 //! ```text
 //! island_preview geophysics --profile <path> [--seed <64 hex>] --out <dir>
-//! island_preview gallery --profile <path> --seeds <n> --out <dir>
+//! island_preview gallery --profile <path> --seeds <n> [--hydro] --out <dir>
 //! island_preview physical --profile <path> [--seed <64 hex>] --days <n> --out <dir>
 //! island_preview life (--scenario <path> | --from <file>) [--days <n>]
 //!                      [--save <file>] [--humans <dir>] --out <dir>
@@ -12,16 +12,19 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use island_preview::{
-    generate, render_gallery, render_geophysics, render_physical, simulate_physical, Output,
+    generate, render_gallery_with, render_geophysics, render_physical, simulate_physical, Output,
 };
 use mk_island::IslandProfile;
 
 const USAGE: &str = "usage:
   island_preview geophysics --profile <path> [--seed <64 hex chars>] --out <dir>
-  island_preview gallery --profile <path> --seeds <n> --out <dir>
+  island_preview gallery --profile <path> --seeds <n> [--hydro] --out <dir>
   island_preview physical --profile <path> [--seed <64 hex chars>] --days <n> --out <dir>
   island_preview life (--scenario <path> | --from <file>) [--days <n>]
                       [--save <file>] [--humans <dir>] --out <dir>
+
+`gallery --hydro` also spins every passing island up and reports its estate's
+micro-hydro site and a town-sized site on the same river (minutes per island).
 
 `life` renders the island: biomes, resources, the estate plan and its trees.
   --days <n>     simulate n days before rendering (default 0, just bootstrapped)
@@ -150,7 +153,8 @@ fn run(args: Vec<String>) -> Result<(), String> {
                 .ok_or(USAGE)?
                 .parse()
                 .map_err(|_| "--seeds must be a whole number")?;
-            write_all(&out, &render_gallery(&profile, n))
+            let hydro = args.iter().any(|a| a == "--hydro");
+            write_all(&out, &render_gallery_with(&profile, n, hydro))
         }
         "physical" => {
             let seed = match flag(&args, "--seed") {

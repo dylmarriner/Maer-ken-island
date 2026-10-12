@@ -4,9 +4,11 @@
 //! that runs them. Here every load needs energy:
 //!
 //! - **Electricity**: loads draw rated power only while in use. Supply is
-//!   solar (from the regional insolation and cloud at the estate), then the
-//!   battery, then the generator burning fuel. When supply runs out the
-//!   loads stop (a computer loses power, so loses access).
+//!   the river's micro-hydro plant (Phase 4b: its output from the river's
+//!   flow at the intake, less the line's losses on the way to the house),
+//!   then solar (from the regional insolation and cloud at the estate),
+//!   then the battery, then the generator burning fuel. When supply runs
+//!   out the loads stop (a computer loses power, so loses access).
 //! - **Vehicles** carry a tank. Road vehicles burn fuel per km at the
 //!   reference 4WD figures for the surface (EPA, `fixtures/reference/
 //!   labour`); tractors and the excavator burn fuel per engine-hour at the
@@ -30,6 +32,8 @@ use std::collections::BTreeSet;
 
 use super::climate::CLEAR_SKY_TRANSMITTANCE;
 use super::estate_layout::{EstateLayout, SpaceId};
+use super::industry::grid::Line;
+use super::industry::hydro_sites::HydroSite;
 
 use mk_core::flux::{FluxEntry, FluxKind, Ledger, Reservoir};
 use mk_island::EstateEnergyConfig;
@@ -148,6 +152,35 @@ pub struct SolarArray {
 pub struct Battery {
     pub capacity_kwh: f64,
     pub charge_kwh: f64,
+}
+
+/// The estate's run-of-river plant and the line that brings its power to
+/// the house (Phase 4b Task 3).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct HydroSupply {
+    pub site: HydroSite,
+    pub line: Line,
+    /// The river's flow at the intake (m^3/s), as last measured.
+    pub river_m3_s: f64,
+}
+
+impl HydroSupply {
+    /// Water the plant takes now (m^3/s), leaving the environmental flow.
+    pub fn diverted_m3_s(&self) -> f64 {
+        self.site
+            .design
+            .diverted_m3_s(self.river_m3_s, self.site.environmental_flow_m3_s)
+    }
+
+    /// Generator output now (kW).
+    pub fn generated_kw(&self) -> f64 {
+        self.site.design.output_kw(self.diverted_m3_s())
+    }
+
+    /// Power arriving at the house now (kW).
+    pub fn delivered_kw(&self) -> f64 {
+        self.line.delivered_kw(self.generated_kw())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -305,6 +338,13 @@ pub fn solar_output_kw(rated_kw: f64, toa_w_m2: f64, cloud_fraction: f64) -> f64
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct EnergyStep {
     pub demand_kwh: f64,
+    /// Hydro energy that served loads or charged the batteries.
+    pub hydro_used_kwh: f64,
+    /// Hydro energy nothing could take, dumped to the plant's ballast load
+    /// (a run-of-river plant runs on whatever the river gives).
+    pub hydro_dumped_kwh: f64,
+    /// Lost in the line from the powerhouse.
+    pub line_loss_kwh: f64,
     pub solar_used_kwh: f64,
     pub solar_curtailed_kwh: f64,
     pub battery_discharged_kwh: f64,
@@ -325,6 +365,10 @@ pub struct EstateEnergy {
     /// saved before lighting was wired had none.
     #[serde(default)]
     pub lighting: Vec<RoomLighting>,
+    /// Run-of-river plants feeding the house, first in the supply order.
+    /// `#[serde(default)]`: an estate saved before Phase 4b had none.
+    #[serde(default)]
+    pub hydro: Vec<HydroSupply>,
     /// Loads fully served in the last step.
     powered: BTreeSet<u64>,
     /// Rooms whose lamps were fully served in the last step.
@@ -407,6 +451,7 @@ impl EstateEnergy {
             loads,
             vehicles,
             lighting: Vec::new(),
+            hydro: Vec::new(),
             powered: BTreeSet::new(),
             lit: BTreeSet::new(),
         };
@@ -505,8 +550,20 @@ impl EstateEnergy {
             && self.powered.contains(&item_id)
     }
 
-    /// Supply the in-use loads for `dt_seconds`: solar (`solar_kw`
-    /// available), then battery, then the generator. Item loads are served
+    /// Connect the run-of-river plant at `site` to the house, `length_km`
+    /// of overhead line away; the line is designed for the plant's rating.
+    pub fn attach_hydro(&mut self, site: HydroSite, length_km: f64) {
+        let line = Line::design(0, 1, site.design.rated_kw, length_km);
+        self.hydro.push(HydroSupply {
+            site,
+            line,
+            river_m3_s: 0.0,
+        });
+    }
+
+    /// Supply the in-use loads for `dt_seconds`: hydro (from each plant's
+    /// last measured river flow), solar (`solar_kw` available), then
+    /// battery, then the generator. Item loads are served
     /// in item order, then the lit rooms in space order; one the supply
     /// cannot cover stops. Fuel burned is
     /// booked in `ledger`.
@@ -533,21 +590,34 @@ impl EstateEnergy {
         let demand_kwh: f64 = active.iter().map(|(_, kwh)| kwh).sum();
         let active_ids = active;
 
-        let solar_kwh = solar_kw.max(0.0) * hours;
-        let solar_used = solar_kwh.min(demand_kwh);
-        let mut surplus = solar_kwh - solar_used;
-        let mut deficit = demand_kwh - solar_used;
+        // Hydro first: the plant runs on what the river gives and its whole
+        // output goes down the line.
+        let generated_kwh: f64 = self.hydro.iter().map(|h| h.generated_kw()).sum::<f64>() * hours;
+        let hydro_kwh: f64 = self.hydro.iter().map(|h| h.delivered_kw()).sum::<f64>() * hours;
+        let line_loss_kwh = generated_kwh - hydro_kwh;
+        let hydro_to_load = hydro_kwh.min(demand_kwh);
+        let mut hydro_surplus = hydro_kwh - hydro_to_load;
+        let mut deficit = demand_kwh - hydro_to_load;
 
-        // Surplus solar charges the batteries.
+        let solar_kwh = solar_kw.max(0.0) * hours;
+        let solar_used = solar_kwh.min(deficit);
+        let mut surplus = solar_kwh - solar_used;
+        deficit -= solar_used;
+
+        // Surplus hydro, then surplus solar, charges the batteries.
         for b in &mut self.batteries {
-            if surplus <= 0.0 {
-                break;
+            for spare in [&mut hydro_surplus, &mut surplus] {
+                if *spare <= 0.0 {
+                    continue;
+                }
+                let stored =
+                    (*spare * BATTERY_ONE_WAY_EFFICIENCY).min(b.capacity_kwh - b.charge_kwh);
+                b.charge_kwh += stored;
+                *spare -= stored / BATTERY_ONE_WAY_EFFICIENCY;
             }
-            let stored = (surplus * BATTERY_ONE_WAY_EFFICIENCY).min(b.capacity_kwh - b.charge_kwh);
-            b.charge_kwh += stored;
-            surplus -= stored / BATTERY_ONE_WAY_EFFICIENCY;
         }
         let curtailed = surplus.max(0.0);
+        let hydro_dumped = hydro_surplus.max(0.0);
 
         // The deficit comes from the batteries...
         let mut battery_out = 0.0;
@@ -609,6 +679,9 @@ impl EstateEnergy {
         }
         EnergyStep {
             demand_kwh,
+            hydro_used_kwh: hydro_kwh - hydro_dumped,
+            hydro_dumped_kwh: hydro_dumped,
+            line_loss_kwh,
             solar_used_kwh: solar_used,
             solar_curtailed_kwh: curtailed,
             battery_discharged_kwh: battery_out,

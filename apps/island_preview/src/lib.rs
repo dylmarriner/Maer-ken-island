@@ -513,8 +513,58 @@ const THUMB_FACTOR: usize = 4;
 const GALLERY_COLUMNS: usize = 6;
 const LABEL_HEIGHT: usize = 18;
 
-/// The `gallery` subcommand's files.
+/// The `gallery` subcommand's files, without the hydro survey.
 pub fn render_gallery(profile: &IslandProfile, seeds: u32) -> Vec<Output> {
+    render_gallery_with(profile, seeds, false)
+}
+
+/// The estate-with-hydro survey of one generated island: spin its physical
+/// systems up, grow its ecology and place the estate where a river beside
+/// it can run the micro-hydro plant (Phase 4b Task 2).
+fn hydro_survey(domain: &IslandDomain, seed: [u8; 32], geophysics: &RegionalGeophysics) -> Value {
+    use mk_engine::regional::ecology::RegionalEcologyState;
+    use mk_engine::regional::industry::hydro_sites::TOWN_HYDRO_KW;
+    use mk_engine::regional::property::{choose_regional_estate_location, estate_hydro_site};
+    let canon = Arc::new(island_canon());
+    let physical =
+        match RegionalPhysicalState::from_geophysics(&canon, domain, seed, geophysics.clone()) {
+            Ok(p) => p,
+            Err(e) => return json!({ "error": e.to_string() }),
+        };
+    let ecology = match RegionalEcologyState::bootstrap(domain, &physical) {
+        Ok(e) => e,
+        Err(e) => return json!({ "error": e.to_string() }),
+    };
+    let Some(block) = choose_regional_estate_location(&canon, &physical, &ecology, domain) else {
+        return json!({ "estate_cell": Value::Null, "reason": "no estate site with a hydro site" });
+    };
+    let hydro = estate_hydro_site(&physical, domain, block).expect("the chosen site has hydro");
+    let site = |s: &mk_engine::regional::industry::hydro_sites::HydroSite| {
+        json!({
+            "intake_cell": [s.intake_cell.0, s.intake_cell.1],
+            "powerhouse_cell": [s.powerhouse_cell.0, s.powerhouse_cell.1],
+            "turbine": format!("{:?}", s.design.turbine.kind),
+            "rated_kw": s.design.rated_kw,
+            "head_m": s.head_m,
+            "penstock_length_m": s.penstock_length_m,
+            "design_flow_m3_s": s.design_flow_m3_s,
+            "firm_flow_m3_s": s.firm_flow_m3_s,
+            "mean_flow_m3_s": s.mean_flow_m3_s,
+        })
+    };
+    json!({
+        "estate_cell": [block.0, block.1],
+        "estate_hydro": site(&hydro.estate),
+        "town_hydro": hydro.town.as_ref().map(site),
+        "town_hydro_kw_possible": if hydro.town.is_some() { TOWN_HYDRO_KW } else { 0.0 },
+    })
+}
+
+/// The `gallery` subcommand's files. With `hydro`, every island that passes
+/// the shape check is spun up and surveyed for an estate with a micro-hydro
+/// site and a town-sized site on the same river, which takes minutes per
+/// island.
+pub fn render_gallery_with(profile: &IslandProfile, seeds: u32, hydro: bool) -> Vec<Output> {
     let mut outputs = Vec::new();
     let mut entries = Vec::new();
     let mut tiles: Vec<(u32, Option<Image>, bool, bool, bool)> = Vec::new();
@@ -545,6 +595,8 @@ pub fn render_gallery(profile: &IslandProfile, seeds: u32) -> Vec<Output> {
                 outputs.push((format!("seed-{hex_seed}.png"), thumb.png()));
                 let gold = has_gold(&g);
                 let diamonds = g.deposits.iter().any(|d| d.kind == DepositKind::Kimberlite);
+                let petroleum = g.deposits.iter().any(|d| d.kind == DepositKind::Petroleum);
+                let survey = (hydro && unmet.is_empty()).then(|| hydro_survey(&domain, seed, &g));
                 entries.push(json!({
                     "index": index,
                     "seed": hex_seed,
@@ -554,6 +606,8 @@ pub fn render_gallery(profile: &IslandProfile, seeds: u32) -> Vec<Output> {
                     "shape": g.shape,
                     "has_gold": gold,
                     "has_diamonds": diamonds,
+                    "has_petroleum_basin": petroleum,
+                    "hydro": survey,
                     "gems": gems(&g),
                     "deposits": deposit_summary(&g),
                 }));

@@ -24,16 +24,18 @@ pub enum ReferenceDomain {
     Geology,
     Humans,
     Labour,
+    Industry,
 }
 
 impl ReferenceDomain {
-    pub const ALL: [ReferenceDomain; 6] = [
+    pub const ALL: [ReferenceDomain; 7] = [
         Self::Climate,
         Self::Hydrology,
         Self::Ecology,
         Self::Geology,
         Self::Humans,
         Self::Labour,
+        Self::Industry,
     ];
 
     /// The directory name under `fixtures/reference/`.
@@ -45,6 +47,7 @@ impl ReferenceDomain {
             Self::Geology => "geology",
             Self::Humans => "humans",
             Self::Labour => "labour",
+            Self::Industry => "industry",
         }
     }
 }
@@ -353,7 +356,7 @@ pub struct ReferenceLibrary {
 }
 
 impl ReferenceLibrary {
-    /// Loads every `*.json` under `root/<domain>/` for all six domains, in
+    /// Loads every `*.json` under `root/<domain>/` for every domain, in
     /// sorted path order. A pack must declare the domain of its directory and
     /// an id equal to its file stem; ids must be unique.
     pub fn load(root: &Path) -> Result<Self, ReferenceError> {

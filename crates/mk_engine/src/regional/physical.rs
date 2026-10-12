@@ -31,9 +31,10 @@ use super::geophysics::{
     bootstrap_regional_geophysics, RegionalGeophysics, RegionalGeophysicsError,
 };
 use super::hydrology::{
-    bootstrap_regional_hydrology, freshwater_to_coarse_ocean_kg, route_to_coarse_sea,
-    step_regional_hydrology_on, FlowNetwork,
+    bootstrap_regional_hydrology, discharge_m3_s, freshwater_to_coarse_ocean_kg,
+    route_to_coarse_sea, step_regional_hydrology_diverted, Diversion, FlowNetwork,
 };
+use super::industry::flow_duration::RiverFlowRecord;
 use super::levels::aggregate_medium_to_coarse;
 use super::ocean::step_regional_ocean;
 use super::synoptic::{apply_synoptic, SynopticState};
@@ -112,6 +113,14 @@ pub struct RegionalPhysicalState {
     network: FlowNetwork,
     /// Fresh water the last step carried into the coarse ocean (kg).
     pub river_water_to_ocean_kg: f64,
+    /// Flow-duration curves of the perennial river cells over the spin-up's
+    /// last orbit. Empty in a state saved before they were recorded.
+    #[serde(default)]
+    pub river_flows: RiverFlowRecord,
+    /// Water taken out of rivers and returned downstream, as the island's
+    /// plants run (set by whoever runs them before each step).
+    #[serde(default)]
+    pub diversions: Vec<Diversion>,
 }
 
 fn finite(grid: &Grid2<f64>, what: &'static str) -> Result<(), RegionalPhysicalError> {
@@ -205,6 +214,8 @@ impl RegionalPhysicalState {
             diurnal_surface,
             network,
             river_water_to_ocean_kg: 0.0,
+            river_flows: RiverFlowRecord::default(),
+            diversions: Vec::new(),
         };
 
         // Settle straight to equilibrium at t = 0, as the planetary world
@@ -212,9 +223,31 @@ impl RegionalPhysicalState {
         state.settle(canon, domain, seed);
         let dt = canon.orbital_period_s / SPIN_UP_STEPS_PER_ORBIT as f64;
         let steps = SPIN_UP_ORBITS * SPIN_UP_STEPS_PER_ORBIT;
+        // The last orbit's river flows, land cells only.
+        let land: Vec<usize> = state
+            .geophysics
+            .elevation_m
+            .data()
+            .iter()
+            .enumerate()
+            .filter(|(_, &h)| h > 0.0)
+            .map(|(i, _)| i)
+            .collect();
+        let mut year: Vec<Vec<f32>> = Vec::with_capacity(SPIN_UP_STEPS_PER_ORBIT);
         for step in 1..=steps {
             state.step(canon, domain, seed, step as f64 * dt, 0, dt as u64)?;
+            if step > steps - SPIN_UP_STEPS_PER_ORBIT {
+                let cols = state.hydrology.runoff.nlon();
+                year.push(
+                    land.iter()
+                        .map(|&i| {
+                            discharge_m3_s(&state.hydrology, domain, i / cols, i % cols) as f32
+                        })
+                        .collect(),
+                );
+            }
         }
+        state.river_flows = RiverFlowRecord::from_year_at(&year, &land);
         // The planetary world starts at t = 0 on the spun-up state; the
         // orbital phase is the same.
         state.sim_time_seconds = 0.0;
@@ -388,7 +421,7 @@ impl RegionalPhysicalState {
         );
 
         // 8. Hydrology on the land cells; 9. its river water to the ocean.
-        self.hydrology = step_regional_hydrology_on(
+        self.hydrology = step_regional_hydrology_diverted(
             canon,
             &self.hydrology,
             &self.weather,
@@ -397,6 +430,7 @@ impl RegionalPhysicalState {
             domain,
             &self.network,
             dt,
+            &self.diversions,
         );
         // Every outlet's water reaches a sea column, even where the outlet
         // sits in a coarse cell that is mostly land.
