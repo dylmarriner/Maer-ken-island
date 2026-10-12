@@ -545,20 +545,21 @@ pub fn step_lifecycle(
 
     let age = human.age();
     let age_years = human.development.age_years;
-    let reason =
-        if age_years > MAX_HUMAN_AGE_YEARS || dies_of_age(human, dt_years, tick, rng_registry) {
-            Some("natural_age")
-        } else if human.needs.glucose <= 0.0 {
-            Some("starvation")
-        } else if human.needs.hydration <= 0.0 {
-            Some("dehydration")
-        } else if human.body.body_temperature_c <= super::body::LETHAL_HYPOTHERMIA_C {
-            Some("hypothermia")
-        } else if human.body.body_temperature_c >= super::body::LETHAL_HYPERTHERMIA_C {
-            Some("hyperthermia")
-        } else {
-            None
-        };
+    let reason = if age_years > MAX_HUMAN_AGE_YEARS {
+        Some("natural_age")
+    } else if let Some(cause) = dies_of_hazard(human, dt_years, tick, rng_registry) {
+        Some(cause)
+    } else if human.needs.glucose <= 0.0 {
+        Some("starvation")
+    } else if human.needs.hydration <= 0.0 {
+        Some("dehydration")
+    } else if human.body.body_temperature_c <= super::body::LETHAL_HYPOTHERMIA_C {
+        Some("hypothermia")
+    } else if human.body.body_temperature_c >= super::body::LETHAL_HYPERTHERMIA_C {
+        Some("hyperthermia")
+    } else {
+        None
+    };
     if let Some(reason) = reason {
         human.profile.status = HumanStatus::Dead;
         human.death_reason = Some(reason.to_string());
@@ -667,32 +668,79 @@ fn activity_met_for(action: ActionKind, observation: &super::AgentWorldObservati
 /// of everyone dying at one fixed age.
 pub const GOMPERTZ_BASELINE_HAZARD_PER_YEAR: f64 = 5.0e-5;
 pub const GOMPERTZ_AGING_RATE_PER_YEAR: f64 = 0.093;
+/// The rest of a Siler (1979) hazard, `a1 e^(-b1 x) + a2 + a3 e^(b3 x)`, on
+/// top of the Gompertz term above: a hazard that is highest at birth and
+/// falls away through infancy (`a1`, `b1`), and a constant one for
+/// infection, accidents and violence at every age (`a2`). Fitted, with the
+/// Gompertz term held fixed, to the US 2019 period life table (Social
+/// Security Administration, 2022 Trustees Report) averaged over the sexes,
+/// by least squares in ln q over ages 0-40 (`fixtures/reference/humans/
+/// life_history.json`, `ssa_period_life_table_2019`). The model's q lands
+/// within a factor of about two of the table at every one of those ages;
+/// the Siler form cannot draw the young-adult accident hump, so it runs
+/// low around 20.
+pub const SILER_INFANT_HAZARD_PER_YEAR: f64 = 0.01448;
+pub const SILER_INFANT_DECAY_PER_YEAR: f64 = 2.671;
+pub const SILER_BACKGROUND_HAZARD_PER_YEAR: f64 = 6.574e-5;
 /// Keyed RNG epoch for the per-step age-mortality roll.
 const AGE_MORTALITY_EPOCH: u32 = 0x4147_4544;
 
-/// Whether this human dies of age-related causes during the `dt_years`
-/// just lived: the Gompertz cumulative hazard over the interval, rolled on
-/// a keyed per-human stream.
-fn dies_of_age(human: &HumanBeing, dt_years: f64, tick: u64, rng_registry: &RngRegistry) -> bool {
-    let dt = dt_years.max(0.0);
-    if dt == 0.0 {
-        return false;
-    }
-    let end = human.development.age_years;
-    let start = (end - dt).max(0.0);
+/// The three parts of the Siler hazard integrated from age `start` to `end`
+/// (years): (infant, extrinsic, senescent).
+pub fn mortality_cumulative_hazard(start: f64, end: f64) -> (f64, f64, f64) {
+    let (start, end) = (start.max(0.0), end.max(start.max(0.0)));
+    let infant = SILER_INFANT_HAZARD_PER_YEAR / SILER_INFANT_DECAY_PER_YEAR
+        * ((-SILER_INFANT_DECAY_PER_YEAR * start).exp()
+            - (-SILER_INFANT_DECAY_PER_YEAR * end).exp());
+    let extrinsic = SILER_BACKGROUND_HAZARD_PER_YEAR * (end - start);
     let (a, b) = (
         GOMPERTZ_BASELINE_HAZARD_PER_YEAR,
         GOMPERTZ_AGING_RATE_PER_YEAR,
     );
-    let cumulative_hazard = a / b * ((b * end).exp() - (b * start).exp());
-    let probability = 1.0 - (-cumulative_hazard).exp();
+    let senescent = a / b * ((b * end).exp() - (b * start).exp());
+    (infant, extrinsic, senescent)
+}
+
+/// Whether this human dies of the age-dependent hazard during the
+/// `dt_years` just lived, and of which part of it: the Siler cumulative
+/// hazard over the interval, rolled on a keyed per-human stream, with a
+/// death attributed to each part in proportion to its share.
+fn dies_of_hazard(
+    human: &HumanBeing,
+    dt_years: f64,
+    tick: u64,
+    rng_registry: &RngRegistry,
+) -> Option<&'static str> {
+    let dt = dt_years.max(0.0);
+    if dt == 0.0 {
+        return None;
+    }
+    let end = human.development.age_years;
+    let start = (end - dt).max(0.0);
+    let (infant, extrinsic, senescent) = mortality_cumulative_hazard(start, end);
+    let total = infant + extrinsic + senescent;
+    if total <= 0.0 {
+        return None;
+    }
+    let probability = 1.0 - (-total).exp();
     let key = RngKey::new(
         SubsystemId::Humans,
         (human.profile.human_id.0 & 0xFFFF_FFFF) as u32,
         AGE_MORTALITY_EPOCH,
         tick,
     );
-    rng_registry.gen_f64_01(key) < probability
+    let draw = rng_registry.gen_f64_01(key);
+    if draw >= probability {
+        return None;
+    }
+    let share = draw / probability * total;
+    Some(if share < infant {
+        "infant_mortality"
+    } else if share < infant + extrinsic {
+        "extrinsic_mortality"
+    } else {
+        "natural_age"
+    })
 }
 
 /// Reserve (0..1 glucose or hydration) one carried `Food` / `Water` item
@@ -2064,7 +2112,7 @@ mod tests {
                     let mut human =
                         HumanBeing::new(format!("gompertz_{age}_{tick}"), BiologicalSex::Male);
                     human.development = super::super::development::DevelopmentSnapshot::new(age);
-                    dies_of_age(&human, 1.0, *tick, &registry_rng)
+                    dies_of_hazard(&human, 1.0, *tick, &registry_rng).is_some()
                 })
                 .count()
         };
@@ -2075,5 +2123,33 @@ mod tests {
             "30-year-olds rarely die of age in a year ({young}/400)"
         );
         assert!(old > 40, "90-year-olds often do ({old}/400)");
+    }
+
+    #[test]
+    fn a_death_is_put_down_to_the_part_of_the_hazard_that_dominates() {
+        // In the first year of life the infant term is nearly all of the
+        // hazard; at 95 ageing is.
+        let (infant, extrinsic, senescent) = mortality_cumulative_hazard(0.0, 1.0);
+        assert!(
+            infant > 10.0 * (extrinsic + senescent),
+            "{infant} {extrinsic} {senescent}"
+        );
+        let (infant, extrinsic, senescent) = mortality_cumulative_hazard(95.0, 96.0);
+        assert!(senescent > 100.0 * (infant + extrinsic));
+        let registry_rng = rng();
+        let causes: Vec<&str> = (0..20_000u64)
+            .filter_map(|tick| {
+                let mut human = HumanBeing::new(format!("siler_{tick}"), BiologicalSex::Female);
+                human.development = super::super::development::DevelopmentSnapshot::new(0.5);
+                dies_of_hazard(&human, 0.5, tick, &registry_rng)
+            })
+            .collect();
+        assert!(!causes.is_empty(), "nobody died in their first half-year");
+        let infant = causes.iter().filter(|c| **c == "infant_mortality").count();
+        assert!(
+            infant * 10 > causes.len() * 9,
+            "{infant} of {} infant",
+            causes.len()
+        );
     }
 }

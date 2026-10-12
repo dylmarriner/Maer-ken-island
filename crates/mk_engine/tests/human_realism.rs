@@ -438,6 +438,42 @@ fn gestation_matches_the_natural_median() {
     assert!((days - 268.0).abs() <= 3.0, "{days}");
 }
 
+/// The young ages, where infants and the young die of infection,
+/// accidents and violence rather than of age (deviation D21). Reference
+/// `ssa_period_life_table_2019` (SSA, 2019, sexes averaged). Tolerance:
+/// the infant year within 15%, every age 0-40 within a factor of 2.2 --
+/// the Siler hazard has no young-adult accident hump, so around 20 it runs
+/// at about half the table, and its Gompertz term, calibrated on adults,
+/// sits about twice the table's childhood minimum at 10.
+#[test]
+fn young_mortality_follows_the_reference_life_table() {
+    use mk_engine::humans::lifecycle::mortality_cumulative_hazard;
+    let lib = reference();
+    let table = lib
+        .item(ReferenceDomain::Humans, "ssa_period_life_table_2019")
+        .unwrap()
+        .table()
+        .unwrap()
+        .clone();
+    for age in 0..=40 {
+        let label = age.to_string();
+        let observed =
+            0.5 * (table.get(&label, "male").unwrap() + table.get(&label, "female").unwrap());
+        let (infant, extrinsic, senescent) =
+            mortality_cumulative_hazard(age as f64, age as f64 + 1.0);
+        let modelled = 1.0 - (-(infant + extrinsic + senescent)).exp();
+        let ratio = modelled / observed;
+        println!("age {age}: model {modelled:.6} table {observed:.6} ratio {ratio:.2}");
+        if age == 0 {
+            assert!((ratio - 1.0).abs() <= 0.15, "infant year: ratio {ratio:.2}");
+        }
+        assert!(
+            (1.0 / 2.2..=2.2).contains(&ratio),
+            "age {age}: model {modelled:.6} against the table's {observed:.6}"
+        );
+    }
+}
+
 #[test]
 fn adult_mortality_follows_the_reference_life_table() {
     // Reference `annual_mortality_by_age` (US 2019) for ages 40-90 and
