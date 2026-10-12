@@ -7,11 +7,12 @@ use mk_core::canon::CanonLocked;
 use mk_core::grid::Grid2;
 use mk_engine::organisms::property::{PropertyBuildingKind, PropertyItemKind};
 use mk_engine::regional::ecology::RegionalEcologyState;
-use mk_engine::regional::hydrology::discharge_m3_s;
+use mk_engine::regional::industry::hydro::{ENVIRONMENTAL_FLOW_FRACTION, FIRM_FLOW_EXCEEDANCE};
+use mk_engine::regional::industry::hydro_sites::{ESTATE_HYDRO_KW, TOWN_HYDRO_KW};
 use mk_engine::regional::physical::RegionalPhysicalState;
 use mk_engine::regional::property::{
     bootstrap_regional_property, choose_regional_estate_location, estate_patch_spec,
-    place_regional_estate, EstatePatchError, PlacedEstate, ESTATE_MIN_RIVER_DISCHARGE_M3_S,
+    place_regional_estate, EstatePatchError, PlacedEstate,
 };
 use mk_island::{DomainLevel, EstatePatchConfig, IslandDomain, IslandScenario};
 
@@ -102,16 +103,71 @@ fn placement_is_deterministic_on_dry_buildable_land_beside_a_river() {
             mk_core::biomes::BiomeType::Volcanic | mk_core::biomes::BiomeType::River
         ));
     }
-    // A river of at least the minimum discharge lies within 1 km of the block.
-    let river = (row.saturating_sub(1)..=row + 2).any(|r| {
-        (col.saturating_sub(1)..=col + 2).any(|c| {
-            r < b.domain.rows(M)
-                && c < b.domain.cols(M)
-                && discharge_m3_s(&b.physical.hydrology, &b.domain, r, c)
-                    >= ESTATE_MIN_RIVER_DISCHARGE_M3_S
-        })
-    });
-    assert!(river, "no river beside the estate");
+    // A perennial river beside the block runs the estate's micro-hydro:
+    // the powerhouse is within 1 km of the block, the intake upstream on
+    // the same river, and at the firm flow the plant takes its full design
+    // flow with the environmental flow left in the river.
+    let hydro = b
+        .placed
+        .hydro
+        .as_ref()
+        .expect("the estate has a hydro site");
+    let site = &hydro.estate;
+    let (pr, pc) = site.powerhouse_cell;
+    assert!(
+        (row.saturating_sub(1)..=row + 2).contains(&pr)
+            && (col.saturating_sub(1)..=col + 2).contains(&pc),
+        "powerhouse {:?} is not beside the block",
+        site.powerhouse_cell
+    );
+    let cols = b.domain.cols(M);
+    let intake = b
+        .physical
+        .river_flows
+        .get(site.intake_cell.0 * cols + site.intake_cell.1)
+        .expect("the intake is on a perennial river");
+    assert!((site.firm_flow_m3_s - intake.flow_at(FIRM_FLOW_EXCEEDANCE)).abs() < 1e-9);
+    assert!(
+        (site.environmental_flow_m3_s - ENVIRONMENTAL_FLOW_FRACTION * f64::from(intake.mean_m3_s))
+            .abs()
+            < 1e-9
+    );
+    assert!(site.firm_flow_m3_s - site.environmental_flow_m3_s >= site.design_flow_m3_s);
+    assert!(site.head_m > 0.0 && site.penstock_length_m > 0.0);
+    assert!(
+        (site.design.rated_kw - ESTATE_HYDRO_KW).abs() < 0.1,
+        "rated {} kW",
+        site.design.rated_kw
+    );
+    // The water drains from the intake down to the powerhouse.
+    let mut cell = site.intake_cell;
+    let mut steps = 0;
+    while cell != site.powerhouse_cell {
+        match net.receiver_of(cell.0, cell.1) {
+            mk_engine::regional::hydrology::Receiver::Cell(i) => {
+                cell = (i as usize / cols, i as usize % cols);
+            }
+            other => panic!("the intake's river leaves at {other:?} before the powerhouse"),
+        }
+        steps += 1;
+        assert!(steps < 10_000);
+    }
+    println!(
+        "estate hydro: {:?} at {:.0} m head, {:.0} m penstock, Qd {:.3} m3/s, firm {:.3}, mean {:.3}; town site {}",
+        site.design.turbine.kind,
+        site.head_m,
+        site.penstock_length_m,
+        site.design_flow_m3_s,
+        site.firm_flow_m3_s,
+        site.mean_flow_m3_s,
+        match &hydro.town {
+            Some(t) => format!(
+                "{:?} {:.0} m head, Qd {:.2} m3/s ({} kW)",
+                t.design.turbine.kind, t.head_m, t.design_flow_m3_s, TOWN_HYDRO_KW
+            ),
+            None => "none".into(),
+        }
+    );
     // The layout stands on the patch, which is the block.
     assert_eq!(b.placed.layout.patch, b.placed.patch);
 }
@@ -185,6 +241,7 @@ fn the_founders_estate_has_every_building_bedroom_vehicle_tool_computer_and_acco
         "Digging Tools",
         "Repair Tools",
         "Exploration Tools",
+        "Forestry Tools",
         "Smithing Tools",
     ] {
         assert!(rooms.contains(category), "shed category {category}");
@@ -235,4 +292,26 @@ fn an_all_ocean_island_has_no_estate_site() {
     assert!(
         place_regional_estate(&b.canon, &sea, &b.ecology, &b.domain, &b.config, b.seed).is_err()
     );
+}
+
+#[test]
+fn an_island_whose_rivers_cannot_run_the_plant_has_no_estate() {
+    // The same island with every river a trickle: perennial, so blocks
+    // beside them still qualify, but none can run the estate's plant.
+    let b = base();
+    let mut dry = b.physical.clone();
+    for fd in dry.river_flows.cells.values_mut() {
+        for q in fd.flows_m3_s.iter_mut() {
+            *q = 1e-4;
+        }
+        fd.mean_m3_s = 1e-4;
+    }
+    assert_eq!(
+        choose_regional_estate_location(&b.canon, &dry, &b.ecology, &b.domain),
+        None
+    );
+    assert!(matches!(
+        place_regional_estate(&b.canon, &dry, &b.ecology, &b.domain, &b.config, b.seed),
+        Err(mk_engine::regional::property::PlaceEstateError::NoHydroSite)
+    ));
 }

@@ -102,6 +102,18 @@ pub struct Person {
     /// Carbon in the body (kg), the measure the island's own acceptance
     /// test holds the founders to.
     pub body_carbon_kg: Option<f64>,
+    /// How tall they are, in metres -- the island's own figure, drawn for
+    /// each person from a sex-specific distribution when they were made.
+    ///
+    /// Served so a renderer stands a person at their own height rather
+    /// than one it chose for everybody. Every frontend used to put every
+    /// head at 1.7 m.
+    ///
+    /// `#[serde(default)]` for backends written before this was sent; it
+    /// reads 0.0 there, which a frontend treats as "not said" rather than
+    /// as somebody with no height.
+    #[serde(default)]
+    pub height_m: f64,
 }
 
 /// The founders' estate.

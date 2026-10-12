@@ -26,9 +26,11 @@ document was wrong about whether rendering here was possible at all.
 | Grid topology for human/organism movement, births and perception (Phase 3 Task 6) | Done; planetary results bit-identical | `topology.rs`, `tests/topology_hash_baseline.rs` |
 | Founders' estate laid out in metres (Phase 3 Task 5) | Done | `regional/estate_layout.rs`, `tests/island_estate_layout.rs` |
 | Canonical founders on the island: observation, bedrooms, computer rule (Phase 3 Task 8) | Done except Task-3-dependent hooks | `regional/humans.rs`, `humans/observation.rs`, `tests/island_human_runtime.rs` |
-| Physical materials: gather, hunt, burn, calcine, eat, respire, drink, build through the flux ledger (Phase 3 Task 3) | Model done and audited inside the island tick. A meal is the carbon its eater respired since the last one, so adults hold at 1.00x of their expected body carbon over a week. Who harvests and when is still the routine's choice, not each human's (D10) | `regional/materials.rs`, `regional/life.rs`, `tests/island_material_flows.rs`, `tests/island_life_acceptance.rs` |
+| Physical materials: gather, hunt, burn, calcine, eat, respire, drink, build through the flux ledger (Phase 3 Task 3) | Model done and audited inside the island tick. A meal is the carbon its eater respired since the last one, eaten when the human chooses to eat (about 45 minutes a day), so adults hold at 1.00x of their expected body carbon over a week; drinking likewise puts back the water lost since the last drink, when they choose to drink (D10, resolved) | `regional/materials.rs`, `regional/life.rs`, `tests/island_material_flows.rs`, `tests/island_life_acceptance.rs` |
 | Timed, energy-costed work: tasks, BMR x MET, walking, load limits (Phase 3 Task 3b) | Model done. Energy is wired: the island tick costs resting metabolism at the body's BMR times the MET of sleeping or sitting, from the circadian clock, and `humans/lifecycle.rs` charges walking, mining and building their Compendium METs. Durations are not: every action still takes one tick, and the actions with no pack row cost the baseline (D9, D22) | `regional/labour.rs`, `regional/life.rs`, `humans/lifecycle.rs`, `tests/island_labour.rs`, `tests/human_realism.rs` |
 | Estate fuel and electricity (Phase 3 Task 4b) | Done | `regional/energy.rs`, `tests/island_energy.rs` |
+| Felled timber: green logs, moved by excavator, ute or hand, and stored | Done but for drying (D40). A felled tree leaves a green log lying where it fell (0.82 kg water per kg dry wood in hardwoods), carbon and water booked. The founder who works it moves it to the building workshop the quickest way the estate allows: the CAT 330 lifts and carries a log within its rating; otherwise it is cross-cut with the axe into pieces they can carry and loaded onto the ute one by one, or carried on foot. Every leg is timed, costs its MET and burns its fuel; the books close at every step | `regional/timber.rs`, `regional/life.rs`, `regional/materials.rs`, `fixtures/reference/labour/timber.json` |
+| River micro-hydro for the estate (Phase 4b Tasks 1-3) | Done but for wear and maintenance (D39). The spin-up records every perennial river cell's flow-duration curve. The estate is placed only beside a river that can run its 25 kW plant at the firm flow with 30% of the mean left in the river, and the same river is searched for a 2 MW town site. On the default island that is a Francis on 138 m of head, with a town site 129 m lower down. The plant is the estate's first supply, through an 11 kV line designed to the 5% drop; its water skips the bypassed reach and rejoins at the tailrace | `regional/industry/`, `regional/property.rs`, `regional/energy.rs`, `tests/hydro_grid.rs`, `tests/island_property_scenario.rs` |
 | Individual trees and stands on the estate patch (Phase 3 Task 7) | Done | `regional/local_vegetation.rs`, `tests/island_local_vegetation.rs` |
 | Island scenario and estate placement (Phase 3 Task 4) | Done | `mk_island/src/scenario.rs`, `regional/property.rs`, `fixtures/island/default_scenario.json` |
 | Complete island snapshot: save, restore, tamper and canon rejection (Phase 4 Task 3) | Done. A full island — a dozen 1,152,000-cell grids, 200,000 stems, the founders and the RNG streams — writes atomically to one deflated, digest-prefixed file and restores to the same state digest, then runs on identically. The domain, grid topology and labour table are derived again on load rather than trusted from the file | `io/island_snapshot.rs`, `regional/life.rs`, `tests/island_snapshot.rs` |
@@ -189,13 +191,13 @@ limit looks like; it is the first thing to check. Until it is, every figure here
 
 ## Known fidelity limits
 
-Every known departure from reality is in `docs/island/DEVIATIONS.md` (D1-D36). The largest open
-ones: no sea/land breezes (D3); storm structure is parametric (D4); river channels have no
-in-channel storage (D28); the regional tick audits tidal heat only (D29); biomass residence times
-are round estimates (D30); production ignores soil nutrients (D31); every human action still takes exactly one
-tick whatever it is (D9); the actions with no Compendium row cost the resting baseline (D22);
-who harvests and when is the routine's choice rather than each person's (D10); machine use off
-the estate's electrical system is still free (D13).
+Every known departure from reality is in `docs/island/DEVIATIONS.md` (D1-D40). The largest open
+ones: the driest tenth of the island gets ~320 mm of rain a year against New Zealand's driest
+basin's 360 (D38); no sea/land breezes, and the coastal damping of the day-night range is observed rather than carried (D3); storm structure is parametric (D4); river channels have no
+in-channel storage (D28); the regional tick audits tidal heat only (D29); production ignores soil
+nutrients (D31); every human action still takes exactly one
+tick whatever it is, and none of them uses a machine (D9); the actions with no Compendium row
+cost the resting baseline (D22).
 
 ## Not done
 
@@ -250,23 +252,14 @@ the estate's electrical system is still free (D13).
 
   Still missing from a map proper: the Creator page does not use it yet, only the intervention
   form.
-- Phase 4b: energy, industry, town, economy. **Blocked at its own first step, and the block is
-  the network rather than the work.** Task 1 Step 1 is "assemble cited reference values" --
-  turbine efficiency curves by type and head range, Darcy-Weisbach penstock friction, oil
-  reservoir recovery factors and Arps decline parameters, crude assays, refinery energy per
-  barrel. Verified from this container on 2026-10-08, not assumed:
-
-  ```
-  https://doi.org               000
-  https://www.ieahydro.org      000
-  https://canyonhydro.com       000
-  ```
-
-  `000` is curl for no connection at all. Writing those values from memory and attaching
-  citations to them would look exactly like sourced data and would not be any -- the provenance
-  would be invented even where the number happened to be right, which is the failure
-  `REALISM.md` exists to prevent. Everything downstream (sizing, staffing, the town) hangs off
-  that table, so the phase waits on reachable sources or on the values being supplied.
+- Phase 4b: energy, industry, town, economy. **Hydro is built (Tasks 1-3); the rest is not.**
+  The sources the 2026-10-08 entry here could not reach were fetched on 2026-10-12 through the
+  Firecrawl connector and are in `fixtures/reference/industry/hydro.json`: ESHA 2004's turbine
+  head ranges and best efficiencies, RETScreen 2004's part-load efficiency curves, Tennant 1976's
+  environmental flow, Moody's pipe roughness with Swamee-Jain friction, BS 215 conductor
+  resistances, AS/NZS 3000's 5% voltage drop and IEC 60038's voltages. Still to do: Task 1's
+  petroleum, refinery, gas, staffing, wage and household-demand tables (with Tasks 4-8, which use
+  them), the plant's wear and maintenance (Task 6, D39), and Tasks 4-9.
 - Phase 5, partly. `island-ui` exists, builds on Bevy 0.19 with no system graphics packages
   (9 min 19 s from cold, 392 crates), reads an island remotely or embedded through one code
   path, and **draws it** -- verified by a photographed frame in CI rather than by argument.

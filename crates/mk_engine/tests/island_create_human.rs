@@ -16,12 +16,28 @@ fn repo(path: &str) -> PathBuf {
         .join(path)
 }
 
-fn island() -> IslandLife {
+fn bootstrap_island() -> IslandLife {
     let mut scenario =
         IslandScenario::load(&repo("fixtures/island/default_scenario.json")).unwrap();
     scenario.estate_patch.tree_cap = 50;
     let canon = Arc::new(CanonLocked::load(&repo("fixtures/island/canon.json")).unwrap());
     IslandLife::bootstrap(scenario, canon).expect("the island bootstraps")
+}
+
+/// Every test here starts from the same island, and bootstrapping spins its
+/// climate up for two orbits -- about half a minute in a debug build. So it
+/// is bootstrapped once and each test gets its own copy restored from the
+/// snapshot, which brings an island back exactly (`island_snapshot.rs`).
+fn island() -> IslandLife {
+    static BOOTSTRAPPED: std::sync::OnceLock<mk_engine::regional::life::IslandLifeSnapshot> =
+        std::sync::OnceLock::new();
+    let snapshot = BOOTSTRAPPED
+        .get_or_init(|| bootstrap_island().snapshot())
+        .clone();
+    let canon = std::sync::Arc::new(
+        mk_core::canon::CanonLocked::load(&repo("fixtures/island/canon.json")).expect("canon"),
+    );
+    IslandLife::restore(canon, snapshot).expect("the island restores")
 }
 
 fn somebody(name: &str, location: CreateLocation) -> IslandCreateHuman {

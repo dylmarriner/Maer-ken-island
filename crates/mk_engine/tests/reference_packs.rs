@@ -11,7 +11,7 @@ fn library() -> ReferenceLibrary {
 }
 
 /// Items each domain must provide (`docs/superpowers/plans/2026-10-02-island-phase0c-canon-and-realism.md`, Task 3).
-const REQUIRED: [(ReferenceDomain, &[&str]); 6] = [
+const REQUIRED: [(ReferenceDomain, &[&str]); 7] = [
     (
         ReferenceDomain::Climate,
         &[
@@ -90,6 +90,27 @@ const REQUIRED: [(ReferenceDomain, &[&str]); 6] = [
             "timber_frame_construction_labour",
             "light_4wd_fuel_consumption",
             "vehicle_speed_by_surface",
+            "green_wood_moisture_content",
+            "light_truck_payload",
+            "excavator_cat330",
+            "crane_log_handling_cycle",
+        ],
+    ),
+    (
+        ReferenceDomain::Industry,
+        &[
+            "turbine_head_range",
+            "turbine_best_efficiency",
+            "generator_best_efficiency",
+            "turbine_part_load_efficiency",
+            "design_hydraulic_loss_fraction",
+            "firm_flow_exceedance",
+            "environmental_flow_fraction_of_mean",
+            "pipe_absolute_roughness",
+            "water_kinematic_viscosity_10c",
+            "acsr_conductor_resistance",
+            "max_voltage_drop_fraction",
+            "standard_three_phase_voltages",
         ],
     ),
 ];

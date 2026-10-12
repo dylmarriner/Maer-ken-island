@@ -27,7 +27,7 @@
 //! pass whatever today's code happens to emit and would notice nothing
 //! when a field stopped being optional.
 
-use mk_island_api::wire::{BuildingFootprint, Conversation, PlacedItem};
+use mk_island_api::wire::{BuildingFootprint, Conversation, Person, PlacedItem};
 
 #[test]
 fn a_conversation_from_a_backend_that_predates_spanning_ticks_still_reads() {
@@ -91,6 +91,27 @@ fn a_building_from_a_backend_that_had_no_real_heights_still_reads() {
     // without pretending to know how tall it is.
     assert_eq!(building.height_m, 0.0);
     assert!(building.height_source.is_empty());
+}
+
+#[test]
+fn a_person_from_a_backend_that_sent_no_height_still_reads() {
+    let old = r#"{
+        "agent_id": "Gem-D",
+        "alive": true,
+        "asleep": false,
+        "age_years": 25.0,
+        "space": "Gem-D's Bedroom",
+        "position_m": [113967.0, 124003.0],
+        "cell": [62, 56],
+        "body_carbon_kg": 13.0
+    }"#;
+
+    let person: Person = serde_json::from_str(old).expect("an old person reads");
+    assert_eq!(person.agent_id, "Gem-D");
+    // Zero is "not said". The desktop application stands such a person at
+    // the mean of the population the island draws heights from, rather
+    // than at nothing or at a figure it chose for everybody.
+    assert_eq!(person.height_m, 0.0);
 }
 
 #[test]

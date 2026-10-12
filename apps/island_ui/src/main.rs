@@ -724,7 +724,7 @@ fn build_the_estate(
             Visibility::Hidden,
         ));
         things += 1;
-        if let Some(model) = thing.model.filter(|m| m.is_really_this) {
+        if let Some(model) = thing.model {
             commands.spawn((
                 OnTheEstate,
                 WorldAssetRoot(assets.load(GltfAssetLabel::Scene(0).from_asset(model.path))),
@@ -1355,15 +1355,14 @@ fn panels(
                         property.buildings.len()
                     ));
                     for building in &property.buildings {
-                        let model = property::building(&building.kind);
                         ui.label(format!(
                             "  {} ({}){}",
                             building.name,
                             building.kind,
-                            if model.is_really_this {
+                            if property::building(&building.kind).is_some() {
                                 ""
                             } else {
-                                " — no model"
+                                " — drawn at its real size, no model"
                             }
                         ));
                     }
@@ -1371,7 +1370,8 @@ fn panels(
                         ui.label(format!(
                             "  {} — {}",
                             item.name,
-                            property::item(&item.kind, &item.name).path
+                            property::item(&item.kind, &item.name)
+                                .map_or("drawn at its real size, no model", |m| m.path)
                         ));
                     }
                 }

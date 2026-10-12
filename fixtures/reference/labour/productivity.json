@@ -64,6 +64,21 @@
       "key": "epa_fueleconomy",
       "citation": "U.S. Department of Energy and EPA. fueleconomy.gov combined-cycle ratings for 4WD pickups and SUVs.",
       "licence": "Public domain (U.S. Government work)"
+    },
+    {
+      "key": "energystar_lamps_v2",
+      "citation": "U.S. Environmental Protection Agency (2016). ENERGY STAR Program Requirements for Lamps (Light Bulbs), Version 2.0.",
+      "licence": "Public domain (U.S. Government work)"
+    },
+    {
+      "key": "cibse2012",
+      "citation": "CIBSE (2012). SLL Code for Lighting. Society of Light and Lighting, Chartered Institution of Building Services Engineers, London. Lumen method: E = F n UF MF / A.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "bs8206_2",
+      "citation": "BSI (2008). BS 8206-2:2008 Lighting for buildings. Code of practice for daylighting. British Standards Institution, London.",
+      "licence": "Facts cited with attribution"
     }
   ],
   "items": [
@@ -518,6 +533,68 @@
         }
       },
       "note": "Field-practice figures for safe travel, not EPA test data; order-of-magnitude only."
+    },
+    {
+      "key": "led_lamp_efficacy",
+      "description": "Minimum luminous efficacy of a qualifying omnidirectional LED lamp",
+      "unit": "lm / W",
+      "source": "energystar_lamps_v2",
+      "confidence": "medium",
+      "value": {
+        "point": 80.0
+      },
+      "note": "Lamps with CRI below 90; a household 800 lm (60 W-equivalent) LED lamp draws about 10 W at this efficacy."
+    },
+    {
+      "key": "room_utilisation_factor",
+      "description": "Lumen-method utilisation factor of a small domestic room: the fraction of lamp output reaching the working plane",
+      "unit": "fraction",
+      "source": "cibse2012",
+      "confidence": "low",
+      "value": {
+        "range": {
+          "min": 0.4,
+          "max": 0.6,
+          "typical": 0.5
+        }
+      },
+      "note": "Small rooms with light walls and ceiling-mounted lamps; the factor falls with room index and surface darkness."
+    },
+    {
+      "key": "room_daylight_factor",
+      "description": "Minimum average daylight factor recommended for rooms of a dwelling",
+      "unit": "fraction of outdoor illuminance",
+      "source": "bs8206_2",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "room",
+          "columns": [
+            "daylight_factor"
+          ],
+          "rows": [
+            {
+              "label": "bedroom",
+              "values": [
+                0.01
+              ]
+            },
+            {
+              "label": "living_room",
+              "values": [
+                0.015
+              ]
+            },
+            {
+              "label": "kitchen",
+              "values": [
+                0.02
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Average daylight factor: indoor horizontal illuminance as a fraction of the simultaneous unobstructed outdoor illuminance under an overcast sky."
     }
   ]
 }

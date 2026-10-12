@@ -57,6 +57,44 @@ opt-level = 2
 [profile.dev.package.mk_core]
 opt-level = 2
 
+# And what the island tests spend their time in besides the engine:
+# serializing, hashing and compressing whole islands (serde, serde_json,
+# bincode, blake3, flate2) and drawing from keyed streams. At opt-level 0
+# these took minutes of every fast-tier run. Only these, not every
+# dependency, so the desktop job's Bevy build is unchanged.
+[profile.dev.package.mk_island]
+opt-level = 2
+
+[profile.dev.package.serde]
+opt-level = 2
+
+[profile.dev.package.serde_json]
+opt-level = 2
+
+[profile.dev.package.ryu]
+opt-level = 2
+
+[profile.dev.package.itoa]
+opt-level = 2
+
+[profile.dev.package.bincode]
+opt-level = 2
+
+[profile.dev.package.blake3]
+opt-level = 2
+
+[profile.dev.package.flate2]
+opt-level = 2
+
+[profile.dev.package.miniz_oxide]
+opt-level = 2
+
+[profile.dev.package.crc32fast]
+opt-level = 2
+
+[profile.dev.package.rand_chacha]
+opt-level = 2
+
 # `cargo test --release` uses the bench profile, which would otherwise inherit
 # the release `lto = true, codegen-units = 1` and make every test binary slow
 # to link.

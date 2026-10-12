@@ -6,8 +6,12 @@
 //! height. The island does the same over its medium cells, with the extra
 //! constraints the island needs: the estate is a 2 × 2 block of medium cells
 //! (the 4 km high-detail patch), all dry, non-volcanic, not a lake or river,
-//! with a perennial river within 1 km of the block (the estate's water
-//! and, in Phase 4b, its micro-hydro supply).
+//! with a perennial river within 1 km of the block (the estate's water)
+//! that can run the estate's micro-hydro plant (Phase 4b): a site on it,
+//! powerhouse beside the block, takes the plant's design flow at the firm
+//! flow and leaves the river its environmental flow
+//! ([`super::industry::hydro_sites`]). The same river is searched for a
+//! town-sized plant's site too.
 //!
 //! The founders' inventory is instantiated by upstream
 //! `PropertySystem::new(Some(location))`; nothing is copied.
@@ -19,7 +23,9 @@ use serde::{Deserialize, Serialize};
 
 use super::ecology::{cell_climate, RegionalEcologyState};
 use super::estate_layout::{layout_estate, EstateLayout, EstateLayoutError};
-use super::hydrology::discharge_m3_s;
+use super::industry::hydro_sites::{
+    site_for_powerhouse, site_on_same_river, HydroSite, ESTATE_HYDRO_KW, TOWN_HYDRO_KW,
+};
 use super::physical::RegionalPhysicalState;
 use crate::climate::seasonal_temperature_amplitude;
 use crate::organisms::property::{PropertySystem, StarterProperty};
@@ -27,10 +33,6 @@ use crate::organisms::property::{PropertySystem, StarterProperty};
 /// Annual-mean temperature (K) the scoring prefers, as upstream's
 /// `ESTATE_IDEAL_TEMP_K`.
 const IDEAL_TEMPERATURE_K: f64 = 288.0;
-/// Smallest discharge (m³/s) of a river the estate may draw on. Phase 4b
-/// sizes the micro-hydro plant against the real flow and environmental
-/// flow; until then a river must at least be one the model calls a river.
-pub const ESTATE_MIN_RIVER_DISCHARGE_M3_S: f64 = 1.0;
 /// Reach (m) from the block to a river cell's centre.
 const RIVER_REACH_M: f64 = 1_000.0;
 /// Sites tried, best first, before giving up.
@@ -67,6 +69,9 @@ impl std::error::Error for EstatePatchError {}
 pub enum PlaceEstateError {
     /// No medium-cell block qualifies.
     NoEstateSite,
+    /// Blocks qualify, but none has a river beside it that can run the
+    /// estate's micro-hydro plant.
+    NoHydroSite,
     Patch(EstatePatchError),
     Layout(EstateLayoutError),
 }
@@ -77,6 +82,11 @@ impl std::fmt::Display for PlaceEstateError {
             Self::NoEstateSite => {
                 write!(f, "the island has no valid site for the founders' estate")
             }
+            Self::NoHydroSite => write!(
+                f,
+                "no estate site has a river beside it that can run a {ESTATE_HYDRO_KW} kW \
+                 micro-hydro plant"
+            ),
             Self::Patch(e) => write!(f, "{e}"),
             Self::Layout(e) => write!(f, "{e}"),
         }
@@ -142,6 +152,71 @@ fn standable(
         )
 }
 
+/// Perennial river cells in the ring around the 2 x 2 block at
+/// `(row, col)` within [`RIVER_REACH_M`] of its footprint (adjacent cells'
+/// centres are 1 km away), nearest first.
+fn river_cells_near(
+    physical: &RegionalPhysicalState,
+    domain: &IslandDomain,
+    (row, col): (usize, usize),
+) -> Vec<(usize, usize)> {
+    let medium = DomainLevel::Medium;
+    let (rows, cols) = (domain.rows(medium), domain.cols(medium));
+    let block = [
+        (row, col),
+        (row, col + 1),
+        (row + 1, col),
+        (row + 1, col + 1),
+    ];
+    let (bx, by) = domain.cell_center_m(medium, row, col);
+    let size = domain.cell_size_m(medium);
+    let mut near: Vec<(f64, (usize, usize))> = (row.saturating_sub(1)..=(row + 2).min(rows - 1))
+        .flat_map(|r| (col.saturating_sub(1)..=(col + 2).min(cols - 1)).map(move |c| (r, c)))
+        .filter(|cell| !block.contains(cell))
+        .filter_map(|(r, c)| {
+            let (x, y) = domain.cell_center_m(medium, r, c);
+            // Distance from the block's footprint to the cell centre.
+            let dx = (x - (bx + 0.5 * size)).abs() - size;
+            let dy = (y - (by + 0.5 * size)).abs() - size;
+            let d = dx.max(0.0).hypot(dy.max(0.0));
+            (d <= RIVER_REACH_M + 1e-9 && physical.river_flows.get(r * cols + c).is_some())
+                .then_some((d, (r, c)))
+        })
+        .collect();
+    near.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+    near.into_iter().map(|(_, cell)| cell).collect()
+}
+
+/// The estate's micro-hydro: its own plant and, on the same river, a site
+/// for the town's.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct EstateHydro {
+    pub estate: HydroSite,
+    /// `None` where the river has no reach that supports a town-sized
+    /// plant.
+    pub town: Option<HydroSite>,
+}
+
+/// The estate's micro-hydro site for the block at `(row, col)`: of the
+/// river cells beside it, the powerhouse whose site needs the shortest
+/// penstock; `None` if no river beside the block supports the plant.
+pub fn estate_hydro_site(
+    physical: &RegionalPhysicalState,
+    domain: &IslandDomain,
+    block: (usize, usize),
+) -> Option<EstateHydro> {
+    let estate = river_cells_near(physical, domain, block)
+        .into_iter()
+        .filter_map(|cell| site_for_powerhouse(physical, domain, cell, ESTATE_HYDRO_KW))
+        .min_by(|a, b| {
+            a.penstock_length_m
+                .total_cmp(&b.penstock_length_m)
+                .then(a.powerhouse_cell.cmp(&b.powerhouse_cell))
+        })?;
+    let town = site_on_same_river(physical, domain, &estate, TOWN_HYDRO_KW);
+    Some(EstateHydro { estate, town })
+}
+
 /// Every qualifying block, best first: `(score, row, col)` of the block's
 /// south-west cell. Ties break on the lowest `(row, col)`.
 pub fn ranked_estate_sites(
@@ -176,24 +251,8 @@ pub fn ranked_estate_sites(
             {
                 continue;
             }
-            // A perennial river within reach of the block: a river cell in
-            // the ring around it (adjacent cells' centres are 1 km away).
-            let river_near = (row.saturating_sub(1)..=(row + 2).min(rows - 1))
-                .flat_map(|r| {
-                    (col.saturating_sub(1)..=(col + 2).min(cols - 1)).map(move |c| (r, c))
-                })
-                .filter(|cell| !block.contains(cell))
-                .any(|(r, c)| {
-                    let (bx, by) = domain.cell_center_m(medium, row, col);
-                    let (x, y) = domain.cell_center_m(medium, r, c);
-                    // Distance from the block's footprint to the cell centre.
-                    let size = domain.cell_size_m(medium);
-                    let dx = (x - (bx + 0.5 * size)).abs() - size;
-                    let dy = (y - (by + 0.5 * size)).abs() - size;
-                    dx.max(0.0).hypot(dy.max(0.0)) <= RIVER_REACH_M + 1e-9
-                        && discharge_m3_s(&physical.hydrology, domain, r, c)
-                            >= ESTATE_MIN_RIVER_DISCHARGE_M3_S
-                });
+            // A perennial river within reach of the block.
+            let river_near = !river_cells_near(physical, domain, (row, col)).is_empty();
             if !river_near {
                 continue;
             }
@@ -233,8 +292,9 @@ pub fn choose_regional_estate_location(
     domain: &IslandDomain,
 ) -> Option<(usize, usize)> {
     ranked_estate_sites(canon, physical, ecology, domain)
-        .first()
-        .map(|&(_, row, col)| (row, col))
+        .into_iter()
+        .map(|(_, row, col)| (row, col))
+        .find(|&block| estate_hydro_site(physical, domain, block).is_some())
 }
 
 /// The founders' estate placed and laid out.
@@ -244,6 +304,10 @@ pub struct PlacedEstate {
     pub patch: LocalPatchSpec,
     pub property: PropertySystem,
     pub layout: EstateLayout,
+    /// The estate's micro-hydro site. `None` only in an estate placed
+    /// before Phase 4b chose one.
+    #[serde(default)]
+    pub hydro: Option<EstateHydro>,
 }
 
 /// Choose the best site where the buildings also fit on the patch's
@@ -260,8 +324,16 @@ pub fn place_regional_estate(
     if sites.is_empty() {
         return Err(PlaceEstateError::NoEstateSite);
     }
-    let mut last = PlaceEstateError::NoEstateSite;
-    for &(_, row, col) in sites.iter().take(MAX_SITES_TRIED) {
+    let mut last = PlaceEstateError::NoHydroSite;
+    let mut tried = 0;
+    for &(_, row, col) in &sites {
+        if tried == MAX_SITES_TRIED {
+            break;
+        }
+        let Some(hydro) = estate_hydro_site(physical, domain, (row, col)) else {
+            continue;
+        };
+        tried += 1;
         let patch =
             estate_patch_spec(domain, (row, col), config).map_err(PlaceEstateError::Patch)?;
         let property = bootstrap_regional_property((row, col));
@@ -277,6 +349,7 @@ pub fn place_regional_estate(
                     patch,
                     property,
                     layout,
+                    hydro: Some(hydro),
                 })
             }
             Err(e) => last = PlaceEstateError::Layout(e),

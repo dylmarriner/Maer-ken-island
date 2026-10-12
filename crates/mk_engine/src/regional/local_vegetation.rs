@@ -95,8 +95,12 @@ pub struct StandCover {
 pub struct WoodYield {
     /// Usable wood (kg dry mass).
     pub wood_kg: f64,
-    /// The stem's carbon (kgC) debited from the cell and the ledger.
+    /// The stem's carbon (kgC) debited from the cell.
     pub carbon_kgc: f64,
+    /// The usable wood's carbon (kgC): the part of the stem that was not
+    /// left behind as brash and roots, still to be booked by whoever takes
+    /// the wood (`regional::materials::MaterialLedger::receive_felled_wood`).
+    pub usable_carbon_kgc: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -246,10 +250,11 @@ impl LocalVegetationPatch {
         trees + stands
     }
 
-    /// Fell a tree: the stem leaves the patch, the cell's biomass field
-    /// loses its carbon, and the ledger records it moving out of living
-    /// biomass. Until the material ledger (Task 3) exists the carbon is
-    /// booked into `DetritusCarbon`: it stays in the land carbon system.
+    /// Fell a tree: the stem leaves the patch and the cell's biomass field
+    /// loses its carbon. The brash and roots left behind go to detritus in
+    /// the ledger here; the usable wood's carbon is returned for the taker to
+    /// book out of living biomass into its own stock, so felling a tree and
+    /// carrying its wood away are one carbon movement, not two.
     pub fn fell_tree(
         &mut self,
         tree_id: u64,
@@ -266,16 +271,42 @@ impl LocalVegetationPatch {
         let area = self.medium_cell_m * self.medium_cell_m;
         let cell = ecology.biomass_kgc_m2.get_mut(row, col);
         *cell = (*cell - tree.biomass_kgc / area).max(0.0);
+        let usable_carbon_kgc = tree.biomass_kgc * USABLE_WOOD_FRACTION;
         ledger.push(FluxEntry::new(
             Reservoir::BiomassCarbon,
             Reservoir::DetritusCarbon,
-            tree.biomass_kgc,
+            tree.biomass_kgc - usable_carbon_kgc,
             FluxKind::Carbon,
         ));
         Ok(WoodYield {
             wood_kg: tree.biomass_kgc / CARBON_FRACTION * USABLE_WOOD_FRACTION,
             carbon_kgc: tree.biomass_kgc,
+            usable_carbon_kgc,
         })
+    }
+
+    /// The biome of the stand at `position_m` (domain metres), if it is on
+    /// the patch.
+    pub fn biome_at(&self, position_m: (f64, f64)) -> Option<BiomeType> {
+        let p = &self.patch;
+        let c = ((position_m.0 - p.origin_x_m) / p.cell_size_m).floor();
+        let r = ((position_m.1 - p.origin_y_m) / p.cell_size_m).floor();
+        if c < 0.0 || r < 0.0 || c as usize >= p.cols || r as usize >= p.rows {
+            return None;
+        }
+        Some(self.stands.get(r as usize, c as usize).biome)
+    }
+
+    /// The living tree standing nearest `position_m` (domain metres), if
+    /// any; ties go to the lower id.
+    pub fn nearest_tree(&self, position_m: (f64, f64)) -> Option<&TreeInstance> {
+        let d2 = |t: &TreeInstance| {
+            (t.position_m.0 - position_m.0).powi(2) + (t.position_m.1 - position_m.1).powi(2)
+        };
+        self.trees
+            .iter()
+            .filter(|t| t.alive)
+            .min_by(|a, b| d2(a).total_cmp(&d2(b)).then(a.id.cmp(&b.id)))
     }
 
     /// Follow the field over `dt_seconds`: trees die at the background

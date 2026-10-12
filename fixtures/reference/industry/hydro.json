@@ -1,0 +1,463 @@
+{
+  "id": "hydro",
+  "domain": "industry",
+  "title": "Small hydropower: turbines, generators, penstocks and river flows",
+  "retrieved": "2026-10-12",
+  "licence": "Numerical values and formulas cited as facts with attribution; no text, figures or datasets reproduced.",
+  "sources": [
+    {
+      "key": "esha2004",
+      "citation": "European Small Hydropower Association (2004). Guide on How to Develop a Small Hydropower Plant. ESHA, Brussels. Chapter 6, Electromechanical equipment: Tables 6.3, 6.7 and 6.8.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "retscreen2004",
+      "citation": "Natural Resources Canada (2004). RETScreen Engineering & Cases Textbook: Small Hydro Project Analysis. CANMET Energy Technology Centre, Varennes. Section 2.3 and Appendix A (turbine efficiency formulae).",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "tennant1976",
+      "citation": "Tennant, D. L. (1976). Instream flow regimens for fish, wildlife, recreation and related environmental resources. Fisheries 1(4), 6-10.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "swamee1976",
+      "citation": "Swamee, P. K. and Jain, A. K. (1976). Explicit equations for pipe-flow problems. Journal of the Hydraulics Division, ASCE 102(HY5), 657-664.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "moody1944",
+      "citation": "Moody, L. F. (1944). Friction factors for pipe flow. Transactions of the ASME 66(8), 671-684; roughness values as tabulated by Pipe Flow Software (pipeflow.com, 'Pipe Roughness') and the Moody Chart Calculator pipe roughness guide (moodychartcalc.com), retrieved 2026-10-12.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "antonpaar_water",
+      "citation": "Anton Paar Wiki, 'Viscosity of Water' measurement table (wiki.anton-paar.com/en/water), retrieved 2026-10-12.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "bs215_deangeli",
+      "citation": "BS 215 Part 2 aluminium conductors steel-reinforced (ACSR), British sizes: maximum DC resistance at 20 C, as listed in De Angeli Prodotti, Conductor Data Sheet: Aluminium Conductor Steel Reinforced (2020).",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "asnzs3000",
+      "citation": "Standards Australia / Standards New Zealand (2018). AS/NZS 3000:2018 Electrical installations (Wiring Rules), clause 3.6.2 (voltage drop not to exceed 5% of nominal voltage).",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "iec60038",
+      "citation": "IEC 60038:2009 IEC standard voltages. Table 1 (230/400 V three-phase) and Table 3 (Series I nominal 11 kV, highest voltage for equipment 12 kV).",
+      "licence": "Facts cited with attribution"
+    }
+  ],
+  "items": [
+    {
+      "key": "turbine_head_range",
+      "description": "Range of net heads over which each small-hydro turbine type operates",
+      "unit": "m",
+      "source": "esha2004",
+      "confidence": "high",
+      "value": {
+        "table": {
+          "row_label": "turbine",
+          "columns": [
+            "min",
+            "max"
+          ],
+          "rows": [
+            {
+              "label": "kaplan_propeller",
+              "values": [
+                2.0,
+                40.0
+              ]
+            },
+            {
+              "label": "francis",
+              "values": [
+                25.0,
+                350.0
+              ]
+            },
+            {
+              "label": "pelton",
+              "values": [
+                50.0,
+                1300.0
+              ]
+            },
+            {
+              "label": "crossflow",
+              "values": [
+                5.0,
+                200.0
+              ]
+            },
+            {
+              "label": "turgo",
+              "values": [
+                50.0,
+                250.0
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Table 6.3. The ranges overlap; several types suit one head, and the choice among them turns on the flow regime."
+    },
+    {
+      "key": "turbine_best_efficiency",
+      "description": "Best (peak) efficiency of small turbines as guaranteed by manufacturers",
+      "unit": "fraction",
+      "source": "esha2004",
+      "confidence": "high",
+      "value": {
+        "table": {
+          "row_label": "turbine",
+          "columns": [
+            "best"
+          ],
+          "rows": [
+            {
+              "label": "kaplan_single_regulated",
+              "values": [
+                0.91
+              ]
+            },
+            {
+              "label": "kaplan_double_regulated",
+              "values": [
+                0.93
+              ]
+            },
+            {
+              "label": "francis",
+              "values": [
+                0.94
+              ]
+            },
+            {
+              "label": "pelton_multi_nozzle",
+              "values": [
+                0.9
+              ]
+            },
+            {
+              "label": "pelton_one_nozzle",
+              "values": [
+                0.89
+              ]
+            },
+            {
+              "label": "turgo",
+              "values": [
+                0.85
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Table 6.7. A Pelton keeps its efficiency from 30% to 100% of its maximum discharge with one jet and from 10% with several; a Turgo operates from 20% to 100% of design flow."
+    },
+    {
+      "key": "generator_best_efficiency",
+      "description": "Best efficiency of small generators by rated power",
+      "unit": "fraction",
+      "source": "esha2004",
+      "confidence": "high",
+      "value": {
+        "table": {
+          "row_label": "rated_kw",
+          "columns": [
+            "rated_kw",
+            "best"
+          ],
+          "rows": [
+            {
+              "label": "10",
+              "values": [
+                10.0,
+                0.91
+              ]
+            },
+            {
+              "label": "50",
+              "values": [
+                50.0,
+                0.94
+              ]
+            },
+            {
+              "label": "100",
+              "values": [
+                100.0,
+                0.95
+              ]
+            },
+            {
+              "label": "250",
+              "values": [
+                250.0,
+                0.955
+              ]
+            },
+            {
+              "label": "500",
+              "values": [
+                500.0,
+                0.96
+              ]
+            },
+            {
+              "label": "1000",
+              "values": [
+                1000.0,
+                0.97
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Table 6.8."
+    },
+    {
+      "key": "turbine_part_load_efficiency",
+      "description": "Turbine efficiency against flow, from curves fitted to many manufacturers' data",
+      "unit": "fraction",
+      "source": "retscreen2004",
+      "confidence": "high",
+      "value": {
+        "point": 0.79
+      },
+      "note": "Appendix A. Value: the cross-flow turbine's efficiency at design flow, e = 0.79 - 0.15 x - 1.37 x^14 with x = (Qd - Q)/Qd. Reaction runners: d = k Qd^0.473 (k 0.46 below 1.8 m, 0.41 above), specific speed nq = k h^-0.5 (k 800 Kaplan and propeller, 600 Francis). Francis: e_nq = ((nq - 56)/256)^2, e_d = (0.081 + e_nq)(1 - 0.789 d^-0.2), ep = 0.919 - e_nq + e_d - 0.0305 + 0.005 Rm (Rm default 4.5), Qp = 0.65 Qd nq^0.05, below Qp e = (1 - 1.25 ((Qp - Q)/Qp)^(3.94 - 0.0195 nq)) ep, full-load drop 0.0072 nq^0.4, above Qp e = ep - ((Q - Qp)/(Qd - Qp))^2 (ep - er). Kaplan and propeller: e_nq = ((nq - 170)/700)^2, e_d = (0.095 + e_nq)(1 - 0.789 d^-0.2), ep = 0.905 - e_nq + e_d - 0.0305 + 0.005 Rm; Kaplan Qp = 0.75 Qd, e = (1 - 3.5 ((Qp - Q)/Qp)^6) ep; propeller Qp = Qd, e = (1 - 1.25 ((Qp - Q)/Qp)^1.13) ep. Pelton with j jets: n = 31 (h / (Qd / j))^0.5 (the flow per jet divides the head; this reading gives ESHA's worked example of about 1,000 rpm at 400 m and 0.42 m3/s), d = 49.4 h^0.5 j^0.02 / n, ep = 0.864 d^0.04, Qp = (0.662 + 0.001 j) Qd, e = (1 - (1.31 + 0.025 j) |(Qp - Q)/Qp|^(5.6 + 0.4 j)) ep. Plant power P = rho g Q (Hg - h_hydr) e_t e_g (1 - l_trans)(1 - l_para), hydraulic loss h_hydr = Hg l_max (Q / Qdes)^2."
+    },
+    {
+      "key": "design_hydraulic_loss_fraction",
+      "description": "Maximum hydraulic (intake and penstock) loss at design flow, as a fraction of gross head, in RETScreen's validation case",
+      "unit": "fraction",
+      "source": "retscreen2004",
+      "confidence": "medium",
+      "value": {
+        "point": 0.05
+      },
+      "note": "Validation against a manufacturer's curves at 103.6 m gross head used maximum hydraulic losses of 5%."
+    },
+    {
+      "key": "firm_flow_exceedance",
+      "description": "Share of the time the firm flow is available on the flow-duration curve",
+      "unit": "fraction",
+      "source": "retscreen2004",
+      "confidence": "high",
+      "value": {
+        "point": 0.95
+      },
+      "note": "'usually equal to 95%'."
+    },
+    {
+      "key": "environmental_flow_fraction_of_mean",
+      "description": "Base flow left in a river, as a fraction of its average annual flow, by habitat outcome",
+      "unit": "fraction",
+      "source": "tennant1976",
+      "confidence": "medium",
+      "value": {
+        "range": {
+          "min": 0.1,
+          "max": 0.3,
+          "typical": 0.3
+        }
+      },
+      "note": "10% of the average flow is the minimum for short-term survival of most aquatic life; 30% sustains good survival habitat for most aquatic life forms."
+    },
+    {
+      "key": "pipe_absolute_roughness",
+      "description": "Absolute roughness of commercial pipe walls",
+      "unit": "m",
+      "source": "moody1944",
+      "confidence": "high",
+      "value": {
+        "table": {
+          "row_label": "material",
+          "columns": [
+            "roughness_m"
+          ],
+          "rows": [
+            {
+              "label": "commercial_steel",
+              "values": [
+                4.6e-05
+              ]
+            },
+            {
+              "label": "plastic_drawn_tubing",
+              "values": [
+                1.5e-06
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Commercial steel 0.045-0.046 mm, PVC and drawn tubing 0.0015 mm. Darcy friction factor from Swamee & Jain (1976): f = 0.25 / (log10(eps / (3.7 D) + 5.74 / Re^0.9))^2, valid for 1e-6 < eps/D < 1e-2 and 5000 < Re < 1e8."
+    },
+    {
+      "key": "water_kinematic_viscosity_10c",
+      "description": "Kinematic viscosity of fresh water at 10 C",
+      "unit": "m2/s",
+      "source": "antonpaar_water",
+      "confidence": "high",
+      "value": {
+        "point": 1.3063e-06
+      },
+      "note": "Measured: dynamic viscosity 1.3059 mPa s, kinematic 1.3063 mm2/s, density 0.9997 g/cm3 at 10 C."
+    },
+    {
+      "key": "acsr_conductor_resistance",
+      "description": "Maximum DC resistance at 20 C of BS 215 ACSR conductors, lightest first",
+      "unit": "ohm/km",
+      "source": "bs215_deangeli",
+      "confidence": "high",
+      "value": {
+        "table": {
+          "row_label": "conductor",
+          "columns": [
+            "aluminium_mm2",
+            "ohm_per_km"
+          ],
+          "rows": [
+            {
+              "label": "Mole",
+              "values": [
+                10.0,
+                2.706
+              ]
+            },
+            {
+              "label": "Squirrel",
+              "values": [
+                20.0,
+                1.37
+              ]
+            },
+            {
+              "label": "Gopher",
+              "values": [
+                25.0,
+                1.093
+              ]
+            },
+            {
+              "label": "Weasel",
+              "values": [
+                30.0,
+                0.9077
+              ]
+            },
+            {
+              "label": "Fox",
+              "values": [
+                35.0,
+                0.7822
+              ]
+            },
+            {
+              "label": "Ferret",
+              "values": [
+                40.0,
+                0.6766
+              ]
+            },
+            {
+              "label": "Rabbit",
+              "values": [
+                50.0,
+                0.5426
+              ]
+            },
+            {
+              "label": "Mink",
+              "values": [
+                60.0,
+                0.4545
+              ]
+            },
+            {
+              "label": "Skunk",
+              "values": [
+                60.0,
+                0.4568
+              ]
+            },
+            {
+              "label": "Beaver",
+              "values": [
+                70.0,
+                0.3825
+              ]
+            },
+            {
+              "label": "Horse",
+              "values": [
+                70.0,
+                0.3936
+              ]
+            },
+            {
+              "label": "Racoon",
+              "values": [
+                75.0,
+                0.3623
+              ]
+            },
+            {
+              "label": "Otter",
+              "values": [
+                80.0,
+                0.3419
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "key": "max_voltage_drop_fraction",
+      "description": "Largest voltage drop allowed in an installation, as a share of nominal voltage",
+      "unit": "fraction",
+      "source": "asnzs3000",
+      "confidence": "high",
+      "value": {
+        "point": 0.05
+      }
+    },
+    {
+      "key": "standard_three_phase_voltages",
+      "description": "Standard nominal three-phase system voltages: low voltage and Series I distribution",
+      "unit": "V",
+      "source": "iec60038",
+      "confidence": "high",
+      "value": {
+        "table": {
+          "row_label": "system",
+          "columns": [
+            "nominal_v"
+          ],
+          "rows": [
+            {
+              "label": "low_voltage",
+              "values": [
+                400.0
+              ]
+            },
+            {
+              "label": "distribution_11kv",
+              "values": [
+                11000.0
+              ]
+            }
+          ]
+        }
+      },
+      "note": "230/400 V four-wire; 11 kV Series I (highest voltage for equipment 12 kV)."
+    }
+  ]
+}

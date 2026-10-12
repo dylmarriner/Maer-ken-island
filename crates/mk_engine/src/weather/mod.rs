@@ -33,7 +33,7 @@ use serde::{Deserialize, Serialize};
 const R_AIR: f64 = 287.05;
 const R_V: f64 = 461.5;
 const EPSILON: f64 = R_AIR / R_V;
-const L_V: f64 = 2.45e6;
+pub(crate) const L_V: f64 = 2.45e6;
 const T0_K: f64 = 273.15;
 const E0_HPA: f64 = 6.112;
 

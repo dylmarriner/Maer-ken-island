@@ -68,6 +68,8 @@ pub struct ActionPreference {
 pub struct AutonomousExperience {
     pub tick: u64,
     pub action: ActionKind,
+    /// What the step taught: its reward less what the mind expected
+    /// (`AutonomousMind::expected_reward` at the time).
     pub reward: f64,
     pub fitness_after: f64,
     #[serde(default = "default_action_success")]
@@ -91,6 +93,12 @@ pub struct AutonomousMind {
     pub last_fitness: f64,
     pub has_last_fitness: bool,
     pub total_reward: f64,
+    /// The reward this mind has come to expect from a step, whatever it
+    /// does: a running average of what its steps have brought. Actions are
+    /// credited with how much better or worse they went than this, not with
+    /// the reward itself (see [`AutonomousMind::learn_from_outcome`]).
+    #[serde(default)]
+    pub expected_reward: f64,
     pub experiences: VecDeque<AutonomousExperience>,
     pub learning_rate: f64,
     pub exploration_rate: f64,
@@ -107,6 +115,7 @@ impl Default for AutonomousMind {
             last_fitness: 0.0,
             has_last_fitness: false,
             total_reward: 0.0,
+            expected_reward: 0.0,
             experiences: VecDeque::new(),
             learning_rate: 0.2,
             exploration_rate: 0.15,
@@ -167,7 +176,14 @@ impl AutonomousMind {
             {
                 continue;
             }
-            let score = self.preference(action)
+            // What was learned about an action that serves a need is worth
+            // only as much as the need is felt now (alliesthesia; see
+            // [`incentive`]): without it a learned taste for eating outbids
+            // everything else even on a full stomach, and a learned taste for
+            // intimacy outbids its own satiety.
+            let learned = (self.preference(action) + self.context_preference(action, observation))
+                * incentive(action, needs, reproduction);
+            let score = learned
                 + drive_for(
                     action,
                     needs,
@@ -178,7 +194,6 @@ impl AutonomousMind {
                     core_systems,
                     reproduction,
                 )
-                + self.context_preference(action, observation)
                 + (rng.gen_f64_01() - 0.5) * self.exploration_rate;
             if score > best_score {
                 best_score = score;
@@ -208,17 +223,28 @@ impl AutonomousMind {
         }
         let reward = fitness_after - self.last_fitness + if action_success { 0.0 } else { -0.1 };
         self.total_reward += reward;
+        // What an action teaches is the surprise in what it brought: the
+        // reward less what this mind expected from any step (the prediction
+        // error of Rescorla & Wagner 1972, which dopamine neurons signal;
+        // Schultz, Dayan & Montague 1997, *Science* 275:1593). A body that
+        // drains steadily between meals loses a little fitness on every step
+        // whatever it does; learning from the raw reward taught every
+        // ordinary action to be worse than one never tried, until a sated
+        // founder chose intimacy, the one action left at zero, hundreds of
+        // times a day.
+        let surprise = reward - self.expected_reward;
+        self.expected_reward += self.learning_rate * surprise;
         if let Some(preference) = self
             .preferences
             .iter_mut()
             .find(|preference| preference.action == self.last_action.kind)
         {
-            preference.value = (preference.value + self.learning_rate * reward).clamp(-1.0, 1.0);
+            preference.value = (preference.value + self.learning_rate * surprise).clamp(-1.0, 1.0);
         }
         self.experiences.push_back(AutonomousExperience {
             tick,
             action: self.last_action.kind,
-            reward,
+            reward: surprise,
             fitness_after,
             action_success,
             caloric_access: observation.caloric_access,
@@ -382,6 +408,29 @@ fn default_action_success() -> bool {
     true
 }
 
+/// How much of what has been learned about `action` the body's present
+/// state lets count. Eating and drinking are rewarding in proportion to the
+/// hunger or thirst they relieve: the pleasantness of food and drink
+/// follows internal state, so the same stimulus a hungry person finds good
+/// is indifferent or unpleasant to a sated one (alliesthesia; Cabanac 1971,
+/// *Science* 173:1103-1107). Desire is the same after an act: its learned
+/// value counts as much as the satiety the drive already respects has worn
+/// off (`ReproductiveSystemSnapshot::satisfaction`). Every other action keeps
+/// its learned value whole.
+fn incentive(
+    action: ActionKind,
+    needs: &NeedsSnapshot,
+    reproduction: &ReproductiveSystemSnapshot,
+) -> f64 {
+    match action {
+        ActionKind::SeekFood => needs.hunger,
+        ActionKind::SeekWater => needs.thirst,
+        ActionKind::Intimacy => 1.0 - reproduction.satisfaction,
+        _ => 1.0,
+    }
+    .clamp(0.0, 1.0)
+}
+
 fn fitness(needs: &NeedsSnapshot) -> f64 {
     needs.glucose * 0.45 + needs.hydration * 0.35 + (1.0 - needs.fatigue) * 0.20
 }
@@ -470,11 +519,16 @@ fn drive_for(
         // couple alone together wants closeness no less than one in a crowd.
         // Libido is the trait-level desire, arousal the momentary state
         // (stepped in `reproduction`, suppressed by exhaustion); both drive it.
+        // Satiety holds it down after an act: desire is the drive less what
+        // the last act still satisfies, which wears off over days. Without
+        // it a willing couple chose intimacy more than half of every waking
+        // minute, where real couples manage about once a week.
         ActionKind::Intimacy => {
-            reproduction.libido * 0.5
+            (reproduction.libido * 0.5
                 + reproduction.arousal * 0.3
                 + reproduction.attraction_average * 0.3
-                + willed_urge(core_systems.chaotic_urges.reproduction) * 0.2
+                + willed_urge(core_systems.chaotic_urges.reproduction) * 0.2)
+                * (1.0 - reproduction.satisfaction.clamp(0.0, 1.0))
         }
         // Curiosity proxy: same `exploration` willed urge and
         // `novelty_seek` trait that drive physical `Explore`, gated by
@@ -594,6 +648,73 @@ mod tests {
         ] {
             assert_in_actions(kind);
         }
+    }
+
+    #[test]
+    fn a_learned_taste_for_eating_does_not_outbid_a_full_stomach() {
+        let profile = HumanProfile::from_canonical_schema(
+            HumanId::new(1),
+            HumanSchema::canonical_minimal("autonomy_test"),
+        );
+        let mut sated = NeedsSnapshot::from_profile(&profile);
+        sated.glucose = 1.0;
+        sated.hunger = 0.0;
+        let mut hungry = sated.clone();
+        hungry.glucose = 0.3;
+        hungry.hunger = 0.7;
+        // Eating has been nothing but rewarding: the strongest preference
+        // a mind can hold.
+        let mut mind = AutonomousMind::default();
+        for preference in mind.preferences.iter_mut() {
+            if preference.action == ActionKind::SeekFood {
+                preference.value = 1.0;
+            }
+        }
+        let registry = RngRegistry::new([7; 32]);
+        let observation = AgentWorldObservation {
+            caloric_access: 1.0,
+            ..AgentWorldObservation::default()
+        };
+        let genetics = GeneticsSnapshot::from_profile(&profile);
+        let carrying = CarryingState::new();
+        let dark_triad = DarkTriadSnapshot::from_profile(&profile);
+        let core_systems = CoreSystemsSnapshot::from_profile(&profile);
+        let reproduction = ReproductiveSystemSnapshot::from_profile(&profile);
+        let neurochemistry = NeurochemistrySnapshot::from_profile(&profile);
+        assert_eq!(incentive(ActionKind::SeekFood, &sated, &reproduction), 0.0);
+        assert_eq!(incentive(ActionKind::SeekFood, &hungry, &reproduction), 0.7);
+        assert_eq!(incentive(ActionKind::Explore, &sated, &reproduction), 1.0);
+        // Desire after an act is the same: what was learned about it waits
+        // for its satiety to wear off.
+        let mut sated_desire = reproduction.clone();
+        sated_desire.satisfaction = 1.0;
+        assert_eq!(incentive(ActionKind::Intimacy, &sated, &sated_desire), 0.0);
+        sated_desire.satisfaction = 0.25;
+        assert_eq!(incentive(ActionKind::Intimacy, &sated, &sated_desire), 0.75);
+        let (mut sated_meals, mut hungry_meals) = (0, 0);
+        for tick in 0..200 {
+            for (needs, meals) in [(&sated, &mut sated_meals), (&hungry, &mut hungry_meals)] {
+                let action = mind.clone().choose_action(
+                    needs,
+                    &observation,
+                    &genetics,
+                    &carrying,
+                    &dark_triad,
+                    &core_systems,
+                    &reproduction,
+                    &neurochemistry,
+                    1,
+                    tick,
+                    &registry,
+                );
+                *meals += usize::from(action.kind == ActionKind::SeekFood);
+            }
+        }
+        assert_eq!(sated_meals, 0, "ate {sated_meals} times on a full stomach");
+        assert!(
+            hungry_meals > 100,
+            "hungry, ate only {hungry_meals} of 200 times"
+        );
     }
 
     #[test]
@@ -989,6 +1110,40 @@ mod tests {
         assert_eq!(mind.experiences.len(), 1);
         assert!(mind.experiences[0].reward < 0.0);
         assert!(!mind.experiences[0].action_success);
+    }
+
+    #[test]
+    fn a_steady_drain_teaches_no_action_to_be_worse_than_another() {
+        // Between meals a body loses a little fitness every step whatever it
+        // does. Learning from that raw loss taught every action it touched
+        // to be bad, leaving untried ones on top; the surprise in it is
+        // nothing once the drain is expected.
+        let profile = HumanProfile::from_canonical_schema(
+            HumanId::new(3),
+            HumanSchema::canonical_minimal("drain_test"),
+        );
+        let mut needs = NeedsSnapshot::from_profile(&profile);
+        let observation = AgentWorldObservation::default();
+        let mut mind = AutonomousMind::default();
+        let tried = [ActionKind::Rest, ActionKind::Explore, ActionKind::Gather];
+        // Glucose from full to a quarter over 3,000 steps: learning from the
+        // raw loss would put each action about 0.02 below zero.
+        for tick in 0..3_000u64 {
+            mind.last_action.kind = tried[tick as usize % tried.len()];
+            needs.glucose = 1.0 - 2.5e-4 * tick as f64;
+            mind.learn_from_outcome(&needs, &observation, tick, true);
+        }
+        for action in tried {
+            let value = mind.preference(action);
+            assert!(
+                value.abs() < 0.01,
+                "{action:?} learned {value} from a drain"
+            );
+        }
+        assert!(
+            mind.expected_reward < 0.0,
+            "the drain is what this mind expects"
+        );
     }
 
     #[test]

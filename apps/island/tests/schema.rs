@@ -52,6 +52,7 @@ fn a_projection() -> IslandProjection {
         position_m: Some((1.0, 2.0)),
         cell: Some((5, 6)),
         body_carbon_kg: Some(16.0),
+        height_m: 1.74,
     });
     projection
 }

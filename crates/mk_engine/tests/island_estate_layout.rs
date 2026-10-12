@@ -293,3 +293,85 @@ fn layout_is_deterministic_and_an_unbuildable_patch_is_an_error() {
         Err(EstateLayoutError::InvalidProperty(_))
     ));
 }
+
+#[test]
+fn a_river_takes_its_channel_and_esplanade_not_its_whole_cell() {
+    use mk_engine::regional::ecology::river_width_m;
+    use mk_engine::regional::estate_layout::ESPLANADE_RESERVE_M;
+    use mk_engine::regional::hydrology::{discharge_m3_s, RIVER_MIN_DISCHARGE_M3_S};
+    let b = base();
+    let size = b.domain.cell_size_m(M);
+    let medium_of = |patch: &LocalPatchSpec, r: usize, c: usize| {
+        let (x, y) = patch.cell_center_m(r, c);
+        ((y / size) as usize, (x / size) as usize)
+    };
+    // A lowland patch with a river through it that the estate still fits
+    // on. Before the river kept to its channel, the whole 2 km cell a
+    // 1 m^3/s stream crossed was unbuildable.
+    let elev = &b.physical.geophysics.elevation_m;
+    let (rows, cols) = (b.domain.rows(M), b.domain.cols(M));
+    let mut checked = 0;
+    for (r, c) in (3..rows - 3)
+        .step_by(4)
+        .flat_map(|r| (3..cols - 3).step_by(4).map(move |c| (r, c)))
+    {
+        let h = *elev.get(r, c);
+        let q = discharge_m3_s(&b.physical.hydrology, &b.domain, r, c);
+        if !(5.0..300.0).contains(&h) || q < RIVER_MIN_DISCHARGE_M3_S {
+            continue;
+        }
+        let (x, y) = b.domain.cell_center_m(M, r, c);
+        let Some(patch) = patch_at(&b.domain, x, y) else {
+            continue;
+        };
+        let Ok(layout) = layout_estate(&b.property, &b.physical, &b.domain, &patch, SEED) else {
+            continue;
+        };
+        // No footprint stands in the river's strip: within each river cell,
+        // footprints sit above the lowest (width + 2 x 20 m) / 2 km share
+        // of the patch cells, where the channel runs.
+        let mut by_cell: std::collections::BTreeMap<(usize, usize), Vec<f64>> =
+            std::collections::BTreeMap::new();
+        for pr in 0..patch.rows {
+            for pc in 0..patch.cols {
+                by_cell
+                    .entry(medium_of(&patch, pr, pc))
+                    .or_default()
+                    .push(*layout.terrain_m.get(pr, pc));
+            }
+        }
+        for f in &layout.buildings {
+            for pr in 0..patch.rows {
+                for pc in 0..patch.cols {
+                    let (px, py) = patch.cell_center_m(pr, pc);
+                    if !f.rect_m.contains(px, py) {
+                        continue;
+                    }
+                    let (mr, mc) = medium_of(&patch, pr, pc);
+                    let q = discharge_m3_s(&b.physical.hydrology, &b.domain, mr, mc);
+                    if q < RIVER_MIN_DISCHARGE_M3_S {
+                        continue;
+                    }
+                    let mut heights = by_cell[&(mr, mc)].clone();
+                    heights.sort_by(f64::total_cmp);
+                    let share = ((river_width_m(q) + 2.0 * ESPLANADE_RESERVE_M) / size).min(1.0);
+                    let taken = (heights.len() as f64 * share).ceil() as usize;
+                    let channel_top = heights[taken.saturating_sub(1).min(heights.len() - 1)];
+                    assert!(
+                        *layout.terrain_m.get(pr, pc) >= channel_top,
+                        "{:?} stands in a river's strip",
+                        f.kind
+                    );
+                }
+            }
+        }
+        checked += 1;
+        if checked >= 3 {
+            break;
+        }
+    }
+    assert!(
+        checked > 0,
+        "no river-crossed lowland patch could take the estate"
+    );
+}

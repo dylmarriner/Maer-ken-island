@@ -16,10 +16,16 @@
 
 /// What is missing, and said rather than substituted.
 ///
-/// Three kinds of thing on this estate have no model upstream either, and
-/// the honest answer is a placeholder plus this list. A renderer that
-/// silently drew a shed for a garage would be lying in a way nobody could
-/// see.
+/// Three kinds of thing on this estate have no model upstream either.
+/// They are drawn at their real size -- the island serves every building's
+/// footprint and height and every item's length, width and height, each
+/// with its source -- and carry no model on top. A renderer that silently
+/// drew a shed for a garage would be lying in a way nobody could see.
+///
+/// There used to be a "placeholder" model here, standing for these. It
+/// named a file that did not exist and was filtered out before anything
+/// loaded it, so it was never drawn: it was a fake value standing in for
+/// "nothing", which is what `None` is for.
 pub const WITHOUT_MODELS: [&str; 3] = ["Garage", "ShedTool", "VehicleAttachment"];
 
 /// A model, and whether it is really that thing or a stand-in.
@@ -27,9 +33,10 @@ pub const WITHOUT_MODELS: [&str; 3] = ["Garage", "ShedTool", "VehicleAttachment"
 pub struct Model {
     /// Path under the asset root, as Bevy's asset server wants it.
     pub path: &'static str,
-    /// False when nothing models this and the renderer is drawing a box.
-    /// The key on screen says so; it is not left to be inferred from a
-    /// shape that happens to look wrong.
+    /// False when the model is somebody else's: a person created after
+    /// the founders is drawn with a founder's model by sex, and the
+    /// inspector says so. Every building and item model is `true`, because
+    /// a thing with no model of its own gets `None` rather than a stand-in.
     pub is_really_this: bool,
 }
 
@@ -40,18 +47,7 @@ impl Model {
             is_really_this: true,
         }
     }
-
-    const fn placeholder() -> Self {
-        Self {
-            path: PLACEHOLDER,
-            is_really_this: false,
-        }
-    }
 }
-
-/// Drawn for anything with no model of its own: an untextured box at the
-/// right place, which the key names as a placeholder.
-pub const PLACEHOLDER: &str = "property/placeholder.glb";
 
 /// A building's model, by its `PropertyBuildingKind` in words.
 ///
@@ -59,18 +55,17 @@ pub const PLACEHOLDER: &str = "property/placeholder.glb";
 /// house* on the ground, which the estate layout already reflects: its
 /// footprint is inside the House's. The model is a room, not a building,
 /// and placing it is `EstateLayout`'s business rather than this table's.
-pub fn building(kind: &str) -> Model {
+pub fn building(kind: &str) -> Option<Model> {
     match kind {
-        "House" => Model::real("property/buildings/homestead_house.glb"),
-        "Shed" => Model::real("property/buildings/equipment_shed.glb"),
-        "Workshop" => Model::real("property/buildings/building_workshop.glb"),
-        "Armoury" => Model::real("property/buildings/secure_armoury.glb"),
-        "ComputerRoom" => Model::real("property/buildings/computer_room.glb"),
+        "House" => Some(Model::real("property/buildings/homestead_house.glb")),
+        "Shed" => Some(Model::real("property/buildings/equipment_shed.glb")),
+        "Workshop" => Some(Model::real("property/buildings/building_workshop.glb")),
+        "Armoury" => Some(Model::real("property/buildings/secure_armoury.glb")),
+        "ComputerRoom" => Some(Model::real("property/buildings/computer_room.glb")),
         // Upstream has no garage model either. Drawing the shed instead
-        // would be a lie nobody could see, so this is a box and the key
-        // says it is a box.
-        "Garage" => Model::placeholder(),
-        _ => Model::placeholder(),
+        // would be a lie nobody could see; the garage is drawn at its own
+        // footprint and height and the key says it has no model.
+        _ => None,
     }
 }
 
@@ -81,17 +76,17 @@ pub fn building(kind: &str) -> Model {
 /// distinctive fragment rather than the whole string, because the
 /// manifest's names carry parenthetical detail ("(gaming, 3 monitors)")
 /// that is part of what the thing is and no part of which model it is.
-pub fn item(kind: &str, name: &str) -> Model {
+pub fn item(kind: &str, name: &str) -> Option<Model> {
     match kind {
         "Computer" => computer(name),
-        "Vehicle" => vehicle(name),
-        "BuildingEquipment" => equipment(name),
-        "ArmouryItem" => armoury(name),
-        "HouseholdItem" => household(name),
-        // Garden tools and towed implements: no models upstream, so
-        // boxes, and `WITHOUT_MODELS` names them.
-        "ShedTool" | "VehicleAttachment" => Model::placeholder(),
-        _ => Model::placeholder(),
+        "Vehicle" => Some(vehicle(name)),
+        "BuildingEquipment" => Some(equipment(name)),
+        "ArmouryItem" => Some(armoury(name)),
+        "HouseholdItem" => Some(household(name)),
+        // Garden tools and towed implements have no models upstream, and
+        // an unknown kind gets none rather than a guess. Both are drawn at
+        // the size the island gives them; `WITHOUT_MODELS` names them.
+        _ => None,
     }
 }
 
@@ -111,15 +106,17 @@ pub fn item(kind: &str, name: &str) -> Model {
 /// `portable_laptop` is therefore unused by this table. It is kept in
 /// `assets/` because it is part of the set and because the first thing on
 /// this estate that is actually portable will want it.
-fn computer(name: &str) -> Model {
+fn computer(name: &str) -> Option<Model> {
     if name.contains("Archive Server") {
-        Model::real("computers/local_archive_server.glb")
+        Some(Model::real("computers/local_archive_server.glb"))
     } else if name.contains("Network Equipment") {
-        Model::real("computers/network_equipment_rack.glb")
+        Some(Model::real("computers/network_equipment_rack.glb"))
     } else if name.contains("Computer") {
-        Model::real("computers/primary_workstation.glb")
+        Some(Model::real("computers/primary_workstation.glb"))
     } else {
-        Model::placeholder()
+        // A machine the manifest names that is none of these four: no
+        // model rather than the wrong one.
+        None
     }
 }
 
@@ -232,12 +229,11 @@ mod tests {
     #[test]
     fn every_building_kind_and_item_kind_has_an_answer() {
         // Not "does not panic": an exhaustive list, so a kind added
-        // upstream and not added here shows up as a placeholder in this
-        // test rather than as a box on the estate.
+        // upstream and not added here shows up as a missing model in this
+        // test rather than unnoticed on the estate.
         for kind in BUILDING_KINDS {
-            let model = building(kind);
             assert_eq!(
-                model.is_really_this,
+                building(kind).is_some(),
                 !WITHOUT_MODELS.contains(&kind),
                 "{kind} disagrees with WITHOUT_MODELS"
             );
@@ -246,8 +242,7 @@ mod tests {
         // version of this passed "Something" to all seven and failed on
         // `Computer`, which was the test being lazy rather than the table
         // being wrong: the four machines in that room are told apart by
-        // name, so a name that is none of them is correctly a
-        // placeholder.
+        // name, so a name that is none of them correctly has no model.
         for (kind, name) in ITEM_KINDS.iter().zip([
             "Utility Truck",
             "Tractor Tipper Trailer",
@@ -257,9 +252,8 @@ mod tests {
             "Gem-D's Computer (gaming, 3 monitors)",
             "Water Storage Tank",
         ]) {
-            let model = item(kind, name);
             assert_eq!(
-                model.is_really_this,
+                item(kind, name).is_some(),
                 !WITHOUT_MODELS.contains(kind),
                 "{kind} ({name}) disagrees with WITHOUT_MODELS"
             );
@@ -273,12 +267,11 @@ mod tests {
         // estate.
         let root = asset_root();
         let mut named = vec![
-            PLACEHOLDER.to_string(),
             human("Gem-D", false).path.to_string(),
             human("Gem-K", true).path.to_string(),
         ];
         for kind in BUILDING_KINDS {
-            named.push(building(kind).path.to_string());
+            named.extend(building(kind).map(|m| m.path.to_string()));
         }
         for kind in ITEM_KINDS {
             for name in [
@@ -303,19 +296,12 @@ mod tests {
                 "Emergency Medical Kit",
                 "Household Storage Set",
             ] {
-                named.push(item(kind, name).path.to_string());
+                named.extend(item(kind, name).map(|m| m.path.to_string()));
             }
         }
         named.sort();
         named.dedup();
         for path in named {
-            if path == PLACEHOLDER {
-                // Generated by the renderer rather than loaded, so there
-                // is no file to check -- and that is deliberate: a
-                // missing-asset placeholder that is itself a missing
-                // asset would be useless.
-                continue;
-            }
             assert!(
                 root.join(&path).is_file(),
                 "{path} is named by this table and is not in assets/"
@@ -327,18 +313,17 @@ mod tests {
     fn the_four_machines_in_the_computer_room_are_four_different_things() {
         // The founders' two share a model, which is a recorded choice;
         // the server and the rack are their own. Three distinct models
-        // for four machines, and none of them a placeholder.
+        // for four machines, and every one of them real.
         let machines = [
             "Gem-D's Computer (gaming, 3 monitors)",
             "Gem-K's Computer (workstation, 2 monitors)",
             "Local Archive Server",
             "Network Equipment Rack",
         ];
-        let models: Vec<Model> = machines.iter().map(|name| item("Computer", name)).collect();
-        assert!(
-            models.iter().all(|m| m.is_really_this),
-            "every machine in that room has a model: {models:?}"
-        );
+        let models: Vec<Model> = machines
+            .iter()
+            .map(|name| item("Computer", name).expect("every machine in that room has a model"))
+            .collect();
         let distinct: std::collections::BTreeSet<&str> = models.iter().map(|m| m.path).collect();
         assert_eq!(
             distinct.len(),
@@ -346,21 +331,20 @@ mod tests {
             "the server and the rack must not be drawn as the founders' desktops: {distinct:?}"
         );
         assert!(item("Computer", "Local Archive Server")
-            .path
-            .contains("local_archive_server"));
+            .is_some_and(|m| m.path.contains("local_archive_server")));
         assert!(item("Computer", "Network Equipment Rack")
-            .path
-            .contains("network_equipment_rack"));
+            .is_some_and(|m| m.path.contains("network_equipment_rack")));
     }
 
     #[test]
     fn a_name_the_table_has_never_seen_still_gets_something() {
         // The manifest can grow. An unknown vehicle is a vehicle, and
-        // drawing the truck is better than drawing a box; an unknown
-        // *kind* is a box, because guessing there would be inventing.
-        assert!(item("Vehicle", "Hovercraft").is_really_this);
-        assert!(!item("Submarine", "Nautilus").is_really_this);
-        assert!(!building("Lighthouse").is_really_this);
+        // drawing the truck is better than drawing nothing on top of its
+        // real size; an unknown *kind* gets no model, because guessing
+        // there would be inventing.
+        assert!(item("Vehicle", "Hovercraft").is_some());
+        assert!(item("Submarine", "Nautilus").is_none());
+        assert!(building("Lighthouse").is_none());
     }
 
     #[test]

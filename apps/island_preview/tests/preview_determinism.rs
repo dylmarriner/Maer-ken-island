@@ -73,6 +73,12 @@ fn the_gallery_lists_failing_seeds_with_reasons() {
     for f in failing {
         assert!(f["reason"].as_str().is_some_and(|r| !r.is_empty()), "{f}");
     }
+    // Every generated island says whether it has a petroleum basin; the
+    // hydro survey is opt-in.
+    for c in candidates.iter().filter(|c| c.get("shape").is_some()) {
+        assert!(c["has_petroleum_basin"].is_boolean(), "{c}");
+        assert!(c["hydro"].is_null());
+    }
     assert!(files.iter().any(|(n, _)| n == "gallery.png"));
     assert_eq!(render_gallery(&IslandProfile::test_small(), 8), files);
 }

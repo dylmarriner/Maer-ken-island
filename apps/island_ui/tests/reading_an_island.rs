@@ -184,12 +184,8 @@ fn the_application_reads_an_island_and_has_enough_to_draw_it() {
         "the computer room holds four machines: {computers:?}"
     );
     for machine in &computers {
-        let model = island_ui::property::item(&machine.kind, &machine.name);
-        assert!(
-            model.is_really_this,
-            "{} has no model of its own",
-            machine.name
-        );
+        let model = island_ui::property::item(&machine.kind, &machine.name)
+            .unwrap_or_else(|| panic!("{} has no model of its own", machine.name));
         assert!(
             repo("assets").join(model.path).is_file(),
             "{} is drawn from {}, which is not there",
@@ -198,11 +194,10 @@ fn the_application_reads_an_island_and_has_enough_to_draw_it() {
         );
     }
 
-    // Every building on the estate, likewise: a model or an honest
-    // placeholder, never a silent substitution.
+    // Every building on the estate, likewise: a model, or no model and on
+    // the list that says so -- never a silent substitution.
     for building in here.iter().flat_map(|p| &p.buildings) {
-        let model = island_ui::property::building(&building.kind);
-        if model.is_really_this {
+        if let Some(model) = island_ui::property::building(&building.kind) {
             assert!(
                 repo("assets").join(model.path).is_file(),
                 "{} is drawn from {}, which is not there",

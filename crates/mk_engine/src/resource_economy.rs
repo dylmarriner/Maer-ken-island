@@ -679,7 +679,28 @@ fn node_kind_for_resource(resource: mk_core::biomes::ResourceKind) -> Option<Res
         R::Food | R::Fruit | R::Nuts | R::Fungi | R::Meat | R::Honey => {
             Some(ResourceNodeKind::FoodPatch)
         }
-        _ => None,
+        // No node yet, each for a stated reason -- and listed rather than
+        // caught by a wildcard, so a resource kind added upstream fails to
+        // compile here instead of silently yielding nothing (Phase 3 Task 2):
+        // - water is drawn from the hydrology stores, never from a node;
+        // - gems, salt, sulfur, wax, hide, bone, feather, fish and shellfish
+        //   have no `ItemKind` to gather into, so a node for them would
+        //   yield nothing a human could carry;
+        // - herbs have an item (`ItemKind::Herbal`) but no node kind, and a
+        //   new kind would add nodes to every planetary world.
+        // Each gets its node with its item, from its real source (deposits,
+        // fauna, coast), with Task 2's node work.
+        R::Water
+        | R::Herbs
+        | R::Gem
+        | R::Salt
+        | R::Sulfur
+        | R::Wax
+        | R::Hide
+        | R::Bone
+        | R::Feather
+        | R::Fish
+        | R::Shellfish => None,
     }
 }
 
