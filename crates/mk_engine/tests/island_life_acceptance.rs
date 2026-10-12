@@ -99,7 +99,7 @@ const DAY: u64 = 86_400;
 /// Audited: 196 of 196, no shortfalls, 13.0 and 10.4 kg against 13.0 and
 /// 10.4, Gem-D asleep 56 of 168 hours (48 at home), Gem-K 54 (46),
 /// temperate-forest NPP 567.
-const WEEK_DIGEST: &str = "c6a56a7ea7097370c6b4b264d422d98379c77fcca7581166cc8be0d2855cf700";
+const WEEK_DIGEST: &str = "d0bd3fad82a3ac09b0281a5f71fd94de0d3a07ec7d994de747b74aa62bc7a30e";
 
 fn repo(path: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -258,6 +258,13 @@ fn slow_a_week_on_the_island_matches_the_reference_packs() {
         w.shortfalls.water,
         w.economy.events.len(),
         w.vegetation.trees.len()
+    );
+    // What the founders' own choices to gather made of the patch: trees
+    // felled with the shed's axe, their usable wood in the estate's stock.
+    println!(
+        "wood felled {:.0} kg",
+        w.materials
+            .stock_kg(mk_engine::regional::materials::Material::Wood)
     );
     assert!(w.audits_closed >= 7 * 24 + 7 * 4);
     for id in ["Gem-D", "Gem-K"] {

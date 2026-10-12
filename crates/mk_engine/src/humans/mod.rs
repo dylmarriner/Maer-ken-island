@@ -1620,6 +1620,12 @@ pub struct HumanBeing {
     /// success, fed into the next private autonomy reward.
     #[serde(default = "default_action_success")]
     pub last_action_success: bool,
+    /// The metabolic equivalent of a labour task this human is working --
+    /// felling a tree, say -- set by the world that runs the task, or `None`
+    /// when what they do costs only what their chosen action does
+    /// (`lifecycle::activity_met_for`).
+    #[serde(default)]
+    pub labour_met: Option<f64>,
     /// The last cell where this human had good shelter (at least
     /// [`autonomy::SEEK_SATISFIED_ACCESS`]). Seeking shelter elsewhere, they
     /// head back here rather than searching blindly.
@@ -2030,6 +2036,7 @@ impl HumanBeing {
             carrying: CarryingState::new(),
             economy_action: default_economy_action(),
             last_action_success: true,
+            labour_met: None,
             home: None,
             pair_bond: None,
             death_reason: None,

@@ -313,7 +313,11 @@ pub fn step_lifecycle(
     // at 1.0, so the needs model never drains slower than its 1.5 MET
     // calibration. Lowering that floor would move survival times the realism
     // suite pins, so it is a separate, deliberate change.
-    let activity_met = activity_met_for(human.economy_action.kind, observation);
+    // A labour task the world is running for this human costs what the
+    // task costs; otherwise the chosen action does.
+    let activity_met = human
+        .labour_met
+        .or_else(|| activity_met_for(human.economy_action.kind, observation));
     let activity = activity_met.map_or(1.0, |met| {
         (met / super::super::regional::labour::BASELINE_MET).max(1.0)
     });

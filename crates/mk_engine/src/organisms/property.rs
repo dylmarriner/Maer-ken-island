@@ -64,7 +64,7 @@ pub struct PropertyItem {
     /// (`"Kitchen"`, `"Lounge"`, `"Bathroom"`, `"<name>'s Bedroom"`,
     /// `"General"`), or which real tool-shed category a shed tool belongs
     /// to (`"Construction Tools"`, `"Digging Tools"`, `"Repair Tools"`,
-    /// `"Exploration Tools"`, `"Smithing Tools"`). `None` for items with no
+    /// `"Exploration Tools"`, `"Forestry Tools"`, `"Smithing Tools"`). `None` for items with no
     /// further sub-grouping (vehicles, computers, armoury contents).
     ///
     /// `#[serde(default)]`: added after some `WorldState` snapshots may
@@ -306,12 +306,24 @@ fn build_items(bedroom_owners: &[&str]) -> Vec<PropertyItem> {
         "Rope (50ft)",
         "Climbing Gear",
         "GPS Device",
+        // Prospecting: panning stream gravel for placer gold.
+        "Gold Pan",
     ] {
         b.push(
             PropertyItemKind::ShedTool,
             tool,
             SHED,
             Some("Exploration Tools"),
+        );
+    }
+    // Hand tools for felling and cross-cutting timber: the owner's
+    // decision (2026-10-12) that the estate can work its own wood.
+    for tool in ["Felling Axe", "Crosscut Saw"] {
+        b.push(
+            PropertyItemKind::ShedTool,
+            tool,
+            SHED,
+            Some("Forestry Tools"),
         );
     }
 

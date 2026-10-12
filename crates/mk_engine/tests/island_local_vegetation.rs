@@ -209,7 +209,19 @@ fn felling_removes_the_stem_adds_wood_and_moves_exactly_its_carbon() {
         (entry.source, entry.sink),
         (Reservoir::BiomassCarbon, Reservoir::DetritusCarbon)
     );
-    assert_eq!(entry.amount, tree.biomass_kgc);
+    // The brash and roots go to detritus here; the usable wood's carbon is
+    // the taker's to book.
+    assert!((entry.amount + wood.usable_carbon_kgc - tree.biomass_kgc).abs() < 1e-9);
+    assert!((wood.usable_carbon_kgc - 0.7 * tree.biomass_kgc).abs() < 1e-9);
+    let mut materials = mk_engine::regional::materials::MaterialLedger::default();
+    let before = materials.stock_of(Reservoir::MaterialCarbon);
+    let mut taken = Ledger::new();
+    let kg = materials.receive_felled_wood(wood.usable_carbon_kgc, &mut taken);
+    assert!(kg > 0.0);
+    assert!(
+        (materials.stock_of(Reservoir::MaterialCarbon) - before - wood.usable_carbon_kgc).abs()
+            < 1e-9
+    );
     // Felling it again, or a tree that never existed, is an error.
     assert!(p.fell_tree(tree.id, &mut e, &mut ledger).is_err());
     assert!(p.fell_tree(u64::MAX, &mut e, &mut ledger).is_err());

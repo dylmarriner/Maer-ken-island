@@ -185,6 +185,7 @@ fn the_founders_estate_has_every_building_bedroom_vehicle_tool_computer_and_acco
         "Digging Tools",
         "Repair Tools",
         "Exploration Tools",
+        "Forestry Tools",
         "Smithing Tools",
     ] {
         assert!(rooms.contains(category), "shed category {category}");

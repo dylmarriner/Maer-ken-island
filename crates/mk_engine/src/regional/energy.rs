@@ -334,6 +334,16 @@ pub struct EstateEnergy {
     lit: BTreeSet<SpaceId>,
 }
 
+/// Whether a tool or machine of this name draws electricity. Named by what
+/// powers it, so a hand tool that shares a word with a powered one (a
+/// crosscut saw and a circular saw) is not wired to the grid.
+fn is_powered_tool(name: &str) -> bool {
+    let name = name.to_lowercase();
+    ["power", "drill", "welder", "circular saw", "chainsaw"]
+        .iter()
+        .any(|word| name.contains(word))
+}
+
 impl EstateEnergy {
     /// The estate's supply from the scenario's config and its loads and
     /// vehicles from the property's items. Batteries start full.
@@ -349,10 +359,7 @@ impl EstateEnergy {
                     in_use: false,
                 }),
                 PropertyItemKind::BuildingEquipment | PropertyItemKind::ShedTool
-                    if item.name.to_lowercase().contains("power")
-                        || item.name.to_lowercase().contains("drill")
-                        || item.name.to_lowercase().contains("saw")
-                        || item.name.to_lowercase().contains("welder") =>
+                    if is_powered_tool(&item.name) =>
                 {
                     loads.push(Load {
                         item_id: item.id,
@@ -694,6 +701,14 @@ impl EstateEnergy {
 #[cfg(test)]
 mod lighting_tests {
     use super::*;
+
+    #[test]
+    fn a_hand_saw_is_not_wired_to_the_grid() {
+        assert!(super::is_powered_tool("Circular Saw"));
+        assert!(super::is_powered_tool("Power Drill"));
+        assert!(!super::is_powered_tool("Crosscut Saw"));
+        assert!(!super::is_powered_tool("Felling Axe"));
+    }
     use crate::regional::estate_layout::{Rect, SpaceKind, SpaceLayout};
     use mk_core::flux::Ledger;
 

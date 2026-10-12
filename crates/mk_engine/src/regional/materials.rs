@@ -353,6 +353,25 @@ impl MaterialLedger {
         Ok(kg)
     }
 
+    /// Take in the wood of a felled stem (`LocalVegetationPatch::fell_tree`):
+    /// its usable carbon leaves living biomass for the stock, as air-dry
+    /// wood. The stem's cell already lost the carbon when it was felled,
+    /// and the brash and roots went to detritus there. Returns the kg of
+    /// wood added.
+    pub fn receive_felled_wood(&mut self, usable_carbon_kgc: f64, ledger: &mut Ledger) -> f64 {
+        let kgc = usable_carbon_kgc.max(0.0);
+        let kg = kgc / composition(Material::Wood).carbon_per_kg;
+        self.add(Material::Wood, kg);
+        flow(
+            ledger,
+            FluxKind::Carbon,
+            Reservoir::BiomassCarbon,
+            Reservoir::MaterialCarbon,
+            kgc,
+        );
+        kg
+    }
+
     /// Mine coal or quarry limestone: carbon from the crust.
     pub fn gather_fossil(
         &mut self,
