@@ -7,7 +7,11 @@ use mk_core::canon::CanonLocked;
 use mk_core::grid::Grid2;
 use mk_engine::climate::{ClimateForcing, ClimateState};
 use mk_engine::regional::boundary::sample_regional_boundaries_with_background;
-use mk_engine::regional::climate::{diurnal_offset_k, step_regional_climate, DiurnalSurface};
+use mk_engine::regional::climate::{
+    daily_toa_insolation_j_m2, diurnal_offset_k, diurnal_range_k, evaporative_fraction,
+    land_air_range_k, step_regional_climate, DiurnalForcing, DiurnalSurface,
+    CLEAR_SKY_TRANSMITTANCE, LAND_ALBEDO,
+};
 use mk_engine::regional::weather::{apply_orographic_precipitation, step_regional_weather};
 use mk_engine::regional::zonal::{ZonalBackgroundState, DEFAULT_BAND_COUNT};
 use mk_island::{DomainLevel, IslandDomain, IslandProfile, RegionalBoundaryState};
@@ -448,39 +452,51 @@ fn the_diurnal_range_follows_the_surface_and_the_daily_mean_is_unchanged() {
     };
     let canon = canon();
     let domain = IslandDomain::from_profile(IslandProfile::default_nz_scale()).unwrap();
+    let spec = domain.storage_spec(C);
     let elev = island(&domain);
     let surface = DiurnalSurface::from_elevation(&elev, domain.cell_size_m(C));
-    let dry = Grid2::new(&domain.storage_spec(C), 0.0);
-    let rainy = Grid2::new(&domain.storage_spec(C), 6.0);
+    let temperature = Grid2::new(&spec, 288.0);
+    let half_wet = Grid2::new(&spec, 0.35);
+    let dry = Grid2::new(&spec, 0.0);
+    let rainy = Grid2::new(&spec, 6.0);
+    let range = |declination_deg: f64, soil: &Grid2<f64>, precip: &Grid2<f64>| {
+        diurnal_range_k(
+            &surface,
+            &elev,
+            &DiurnalForcing {
+                toa_flux_w_m2: canon.solar_constant_w_m2,
+                declination_rad: declination_deg.to_radians(),
+                sea_level_pressure_pa: canon.sea_level_pressure_pa,
+                surface_temperature_k: &temperature,
+                soil_moisture: soil,
+                precipitation_mm_day: precip,
+            },
+            &domain,
+            &canon,
+        )
+    };
 
-    let samples = 24;
-    let day = |precip: &Grid2<f64>| -> Vec<Grid2<f64>> {
-        (0..samples)
-            .map(|k| {
-                let lon = std::f64::consts::TAU * k as f64 / samples as f64;
-                diurnal_offset_k(&surface, &elev, precip, &domain, &canon, lon)
-            })
-            .collect()
-    };
-    let clear = day(&dry);
-    let range = |days: &[Grid2<f64>], r: usize, c: usize| {
-        let v: Vec<f64> = days.iter().map(|g| *g.get(r, c)).collect();
-        v.iter().cloned().fold(f64::MIN, f64::max) - v.iter().cloned().fold(f64::MAX, f64::min)
-    };
+    // Equinox, half-wet soil, clear skies.
+    let clear = range(0.0, &half_wet, &dry);
     let (ocean_r, coastal_r, inland_r, valley_r) = (
-        range(&clear, 10, 10),
-        range(&clear, 90, 71),
-        range(&clear, 75, 100),
-        range(&clear, 90, 100),
+        *clear.get(10, 10),
+        *clear.get(90, 71),
+        *clear.get(75, 100),
+        *clear.get(90, 100),
     );
+    println!("DTR ocean {ocean_r:.2}, coastal {coastal_r:.2}, inland {inland_r:.2}, valley {valley_r:.2} K");
     // Reference pack (24 h day): ocean 0.1-0.5 K, coastal land 5-9 K,
-    // inland grass 9-15 K. A 36 h day widens the land range.
+    // inland grass 9-15 K. The 36 h day stores half as much sunshine again
+    // in the boundary layer, widening the land range by up to sqrt(1.5).
     assert!((0.1..=0.6).contains(&ocean_r), "ocean {ocean_r}");
     assert!(
         coastal_r > 5.0 && coastal_r < inland_r,
         "coastal {coastal_r}, inland {inland_r}"
     );
-    assert!(inland_r >= 9.0, "inland {inland_r}");
+    assert!(
+        (9.0..=15.0 * 1.5f64.sqrt()).contains(&inland_r),
+        "inland {inland_r}"
+    );
     assert!(
         inland_r / ocean_r >= 9.0 / 0.5,
         "ratio {}",
@@ -489,16 +505,77 @@ fn the_diurnal_range_follows_the_surface_and_the_daily_mean_is_unchanged() {
     assert!(valley_r > coastal_r, "valley {valley_r}");
 
     // Cloud cuts the land range by 25-50% and leaves the ocean alone.
-    let overcast = day(&rainy);
-    let cut = 1.0 - range(&overcast, 75, 100) / inland_r;
+    let overcast = range(0.0, &half_wet, &rainy);
+    let cut = 1.0 - overcast.get(75, 100) / inland_r;
     assert!((0.25..=0.5).contains(&cut), "cloud reduction {cut}");
-    assert!((range(&overcast, 10, 10) - ocean_r).abs() < 1e-9);
+    assert!((overcast.get(10, 10) - ocean_r).abs() < 1e-9);
+
+    // Wet soil spends sunshine on evaporation, not on warming the air;
+    // a summer day stores more than a winter one (the island is at 41 S).
+    let wet = range(0.0, &Grid2::new(&spec, 1.0), &dry);
+    let parched = range(0.0, &Grid2::new(&spec, 0.0), &dry);
+    assert!(*wet.get(75, 100) < inland_r && inland_r < *parched.get(75, 100));
+    let summer = range(-canon.obliquity_deg, &half_wet, &dry);
+    let winter = range(canon.obliquity_deg, &half_wet, &dry);
+    println!(
+        "inland summer {:.2}, winter {:.2}, wet {:.2}, parched {:.2} K",
+        summer.get(75, 100),
+        winter.get(75, 100),
+        wet.get(75, 100),
+        parched.get(75, 100)
+    );
+    assert!(*summer.get(75, 100) > inland_r && *winter.get(75, 100) < inland_r);
 
     // Zero mean over a day for every cell: the daily mean is unchanged.
+    let samples = 24;
+    let day: Vec<Grid2<f64>> = (0..samples)
+        .map(|k| {
+            let lon = std::f64::consts::TAU * k as f64 / samples as f64;
+            diurnal_offset_k(&clear, &domain, lon)
+        })
+        .collect();
     for (r, c) in [(10, 10), (75, 100), (90, 100), (90, 71)] {
-        let mean: f64 = clear.iter().map(|g| *g.get(r, c)).sum::<f64>() / samples as f64;
+        let v: Vec<f64> = day.iter().map(|g| *g.get(r, c)).collect();
+        let mean: f64 = v.iter().sum::<f64>() / samples as f64;
         assert!(mean.abs() < 1e-9, "daily mean offset {mean} at ({r},{c})");
+        // And the sampled day spans the range.
+        let span =
+            v.iter().cloned().fold(f64::MIN, f64::max) - v.iter().cloned().fold(f64::MAX, f64::min);
+        assert!((span - clear.get(r, c)).abs() <= 0.02 * clear.get(r, c) + 1e-12);
     }
+}
+
+#[test]
+fn the_boundary_layer_range_reproduces_the_paper() {
+    // Panwar & Kleidon (2022): evaporation cuts the range by up to ~40% of
+    // the dry value between f_e = 0 and f_e = 1 (sqrt(1/3) = 0.577).
+    let dry = land_air_range_k(2.0e7, 288.0, 101_325.0, 0.0);
+    let wet = land_air_range_k(2.0e7, 288.0, 101_325.0, 1.0);
+    assert!((wet / dry - (1.0f64 / 3.0).sqrt()).abs() < 1e-12);
+    // An Earth day at 41 degrees at equinox, grass in clear sky at sea
+    // level, with a typical half-wet evaporative fraction: inside the
+    // reference inland grass range of 9-15 K.
+    let toa = daily_toa_insolation_j_m2(1361.0, 41f64.to_radians(), 0.0, 86_400.0);
+    let absorbed = toa * CLEAR_SKY_TRANSMITTANCE * (1.0 - LAND_ALBEDO);
+    let earth = land_air_range_k(absorbed, 288.0, 101_325.0, 0.5);
+    println!("Earth 41 deg equinox DTR {earth:.2} K");
+    assert!((9.0..=15.0).contains(&earth), "{earth}");
+    // Daily insolation: the equator at equinox gets S P / pi.
+    let eq = daily_toa_insolation_j_m2(1361.0, 0.0, 0.0, 86_400.0);
+    assert!((eq - 1361.0 * 86_400.0 / std::f64::consts::PI).abs() < 1e-6 * eq);
+    // Polar night gets none; a wet surface's fraction is Priestley-Taylor.
+    assert_eq!(
+        daily_toa_insolation_j_m2(
+            1361.0,
+            80f64.to_radians(),
+            (-23.4f64).to_radians(),
+            86_400.0
+        ),
+        0.0
+    );
+    let fe = evaporative_fraction(288.0, 101_325.0, 1.0);
+    assert!((0.6..=0.9).contains(&fe), "wet evaporative fraction {fe}");
+    assert_eq!(evaporative_fraction(288.0, 101_325.0, 0.0), 0.0);
 }
 
 /// No wind: no air carried in, the energy balance on its own.

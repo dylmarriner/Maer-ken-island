@@ -59,6 +59,26 @@
       "key": "niwa_climate_series",
       "citation": "Chappell, P. R. (2013-2016). The climate and weather of [Wellington, Canterbury, Otago, Southland, West Coast ...]. NIWA Science and Technology Series. National Institute of Water and Atmospheric Research, Wellington.",
       "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "panwar2022",
+      "citation": "Panwar, A. and Kleidon, A. (2022). Evaluating the response of diurnal variations in surface and air temperature to evaporative conditions across vegetation types in FLUXNET and ERA5. Journal of Climate 35(19), 6301-6328. doi:10.1175/JCLI-D-21-0345.1",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "oke1987",
+      "citation": "Oke, T. R. (1987). Boundary Layer Climates, 2nd edition. Methuen, London. Table 1.1 (radiative properties of natural materials, after Sellers 1965, List 1966, Paterson 1969 and Monteith 1973).",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "allen1998",
+      "citation": "Allen, R. G., Pereira, L. S., Raes, D. and Smith, M. (1998). Crop evapotranspiration: guidelines for computing crop water requirements. FAO Irrigation and Drainage Paper 56, Rome. Equation 37.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "priestley1972",
+      "citation": "Priestley, C. H. B. and Taylor, R. J. (1972). On the assessment of surface heat flux and evaporation using large-scale parameters. Monthly Weather Review 100(2), 81-92.",
+      "licence": "Facts cited with attribution"
     }
   ],
   "items": [
@@ -188,6 +208,53 @@
         }
       },
       "note": "About 8 K at exposed coasts (Wellington) and 10-11 K on the plains (Christchurch), rising to about 15-16 K in the most sheltered inland basins (Central Otago), the most continental climate in New Zealand. Coldest-month lowland means are about 2-9 C."
+    },
+    {
+      "key": "background_potential_temperature_lapse_rate",
+      "description": "Background lapse rate of potential temperature into which the daytime convective boundary layer grows over land (Gamma_theta = Delta T_a / Delta z), ERA5 at FLUXNET sites",
+      "unit": "K/m",
+      "source": "panwar2022",
+      "confidence": "medium",
+      "value": { "range": { "min": 0.004, "max": 0.010, "typical": 0.007 } },
+      "note": "Similar across short vegetation, savanna and forest (median about 7 x 10^-3 K/m). In the paper's boundary-layer heat-storage (SABL) model the diurnal range of near-surface air temperature is (Delta T_a0)^2 = 2 Gamma_theta Delta U_0 / (c_p rho), with Delta U_0 the day's absorbed solar energy per square metre, reduced by evaporation as Delta T_a = ((2 - f_e) / (2 + f_e))^(1/2) Delta T_a0, f_e = LE / (LE + H)."
+    },
+    {
+      "key": "surface_albedo_by_cover",
+      "description": "Shortwave albedo of natural surfaces",
+      "unit": "fraction",
+      "source": "oke1987",
+      "confidence": "high",
+      "value": {
+        "table": {
+          "row_label": "surface",
+          "columns": ["min", "max"],
+          "rows": [
+            { "label": "soil_dark_wet_to_light_dry", "values": [0.05, 0.40] },
+            { "label": "grass", "values": [0.16, 0.26] },
+            { "label": "agricultural_crops_tundra", "values": [0.18, 0.25] },
+            { "label": "deciduous_forest", "values": [0.15, 0.20] },
+            { "label": "coniferous_forest", "values": [0.05, 0.15] },
+            { "label": "water", "values": [0.03, 0.10] }
+          ]
+        }
+      }
+    },
+    {
+      "key": "clear_sky_shortwave_transmittance",
+      "description": "Clear-sky solar radiation at the surface as a fraction of extraterrestrial radiation, by station elevation z (m): 0.75 + 2 x 10^-5 z",
+      "unit": "fraction",
+      "source": "allen1998",
+      "confidence": "high",
+      "value": { "point": 0.75 },
+      "note": "Value at sea level; the elevation term adds 2 x 10^-5 per metre (FAO-56 Equation 37)."
+    },
+    {
+      "key": "priestley_taylor_alpha",
+      "description": "Ratio of evaporation from a wet surface with unlimited water to equilibrium evaporation s / (s + gamma) of the available energy",
+      "unit": "dimensionless",
+      "source": "priestley1972",
+      "confidence": "high",
+      "value": { "point": 1.26 }
     }
   ]
 }

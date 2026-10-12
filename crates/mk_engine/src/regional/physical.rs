@@ -24,7 +24,8 @@ use mk_island::{DomainLevel, IslandDomain, RegionalBoundaryState};
 
 use super::boundary::{sample_regional_boundaries, sample_regional_boundaries_with_background};
 use super::climate::{
-    coarse_latitudes, diurnal_offset_k, regional_coriolis, step_regional_climate, DiurnalSurface,
+    coarse_latitudes, diurnal_offset_k, diurnal_range_k, regional_coriolis, step_regional_climate,
+    DiurnalForcing, DiurnalSurface,
 };
 use super::geophysics::{
     bootstrap_regional_geophysics, RegionalGeophysics, RegionalGeophysicsError,
@@ -370,15 +371,15 @@ impl RegionalPhysicalState {
         apply_orographic_precipitation(&mut self.weather, &self.elevation_coarse_m, domain);
         apply_synoptic(&mut self.weather, &mut self.synoptic, domain, canon, dt);
 
-        // Diurnal departure from the daily mean, from the weather's cloud.
-        self.diurnal_offset_k = diurnal_offset_k(
-            &self.diurnal_surface,
-            &self.elevation_coarse_m,
-            &self.weather.precipitation,
+        // Diurnal departure from the daily mean: the day's range from the
+        // sunshine, the soil's water and the weather's cloud.
+        let range = self.day_range_k(
             domain,
             canon,
-            rotation.subsolar_longitude,
+            canon.solar_constant_w_m2 / (orbit.r_over_a * orbit.r_over_a),
+            rotation.subsolar_latitude,
         );
+        self.diurnal_offset_k = diurnal_offset_k(&range, domain, rotation.subsolar_longitude);
         self.climatology.update(
             &self.climate.surface_temperature,
             &self.weather.precipitation,
@@ -458,28 +459,106 @@ impl RegionalPhysicalState {
     }
 
     /// Peak-to-peak temperature range (K) of the coming local day at every
-    /// coarse cell, from the current surface and cloud, sampled at 24
-    /// evenly spaced local times.
+    /// coarse cell, from the sunshine of the present season and the
+    /// current soil water and cloud ([`diurnal_range_k`]).
     pub fn diurnal_range_k(&self, domain: &IslandDomain, canon: &CanonLocked) -> Grid2<f64> {
-        let spec = domain.storage_spec(DomainLevel::Coarse);
-        let mut lo = vec![f64::MAX; spec.nlat * spec.nlon];
-        let mut hi = vec![f64::MIN; spec.nlat * spec.nlon];
-        for k in 0..24 {
-            let lon = std::f64::consts::TAU * f64::from(k) / 24.0;
-            let offsets = diurnal_offset_k(
-                &self.diurnal_surface,
+        let orbit = crate::orbit::step_orbit(canon, self.sim_time_seconds);
+        let rotation =
+            crate::rotation::step_rotation(self.sim_time_seconds, orbit.mean_anomaly, canon);
+        let mut surface = self.diurnal_surface.clone();
+        if surface.land_range_share.len() != self.elevation_coarse_m.data().len() {
+            surface = DiurnalSurface::from_elevation(
                 &self.elevation_coarse_m,
-                &self.weather.precipitation,
-                domain,
-                canon,
-                lon,
+                domain.cell_size_m(DomainLevel::Coarse),
             );
-            for (i, &o) in offsets.data().iter().enumerate() {
-                lo[i] = lo[i].min(o);
-                hi[i] = hi[i].max(o);
-            }
         }
-        Grid2::from_data(&spec, hi.into_iter().zip(lo).map(|(h, l)| h - l).collect())
+        self.range_with(
+            &surface,
+            domain,
+            canon,
+            canon.solar_constant_w_m2 / (orbit.r_over_a * orbit.r_over_a),
+            rotation.subsolar_latitude,
+        )
+    }
+
+    /// As [`diurnal_range_k`](Self::diurnal_range_k) for the given sun,
+    /// rebuilding the surface description first if the state was saved
+    /// without one.
+    fn day_range_k(
+        &mut self,
+        domain: &IslandDomain,
+        canon: &CanonLocked,
+        toa_flux_w_m2: f64,
+        declination_rad: f64,
+    ) -> Grid2<f64> {
+        if self.diurnal_surface.land_range_share.len() != self.elevation_coarse_m.data().len() {
+            self.diurnal_surface = DiurnalSurface::from_elevation(
+                &self.elevation_coarse_m,
+                domain.cell_size_m(DomainLevel::Coarse),
+            );
+        }
+        self.range_with(
+            &self.diurnal_surface,
+            domain,
+            canon,
+            toa_flux_w_m2,
+            declination_rad,
+        )
+    }
+
+    fn range_with(
+        &self,
+        surface: &DiurnalSurface,
+        domain: &IslandDomain,
+        canon: &CanonLocked,
+        toa_flux_w_m2: f64,
+        declination_rad: f64,
+    ) -> Grid2<f64> {
+        let soil_moisture = self.coarse_land_soil_moisture(domain);
+        diurnal_range_k(
+            surface,
+            &self.elevation_coarse_m,
+            &DiurnalForcing {
+                toa_flux_w_m2,
+                declination_rad,
+                sea_level_pressure_pa: canon.sea_level_pressure_pa,
+                surface_temperature_k: &self.climate.surface_temperature,
+                soil_moisture: &soil_moisture,
+                precipitation_mm_day: &self.weather.precipitation,
+            },
+            domain,
+            canon,
+        )
+    }
+
+    /// Soil water as a fraction of field capacity, averaged over the land
+    /// (medium cells above sea level) of each coarse cell; zero where a
+    /// coarse cell has no medium land.
+    fn coarse_land_soil_moisture(&self, domain: &IslandDomain) -> Grid2<f64> {
+        let elevation = &self.geophysics.elevation_m;
+        let land: Vec<f64> = elevation
+            .data()
+            .iter()
+            .map(|&h| if h > 0.0 { 1.0 } else { 0.0 })
+            .collect();
+        let wet: Vec<f64> = self
+            .hydrology
+            .soil_water
+            .data()
+            .iter()
+            .zip(&land)
+            .map(|(w, l)| w.moisture_fraction * l)
+            .collect();
+        let spec = domain.storage_spec(DomainLevel::Medium);
+        let land = aggregate_medium_to_coarse(&Grid2::from_data(&spec, land), domain);
+        let wet = aggregate_medium_to_coarse(&Grid2::from_data(&spec, wet), domain);
+        let data = wet
+            .data()
+            .iter()
+            .zip(land.data())
+            .map(|(w, l)| if *l > 0.0 { w / l } else { 0.0 })
+            .collect();
+        Grid2::from_data(&domain.storage_spec(DomainLevel::Coarse), data)
     }
 
     /// The coarse elevation the atmosphere and ocean see (m).

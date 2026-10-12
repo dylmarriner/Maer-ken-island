@@ -28,6 +28,7 @@
 
 use std::collections::BTreeSet;
 
+use super::climate::CLEAR_SKY_TRANSMITTANCE;
 use super::estate_layout::{EstateLayout, SpaceId};
 
 use mk_core::flux::{FluxEntry, FluxKind, Ledger, Reservoir};
@@ -43,9 +44,6 @@ pub const DIESEL_KWH_PER_LITRE: f64 = 9.97;
 pub const GENERATOR_EFFICIENCY: f64 = 0.30;
 /// Round-trip losses are split evenly between charging and discharging.
 const BATTERY_ONE_WAY_EFFICIENCY: f64 = 0.95;
-/// Clear-sky transmittance of the atmosphere to the surface (global
-/// irradiance over top-of-atmosphere), for a mid-latitude sea-level site.
-const CLEAR_SKY_TRANSMITTANCE: f64 = 0.75;
 /// Cloud's reduction of surface irradiance at full cover.
 const OVERCAST_REDUCTION: f64 = 0.75;
 /// Standard-test-condition irradiance of a panel rating (W/m²).

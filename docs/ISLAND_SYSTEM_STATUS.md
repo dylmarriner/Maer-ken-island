@@ -191,7 +191,7 @@ limit looks like; it is the first thing to check. Until it is, every figure here
 
 Every known departure from reality is in `docs/island/DEVIATIONS.md` (D1-D38). The largest open
 ones: the driest tenth of the island gets ~320 mm of rain a year against New Zealand's driest
-basin's 360 (D38); no sea/land breezes (D3); storm structure is parametric (D4); river channels have no
+basin's 360 (D38); no sea/land breezes, and the coastal damping of the day-night range is observed rather than carried (D3); storm structure is parametric (D4); river channels have no
 in-channel storage (D28); the regional tick audits tidal heat only (D29); production ignores soil
 nutrients (D31); every human action still takes exactly one
 tick whatever it is, and none of them uses a machine (D9); the actions with no Compendium row
