@@ -190,6 +190,94 @@ impl LabourTable {
             .ok_or_else(|| LabourError::MissingReference(format!("{key}/{row}")))
     }
 
+    fn cell(
+        &self,
+        domain: ReferenceDomain,
+        key: &str,
+        row: &str,
+        column: &str,
+    ) -> Result<f64, LabourError> {
+        self.set
+            .item(domain, key)
+            .and_then(|i| i.table())
+            .and_then(|t| t.get(row, column))
+            .ok_or_else(|| LabourError::MissingReference(format!("{key}/{row}/{column}")))
+    }
+
+    /// Water per kg of oven-dry wood at felling, for `group` (`hardwoods`
+    /// or `softwoods`): the Wood Handbook's heartwood-sapwood average.
+    pub fn green_moisture_content(&self, group: &str) -> Result<f64, LabourError> {
+        self.cell(
+            ReferenceDomain::Labour,
+            "green_wood_moisture_content",
+            group,
+            "average",
+        )
+    }
+
+    /// Basic specific gravity (oven-dry mass over green volume) of `group`.
+    pub fn basic_specific_gravity(&self, group: &str) -> Result<f64, LabourError> {
+        self.cell(
+            ReferenceDomain::Labour,
+            "green_wood_moisture_content",
+            group,
+            "basic_specific_gravity",
+        )
+    }
+
+    /// The estate ute's payload (kg).
+    pub fn ute_payload_kg(&self) -> Result<f64, LabourError> {
+        self.scalar(ReferenceDomain::Labour, "light_truck_payload", "payload_kg")
+    }
+
+    /// The estate ute's bed length (m).
+    pub fn ute_bed_length_m(&self) -> Result<f64, LabourError> {
+        self.scalar(
+            ReferenceDomain::Labour,
+            "light_truck_payload",
+            "bed_length_m",
+        )
+    }
+
+    /// Middle of the packs' travel speed (m/s) for a light 4WD on
+    /// `surface` (a `vehicle_speed_by_surface` row).
+    pub fn vehicle_speed_m_s(&self, surface: &str) -> Result<f64, LabourError> {
+        Ok(self
+            .table_range(ReferenceDomain::Labour, "vehicle_speed_by_surface", surface)?
+            .mid()
+            / 3.6)
+    }
+
+    /// The excavator's travel speed (m/s).
+    pub fn excavator_travel_m_s(&self) -> Result<f64, LabourError> {
+        Ok(self.scalar(
+            ReferenceDomain::Labour,
+            "excavator_cat330",
+            "max_travel_speed_km_h",
+        )? / 3.6)
+    }
+
+    /// The most the excavator may lift (kg): its rating over the side at
+    /// 6 m, the lower of its two ratings there, since a log is picked up
+    /// wherever it lies.
+    pub fn excavator_lift_kg(&self) -> Result<f64, LabourError> {
+        self.scalar(
+            ReferenceDomain::Labour,
+            "excavator_cat330",
+            "lift_over_side_6m_radius_1_5m_height_kg",
+        )
+    }
+
+    /// One loader-crane cycle (s): `operation` is `loading` or `unloading`.
+    pub fn crane_cycle_s(&self, operation: &str) -> Result<f64, LabourError> {
+        Ok(self.cell(
+            ReferenceDomain::Labour,
+            "crane_log_handling_cycle",
+            operation,
+            "minutes",
+        )? * 60.0)
+    }
+
     /// Middle of an activity's MET range (Compendium of Physical Activities).
     pub fn met(&self, activity: &str) -> Result<f64, LabourError> {
         Ok(self

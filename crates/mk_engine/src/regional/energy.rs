@@ -739,6 +739,35 @@ impl EstateEnergy {
         driven
     }
 
+    /// A road vehicle's fuel burn (L/km) on `surface`, or `None` for a
+    /// vehicle that is not one.
+    pub fn litres_per_km(&self, vehicle_id: u64, surface: Surface) -> Option<f64> {
+        let v = self.vehicles.iter().find(|v| v.item_id == vehicle_id)?;
+        match v.engine {
+            VehicleEngine::Road { class_factor } => {
+                Some(reference_l_per_100km(surface) * class_factor / 100.0)
+            }
+            VehicleEngine::Work { .. } => None,
+        }
+    }
+
+    /// A working machine's fuel burn (L/h), or `None` for one that is not.
+    pub fn litres_per_hour(&self, vehicle_id: u64) -> Option<f64> {
+        let v = self.vehicles.iter().find(|v| v.item_id == vehicle_id)?;
+        match v.engine {
+            VehicleEngine::Work {
+                rated_kw,
+                load_fraction,
+            } => Some(rated_kw * load_fraction * WORK_L_PER_KWH),
+            VehicleEngine::Road { .. } => None,
+        }
+    }
+
+    /// The estate vehicle called `name`, if there is one.
+    pub fn vehicle_named(&self, name: &str) -> Option<&EstateVehicle> {
+        self.vehicles.iter().find(|v| v.name == name)
+    }
+
     /// Run a working machine for `hours`: the hours it actually runs
     /// before the tank empties.
     pub fn run_engine_hours(&mut self, vehicle_id: u64, hours: f64, ledger: &mut Ledger) -> f64 {

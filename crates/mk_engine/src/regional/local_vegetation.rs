@@ -285,6 +285,18 @@ impl LocalVegetationPatch {
         })
     }
 
+    /// The biome of the stand at `position_m` (domain metres), if it is on
+    /// the patch.
+    pub fn biome_at(&self, position_m: (f64, f64)) -> Option<BiomeType> {
+        let p = &self.patch;
+        let c = ((position_m.0 - p.origin_x_m) / p.cell_size_m).floor();
+        let r = ((position_m.1 - p.origin_y_m) / p.cell_size_m).floor();
+        if c < 0.0 || r < 0.0 || c as usize >= p.cols || r as usize >= p.rows {
+            return None;
+        }
+        Some(self.stands.get(r as usize, c as usize).biome)
+    }
+
     /// The living tree standing nearest `position_m` (domain metres), if
     /// any; ties go to the lower id.
     pub fn nearest_tree(&self, position_m: (f64, f64)) -> Option<&TreeInstance> {

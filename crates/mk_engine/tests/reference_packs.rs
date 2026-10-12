@@ -90,6 +90,10 @@ const REQUIRED: [(ReferenceDomain, &[&str]); 7] = [
             "timber_frame_construction_labour",
             "light_4wd_fuel_consumption",
             "vehicle_speed_by_surface",
+            "green_wood_moisture_content",
+            "light_truck_payload",
+            "excavator_cat330",
+            "crane_log_handling_cycle",
         ],
     ),
     (

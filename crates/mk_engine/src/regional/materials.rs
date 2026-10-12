@@ -33,6 +33,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
+use super::timber::Log;
 use mk_core::flux::{FluxEntry, FluxKind, Ledger, Reservoir};
 
 use super::ecology::RegionalEcologyState;
@@ -259,6 +260,14 @@ pub struct MaterialLedger {
     structures: BTreeMap<u64, Structure>,
     bodies: BTreeMap<String, Body>,
     next_structure: u64,
+    /// Felled logs and their cross-cut pieces, wherever they are: on the
+    /// ground, on a vehicle, or in the store (`regional::timber`). Their
+    /// carbon is material carbon and their water material water.
+    /// `#[serde(default)]`: a ledger saved before logs existed had none.
+    #[serde(default)]
+    logs: BTreeMap<u64, Log>,
+    #[serde(default)]
+    next_log: u64,
 }
 
 fn flow(ledger: &mut Ledger, kind: FluxKind, from: Reservoir, to: Reservoir, amount: f64) {
@@ -310,11 +319,13 @@ impl MaterialLedger {
                         .values()
                         .map(|s| s.kg * composition(s.material).carbon_per_kg)
                         .sum::<f64>()
+                    + self.logs.values().map(|l| l.carbon_kgc).sum::<f64>()
             }
             Reservoir::HumanCarbon => self.bodies.values().map(|b| b.carbon_kg).sum(),
             Reservoir::MaterialWater => {
                 self.stock_kg(Material::Water)
                     + self.bodies.values().map(|b| b.water_kg).sum::<f64>()
+                    + self.logs.values().map(|l| l.water_kg).sum::<f64>()
             }
             _ => 0.0,
         }
@@ -370,6 +381,63 @@ impl MaterialLedger {
             kgc,
         );
         kg
+    }
+
+    /// Take in a felled stem's log (`regional::timber::felled_log`) where
+    /// it lies: its carbon leaves living biomass and the water in its wood,
+    /// which the tree drew up from the soil it grew in, leaves the soil.
+    /// The log is given the next log id; returns it.
+    pub fn receive_felled_log(&mut self, mut log: Log, ledger: &mut Ledger) -> u64 {
+        log.id = self.reserve_log_ids(1);
+        flow(
+            ledger,
+            FluxKind::Carbon,
+            Reservoir::BiomassCarbon,
+            Reservoir::MaterialCarbon,
+            log.carbon_kgc,
+        );
+        flow(
+            ledger,
+            FluxKind::Water,
+            Reservoir::SoilWater,
+            Reservoir::MaterialWater,
+            log.water_kg,
+        );
+        let id = log.id;
+        self.logs.insert(id, log);
+        id
+    }
+
+    /// Reserve `n` consecutive log ids; returns the first.
+    pub fn reserve_log_ids(&mut self, n: u64) -> u64 {
+        let first = self.next_log.max(1);
+        self.next_log = first + n;
+        first
+    }
+
+    /// Every log and piece, by id.
+    pub fn logs(&self) -> impl Iterator<Item = &Log> {
+        self.logs.values()
+    }
+
+    pub fn log(&self, id: u64) -> Option<&Log> {
+        self.logs.get(&id)
+    }
+
+    pub fn log_mut(&mut self, id: u64) -> Option<&mut Log> {
+        self.logs.get_mut(&id)
+    }
+
+    /// Cross-cut log `id` into `pieces` with ids from `first_id`: the log
+    /// becomes its pieces, nothing gained or lost.
+    pub fn cross_cut_log(&mut self, id: u64, pieces: u32, first_id: u64) -> bool {
+        let Some(log) = self.logs.remove(&id) else {
+            return false;
+        };
+        for piece in log.cross_cut(pieces, first_id) {
+            self.logs.insert(piece.id, piece);
+        }
+        true
     }
 
     /// Mine coal or quarry limestone: carbon from the crust.

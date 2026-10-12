@@ -99,7 +99,7 @@ const DAY: u64 = 86_400;
 /// Audited: 196 of 196, no shortfalls, 13.0 and 10.4 kg against 13.0 and
 /// 10.4, Gem-D asleep 56 of 168 hours (48 at home), Gem-K 54 (46),
 /// temperate-forest NPP 567.
-const WEEK_DIGEST: &str = "ed12bc063648629e82c40db84e41d2c2b07a5fa88f24f3eed6f74398439e2119";
+const WEEK_DIGEST: &str = "c405fc060f7827fae30b19367c7f6d2d30c0ebeedc956ca5615b069f924653c6";
 
 fn repo(path: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -260,11 +260,16 @@ fn slow_a_week_on_the_island_matches_the_reference_packs() {
         w.vegetation.trees.len()
     );
     // What the founders' own choices to gather made of the patch: trees
-    // felled with the shed's axe, their usable wood in the estate's stock.
+    // felled with the shed's axe, their logs on the ground or in the store.
+    let logs: Vec<_> = w.materials.logs().collect();
     println!(
-        "wood felled {:.0} kg",
-        w.materials
-            .stock_kg(mk_engine::regional::materials::Material::Wood)
+        "wood felled {:.0} kg dry ({:.0} kg green), {} of {} pieces in the store",
+        logs.iter().map(|l| l.dry_kg).sum::<f64>().abs(),
+        logs.iter().map(|l| l.green_kg()).sum::<f64>().abs(),
+        logs.iter()
+            .filter(|l| l.place == mk_engine::regional::timber::LogPlace::Stored)
+            .count(),
+        logs.len()
     );
     assert!(w.audits_closed >= 7 * 24 + 7 * 4);
     for id in ["Gem-D", "Gem-K"] {

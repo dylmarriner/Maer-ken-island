@@ -42,6 +42,8 @@ use super::materials::{composition, Material, MaterialError, MaterialLedger};
 use super::physical::{RegionalPhysicalError, RegionalPhysicalState};
 use super::property::{place_regional_estate, PlaceEstateError, PlacedEstate};
 use super::scheduler::IslandScheduler;
+use super::timber::{self, HaulJob, HaulTask};
+use crate::humans::lifecycle::WALKING_MET;
 use crate::humans::HumanSystem;
 use crate::resource_economy::ResourceEconomyState;
 use crate::topology::GridTopology;
@@ -112,6 +114,10 @@ pub struct FellingJob {
 /// pack's steel-axe times. The two-person crosscut saw needs a second
 /// person on the other end, which nothing here arranges yet.
 pub const FELLING_TOOL: &str = "Felling Axe";
+/// The estate's road vehicle that carries cut timber: the ute.
+pub const HAUL_UTE: &str = "Ford Raptor 4x4 Ute";
+/// The estate's machine that lifts whole logs: the excavator.
+pub const HAUL_EXCAVATOR: &str = "30-Ton Excavator (CAT 330)";
 
 /// The snapshot format. A snapshot written by another version is refused
 /// rather than guessed at.
@@ -143,6 +149,8 @@ pub struct IslandLifeSnapshot {
     pub lost_since_drink: BTreeMap<String, f64>,
     #[serde(default)]
     pub felling: BTreeMap<String, FellingJob>,
+    #[serde(default)]
+    pub hauling: BTreeMap<String, HaulJob>,
     #[serde(default)]
     pub labour_kcal: BTreeMap<String, f64>,
     #[serde(default)]
@@ -180,6 +188,9 @@ pub struct IslandLife {
     /// steps as that is, and a founder who stops comes back to the same
     /// tree.
     felling: BTreeMap<String, FellingJob>,
+    /// The log each founder is moving to the store and the tasks they
+    /// still have to do (`regional::timber`).
+    hauling: BTreeMap<String, HaulJob>,
     /// Energy (kcal) each founder's labour has cost since their respiration
     /// was last charged, above what the same time awake at home costs.
     labour_kcal: BTreeMap<String, f64>,
@@ -339,6 +350,7 @@ impl IslandLife {
             respired_since_meal: BTreeMap::new(),
             lost_since_drink: BTreeMap::new(),
             felling: BTreeMap::new(),
+            hauling: BTreeMap::new(),
             labour_kcal: BTreeMap::new(),
             water_drunk_kg: BTreeMap::new(),
             sleep_seconds: BTreeMap::new(),
@@ -414,6 +426,7 @@ impl IslandLife {
             respired_since_meal: self.respired_since_meal.clone(),
             lost_since_drink: self.lost_since_drink.clone(),
             felling: self.felling.clone(),
+            hauling: self.hauling.clone(),
             labour_kcal: self.labour_kcal.clone(),
             water_drunk_kg: self.water_drunk_kg.clone(),
             sleep_seconds: self.sleep_seconds.clone(),
@@ -465,6 +478,7 @@ impl IslandLife {
             respired_since_meal: snapshot.respired_since_meal,
             lost_since_drink: snapshot.lost_since_drink,
             felling: snapshot.felling,
+            hauling: snapshot.hauling,
             labour_kcal: snapshot.labour_kcal,
             water_drunk_kg: snapshot.water_drunk_kg,
             sleep_seconds: snapshot.sleep_seconds,
@@ -638,6 +652,7 @@ impl IslandLife {
         self.respired_since_meal.remove(id);
         self.lost_since_drink.remove(id);
         self.felling.remove(id);
+        self.hauling.remove(id);
         self.labour_kcal.remove(id);
         self.water_drunk_kg.remove(id);
         self.sleep_seconds.remove(id);
@@ -784,13 +799,22 @@ impl IslandLife {
     }
 
     /// Run the labour founders have chosen. A founder who chooses to gather
-    /// while outdoors on the estate, with the shed's axe to hand, fells the
-    /// tree nearest them: the work carries across steps until the felling
-    /// pack's time for that trunk is met (`LabourTable::fell_tree`), the
-    /// stem comes down, and its usable wood goes into the estate's stock
-    /// through the ledger. While they work their needs drain at the
-    /// felling MET (`HumanBeing::labour_met`, read by the next step's
-    /// lifecycle) and their respiration is charged for it.
+    /// while outdoors on the estate, with the shed's axe to hand, works the
+    /// estate's wood:
+    ///
+    /// - a log lying on the ground that nobody else is moving is hauled to
+    ///   the store, the founder's quickest way the estate allows
+    ///   (`regional::timber`: the excavator, the ute, or on foot), task by
+    ///   task across steps;
+    /// - otherwise they fell the tree nearest them: the work carries across
+    ///   steps until the felling pack's time for that trunk is met
+    ///   (`LabourTable::fell_tree`), and the stem comes down as a green log
+    ///   lying where it fell, its carbon and water booked through the
+    ///   ledger.
+    ///
+    /// While they work their needs drain at the MET of what they are doing
+    /// (`HumanBeing::labour_met`, read by the next step's lifecycle) and
+    /// their respiration is charged for it.
     fn work(&mut self, dt_s: f64) -> Result<(), IslandLifeError> {
         let has_axe = self.estate_has_tool(FELLING_TOOL);
         let awake_met = self
@@ -805,6 +829,7 @@ impl IslandLife {
             .map(|h| h.agent_id().to_string())
             .collect();
         let mut felled: Vec<(String, u64)> = Vec::new();
+        let mut done_tasks: Vec<(String, HaulTask)> = Vec::new();
         for id in ids {
             let outdoors_at = self.positions.0.get(&id).and_then(|p| match p.space {
                 Space::Outdoors => Some(p.position_m),
@@ -817,60 +842,86 @@ impl IslandLife {
                 .expect("a listed human exists");
             let gathering = human.economy_action.kind == crate::humans::ActionKind::Gather;
             let body = LabourBody::from_human(human);
-            let working = match (has_axe && gathering, outdoors_at) {
-                (true, Some(at)) => {
-                    // Back to the tree already started, if it still stands;
-                    // otherwise the nearest.
-                    let tree = self
-                        .felling
-                        .get(&id)
-                        .and_then(|job| {
-                            self.vegetation
-                                .trees
-                                .iter()
-                                .find(|t| t.id == job.tree_id && t.alive)
-                        })
-                        .or_else(|| self.vegetation.nearest_tree(at))
-                        .map(|t| (t.id, t.stem_diameter_m, t.position_m));
-                    tree
-                }
-                _ => None,
-            };
-            let Some((tree_id, diameter_m, tree_at)) = working else {
+            let Some(at) = outdoors_at.filter(|_| has_axe && gathering) else {
                 if let Some(h) = self.humans.registry.get_human_mut(&id) {
                     h.labour_met = None;
                 }
                 continue;
             };
-            let spec = self
-                .labour
-                .fell_tree(LabourTool::SteelAxe, diameter_m * 100.0)
-                .map_err(IslandLifeError::Labour)?;
-            // The tree is where it stands: the job starts with the walk to
-            // it from wherever the founder is, at the packs' walking speed.
-            let from = outdoors_at.expect("working means outdoors");
-            let distance_m = ((tree_at.0 - from.0).powi(2) + (tree_at.1 - from.1).powi(2)).sqrt();
-            let walk_s = self
-                .labour
-                .walking_time_s(&body, distance_m, 0.0, 0.0)
-                .map_err(IslandLifeError::Labour)?;
-            let job = self.felling.entry(id.clone()).or_insert(FellingJob {
-                tree_id,
-                worked_s: 0.0,
-            });
-            if job.tree_id != tree_id {
-                *job = FellingJob {
+
+            // A log on the ground nobody is moving: haul it.
+            if !self.hauling.contains_key(&id) && !self.felling.contains_key(&id) {
+                if let Some(job) = self.plan_haul(at, &body)? {
+                    self.hauling.insert(id.clone(), job);
+                }
+            }
+            let met = if let Some(job) = self.hauling.get_mut(&id) {
+                job.worked_s += dt_s;
+                let met = job.tasks.front().map_or(WALKING_MET, |t| t.met);
+                while let Some(task) = job.tasks.front() {
+                    if job.worked_s + 1e-9 < task.duration_s {
+                        break;
+                    }
+                    job.worked_s -= task.duration_s;
+                    let task = job.tasks.pop_front().expect("a front task");
+                    done_tasks.push((id.clone(), task));
+                }
+                if job.tasks.is_empty() {
+                    self.hauling.remove(&id);
+                }
+                met
+            } else {
+                // Fell: back to the tree already started, if it still
+                // stands; otherwise the nearest.
+                let tree = self
+                    .felling
+                    .get(&id)
+                    .and_then(|job| {
+                        self.vegetation
+                            .trees
+                            .iter()
+                            .find(|t| t.id == job.tree_id && t.alive)
+                    })
+                    .or_else(|| self.vegetation.nearest_tree(at))
+                    .map(|t| (t.id, t.stem_diameter_m, t.position_m));
+                let Some((tree_id, diameter_m, tree_at)) = tree else {
+                    if let Some(h) = self.humans.registry.get_human_mut(&id) {
+                        h.labour_met = None;
+                    }
+                    continue;
+                };
+                let spec = self
+                    .labour
+                    .fell_tree(LabourTool::SteelAxe, diameter_m * 100.0)
+                    .map_err(IslandLifeError::Labour)?;
+                // The tree is where it stands: the job starts with the walk
+                // to it from wherever the founder is, at the packs' pace.
+                let distance_m = ((tree_at.0 - at.0).powi(2) + (tree_at.1 - at.1).powi(2)).sqrt();
+                let walk_s = self
+                    .labour
+                    .walking_time_s(&body, distance_m, 0.0, 0.0)
+                    .map_err(IslandLifeError::Labour)?;
+                let job = self.felling.entry(id.clone()).or_insert(FellingJob {
                     tree_id,
                     worked_s: 0.0,
+                });
+                if job.tree_id != tree_id {
+                    *job = FellingJob {
+                        tree_id,
+                        worked_s: 0.0,
+                    };
+                }
+                let met = if job.worked_s < walk_s {
+                    WALKING_MET
+                } else {
+                    spec.met
                 };
-            }
-            let met = if job.worked_s < walk_s {
-                crate::humans::lifecycle::WALKING_MET
-            } else {
-                spec.met
+                job.worked_s += dt_s;
+                if job.worked_s >= walk_s + spec.duration_s {
+                    felled.push((id.clone(), tree_id));
+                }
+                met
             };
-            job.worked_s += dt_s;
-            let done = job.worked_s >= walk_s + spec.duration_s;
             let extra = self
                 .labour
                 .energy_kcal(&body, met, dt_s)
@@ -883,25 +934,234 @@ impl IslandLife {
             if let Some(h) = self.humans.registry.get_human_mut(&id) {
                 h.labour_met = Some(met);
             }
-            if done {
-                felled.push((id, tree_id));
-            }
         }
-        if felled.is_empty() {
+        if felled.is_empty() && done_tasks.is_empty() {
             return Ok(());
         }
         self.audited(|life, ledger| {
             for (id, tree_id) in &felled {
                 life.felling.remove(id);
+                let Some(tree) = life
+                    .vegetation
+                    .trees
+                    .iter()
+                    .find(|t| t.id == *tree_id && t.alive)
+                    .cloned()
+                else {
+                    continue;
+                };
+                // Conifer stands are softwood; every other forest here is
+                // broadleaf.
+                let group = match life.vegetation.biome_at(tree.position_m) {
+                    Some(mk_core::biomes::BiomeType::BorealForest) => "softwoods",
+                    _ => "hardwoods",
+                };
+                let (Ok(mc), Ok(sg)) = (
+                    life.labour.green_moisture_content(group),
+                    life.labour.basic_specific_gravity(group),
+                ) else {
+                    continue;
+                };
                 if let Ok(wood) = life
                     .vegetation
                     .fell_tree(*tree_id, &mut life.ecology, ledger)
                 {
-                    life.materials
-                        .receive_felled_wood(wood.usable_carbon_kgc, ledger);
+                    let log = timber::felled_log(
+                        0,
+                        tree.position_m,
+                        timber::fall_heading_rad(*tree_id, &life.scenario.seed),
+                        tree.stem_diameter_m,
+                        tree.height_m,
+                        wood.wood_kg,
+                        wood.usable_carbon_kgc,
+                        mc,
+                        sg,
+                    );
+                    life.materials.receive_felled_log(log, ledger);
+                }
+            }
+            for (id, task) in &done_tasks {
+                life.finish_haul_task(task, ledger);
+                if let Some(p) = life.positions.0.get_mut(id) {
+                    p.space = Space::Outdoors;
+                    p.position_m = task.ends_at_m;
                 }
             }
         })
+    }
+
+    /// The places a haul runs between: the garage's and the building
+    /// workshop's outside doors (the workshop is where timber is kept and
+    /// used), and how far it is from the workshop's door to the middle of
+    /// its floor, where the wood is stacked.
+    fn haul_site(&self) -> Option<timber::HaulSite> {
+        use crate::organisms::property::PropertyBuildingKind as Kind;
+        let layout = &self.placed.layout;
+        let door_of = |kind: Kind| {
+            let building = layout.buildings.iter().find(|b| b.kind == kind)?;
+            let r = &building.rect_m;
+            let centre = (0.5 * (r.x0 + r.x1), 0.5 * (r.y0 + r.y1));
+            let door = layout
+                .doors
+                .iter()
+                .find(|d| {
+                    let inside = |s: &Space| match s {
+                        Space::Inside(id) => layout
+                            .spaces
+                            .iter()
+                            .any(|sp| sp.id == *id && sp.building_id == building.building_id),
+                        Space::Outdoors => false,
+                    };
+                    (d.a == Space::Outdoors && inside(&d.b))
+                        || (d.b == Space::Outdoors && inside(&d.a))
+                })
+                .map_or(centre, |d| d.position_m);
+            Some((door, centre))
+        };
+        let (garage_m, _) = door_of(Kind::Garage)?;
+        let (store_m, store_centre) = door_of(Kind::Workshop)?;
+        Some(timber::HaulSite {
+            garage_m,
+            store_m,
+            store_carry_m: (store_centre.0 - store_m.0).hypot(store_centre.1 - store_m.1),
+        })
+    }
+
+    /// The quickest haul of the log on the ground nearest `at` that no
+    /// founder is already moving, or `None` if there is none.
+    fn plan_haul(
+        &mut self,
+        at: (f64, f64),
+        body: &LabourBody,
+    ) -> Result<Option<timber::HaulJob>, IslandLifeError> {
+        let claimed: std::collections::BTreeSet<u64> =
+            self.hauling.values().map(|j| j.log_id).collect();
+        let Some(log) = self
+            .materials
+            .logs()
+            .filter(|l| l.place == timber::LogPlace::Ground && !claimed.contains(&l.id))
+            .min_by(|a, b| {
+                let d = |l: &timber::Log| (l.position_m.0 - at.0).hypot(l.position_m.1 - at.1);
+                d(a).total_cmp(&d(b)).then(a.id.cmp(&b.id))
+            })
+            .cloned()
+        else {
+            return Ok(None);
+        };
+        let Some(site) = self.haul_site() else {
+            return Ok(None);
+        };
+        let road = |name: &str| {
+            let v = self.energy.vehicle_named(name)?;
+            Some(timber::RoadVehicle {
+                item_id: v.item_id,
+                litres: v.litres,
+                litres_per_km: self
+                    .energy
+                    .litres_per_km(v.item_id, super::energy::Surface::OffRoadTrack)?,
+            })
+        };
+        let tracked = |name: &str| {
+            let v = self.energy.vehicle_named(name)?;
+            Some(timber::TrackedMachine {
+                item_id: v.item_id,
+                litres: v.litres,
+                litres_per_hour: self.energy.litres_per_hour(v.item_id)?,
+            })
+        };
+        let fleet = timber::Fleet {
+            ute: road(HAUL_UTE),
+            excavator: tracked(HAUL_EXCAVATOR),
+        };
+        // Pieces cut from this log take ids reserved now, so a plan names
+        // them before they exist: as many as the most pieces any plan cuts.
+        let carry = self
+            .labour
+            .sustainable_load_kg(body)
+            .map_err(IslandLifeError::Labour)?;
+        let bed = self
+            .labour
+            .ute_bed_length_m()
+            .map_err(IslandLifeError::Labour)?;
+        let most = (log.green_kg() / carry.max(1e-6))
+            .ceil()
+            .max((log.length_m / bed.max(1e-6)).ceil())
+            .max(1.0) as u64;
+        let first = self.materials.reserve_log_ids(most);
+        let plans = timber::haul_plans(&log, at, body, &self.labour, &site, &fleet, first)
+            .map_err(IslandLifeError::Labour)?;
+        Ok(timber::quickest(plans))
+    }
+
+    /// What a finished haul task does to the world.
+    fn finish_haul_task(&mut self, task: &HaulTask, ledger: &mut Ledger) {
+        use timber::{HaulAction, LogPlace};
+        let mut put = |ids: &[u64], place: LogPlace, at: Option<(f64, f64)>| {
+            for id in ids {
+                if let Some(log) = self.materials.log_mut(*id) {
+                    log.place = place;
+                    if let Some(at) = at {
+                        log.position_m = at;
+                    }
+                }
+            }
+        };
+        match &task.action {
+            HaulAction::Walk => {}
+            HaulAction::CrossCut {
+                log_id,
+                pieces,
+                first_id,
+            } => {
+                self.materials.cross_cut_log(*log_id, *pieces, *first_id);
+            }
+            HaulAction::Load { vehicle_id, logs } => {
+                put(logs, LogPlace::Vehicle(*vehicle_id), None);
+            }
+            HaulAction::Drive {
+                vehicle_id,
+                km,
+                logs,
+            } => {
+                put(logs, LogPlace::Vehicle(*vehicle_id), Some(task.ends_at_m));
+                self.energy.drive_km(
+                    *vehicle_id,
+                    super::energy::Surface::OffRoadTrack,
+                    *km,
+                    ledger,
+                );
+            }
+            HaulAction::Unload { logs } => put(logs, LogPlace::Stored, Some(task.ends_at_m)),
+            HaulAction::CarryToStore { log_id } => {
+                put(&[*log_id], LogPlace::Stored, Some(task.ends_at_m));
+            }
+            HaulAction::Track {
+                vehicle_id,
+                hours,
+                log,
+            } => {
+                if let Some(log) = log {
+                    put(
+                        &[*log],
+                        LogPlace::Vehicle(*vehicle_id),
+                        Some(task.ends_at_m),
+                    );
+                }
+                self.energy.run_engine_hours(*vehicle_id, *hours, ledger);
+            }
+            HaulAction::Lift { vehicle_id, log_id } => {
+                put(&[*log_id], LogPlace::Vehicle(*vehicle_id), None);
+                self.energy
+                    .run_engine_hours(*vehicle_id, task.duration_s / 3_600.0, ledger);
+            }
+            HaulAction::SetDown { log_id } => {
+                put(&[*log_id], LogPlace::Stored, Some(task.ends_at_m));
+                if let Some(id) = self.energy.vehicle_named(HAUL_EXCAVATOR).map(|v| v.item_id) {
+                    self.energy
+                        .run_engine_hours(id, task.duration_s / 3_600.0, ledger);
+                }
+            }
+        }
     }
 
     /// Whether the founders' estate holds a tool of this name.
@@ -1078,6 +1338,7 @@ impl IslandLife {
                         || self.respired_since_meal.contains_key(human.agent_id())
                         || self.lost_since_drink.contains_key(human.agent_id())
                         || self.felling.contains_key(human.agent_id())
+                        || self.hauling.contains_key(human.agent_id())
                         || self.labour_kcal.contains_key(human.agent_id())
                     {
                         forget.push(human.agent_id().to_string());
@@ -1106,6 +1367,7 @@ impl IslandLife {
                 self.respired_since_meal.remove(&id);
                 self.lost_since_drink.remove(&id);
                 self.felling.remove(&id);
+                self.hauling.remove(&id);
                 self.labour_kcal.remove(&id);
             }
             self.work(human_s as f64)?;
@@ -1185,6 +1447,7 @@ impl IslandLife {
         h.update(canonical(&self.respired_since_meal).as_bytes());
         h.update(canonical(&self.lost_since_drink).as_bytes());
         h.update(canonical(&self.felling).as_bytes());
+        h.update(canonical(&self.hauling).as_bytes());
         h.update(canonical(&self.labour_kcal).as_bytes());
         h.update(canonical(&self.water_drunk_kg).as_bytes());
         h.update(canonical(&self.sleep_seconds).as_bytes());
@@ -1308,21 +1571,66 @@ mod tests {
             worked >= needed,
             "felled after {worked} s, before its {needed}"
         );
-        let wood = life.materials.stock_kg(Material::Wood);
-        let expected = tree.biomass_kgc * 0.7 / composition(Material::Wood).carbon_per_kg;
-        assert!(
-            (wood - expected).abs() < 1e-9 * expected.max(1.0),
-            "{wood} kg of wood"
-        );
+        // The usable wood is on the ground where the tree fell, green.
+        let logs: Vec<timber::Log> = life.materials.logs().cloned().collect();
+        assert_eq!(logs.len(), 1, "one log came down");
+        let log = &logs[0];
+        assert_eq!(log.place, timber::LogPlace::Ground);
+        assert!((log.carbon_kgc - tree.biomass_kgc * 0.7).abs() < 1e-9);
+        let mc = life.labour.green_moisture_content("hardwoods").unwrap();
+        assert!((log.moisture_content() - mc).abs() < 1e-12, "green wood");
+        let butt = log.butt_m();
+        assert!((butt.0 - tree.position_m.0).abs() < 1e-9);
+        assert!((butt.1 - tree.position_m.1).abs() < 1e-9);
+        assert_eq!(life.materials.stock_kg(Material::Wood), 0.0);
         assert_eq!(
             life.audits_closed,
             audits + 1,
             "the felling closed its books"
         );
-        assert!(!life.felling.contains_key("Gem-D"), "the job is done");
+        assert!(!life.felling.contains_key("Gem-D"), "the felling is done");
         assert!(
             *life.labour_kcal.get("Gem-D").unwrap() > 0.0,
             "the work cost energy"
+        );
+
+        // Keep working: Gem-D moves the log to the store, the quickest way.
+        let (carbon, water) = (log.carbon_kgc, log.water_kg);
+        life.work(minute).unwrap();
+        let job = life
+            .hauling
+            .get("Gem-D")
+            .expect("a haul is planned")
+            .clone();
+        let total = job.total_s();
+        let mut hauled = minute;
+        while life.hauling.contains_key("Gem-D") {
+            assert!(
+                hauled < total + 2.0 * minute,
+                "still hauling after {hauled} s of {total}"
+            );
+            life.work(minute).unwrap();
+            hauled += minute;
+        }
+        let stored: Vec<&timber::Log> = life.materials.logs().collect();
+        assert!(stored.iter().all(|l| l.place == timber::LogPlace::Stored));
+        let sum = |f: fn(&timber::Log) -> f64| stored.iter().map(|l| f(l)).sum::<f64>();
+        assert!(
+            (sum(|l| l.carbon_kgc) - carbon).abs() < 1e-9,
+            "no carbon lost"
+        );
+        assert!(
+            (sum(|l| l.water_kg) - water).abs() < 1e-9,
+            "the stored wood is still green"
+        );
+        let site = life.haul_site().unwrap();
+        assert!(stored.iter().all(|l| l.position_m == site.store_m));
+        println!(
+            "{:?} hauled {} piece(s), {:.0} kg green, in {:.0} s",
+            job.method,
+            stored.len(),
+            sum(|l| l.dry_kg) + water,
+            total
         );
     }
 
