@@ -131,7 +131,10 @@ pub fn rooms(layout: &EstateLayout) -> Vec<Placed> {
 /// thick or tall its walls are; a line claims neither.
 pub fn room_outlines(layout: &EstateLayout) -> Vec<(String, [Point; 4])> {
     let origin = (layout.patch.x0, layout.patch.y0);
-    let floor = f64::from(FLOOR_THICKNESS_M);
+    // Just above the floor's top face: a floor is drawn centred
+    // `FLOOR_THICKNESS_M` up and that thick, so its top is at one and a
+    // half thicknesses, and a line any lower is inside it and hidden.
+    let floor = 2.0 * f64::from(FLOOR_THICKNESS_M);
     layout
         .spaces
         .iter()
@@ -707,7 +710,8 @@ mod tests {
             let (a, b) = (corners[i], corners[(i + 1) % 4]);
             let side = ((a.x - b.x).powi(2) + (a.z - b.z).powi(2)).sqrt();
             assert!((side - 4.0).abs() < 1e-3, "side {i} is {side} m");
-            assert_eq!(a.y, FLOOR_THICKNESS_M);
+            // Above the floor's top face, which is at 1.5 thicknesses.
+            assert!(a.y > 1.5 * FLOOR_THICKNESS_M, "{a:?} is inside the floor");
         }
     }
 
