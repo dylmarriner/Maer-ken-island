@@ -24,16 +24,18 @@ fn hex(digest: [u8; 32]) -> String {
 ///
 /// The path in the scenario is usually repo-relative (`fixtures/island/…`),
 /// which works when the runner is started from the repository root and not
-/// otherwise. Rather than demand a working directory, this also looks beside
-/// the scenario file, so a scenario and its canon can be kept together
-/// anywhere.
+/// otherwise. Rather than demand a working directory, this also looks from
+/// the scenario's folder and each folder above it, so an installed copy of
+/// the repository's `fixtures/` (`/usr/local/share/island/fixtures/…`)
+/// finds its canon wherever the process was started.
 fn canon_for(scenario_path: &Path, scenario: &IslandScenario) -> Result<CanonLocked, String> {
     let named = &scenario.canon_path;
-    let beside = scenario_path
+    let from_above = scenario_path
         .parent()
-        .map(|dir| dir.join(named))
-        .unwrap_or_else(|| named.clone());
-    for candidate in [named.clone(), beside] {
+        .into_iter()
+        .flat_map(Path::ancestors)
+        .map(|dir| dir.join(named));
+    for candidate in std::iter::once(named.clone()).chain(from_above) {
         if candidate.is_file() {
             return CanonLocked::load(&candidate)
                 .map_err(|e| format!("cannot read the canon at {}: {e}", candidate.display()));
@@ -41,7 +43,7 @@ fn canon_for(scenario_path: &Path, scenario: &IslandScenario) -> Result<CanonLoc
     }
     Err(format!(
         "the scenario names a canon at {}, which is not there — looked from the working \
-         directory and beside {}",
+         directory and from every folder above {}",
         named.display(),
         scenario_path.display()
     ))
@@ -271,5 +273,48 @@ pub fn open_world(scenario: Option<&Path>, snapshot: Option<&Path>) -> Result<Is
             load_island_snapshot(Arc::new(canon), path)
                 .map_err(|e| format!("cannot read {}: {e}", path.display()))
         }
+    }
+}
+
+/// Carry on from `snapshot` under the canon `scenario` names: what
+/// `island serve --resume` opens when a saved island is there. The canon is
+/// not in the file, so it is found the way a fresh start from the same
+/// scenario would find it, and the load refuses one that disagrees.
+pub fn resume_world(scenario: &Path, snapshot: &Path) -> Result<IslandLife, String> {
+    let named = IslandScenario::load(scenario).map_err(|e| e.to_string())?;
+    let canon = canon_for(scenario, &named)?;
+    load_island_snapshot(Arc::new(canon), snapshot)
+        .map_err(|e| format!("cannot read {}: {e}", snapshot.display()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn repo(path: &str) -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .join(path)
+    }
+
+    /// An installed copy of `fixtures/` keeps the scenario's repo-relative
+    /// canon path working from any working directory: the container
+    /// starts in `/var/lib/island` with the fixtures under
+    /// `/usr/local/share/island`.
+    #[test]
+    fn the_canon_is_found_from_an_installed_copy_of_the_fixtures() {
+        let share = tempfile::tempdir().unwrap();
+        let island = share.path().join("fixtures/island");
+        std::fs::create_dir_all(&island).unwrap();
+        for file in ["canon.json", "default_scenario.json"] {
+            std::fs::copy(repo(&format!("fixtures/island/{file}")), island.join(file)).unwrap();
+        }
+        let scenario_path = island.join("default_scenario.json");
+        let scenario = IslandScenario::load(&scenario_path).unwrap();
+        assert!(
+            !scenario.canon_path.is_file(),
+            "the test must not find the canon from the working directory"
+        );
+        canon_for(&scenario_path, &scenario).expect("found from the folders above the scenario");
     }
 }

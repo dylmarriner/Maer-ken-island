@@ -7,3 +7,4 @@
 # committed — without it those records cannot be read, and with it in a
 # repository they are not protected by anything.
 /island-data/
+/dist/

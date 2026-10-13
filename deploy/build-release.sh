@@ -36,6 +36,13 @@ echo "==> the backend"
 cargo build --release --locked -p island
 cp target/release/island "$dist/bin/"
 
+echo "==> the scenario, its canon and the reference packs"
+# The binary looks for the reference packs in the tree it was built from,
+# which is not on the machine it is installed on: the service names the
+# shipped copy with ISLAND_REFERENCE_DIR.
+mkdir -p "$dist/share/island/fixtures"
+cp -r fixtures/island fixtures/reference "$dist/share/island/fixtures/"
+
 echo "==> the dashboard, as files"
 # The island's address goes in a generated config.js rather than in the
 # pages, so the same export serves any backend when one is not named here.
@@ -60,5 +67,5 @@ echo
 echo "dist/ holds:"
 find "$dist" -maxdepth 2 -mindepth 1 | sed "s|$dist|  dist|" | sort
 echo
-echo "The backend needs fixtures/island/ beside it, or --scenario pointing"
-echo "at a scenario and its canon. See docs/island/DEPLOYMENT.md."
+echo "Install dist/share/island as /usr/local/share/island; deploy/island.service"
+echo "reads the scenario and packs from there. See docs/island/DEPLOYMENT.md."

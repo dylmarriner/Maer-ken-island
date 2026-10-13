@@ -42,6 +42,14 @@ serve    the dashboard: the overview at /, the roster at /people, the island
                    Without it that request is refused rather than silently
                    doing nothing. Writing one takes about half a minute on
                    the full island and the island does not step meanwhile
+  --autosave MIN   also keep the island in <snapshot-dir>/latest.mks,
+                   rewritten every MIN minutes of real time and when the
+                   server stops (Ctrl-C or SIGTERM). Needs --snapshot-dir
+  --resume         carry on from <snapshot-dir>/latest.mks when there is
+                   one, and start from --scenario when there is not, so a
+                   restarted service picks up where it stopped rather than
+                   beginning a new island. Needs --scenario and
+                   --snapshot-dir
   --import-0b DIR  carry the people stored in a Phase-0b data directory into
                    the world, once, as creations at the first step
   --allow-origin U a web frontend served from this address may call this
@@ -293,7 +301,7 @@ fn main() {
         if matches!(flag.as_str(), "--help" | "-h") {
             help();
         }
-        if flag == "--frontend-only" {
+        if flag == "--frontend-only" || flag == "--resume" {
             continue;
         }
         let value = iter.next().unwrap_or_else(|| {
@@ -314,7 +322,7 @@ fn main() {
             // they are accepted rather than falling through to the usage
             // message as unknown flags.
             "--scenario" | "--snapshot" | "--speed" | "--log" | "--import-0b"
-            | "--snapshot-dir" => {}
+            | "--snapshot-dir" | "--autosave" => {}
             _ => usage(),
         }
     }
@@ -394,10 +402,46 @@ fn main() {
                     usage()
                 }),
             };
-            let mut life = headless::open_world(
-                scenario.map(PathBuf::from).as_deref(),
-                snapshot.map(PathBuf::from).as_deref(),
-            )
+            let snapshot_dir = flag(rest, "--snapshot-dir").map(PathBuf::from);
+            let latest = snapshot_dir.as_ref().map(|dir| dir.join("latest.mks"));
+            let resume = rest.iter().any(|a| a == "--resume");
+            let persist = flag(rest, "--autosave").map(|minutes| {
+                let minutes: f64 = minutes
+                    .parse()
+                    .ok()
+                    .filter(|m: &f64| m.is_finite() && *m > 0.0)
+                    .unwrap_or_else(|| {
+                        eprintln!("--autosave needs a number of minutes above zero.\n");
+                        usage()
+                    });
+                serve::sim::Persist {
+                    path: latest.clone().unwrap_or_else(|| {
+                        eprintln!(
+                            "--autosave keeps the island in --snapshot-dir, so it needs one.\n"
+                        );
+                        usage()
+                    }),
+                    every: std::time::Duration::from_secs_f64(minutes * 60.0),
+                }
+            });
+            if resume && (scenario.is_none() || latest.is_none()) {
+                eprintln!(
+                    "--resume carries on from <snapshot-dir>/latest.mks, or starts from the \
+                     scenario when there is none yet, so it needs --scenario and --snapshot-dir.\n"
+                );
+                usage()
+            }
+            let resumed = latest.as_ref().filter(|path| resume && path.is_file());
+            let mut life = match (resumed, scenario.as_deref()) {
+                (Some(saved), Some(scenario)) => {
+                    println!("Carrying on from {}.", saved.display());
+                    headless::resume_world(std::path::Path::new(scenario), saved)
+                }
+                _ => headless::open_world(
+                    scenario.map(PathBuf::from).as_deref(),
+                    snapshot.map(PathBuf::from).as_deref(),
+                ),
+            }
             .unwrap_or_else(|e| {
                 eprintln!("{e}");
                 std::process::exit(1);
@@ -450,7 +494,14 @@ fn main() {
                     eprintln!("the estate has no space outside the house to import people into");
                     std::process::exit(1);
                 });
-            let world = serve::sim::spawn_with(life, speed, log, snapshots);
+            if let Some(persist) = &persist {
+                println!(
+                    "Keeping the island in {}, every {:.0} min and on stopping.",
+                    persist.path.display(),
+                    persist.every.as_secs_f64() / 60.0
+                );
+            }
+            let world = serve::sim::spawn_persisting(life, speed, log, snapshots, persist);
             // Carried in as ordinary commands, so they are recorded in the
             // replay log and reproduced by a replay exactly like anybody
             // created later. They land at `landing`, outside the house: a
@@ -539,7 +590,8 @@ fn main() {
     println!("Press Ctrl-C to stop. Set ISLAND_ACCESS_LOG=off to silence the request log.");
 
     let runtime = tokio::runtime::Runtime::new().expect("tokio runtime");
-    if let Err(err) = runtime.block_on(serve::server::run_with_config(
+    let world_to_stop = world.clone();
+    let served = runtime.block_on(serve::server::run_with_config(
         Arc::new(Mutex::new(population)),
         bind,
         world,
@@ -551,7 +603,14 @@ fn main() {
             access_log: None,
             connect_origins,
         },
-    )) {
+    ));
+    // The listener has stopped; the island finishes its step and, when it
+    // persists, saves before the process goes.
+    if let Some(world) = world_to_stop {
+        println!("Stopping the island.");
+        world.stop_and_wait();
+    }
+    if let Err(err) = served {
         eprintln!("could not serve on {bind}: {err}");
         std::process::exit(1);
     }

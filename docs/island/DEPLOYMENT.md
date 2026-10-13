@@ -109,6 +109,35 @@ accept paying twice for nothing.
 `deploy/island.service` is a systemd unit; `deploy/Dockerfile` builds the
 backend into a container. Both read the same variables as above.
 
+The backend needs three things besides the binary: the scenario, its canon,
+and the reference packs (`fixtures/reference/`) the founders' labour is
+costed from. `deploy/build-release.sh` puts them in `dist/share/island/`,
+which installs as `/usr/local/share/island/`; the image carries the same
+tree. The scenario's canon is looked for from the working directory and
+from every folder above the scenario. The packs are looked for at
+`ISLAND_REFERENCE_DIR`, then in the source tree the binary was built from
+(a path that exists only on the build machine), then under the working
+directory; the unit and the image both set the variable. Without the
+packs the backend refuses to start with `MissingReference`, rather than
+running an island whose work costs nothing.
+
+### Keeping the island across restarts
+
+Without these flags a restarted backend builds a **new** island from the
+scenario, and everything simulated since the last start is gone:
+
+| Flag | Does |
+|---|---|
+| `--autosave MIN` | Writes the island to `<snapshot-dir>/latest.mks` every `MIN` minutes of real time, and once more when the server stops on Ctrl-C or SIGTERM. Each save is written beside the file and renamed over it, so a crash mid-save keeps the previous one. |
+| `--resume` | Carries on from `<snapshot-dir>/latest.mks` when it exists, and starts from `--scenario` when it does not (the first start). |
+
+The unit uses both (`--autosave 30 --resume`), so a reboot or a
+`systemctl restart` loses at most the last half hour, and a clean
+`systemctl stop` loses nothing. A save takes about half a minute on the full
+island and the clock stops while it is written. When a step fails (an audit
+that does not close) the island stops and is **not** saved on the way out:
+the last good save is kept rather than overwritten with a broken island.
+
 ## The web dashboard, somewhere else
 
 Two ways, and they produce the same pages.
