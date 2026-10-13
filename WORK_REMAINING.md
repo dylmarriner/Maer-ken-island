@@ -323,8 +323,7 @@ dashboard; the desktop panels).
 | 8 | Final acceptance: every design criterion run and recorded | All of the above |
 
 Also: **a GPU frame-rate figure** for `island-ui` (every frame so far was rasterised on the CPU,
-0.6 frames/s for the island view and 10.8 for the estate), and other window sizes. The Creator
-page does not yet use the map.
+0.6 frames/s for the island view and 10.8 for the estate), and other window sizes.
 
 ---
 
