@@ -47,6 +47,9 @@ The newest work (merged 2026-10-12, PR #6):
 
 `docs/handoff/SESSION_2026-10-12.md` is the full account.
 
+The session of 2026-10-13 (production readiness, the realism research and programme, water at
+home, soil carbon) is recorded in `docs/handoff/SESSION_2026-10-13.md`.
+
 ## Read in this order
 
 1. **This file.**

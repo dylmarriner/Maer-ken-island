@@ -12,8 +12,10 @@ in this order:
 3. **[WORKING_PRACTICES.md](WORKING_PRACTICES.md)**: the rules the project holds itself to
    (realism, reference data, digests, CI), the environment's traps, and the owner's standing
    decisions.
-4. **[SESSION_2026-10-12.md](SESSION_2026-10-12.md)**: what the last working session changed, why,
-   and what it measured.
+4. **[SESSION_2026-10-13.md](SESSION_2026-10-13.md)**: the latest session: production readiness
+   (installed backend, persistence, health), the realism research and programme, water at home,
+   soil carbon, and what was learned the hard way.
+5. **[SESSION_2026-10-12.md](SESSION_2026-10-12.md)**: the session before (PR #6).
 
 ## The authoritative documents (do not duplicate them, read them)
 
