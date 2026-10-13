@@ -229,9 +229,9 @@ pub fn relative_humidity_at(
 }
 
 ///
-/// Returns the vapour budget's fraction `f` per coarse cell (1 over the
-/// sea and on a grid too small for slopes), for
-/// [`relative_humidity_at`].
+/// Adds the slopes' rain to `weather.precipitation` in place, and returns
+/// the vapour budget's fraction `f` per coarse cell (1 over the sea and on
+/// a grid too small for slopes), for [`relative_humidity_at`].
 pub fn apply_orographic_precipitation(
     weather: &mut WeatherState,
     elevation_m: &Grid2<f64>,

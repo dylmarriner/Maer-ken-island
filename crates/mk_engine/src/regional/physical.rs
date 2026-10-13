@@ -124,8 +124,9 @@ pub struct RegionalPhysicalState {
     /// The fraction of its equilibrium vapour the air still carries in each
     /// coarse cell after the slopes upwind wrung their rain out of it
     /// (`weather::apply_orographic_precipitation`). Absent in a state saved
-    /// before it was kept, until the next weather step. Not in the digest:
-    /// it follows from the wind and terrain, which are.
+    /// before it was kept, until the next weather step; until then the
+    /// humidity reads it as 1, the undepleted air. Not in the digest: it
+    /// follows from the wind and terrain, which are.
     #[serde(default)]
     pub vapour_remaining: Option<Grid2<f64>>,
 }
