@@ -1141,7 +1141,7 @@ fn pick_on_the_estate(
     island: Res<TheIsland>,
     buttons: Res<ButtonInput<MouseButton>>,
     windows: Query<&Window, With<bevy::window::PrimaryWindow>>,
-    camera: Query<(&Camera, &GlobalTransform), With<Camera3d>>,
+    camera: Query<(&Camera, &Transform), With<Camera3d>>,
     // Together because they change together: what the press was, and what
     // its click picked.
     (mut press, mut panels): (ResMut<Press>, ResMut<Panels>),
@@ -1180,10 +1180,14 @@ fn pick_on_the_estate(
     if press.travelled > STILL_PX || *showing != Showing::Estate {
         return;
     }
-    let (Some(layout), Ok((camera, placed))) = (island.0.estate(), camera.single()) else {
+    let (Some(layout), Ok((camera, pose))) = (island.0.estate(), camera.single()) else {
         return;
     };
-    let Ok(ray) = camera.viewport_to_world(placed, cursor) else {
+    // The pose `drive_the_camera` set this frame, not the `GlobalTransform`
+    // Bevy propagates from it in `PostUpdate`: that is still last frame's,
+    // and a ray from it would miss a small thing while the view moves. The
+    // camera has no parent, so its own transform is its place in the world.
+    let Ok(ray) = camera.viewport_to_world(&GlobalTransform::from(*pose), cursor) else {
         return;
     };
     let from = Point::new(ray.origin.x, ray.origin.y, ray.origin.z);
