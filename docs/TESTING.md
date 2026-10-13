@@ -15,8 +15,9 @@ The toolchain is pinned in `rust-toolchain.toml` (Rust 1.97.0 with `rustfmt` and
 
 `island_ui` is excluded from the fast and slow commands because it pulls in Bevy, which needs
 system audio and graphics headers a plain container lacks; it has its own CI job. The nightly
-`slow` job in `.github/workflows/ci.yml` currently runs `--workspace` **without**
-`--exclude island_ui`; if it fails while building, that is why.
+`slow` job in `.github/workflows/ci.yml` runs `--workspace` without `--exclude island_ui`, and
+builds it: with `bevy_audio` and `bevy_gilrs` off, Bevy needs no ALSA or libudev headers (green
+on 2026-10-13, 58 minutes). If it ever fails while building, `--exclude island_ui` is the fix.
 
 Current members (find them with `grep -rn 'fn slow_\|fn deep_' --include=*.rs crates apps`):
 

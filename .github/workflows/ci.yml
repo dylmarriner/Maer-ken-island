@@ -84,6 +84,13 @@ jobs:
             xvfb xdotool imagemagick mesa-vulkan-drivers libxkbcommon-x11-0
       - name: Clippy
         run: cargo clippy -p island_ui --all-targets --locked -- -D warnings
+      # `.cargo/audit.toml` ignores RUSTSEC-2026-0344 only because the KTX2
+      # loader, ruzstd's one caller, is not built. This keeps it that way.
+      - name: No KTX2 loader while the ruzstd advisory is ignored
+        run: |
+          if cargo tree -p island_ui --locked -e features -i bevy_image | grep -q 'feature "ktx2"'; then
+            echo "bevy_image/ktx2 is on: it reaches ruzstd 0.8 (RUSTSEC-2026-0344)"; exit 1
+          fi
       - name: Build
         run: cargo build -p island_ui --locked
       # Everything that is not the renderer. No windowed test runs here,

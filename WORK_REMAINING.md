@@ -59,7 +59,7 @@ this list holds the current state. The evidence for what is *done* is in
 | Gates | Gate 1, 2, 3 owner reviews | **Closed** (owner, 2026-10-13) | — |
 | Upstream | PRs for every divergence in `UPSTREAM.md` | Open | Owner's upstream access |
 | Realism | R0-R10: humans, work and the living world replicate Earth (section 8) | R1 done; R1b (fetching water by hand) done | Engineering and sourcing |
-| CI | Nightly slow job | Check | See Housekeeping |
+| CI | Nightly slow job and dependency audit | Green after PR #15 | See Housekeeping |
 
 ---
 
@@ -431,10 +431,10 @@ invertebrate densities, fire danger indices (see each report's "unsourced" secti
   - A scan of the whole git history on 2026-10-13 found no keys, tokens or private keys;
     `deploy/island.env` holds empty token placeholders. Keep secrets in environment variables.
 
-- **Nightly slow job:** `.github/workflows/ci.yml`'s `slow` job runs
-  `cargo test --workspace --release -- --ignored slow_` without `--exclude island_ui` and
-  without the ALSA and graphics packages the desktop job installs. If the nightly run is red at
-  build time, that is the first thing to check; the fix is `--exclude island_ui`.
+- **Nightly slow job:** green on 2026-10-13 (58 minutes), `island_ui` included: Bevy builds
+  without ALSA or libudev headers now that its audio and gamepad features are off. The same
+  night's `dependency audit` was red on RUSTSEC-2026-0344 (ruzstd), fixed in PR #15; that PR's
+  `.cargo/audit.toml` ignore is to be removed once a `bevy_image` release takes ruzstd 0.9.1.
 - **Remove the Snyk GitHub App** (owner's action). It is out of quota and posts an error on every
   push; the `dependency audit` CI job replaced it.
 - **Firecrawl credits ran out** on 2026-10-12. WebSearch and the TinyFish fetcher still work for

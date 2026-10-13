@@ -369,3 +369,7 @@ have no upstream counterpart.
    (`WATER_JERRYCAN`, IFRC's family size), what a founder carries water home in when the
    rainwater tank is dry (realism programme R1b). **Changes upstream data**: two more items in
    the estate's inventory and layout.
+3. `crates/mk_interventions/Cargo.toml` — the optional `bevy = "0.13"` dependency and its `bevy`
+   feature are removed (2026-10-14). Nothing in the crate used them and nothing enabled the
+   feature, but the lockfile still carried the whole Bevy 0.13 tree, including `ruzstd` 0.5
+   (RUSTSEC-2026-0344). **No behaviour change.** Upstream would take the same removal.
