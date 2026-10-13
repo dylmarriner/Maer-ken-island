@@ -255,8 +255,12 @@ fn spawn_poller(
                     if next.trouble.is_none()
                         && trees_at.is_none_or(|at| at.elapsed() >= crate::stems::TREE_POLL)
                     {
+                        // The attempt is what is timed, not the success: a
+                        // backend whose tree route fails would otherwise be
+                        // asked again on every quarter-second poll. A failed
+                        // read keeps the last good one on screen.
+                        trees_at = Some(Instant::now());
                         if let Ok(trees) = client.trees_in(x0, y0, x1, y1, crate::stems::STEM_CAP) {
-                            trees_at = Some(Instant::now());
                             next.trees = Arc::new(Some(trees));
                         }
                     }
