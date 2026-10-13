@@ -36,7 +36,7 @@ this list holds the current state. The evidence for what is *done* is in
 
 | Area | Item | State | Blocked on |
 |---|---|---|---|
-| Timber | Drying, seasoning, splitting, crosscut, rigging (D40) | Open | Cited drying model and rates |
+| Timber | Splitting, crosscut, rigging, routes (D40); drying and seasoning done 2026-10-14 | Open | Splitting and sawing rates |
 | Living world | Phase 3 Task 1b: species at island scale | Open | Engineering only |
 | Living world | Phase 3 Task 2: every resource and material, placers, recipes | Open (partly started) | Cited placer decay, shaft size, abundances |
 | Living world | D9: actions take one tick | Open (felling, hauling done) | Cited durations per task |
@@ -70,32 +70,24 @@ hardwoods, 1.06 for softwoods, from `fixtures/reference/labour/timber.json`). A 
 to the building workshop by the quickest of the CAT 330 excavator, the ute (after cross-cutting
 it into pieces they can lift) or on foot. The log is stored green and stays green.
 
-### 1a. Drying
+### 1a. Drying (done 2026-10-14)
 
-- **Needs (sources):** the equilibrium moisture content of wood in air of a given temperature and
-  humidity (the Wood Handbook, ch. 4, gives the Hailwood-Horrobin equation with Simpson's
-  coefficients), and an air-drying rate or time for stock of a given thickness (USDA FPL
-  GTR-117, *Air Drying of Lumber*). Whole logs with bark dry far slower than sawn stock; a cited
-  figure for that, or a recorded deviation for using the sawn-stock rate, is needed. Fetch the
-  documents and transcribe the exact values; do not use remembered ones.
-- **Files:** `regional/timber.rs` (a drying step on `Log`), `regional/materials.rs` (log water
-  leaving), `regional/life.rs` (call it each step with the estate's air temperature and
-  humidity from the physical state), `fixtures/reference/labour/timber.json` (the new values).
-- **Ledger:** water leaves as `MaterialWater → Atmosphere`.
-- **Tests:** a log in warm dry air loses water faster than one in cold wet air; it never falls
-  below the equilibrium moisture content; the books still close; a reference-pack check that the
-  drying time for a cited thickness is within the source's range.
-- **Done when:** a stored log reaches air-dry in a time the source supports, and D40's drying
-  clause is closed.
+`regional/drying.rs`: every log approaches the Wood Handbook's equilibrium moisture content
+(Eq. 4-5, Table 4-2 reproduced) for the estate's hourly air, at a rate fitted to Simpson & Hart
+(2000, FPL-GTR-121) Table 2 and scaled by vapour pressure and by thickness squared; the water
+leaves `MaterialWater` for the atmosphere through the audit. Tests: `regional::drying` (the
+equation against the table, the fit re-checked against all 72 Madison times, warm dry air
+faster than cold wet, never below equilibrium, thickness scaling, steps compose) and
+`tests/island_timber_drying.rs` (a stored log on the island dries, the books close). Left in
+D40: end grain, bark, species and re-wetting.
 
-### 1b. Seasoned wood joins the stock
+### 1b. Seasoned wood joins the stock (done 2026-10-14)
 
-- **What:** once a piece reaches air-dry it becomes `Material::Wood`, usable for building and
-  burning. The stock's composition is air-dry (15% water), and the stock does **not** count its
-  bound water in `MaterialWater`, so the conversion must book the water consistently (see the
-  D40 row and `materials.rs`).
-- **Tests:** converting a seasoned log moves exactly its dry mass and carbon into the stock; the
-  audit closes across the conversion; burning seasoned wood books the same carbon as before.
+A stored log that has dried to the stock's air-dry moisture (15% wet basis, 0.176 kg per kg
+dry) becomes `Material::Wood` with its carbon exact (`MaterialLedger::season_stored_logs`,
+every hour after drying). The stock's wood carries its bound water outside the water books, so
+the log's last water is booked to the air at that moment rather than when the wood burns
+(D40). Test: `tests/island_timber_drying.rs::a_seasoned_stored_log_joins_the_wood_stock`.
 
 ### 1c. Splitting, the crosscut saw, rigging and routes
 

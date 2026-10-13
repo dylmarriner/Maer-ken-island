@@ -940,6 +940,7 @@ impl IslandLife {
             cr.min(self.domain.rows(DomainLevel::Coarse) - 1),
             cc.min(self.domain.cols(DomainLevel::Coarse) - 1),
         );
+        self.dry_logs(cr, cc)?;
         let toa = *self.physical.insolation.toa_w_m2.get(cr, cc);
         let cloud = (self.physical.weather.precipitation.get(cr, cc) / 5.0).clamp(0.0, 1.0);
         let solar_kw: f64 = self
@@ -1857,6 +1858,32 @@ impl IslandLife {
     /// Lay the soil down under every land cell at RothC's steady state for
     /// its production (`super::soil`, D43). Its temperature modifier is the
     /// cell's year-average of RothC's monthly factor over the climatology.
+    /// An hour of the estate's air on every log (D40): the air temperature
+    /// now (the day's mean and the hour's departure from it) and its
+    /// humidity at the estate's coarse cell `(cr, cc)`.
+    fn dry_logs(&mut self, cr: usize, cc: usize) -> Result<(), IslandLifeError> {
+        if self.materials.logs().next().is_none() {
+            return Ok(());
+        }
+        let drying = super::drying::WoodDrying::from_reference(self.labour.library())
+            .map_err(|e| IslandLifeError::Labour(LabourError::MissingReference(e)))?;
+        let t_k = self.physical.climate.surface_temperature.get(cr, cc)
+            + self.physical.diurnal_offset_k.get(cr, cc);
+        let rh = super::weather::relative_humidity_at(
+            &self.canon,
+            &self.physical.weather,
+            *self.physical.climate.surface_temperature.get(cr, cc),
+            cr,
+            cc,
+        );
+        let dt_s = self.scenario.cadences.weather_ocean_seconds as f64;
+        self.audited(|life, ledger| {
+            life.materials
+                .dry_logs(&drying, t_k - 273.15, rh, dt_s, ledger);
+            life.materials.season_stored_logs(ledger);
+        })
+    }
+
     fn install_soil(&mut self) -> Result<(), IslandLifeError> {
         let (params, factor) = soil_for(&self.domain, &self.physical, &self.ecology, &self.labour)?;
         self.ecology.install_soil(params, factor);

@@ -8,6 +8,7 @@ pub mod commands;
 pub mod create_human;
 pub mod deep_time;
 pub mod deposits;
+pub mod drying;
 pub mod ecology;
 pub mod edge;
 pub mod energy;

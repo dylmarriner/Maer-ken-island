@@ -260,7 +260,7 @@ cost the resting baseline (D22).
   the exhaustive `node_kind_for_resource` and the estate's axe, crosscut saw and gold pan exist),
   Task 9 Step 6 (Gate 3, closed 2026-10-13). Durations: felling and hauling are timed; every other action still
   takes one tick (D9).
-- Felled timber does not dry yet, so it never becomes usable building or fuel wood (D40).
+- Felled timber dries in the air and, once air-dry in the store, joins the wood stock for building and burning (2026-10-14, `regional/drying.rs`, D40). Splitting, the two-person crosscut and rigging are still untimed (§1c).
 - **Phase 4 Task 2b, the deep-time spin-up, is done** (2026-10-14): before the founders
   arrive, `regional/deep_time.rs` runs the plants, grazers and RothC soil monthly for the
   scenario's 1,000 local years on each cell's climatology, cached under
