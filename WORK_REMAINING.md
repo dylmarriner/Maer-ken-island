@@ -56,7 +56,7 @@ this list holds the current state. The evidence for what is *done* is in
 | Climate | D38: driest tenth too dry | Open | Diagnosis |
 | Climate | D29: energy audited per module | Open | End-to-end energy ledger |
 | App | Phase 5 Tasks 3-8 | Partly done | See below; one owner pick (portraits) |
-| Gates | Gate 1, 2, 3 owner reviews | Open | Owner |
+| Gates | Gate 1, 2, 3 owner reviews | **Closed** (owner, 2026-10-13) | — |
 | Upstream | PRs for every divergence in `UPSTREAM.md` | Open | Owner's upstream access |
 | Realism | R0-R10: humans, work and the living world replicate Earth (section 8) | R1 in progress | Engineering and sourcing |
 | CI | Nightly slow job | Check | See Housekeeping |
@@ -154,7 +154,7 @@ it into pieces they can lift) or on foot. The log is stored green and stays gree
   coasts, deposits never regenerate, a pan is needed to pan, smelting yields gold in proportion
   to grade, deterministic ids).
 - **Then:** record the enums, tool map and every abundance source in `UPSTREAM.md`; re-render
-  `island_preview life` so `resources.png` shows the nodes (Gate 3 needs it).
+  `island_preview life` so `resources.png` shows the nodes.
 
 ### 2c. D9: most actions still take one tick
 
@@ -361,11 +361,10 @@ page does not yet use the map.
 
 ## 7. Owner gates and upstream
 
-- **Gate 1:** the owner reviews the island (`docs/previews/phase1/`); the island is provisional
-  until then.
-- **Gate 2:** the weather previews (`docs/previews/phase2/`).
-- **Gate 3:** the estate plan and tree map (`docs/previews/phase3/estate_plan.png`,
-  `estate_trees.png`); `resources.png` needs Phase 3 Task 2 first.
+- **Gates 1, 2 and 3 are closed** (owner, 2026-10-13): the island, its weather and the estate
+  plan are the ones the project has been built on, and that is the approval. The island is no
+  longer provisional. Do not reopen them as blockers; `resources.png` is still re-rendered when
+  Phase 3 Task 2 lands, as a record rather than a gate.
 - **Upstream pull requests** for every divergence in `UPSTREAM.md` (Phase 0 items 4-7, Phase 0c's
   biology, and the 2026-10-12 human-runtime changes listed there). The owner kept the pin at
   `7c05f0d` on 2026-10-09 because resyncing before these merge would mean reapplying them by
