@@ -965,6 +965,11 @@ fn light_the_island(mut commands: Commands) {
     });
     commands.spawn((
         Camera3d::default(),
+        // Bevy's default, TonyMcMapface, reads a KTX2 lookup table, and the
+        // KTX2 loader is left out (see Cargo.toml). This one is computed
+        // in the shader and is the closest of those in look: neutral in
+        // the darks and mids, brights desaturating.
+        bevy::core_pipeline::tonemapping::Tonemapping::SomewhatBoringDisplayTransform,
         Transform::from_xyz(0.0, 200.0, 240.0).looking_at(Vec3::ZERO, Vec3::Y),
     ));
 }

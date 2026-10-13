@@ -53,9 +53,12 @@ features = [
   "bevy_state",
   "bevy_log",
   "x11",
-  "tonemapping_luts",
-  "ktx2",
-  "zstd_rust",
+  # No `ktx2` and no `tonemapping_luts` (which turns `ktx2` on): KTX2 is
+  # the only format bevy_image decodes zstd for, and its zstd decoder,
+  # ruzstd 0.8, has a decompression bomb (RUSTSEC-2026-0344) that no Bevy
+  # release can take the fix for yet. Without the loader no asset pack,
+  # bundled or pointed at with --assets, reaches it. The camera uses a
+  # tonemapper that needs no lookup tables instead (`main.rs`).
   "png",
   "multi_threaded",
 ]
