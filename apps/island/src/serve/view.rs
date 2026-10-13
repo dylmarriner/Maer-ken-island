@@ -9,8 +9,9 @@
 //! still served alongside for anyone who wants it.
 
 use crate::population::HumanSummary;
-use mk_core::human::{BiologicalSex, Generation, Locality};
+use mk_core::human::{BiologicalSex, Generation, HumanStatus, Locality};
 use mk_engine::humans::needs::SurvivalStatus;
+use mk_engine::humans::thought::generate_thought;
 use mk_engine::humans::HumanBeing;
 use serde::Serialize;
 
@@ -183,6 +184,79 @@ fn emotions_are_at_rest(human: &HumanBeing) -> bool {
     standout_emotions(human, 1)
         .first()
         .is_none_or(|(_, level, baseline)| (level - baseline).abs() < 0.001)
+}
+
+/// `EatFood` as "Eat food".
+fn spaced(name: &str) -> String {
+    let mut out = String::with_capacity(name.len() + 4);
+    for (i, c) in name.chars().enumerate() {
+        if c.is_uppercase() && i > 0 {
+            out.push(' ');
+            out.extend(c.to_lowercase());
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
+/// Their parents and children, by whoever the island has a record of.
+///
+/// Separate from [`sections`] because it needs the rest of the
+/// population: a person carries their parents' ids, not their parents,
+/// and nobody carries a list of their children.
+pub fn family_section(human: &HumanBeing, everyone: &[&HumanBeing]) -> Section {
+    let alive = |h: &HumanBeing| matches!(h.profile.status, HumanStatus::Alive);
+    let who = |id: &str| {
+        everyone.iter().find(|h| h.agent_id() == id).map_or_else(
+            || format!("{id} (no record on the island)"),
+            |h| {
+                if alive(h) {
+                    id.to_string()
+                } else {
+                    format!("{id} (dead)")
+                }
+            },
+        )
+    };
+    let (father, mother) = match human.parent_agent_ids() {
+        Some((father, mother)) => (who(&father), who(&mother)),
+        None => {
+            let founder = "None: they came to the island, they were not born on it".to_string();
+            (founder.clone(), founder)
+        }
+    };
+    let children: Vec<String> = everyone
+        .iter()
+        .filter(|h| {
+            h.parent_agent_ids()
+                .is_some_and(|(f, m)| f == human.agent_id() || m == human.agent_id())
+        })
+        .map(|h| {
+            if alive(h) {
+                h.agent_id().to_string()
+            } else {
+                format!("{} (dead)", h.agent_id())
+            }
+        })
+        .collect();
+    section(
+        "family",
+        "Family",
+        "Their parents and their children, as the island records them.",
+        vec![
+            text("Father", father),
+            text("Mother", mother),
+            text(
+                "Children",
+                if children.is_empty() {
+                    "None".to_string()
+                } else {
+                    children.join(", ")
+                },
+            ),
+        ],
+    )
 }
 
 /// The sections the People page shows for one person, in reading order.
@@ -381,7 +455,7 @@ pub fn sections(human: &HumanBeing, summary: &HumanSummary, folder: Option<&str>
             vec![noted(
                 "At rest",
                 "Nothing stirring",
-                "Every emotion sits exactly on this person's baseline. Nothing has happened to them yet, because time is not running.",
+                "Every emotion sits exactly on this person's own baseline: nothing they have met has moved one away from it.",
             )]
         } else {
         standout_emotions(human, 6)
@@ -420,6 +494,55 @@ pub fn sections(human: &HumanBeing, summary: &HumanSummary, folder: Option<&str>
             scale("Attention fatigue", attention.attention_fatigue, ""),
             scale("Flow", attention.flow, "Absorbed in what they are doing."),
             scale("Distractibility", attention.distractibility, ""),
+        ],
+    ));
+
+    let doing = human.economy_action.kind;
+    let learned = human
+        .autonomous_mind
+        .preferences
+        .iter()
+        .find(|preference| preference.action == doing)
+        .map(|preference| preference.value);
+    sections.push(section(
+        "choosing",
+        "What they are doing",
+        "What their own choice settled on, what they make of it, and what they have learned from choosing.",
+        vec![
+            noted(
+                "Thinking",
+                generate_thought(human),
+                "Their inner speech this hour, put together from their own state.",
+            ),
+            text("Doing", spaced(&format!("{doing:?}"))),
+            noted(
+                "Last choice",
+                if human.last_action_success {
+                    "Went as meant"
+                } else {
+                    "Did not come off"
+                },
+                "Whether the last thing they chose to do succeeded.",
+            ),
+            noted(
+                "Worth of this, to them",
+                learned.map_or_else(
+                    || "Not yet learned".to_string(),
+                    // A learned zero is "nothing either way", not "-0.00".
+                    |v| if v.abs() < 0.005 { "0.00".to_string() } else { format!("{v:+.2}") },
+                ),
+                "What they have come to expect doing this brings, learned from how it went before.",
+            ),
+            noted(
+                "Reward so far",
+                format!("{:.1}", human.autonomous_mind.total_reward),
+                "Everything their choices have brought them, summed.",
+            ),
+            noted(
+                "Choices remembered",
+                human.autonomous_mind.experiences.len().to_string(),
+                "Recent choices and how they went, which their learning draws on.",
+            ),
         ],
     ));
 
@@ -644,5 +767,84 @@ mod tests {
         let standouts = standout_emotions(&human, 6);
         assert_eq!(standouts[0].0, "Awe");
         assert_eq!(standouts.len(), 6);
+    }
+
+    #[test]
+    fn they_are_seen_choosing_with_a_thought_of_their_own() {
+        let (population, id) = founder();
+        let human = population.get(&id).unwrap();
+        let summary = summarize(human);
+        let all = sections(human, &summary, None);
+        let choosing = all
+            .iter()
+            .find(|s| s.id == "choosing")
+            .expect("a section on what they are doing");
+        let value = |label: &str| {
+            choosing
+                .fields
+                .iter()
+                .find(|f| f.label == label)
+                .unwrap_or_else(|| panic!("no {label}"))
+                .value
+                .clone()
+        };
+        assert_eq!(value("Thinking"), generate_thought(human));
+        assert!(!value("Doing").is_empty());
+        assert_eq!(
+            value("Choices remembered"),
+            human.autonomous_mind.experiences.len().to_string()
+        );
+    }
+
+    #[test]
+    fn a_founder_has_no_parents_on_the_island_and_a_child_names_theirs() {
+        let (population, id) = founder();
+        let founder = population.get(&id).unwrap();
+        let everyone: Vec<&HumanBeing> = population.system().registry.iter().collect();
+        let family = family_section(founder, &everyone);
+        assert_eq!(family.id, "family");
+        assert!(
+            family.fields[0].value.starts_with("None"),
+            "{:?}",
+            family.fields
+        );
+        assert_eq!(family.fields[2].value, "None");
+
+        // A child of the two founders, recorded the way a birth records
+        // one (as upstream's own tests build a child).
+        let mut child = HumanBeing::new("Gem-DK-1".to_string(), BiologicalSex::Female);
+        child.profile.canonical_schema = Some(
+            mk_core::human::schema::HumanSchema::canonical_minimal(child.agent_id()),
+        );
+        child
+            .profile
+            .canonical_schema
+            .as_mut()
+            .unwrap()
+            .reproductive_systems
+            .genetics_system
+            .birth_records
+            .push(mk_core::human::schema::BirthRecordSchema {
+                birth_id: "birth_Gem-DK-1".to_string(),
+                genotype_id: "genotype_Gem-DK-1".to_string(),
+                father_id: "Gem-D".to_string(),
+                mother_id: "Gem-K".to_string(),
+                birth_timestamp: "tick-0".to_string(),
+                agent_id: "Gem-DK-1".to_string(),
+                mutations: vec![],
+            });
+        let mut everyone = everyone;
+        everyone.push(&child);
+        let theirs = family_section(&child, &everyone);
+        assert_eq!(theirs.fields[0].value, "Gem-D");
+        assert_eq!(theirs.fields[1].value, "Gem-K");
+        let fathers = family_section(founder, &everyone);
+        assert_eq!(fathers.fields[2].value, "Gem-DK-1");
+    }
+
+    #[test]
+    fn an_action_name_is_said_in_words() {
+        assert_eq!(spaced("EatFood"), "Eat food");
+        assert_eq!(spaced("Rest"), "Rest");
     }
 }
