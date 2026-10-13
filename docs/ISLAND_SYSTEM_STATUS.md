@@ -1,7 +1,8 @@
 # Island system status
 
-Updated 2026-10-09. This records what is implemented, measured and verified, and the known
-fidelity limits. The project is **not complete**: see "Not done".
+Updated 2026-10-13. This records what is implemented, measured and verified, and the known
+fidelity limits. The project is **not complete**: see "Not done", and `WORK_REMAINING.md` at the
+repository root for every open item with what it needs. `HANDOFF.md` is the front door.
 
 The island stopped being one program on 2026-10-09. It is now a backend that simulates and
 serves, and frontends that read it: a web dashboard that can be hosted on any machine, and a
@@ -64,9 +65,9 @@ The combined island (without persistence, the scheduler, a larger population, th
 ## Verification commands
 
     cargo fmt --all -- --check
-    cargo clippy --workspace --all-targets -- -D warnings
-    cargo test --workspace --release --no-fail-fast
-    cargo test --workspace --release --no-fail-fast -- --ignored slow_
+    cargo clippy --workspace --exclude island_ui --all-targets -- -D warnings
+    cargo test --workspace --exclude island_ui --no-fail-fast
+    cargo test --workspace --exclude island_ui --release --no-fail-fast -- --ignored slow_
 
     cd services/computer-service && npm ci && npm test
     for f in apps/island/static/*.js; do cp "$f" /tmp/x.mjs && node --check /tmp/x.mjs; done
@@ -82,9 +83,11 @@ incremental compilation on). On a machine with a small disk, `CARGO_INCREMENTAL=
 `CARGO_PROFILE_DEV_DEBUG=0` keep it to a fraction of that. With Bevy in the tree that matters
 more than it did: a debug build of this workspace filled this container's disk once.
 
-The last full-workspace run was **1,226 passing, 0 failing, 22 ignored, across 88 binaries**
-(2026-10-08, commit `94b97b1`), with `cargo fmt --all -- --check` and
-`cargo clippy --workspace --all-targets -- -D warnings` clean.
+The last full-workspace run recorded here was **1,226 passing, 0 failing, 22 ignored, across 88
+binaries** (2026-10-08, commit `94b97b1`). Since then CI runs the fast tier on every push: on
+2026-10-12 every job (fmt, clippy, fast tests, the desktop application, the computer service,
+the web dashboard, the dependency audit) passed on `7324356`, the head merged to `main` as
+`05fd6e5`. The week digest was re-pinned on that work after the week's audit passed locally.
 
 Run it with `--no-fail-fast`. Without it cargo stops at the first failing binary, and the run
 before this one reported "50 passed" across four binaries — a partial result that reads exactly
@@ -182,12 +185,11 @@ depend on how many humans it holds, so giving 200 humans 100 steps while 5,000 g
 that fixed cost over 25x fewer people — measured, it put the 200-human figure at 84 us against
 its usual 17-25 and made the test compare two different things.
 
-CI has not run any of it: every
-job since 2026-10-06 completes in 1-4 seconds with `runner_id: 0`, an empty `runner_name` and no
-`steps` array — no runner is ever assigned, so nothing executes to pass or fail, and `main` is
-red the same way on a commit that passed three times before. The repository is private, so
-Actions minutes are billable, and that signature is what an exhausted allowance or spending
-limit looks like; it is the first thing to check. Until it is, every figure here is local.
+CI runs again. Between 2026-10-06 and 2026-10-09 every job completed in 1-4 seconds with no
+runner assigned (the signature of an exhausted Actions allowance on a private repository). That
+has cleared: the repository is now public, the jobs run, and they passed on 2026-10-12 as above. The nightly slow job runs `--workspace` without `--exclude island_ui`
+and without the desktop job's ALSA packages, so if it fails at build time, that is the first
+thing to check (`WORK_REMAINING.md`, Housekeeping).
 
 ## Known fidelity limits
 
@@ -195,15 +197,26 @@ Every known departure from reality is in `docs/island/DEVIATIONS.md` (D1-D40). T
 ones: the driest tenth of the island gets ~320 mm of rain a year against New Zealand's driest
 basin's 360 (D38); no sea/land breezes, and the coastal damping of the day-night range is observed rather than carried (D3); storm structure is parametric (D4); river channels have no
 in-channel storage (D28); the regional tick audits tidal heat only (D29); production ignores soil
-nutrients (D31); every human action still takes exactly one
-tick whatever it is, and none of them uses a machine (D9); the actions with no Compendium row
+nutrients (D31); every human action but felling and hauling
+timber still takes exactly one tick (D9); felled wood never dries (D40); the hydro plant never
+wears (D39); the actions with no Compendium row
 cost the resting baseline (D22).
 
 ## Not done
 
-- Phase 3 Task 1b (island-scale species) and Tasks 2 and 9 (and the economy/lifecycle wiring of Tasks 3 and 3b): materials and resources, physical
-  materials, time and energy of actions, acceptance.
-- Phase 4 is **done**: world composition, the cadence scheduler, the island snapshot, a folder
+`WORK_REMAINING.md` is the full list with what each item needs; this section is the summary.
+
+- Phase 3: Task 1b (island-scale species; fauna is absent), Task 2 (every resource and material:
+  the catalogue, placers and ironsand, the new tools and recipes, `regional/resources.rs`; only
+  the exhaustive `node_kind_for_resource` and the estate's axe, crosscut saw and gold pan exist),
+  Task 9 Step 6 (Gate 3). Durations: felling and hauling are timed; every other action still
+  takes one tick (D9).
+- Felled timber does not dry yet, so it never becomes usable building or fuel wood (D40).
+- **Phase 4 Task 2b, the deep-time spin-up, is not started**: no `regional/deep_time.rs`, no
+  `IslandWorldState::spin_up`, no cache. The island starts from its first settled orbit rather
+  than from centuries of soils and forest. This page previously called Phase 4 done without
+  that exception.
+- The rest of Phase 4 is **done**: world composition, the cadence scheduler, the island snapshot, a folder
   per human, external commands and replay, operator interventions, the headless runner, and the
   dashboard with a world behind it. **The map it lacked is drawn, and it is clickable**:
   `/api/map.png` serves the elevation render `island_preview` already made for the headless
@@ -259,7 +272,9 @@ cost the resting baseline (D22).
   environmental flow, Moody's pipe roughness with Swamee-Jain friction, BS 215 conductor
   resistances, AS/NZS 3000's 5% voltage drop and IEC 60038's voltages. Still to do: Task 1's
   petroleum, refinery, gas, staffing, wage and household-demand tables (with Tasks 4-8, which use
-  them), the plant's wear and maintenance (Task 6, D39), and Tasks 4-9.
+  them), the plant's wear and maintenance (Task 6, D39), and Tasks 4-9 (oil and gas, the
+  refinery and depot, jobs and trades, money and enterprises, food and timber chains, the town,
+  their dashboard pages and the year's acceptance). None of those is started.
 - Phase 5, partly. `island-ui` exists, builds on Bevy 0.19 with no system graphics packages
   (9 min 19 s from cold, 392 crates), reads an island remotely or embedded through one code
   path, and **draws it** -- verified by a photographed frame in CI rather than by argument.
@@ -288,5 +303,5 @@ cost the resting baseline (D22).
   foundry panel, the resolution gate and its benchmark, `island_bench`, the allocation-bound
   test, retiring `apps/island_humans`, and the planetary-only pruning. None of those is
   blocked; none is done.
-- Owner reviews: Gate 1 (island) and Gate 2 (weather previews).
+- Owner reviews: Gate 1 (island), Gate 2 (weather previews) and Gate 3 (estate plan and trees).
 - Upstream pull requests for every divergence in `UPSTREAM.md`.

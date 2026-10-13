@@ -1,12 +1,14 @@
 # Handoff: Maer-Ken Island
 
-Written 2026-10-12, at the merge of PR #6 into `main`. This folder is for whoever picks the
-island up next, human or agent. Read it in this order:
+Written 2026-10-12 at the merge of PR #6 into `main`; updated 2026-10-13. The front door is now
+[`HANDOFF.md`](../../HANDOFF.md) at the repository root, and the open work is in
+[`WORK_REMAINING.md`](../../WORK_REMAINING.md). This folder holds the detail behind them. Read it
+in this order:
 
 1. **[STATE_OF_THE_ISLAND.md](STATE_OF_THE_ISLAND.md)**: what exists, how the simulation is put
    together, and where each system lives in the code.
-2. **[OPEN_WORK.md](OPEN_WORK.md)**: what is not done, in priority order, with what each item
-   needs (sources, decisions, files).
+2. **[`WORK_REMAINING.md`](../../WORK_REMAINING.md)**: what is not done, with what each item
+   needs (sources, decisions, files, tests). `OPEN_WORK.md` here now points to it.
 3. **[WORKING_PRACTICES.md](WORKING_PRACTICES.md)**: the rules the project holds itself to
    (realism, reference data, digests, CI), the environment's traps, and the owner's standing
    decisions.
@@ -25,7 +27,8 @@ island up next, human or agent. Read it in this order:
 | `docs/superpowers/specs/2026-10-01-maer-ken-island-regional-world-design.md` | The design spec. |
 | `docs/island/DEPLOYMENT.md`, `RENDER_STACK.md`, `PLANETARY_DEPENDENCIES.md` | Running it apart, the renderer, and what the island borrows from the planetary engine. |
 | `UPSTREAM.md` | What is ported from upstream Maer-Ken, and how the island adapts it. |
-| `docs/TESTING.md` | The test tiers. |
+| `docs/TESTING.md` | The test tiers, and every slow and deep test. |
+| `HANDOFF.md`, `WORK_REMAINING.md` (root) | The front door, and the open work with what each item needs. |
 
 ## Thirty-second orientation
 
@@ -47,10 +50,10 @@ island up next, human or agent. Read it in this order:
 ```bash
 cargo fmt --all -- --check
 cargo clippy --workspace --exclude island_ui --all-targets -- -D warnings
-cargo test --release --workspace --exclude island_ui --no-fail-fast          # fast tier
+cargo test --workspace --exclude island_ui --no-fail-fast                     # fast tier
 cargo test --release -p mk_engine --test island_life_acceptance -- --ignored   # the week audit
 cargo test --release -p mk_engine --test regional_physical_coupling -- --ignored  # the year
-cargo test --workspace --release --no-fail-fast -- --ignored slow_            # whole slow tier
+cargo test --workspace --exclude island_ui --release -- --ignored slow_       # whole slow tier
 ```
 
 `island_ui` (Bevy) needs ALSA and graphics headers. CI builds it in its own job; a plain cloud

@@ -2,6 +2,7 @@
 name = "island"
 version = "0.1.0"
 edition = "2021"
+license = "LicenseRef-All-Rights-Reserved"
 description = "Maer-Ken Island: dashboard with the Human Creator"
 
 [[bin]]
