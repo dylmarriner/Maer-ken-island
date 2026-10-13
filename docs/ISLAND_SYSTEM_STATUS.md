@@ -319,8 +319,9 @@ cost the resting baseline (D22).
   cover is drawn paler because the stems' carbon has been taken out of it and put into the
   trees — the same carbon, counted once.
 
-  Still missing from a map proper: the Creator page does not use it yet, only the intervention
-  form.
+  The Creator page uses it too (2026-10-14): choosing "somewhere else on the island" shows the
+  island's elevation picture, and a click fills the row and column and says what the island
+  has there (land and its height, or sea and its depth, refused before it is sent).
 - Phase 4b: energy, industry, town, economy. **Hydro is built (Tasks 1-3); the rest is not.**
   The sources the 2026-10-08 entry here could not reach were fetched on 2026-10-12 through the
   Firecrawl connector and are in `fixtures/reference/industry/hydro.json`: ESHA 2004's turbine
