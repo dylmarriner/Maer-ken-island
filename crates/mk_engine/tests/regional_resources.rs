@@ -14,6 +14,7 @@ use mk_engine::regional::resources::{IslandResources, ResourceError, SecondaryMo
 use mk_island::{DomainLevel, IslandDomain, IslandProfile};
 
 struct Base {
+    canon: Arc<CanonLocked>,
     seed: [u8; 32],
     domain: IslandDomain,
     physical: RegionalPhysicalState,
@@ -38,6 +39,7 @@ fn base() -> &'static Base {
         let models = SecondaryModels::load_default().unwrap();
         let resources = IslandResources::survey(&physical, &domain, &seed, &models);
         Base {
+            canon,
             seed,
             domain,
             physical,
@@ -212,6 +214,23 @@ fn the_survey_is_a_pure_function_of_the_island() {
     for (i, s) in b.resources.sites().iter().enumerate() {
         assert_eq!(s.id as usize, i);
     }
+}
+
+#[test]
+fn the_sites_do_not_change_with_the_weather() {
+    // Rivers come from the island's year of flows, not from whatever the
+    // last step's discharge was, so a survey days later finds the same
+    // sites.
+    let b = base();
+    let mut later = b.physical.clone();
+    let day = 86_400;
+    for d in 1..=3u64 {
+        later
+            .step(&b.canon, &b.domain, b.seed, (d * day) as f64, d, day)
+            .unwrap();
+    }
+    let again = IslandResources::survey(&later, &b.domain, &b.seed, &b.models);
+    assert_eq!(again, b.resources);
 }
 
 #[test]

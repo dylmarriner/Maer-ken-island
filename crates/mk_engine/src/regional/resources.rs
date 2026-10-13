@@ -39,7 +39,7 @@ use mk_island::{DomainLevel, IslandDomain};
 
 use super::deposits::{normal, DepositKind, MineralDeposit};
 use super::geology::Lithology;
-use super::hydrology::{discharge_m3_s, Receiver, RIVER_MIN_DISCHARGE_M3_S};
+use super::hydrology::Receiver;
 use super::labour::{LabourError, LabourTable, LabourTool, TaskSpec};
 use super::physical::RegionalPhysicalState;
 use super::terrain::{hash01, terrain_key};
@@ -437,7 +437,7 @@ impl<'a> Channels<'a> {
     }
 
     fn is_river(&self, (r, c): (usize, usize)) -> bool {
-        discharge_m3_s(&self.physical.hydrology, self.domain, r, c) >= RIVER_MIN_DISCHARGE_M3_S
+        self.physical.river_flows.is_river(r * self.cols + c)
     }
 
     fn receiver(&self, (r, c): (usize, usize)) -> Receiver {
