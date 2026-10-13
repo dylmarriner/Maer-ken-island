@@ -38,7 +38,7 @@ this list holds the current state. The evidence for what is *done* is in
 |---|---|---|---|
 | Timber | Splitting, crosscut, rigging, routes (D40); drying and seasoning done 2026-10-14 | Open | Splitting and sawing rates |
 | Living world | Phase 3 Task 1b: species at island scale | Done (D55 open: upstream densities) | — |
-| Living world | Phase 3 Task 2: every resource and material, placers, recipes | Open (partly started) | Cited placer decay, shaft size, abundances |
+| Living world | Phase 3 Task 2: every resource and material, placers, recipes | Catalogue, mineral sites, gold placers, ironsand done (2026-10-14); biotic and animal nodes, gem placers, tools, recipes open | Cited diamond-placer grade, shaft depth and rate |
 | Living world | D9: actions take one tick | Open (felling, hauling done) | Cited durations per task |
 | Living world | D31: NPP ignores soil nutrients | Open | Regional soils model and data |
 | Runtime | Phase 4 Task 2b: deep-time spin-up | **Done** (2026-10-14) | — |
@@ -118,24 +118,24 @@ animal and fish resource nodes (§2b), which can now read the habitats.
 
 ### 2b. Phase 3 Task 2: every resource and material
 
-- **Now:** upstream's nine node kinds; `node_kind_for_resource` names every resource kind that has
-  no node yet (an exhaustive match was started); the estate's shed has an axe, a crosscut saw and
-  a gold pan. Nothing else from the task exists: no `materials/catalogue.rs`, no
-  `regional/resources.rs`, no placers.
-- **Needs (sources):** a cited downstream decay of placer-gold grade along a river; a cited
-  artisanal shaft size for hand mining; for every deposit, an abundance and grade source (the
-  Phase 1 deposits already carry their own). Densities and Mohs hardness per catalogue item
-  from a cited table.
-- **Files:** create `crates/mk_engine/src/materials/{mod.rs,catalogue.rs}`,
-  `crates/mk_engine/src/regional/resources.rs`
-  (`bootstrap_regional_resources(geophysics, ecology, physical, domain)`); modify
-  `resource_economy.rs` (`ResourceNodeKind`, `ToolKind` gaining `GoldPan`, `Sluice`, `Chisel`,
-  `LapidaryWheel`, `HuntingWeapon`, `FishingGear`, `Kiln`, `Crucible`, `Anvil`, `Drill`, recipes),
-  `agents/mod.rs` (`ItemKind`). Add, never rename, upstream variants.
-- **Tests:** `crates/mk_engine/tests/regional_resources.rs` and catalogue unit tests, as listed in
-  the plan's Task 2 Steps 1-2 (placers only downstream of a source, ironsand only on suitable
-  coasts, deposits never regenerate, a pan is needed to pan, smelting yields gold in proportion
-  to grade, deterministic ids).
+- **Done (2026-10-14):** the material catalogue (`materials/catalogue.rs`, densities and hardness
+  cited) and `regional/resources.rs`: every primary deposit as a site; placer gold below each
+  gold-bearing deposit where the river's gradient flattens (Orris & Bliss 1986, USGS model 39a,
+  read from the bulletin); ironsand at the mouths of rivers draining arc andesite (Christie et al.
+  2024, GNS 2024/62A); sites deplete and never refill; panning with a pan or sluice through the
+  labour model. The deposit models' medians and spreads now match the bulletin's figures (Fe skarn
+  50% Fe, phosphorite 330 Mt at 25% P2O5, placer gold 0.2 g/t were corrected), and a unit test
+  holds them to the pack. D56 records what the sites leave out.
+- **Left:**
+  - Diamond and gem placers below kimberlite and gem deposits: the bulletin's model 39d is
+    descriptive only (no grade-tonnage), so a cited diamond-placer grade is needed.
+  - Hand mining of primary ore: a cited artisanal shaft or adit depth and rate (refused by name
+    until then).
+  - Biotic nodes as views of cell biomass, animal and fish nodes from `regional/species.rs`
+    populations, salt pans and water sources.
+  - The new tools in `resource_economy.rs`, smelting and the other recipes, mass-balanced through
+    the material ledger.
+  - Serving the sites to the map and the founders' choices.
 - **Then:** record the enums, tool map and every abundance source in `UPSTREAM.md`; re-render
   `island_preview life` so `resources.png` shows the nodes.
 

@@ -225,6 +225,12 @@ impl FlowNetwork {
         self.order.len()
     }
 
+    /// Land cells (flat indices) from upstream to downstream: every cell
+    /// comes before the cell it drains into.
+    pub fn upstream_to_downstream(&self) -> impl Iterator<Item = usize> + '_ {
+        self.order.iter().map(|&i| i as usize)
+    }
+
     pub fn receiver_of(&self, row: usize, col: usize) -> Receiver {
         self.receiver[row * self.cols + col]
     }
