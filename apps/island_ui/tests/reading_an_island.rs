@@ -212,6 +212,45 @@ fn the_application_reads_an_island_and_has_enough_to_draw_it() {
             );
         }
     }
+
+    // Every space in the served layout becomes exactly one floor, under
+    // its own label and kind, and it lies inside a building's footprint;
+    // every thing stands on the estate patch (Phase 5 Task 3 Step 3).
+    let layout = island
+        .estate()
+        .expect("the island serves its estate layout");
+    let floors = island_ui::estate::rooms(layout);
+    assert_eq!(floors.len(), layout.spaces.len(), "one floor per space");
+    assert!(!layout.spaces.is_empty());
+    let inside = |r: &mk_island_api::Rect, x: f64, y: f64| {
+        x >= r.x0.min(r.x1) - 1e-6
+            && x <= r.x0.max(r.x1) + 1e-6
+            && y >= r.y0.min(r.y1) - 1e-6
+            && y <= r.y0.max(r.y1) + 1e-6
+    };
+    for (space, floor) in layout.spaces.iter().zip(&floors) {
+        assert_eq!((&floor.name, &floor.kind), (&space.label, &space.kind));
+        let (cx, cy) = (
+            (space.rect_m.x0 + space.rect_m.x1) / 2.0,
+            (space.rect_m.y0 + space.rect_m.y1) / 2.0,
+        );
+        assert!(
+            layout.buildings.iter().any(|b| inside(&b.rect_m, cx, cy)),
+            "{} ({}) is in no building",
+            space.label,
+            space.kind
+        );
+    }
+    let things = island_ui::estate::things(layout);
+    assert_eq!(things.len(), layout.items.len(), "one drawn thing per item");
+    for item in &layout.items {
+        let (x, y) = item.position_m;
+        assert!(
+            inside(&layout.patch, x, y),
+            "{} is off the estate",
+            item.name
+        );
+    }
 }
 
 #[test]
