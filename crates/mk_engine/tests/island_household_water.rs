@@ -69,7 +69,8 @@ fn the_house_draws_its_water_from_a_tank_on_its_own_roof() {
     // out is accounted for.
     assert!(after.stored_kg <= after.capacity_kg + 1e-6);
     let balance =
-        tank.stored_kg + (after.caught_kg - tank.caught_kg) - (after.used_kg - tank.used_kg);
+        tank.stored_kg + (after.caught_kg - tank.caught_kg) + (after.fetched_kg - tank.fetched_kg)
+            - (after.used_kg - tank.used_kg);
     assert!(
         (balance - after.stored_kg).abs() < 1e-6,
         "tank: started {} + caught {} - used {} = {} but holds {}",
@@ -98,5 +99,44 @@ fn the_house_draws_its_water_from_a_tank_on_its_own_roof() {
         life.state_digest(),
         digest,
         "the digest does not see the tank"
+    );
+}
+
+/// With the tank dry and no rain reaching it, a founder who wants a drink
+/// at home has to walk to water (realism R1b): the trip takes minutes, not
+/// a tick, and comes back with the jerrycans full for the tank.
+#[test]
+fn with_the_tank_dry_a_founder_walks_to_water_and_carries_it_home() {
+    let mut life = island();
+    {
+        let tank = life.household_water.as_mut().unwrap();
+        tank.stored_kg = 0.0;
+        tank.roof_area_m2 = 0.0;
+    }
+    let mut longest_trip_s: f64 = 0.0;
+    for _ in 0..(2 * 86_400 / 60) {
+        life.advance(60).unwrap();
+        for trip in life.water_trips.values() {
+            longest_trip_s = longest_trip_s.max(trip.worked_s);
+            assert!(trip.carry_kg <= 40.0 + 1e-9, "two 20 L cans hold 40 L");
+        }
+        if life.household_water.as_ref().unwrap().fetched_kg > 0.0 {
+            break;
+        }
+    }
+    let tank = life.household_water.as_ref().unwrap();
+    println!(
+        "longest trip seen {:.0} s; fetched {:.1} L; tank {:.1} L",
+        longest_trip_s, tank.fetched_kg, tank.stored_kg
+    );
+    assert!(
+        longest_trip_s >= 120.0,
+        "a trip to water took no time: {longest_trip_s} s"
+    );
+    assert!(tank.fetched_kg > 0.0, "nobody carried water home");
+    assert!(
+        tank.fetched_kg <= 40.0 * 10.0,
+        "{} L fetched",
+        tank.fetched_kg
     );
 }

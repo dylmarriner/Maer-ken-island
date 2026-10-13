@@ -1507,7 +1507,7 @@ async fn properties_economy_and_timeline_serve_what_the_island_really_holds() {
             // the two tables on the page do not disagree about one thing.
             let recorded = body["events"]
                 .as_array()
-                .and_then(|e| e.first())
+                .and_then(|e| e.iter().find(|e| e["kind"] == "Constructed"))
                 .expect("the economy recorded the construction");
             assert_eq!(recorded["subject"], "Wooden Shelter", "{body}");
             break;

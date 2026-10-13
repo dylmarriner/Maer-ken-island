@@ -101,7 +101,7 @@ Every number the model uses that describes the real world lives in a cited pack,
 
 | Pin | Where | Current value |
 |---|---|---|
-| The founders' week | `crates/mk_engine/tests/island_life_acceptance.rs` `WEEK_DIGEST` | `85511c3a…ba89` (re-pinned with the rainwater tank, R1) |
-| The planetary topology | `crates/mk_engine/tests/topology_hash_baseline.rs` | `766d5cd8…d497` (unchanged by the island) |
+| The founders' week | `crates/mk_engine/tests/island_life_acceptance.rs` `WEEK_DIGEST` | `3d268e8b…4338` (re-pinned with fetching water by hand, R1b) |
+| The planetary topology | `crates/mk_engine/tests/topology_hash_baseline.rs` | `e4ece246…73e2` (moved only by starter-shed data: the R1b jerrycans) |
 
 `WORKING_PRACTICES.md` says how and when to re-pin.

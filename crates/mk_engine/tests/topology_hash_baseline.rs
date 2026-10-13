@@ -12,8 +12,9 @@ use mk_engine::world_integration::WorldState;
 /// left it unchanged; re-pinned (2026-10-12) when the starter property's
 /// shed gained a felling axe, a crosscut saw and a gold pan and every human
 /// a `labour_met` field. Both are state the planetary world now carries,
-/// not a change to how it steps.
-const EXPECTED: &str = "766d5cd86f3eea358b470bcc0881767488db7c1fea06423b1d217d54f06fd497";
+/// not a change to how it steps. Re-pinned again (2026-10-13) when the shed
+/// gained two 20 L water jerrycans (R1b, UPSTREAM.md), likewise state only.
+const EXPECTED: &str = "e4ece246a21e726f63f1f5561eb3c2a039f8d38c1b503f1647395f6864ba73e2";
 
 #[test]
 fn ten_planetary_steps_hash_as_before_the_topology_refactor() {

@@ -126,6 +126,8 @@ pub struct StarterProperty {
 
 const HOUSE: u64 = 1;
 const SHED: u64 = 2;
+/// The household's water container, by the name the estate lists it under.
+pub const WATER_JERRYCAN: &str = "Water Jerrycan (20 L)";
 const WORKSHOP: u64 = 3;
 const ARMOURY: u64 = 4;
 const COMPUTER_ROOM: u64 = 5;
@@ -324,6 +326,17 @@ fn build_items(bedroom_owners: &[&str]) -> Vec<PropertyItem> {
             tool,
             SHED,
             Some("Forestry Tools"),
+        );
+    }
+    // Two 20 L jerrycans (IFRC's family size) for carrying water home when
+    // the rainwater tank runs dry: realism programme R1b, an island
+    // divergence recorded in UPSTREAM.md.
+    for _ in 0..2 {
+        b.push(
+            PropertyItemKind::ShedTool,
+            WATER_JERRYCAN,
+            SHED,
+            Some("Household Water"),
         );
     }
 

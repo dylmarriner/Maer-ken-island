@@ -86,10 +86,10 @@ cargo run -p island -- serve --scenario fixtures/island/default_scenario.json   
 ## Things that will bite you
 
 - **The week digest.** `WEEK_DIGEST` in `crates/mk_engine/tests/island_life_acceptance.rs`
-  (`85511c3a…ba89`) pins one simulated week. Any change to what the founders or their world do
+  (`3d268e8b…4338`) pins one simulated week. Any change to what the founders or their world do
   moves it. Re-pin only after the audit and the reference-pack checks pass, and say in the
   commit that behaviour changed.
-- **The planetary topology pin** (`766d5cd8…d497`, `tests/topology_hash_baseline.rs`) must not move
+- **The planetary topology pin** (`e4ece246…73e2`, `tests/topology_hash_baseline.rs`) must not move
   because of island work. Shared ocean and climate code is shared with the planet; that is why
   D25 needs an owner decision.
 - **Sources.** Never type a real-world value from memory. Fetch the source, transcribe it into the

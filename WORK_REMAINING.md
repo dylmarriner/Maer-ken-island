@@ -58,7 +58,7 @@ this list holds the current state. The evidence for what is *done* is in
 | App | Phase 5 Tasks 3-8 | Partly done | See below; one owner pick (portraits) |
 | Gates | Gate 1, 2, 3 owner reviews | **Closed** (owner, 2026-10-13) | — |
 | Upstream | PRs for every divergence in `UPSTREAM.md` | Open | Owner's upstream access |
-| Realism | R0-R10: humans, work and the living world replicate Earth (section 8) | R1 tank done; R1b next | Engineering and sourcing |
+| Realism | R0-R10: humans, work and the living world replicate Earth (section 8) | R1 done; R1b (fetching water by hand) done | Engineering and sourcing |
 | CI | Nightly slow job | Check | See Housekeeping |
 
 ---
@@ -329,7 +329,7 @@ Add to `fixtures/reference/industry/` (new packs alongside `hydro.json`), each v
 | Item | What is needed |
 |---|---|
 | **D3 (rest)**: sea and land breezes, katabatic winds | A diurnal wind solver on the coarse grid (land-sea temperature contrast driving an onshore/offshore flow; cold-air drainage downslope at night). The coastal damping of the day-night range is still the observed coastal/inland ratio; the land's range itself is already physical (Panwar & Kleidon 2022). |
-| **D25**: the SST season lags 1-2 months too long | Turbulent air-sea heat exchange in the mixed layer would shorten it. The ocean physics is shared with the planetary run, whose topology digest is pinned (`766d5cd8…d497`). **Owner decision:** change it regionally only, or change it in the shared code and re-pin the planet. |
+| **D25**: the SST season lags 1-2 months too long | Turbulent air-sea heat exchange in the mixed layer would shorten it. The ocean physics is shared with the planetary run, whose topology digest is pinned (`e4ece246…73e2`). **Owner decision:** change it regionally only, or change it in the shared code and re-pin the planet. |
 | **D4**: weather systems are parametric | No occlusion, no warm-front structure. A structural change to `synoptic.rs`; large. |
 | **D38**: the driest tenth gets ~320 mm/yr against NZ's driest basin at ~360 | Diagnose first: the vapour budget, the rain-shadow strength or the evaporation. |
 | **D29**: energy is audited per module | An end-to-end energy ledger across the coupled tick. |
@@ -404,7 +404,7 @@ Ordered by what most changes the founders' daily life:
 | # | Step | Research | State |
 |---|---|---|---|
 | R0 | Honest register: deviation rows for every mind and sense gap; book grazer faeces and deaths to detritus; remove or wire dead code | humans §1.11, earth §4 Step 0 | Open |
-| R1 | Water at home: a rainwater tank filled by simulated rain on the house roof, sized from the estate's own climate (ESR 2021 use, Harrison Grierson 2011 inflow model); people away from home drink where they find water; a dry tank means fetching by hand | work §3.2 | Tank done (PR #10, D42); **R1b** timed fetching by hand when dry: open |
+| R1 | Water at home: a rainwater tank filled by simulated rain on the house roof, sized from the estate's own climate (ESR 2021 use, Harrison Grierson 2011 inflow model); people away from home drink where they find water; a dry tank means fetching by hand | work §3.2 | Tank done (PR #10, D42); R1b fetching by hand with two 20 L jerrycans when dry done (PR #12) |
 | R2 | Mass-based carrying and real containers: load limits by body mass, pace and energy by load | work §3.1, §2.2 | Open |
 | R3 | An edible food base: edible fractions, foraging with a food store at home, seasonal and soil-limited plant production (D31) | earth Steps 1-2, work §3.3 | Open |
 | R4 | Firewood, drying (D40), fire and cooking | work §3.4, §2.5-2.6 | Open |
@@ -439,5 +439,5 @@ invertebrate densities, fire danger indices (see each report's "unsourced" secti
   push; the `dependency audit` CI job replaced it.
 - **Firecrawl credits ran out** on 2026-10-12. WebSearch and the TinyFish fetcher still work for
   sources; the container's own network blocks most hosts.
-- **Persist digests.** `WEEK_DIGEST` is `85511c3a…ba89`; the planetary topology pin is
-  `766d5cd8…d497`. Any change that moves either is a behaviour change and must say so.
+- **Persist digests.** `WEEK_DIGEST` is `3d268e8b…4338`; the planetary topology pin is
+  `e4ece246…73e2`. Any change that moves either is a behaviour change and must say so.
