@@ -32,9 +32,9 @@ pub use error::ClientError;
 pub use mk_island_api as api;
 
 use mk_island_api::{
-    Accepted, Capabilities, Cell, ControlRequest, Conversation, CreateHumanRequest, Economy,
-    InterventionRequest, Outcome, Property, Refusal, ServerVersion, Terrain, TimelineEntry, Trees,
-    World,
+    Accepted, Capabilities, Cell, ControlRequest, Conversation, CreateHumanRequest, CreatorOptions,
+    Economy, InterventionRequest, Outcome, Property, Refusal, ServerVersion, Terrain,
+    TimelineEntry, Trees, World,
 };
 use std::time::Duration;
 
@@ -163,6 +163,12 @@ impl IslandClient {
     /// frontend reads the parts it shows.
     pub fn human(&self, agent_id: &str) -> Result<serde_json::Value, ClientError> {
         self.json(&format!("/api/world/humans/{agent_id}"))
+    }
+
+    /// What a creation form may offer: the lists and limits the creator
+    /// accepts.
+    pub fn creator_options(&self) -> Result<CreatorOptions, ClientError> {
+        self.json("/api/creator/options")
     }
 
     /// The estate as geometry: what stands where, in metres.

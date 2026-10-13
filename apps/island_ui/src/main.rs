@@ -242,6 +242,264 @@ struct Panels {
     picked: Option<estate::Picked>,
     /// The chosen person, as the backend last described them.
     person: PersonReading,
+    /// The foundry window: making somebody new.
+    foundry: Foundry,
+}
+
+/// The foundry's state across frames. The creator's options are asked
+/// for once, when the window first opens; a creation is followed on a
+/// thread of its own until the island says what became of it.
+#[derive(Default)]
+struct Foundry {
+    open: bool,
+    options: Slot<Result<mk_island_api::CreatorOptions, String>>,
+    asked_for_options: bool,
+    form: Option<island_ui::foundry::Form>,
+    following: Slot<Followed>,
+    /// The person last created, once selected, so they are chosen once and
+    /// not again every frame after.
+    selected_once: Option<String>,
+}
+
+/// A value another thread fills in.
+type Slot<T> = std::sync::Arc<std::sync::Mutex<Option<T>>>;
+
+/// What became of a creation, in words, and who it made if it made anyone.
+#[derive(Clone)]
+struct Followed {
+    said: String,
+    created: Option<String>,
+}
+
+/// Follow command `id` until the island has applied or refused it.
+fn follow_creation(island: &Island, id: u64, slot: Slot<Followed>) {
+    let client = island.client().clone();
+    std::thread::spawn(move || {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+        let said = loop {
+            match client.outcome(id) {
+                Ok(mk_island_api::Outcome::Queued) if std::time::Instant::now() < deadline => {
+                    std::thread::sleep(std::time::Duration::from_millis(200));
+                }
+                Ok(mk_island_api::Outcome::Queued) => {
+                    break Followed {
+                        said: format!(
+                            "Command {id} is still queued after a minute; the island may be busy."
+                        ),
+                        created: None,
+                    };
+                }
+                Ok(mk_island_api::Outcome::Created {
+                    agent_id, space, ..
+                }) => {
+                    break Followed {
+                        said: match space {
+                            Some(space) => format!("{agent_id} exists, in the {space}."),
+                            None => format!("{agent_id} exists."),
+                        },
+                        created: Some(agent_id),
+                    };
+                }
+                Ok(mk_island_api::Outcome::Refused { problems }) => {
+                    break Followed {
+                        said: format!("The island refused: {}", problems.join(" ")),
+                        created: None,
+                    };
+                }
+                Ok(other) => {
+                    break Followed {
+                        said: format!("The island answered {other:?}."),
+                        created: None,
+                    };
+                }
+                Err(e) => {
+                    break Followed {
+                        said: format!("Following command {id} failed: {e}"),
+                        created: None,
+                    };
+                }
+            }
+        };
+        if let Ok(mut slot) = slot.lock() {
+            *slot = Some(said);
+        }
+    });
+}
+
+/// The foundry window: the creator's request, field for field.
+fn foundry_window(
+    ctx: &egui::Context,
+    island: &Island,
+    snapshot: &Snapshot,
+    panels: &mut Panels,
+    cell_under_view: Option<(usize, usize)>,
+) {
+    use island_ui::foundry::{Form, Place};
+    let foundry = &mut panels.foundry;
+    if !foundry.open {
+        return;
+    }
+    if !foundry.asked_for_options {
+        foundry.asked_for_options = true;
+        let (client, slot) = (island.client().clone(), foundry.options.clone());
+        std::thread::spawn(move || {
+            let got = client.creator_options().map_err(|e| e.to_string());
+            if let Ok(mut slot) = slot.lock() {
+                *slot = Some(got);
+            }
+        });
+    }
+    let options = foundry.options.lock().ok().and_then(|o| o.clone());
+    let mut open = foundry.open;
+    let mut chosen: Option<String> = None;
+    egui::Window::new("Create somebody")
+        .open(&mut open)
+        .default_width(340.0)
+        .show(ctx, |ui| {
+            let options = match options {
+                None => {
+                    ui.label("Asking the island what the creator offers…");
+                    return;
+                }
+                Some(Err(e)) => {
+                    ui.colored_label(egui::Color32::from_rgb(220, 120, 120), e);
+                    return;
+                }
+                Some(Ok(options)) => options,
+            };
+            let form = foundry.form.get_or_insert_with(|| Form::new(&options));
+            ui.small(
+                "Everything else about them -- temperament, neurotype, the rest -- is worked out \
+                 when they are made, and the inspector shows it once they exist.",
+            );
+            egui::Grid::new("foundry").num_columns(2).show(ui, |ui| {
+                ui.label("Name");
+                ui.text_edit_singleline(&mut form.name);
+                ui.end_row();
+                let choose = |ui: &mut Ui, label: &str, value: &mut String, list: &[String]| {
+                    ui.label(label);
+                    egui::ComboBox::from_id_salt(label)
+                        .selected_text(value.clone())
+                        .show_ui(ui, |ui| {
+                            for item in list {
+                                ui.selectable_value(value, item.clone(), item);
+                            }
+                        });
+                    ui.end_row();
+                };
+                choose(ui, "Sex", &mut form.biological_sex, &options.biological_sex);
+                ui.label("Born");
+                ui.horizontal(|ui| {
+                    ui.add(
+                        egui::TextEdit::singleline(&mut form.birth_local)
+                            .hint_text("1999-09-09T09:09")
+                            .desired_width(130.0),
+                    );
+                    ui.add(
+                        egui::TextEdit::singleline(&mut form.birth_offset)
+                            .hint_text("+13:00")
+                            .desired_width(50.0),
+                    );
+                });
+                ui.end_row();
+                ui.label("Age, years");
+                ui.add(
+                    egui::DragValue::new(&mut form.age_years).range(0.0..=options.max_age_years),
+                );
+                ui.end_row();
+                ui.label("Height, cm");
+                ui.add(
+                    egui::DragValue::new(&mut form.height_cm)
+                        .range(options.height_cm.0..=options.height_cm.1),
+                );
+                ui.end_row();
+                choose(ui, "Build", &mut form.build, &options.build);
+                choose(ui, "Hair", &mut form.hair_color, &options.hair_color);
+                choose(ui, "Eyes", &mut form.eye_color, &options.eye_color);
+                choose(ui, "Skin", &mut form.skin_tone, &options.skin_tone);
+            });
+
+            ui.separator();
+            ui.label("Where");
+            let spaces = &snapshot.world.estate.spaces;
+            ui.horizontal_wrapped(|ui| {
+                for space in spaces {
+                    let here = form.place == Some(Place::Space(space.id));
+                    if ui.selectable_label(here, &space.label).clicked() {
+                        form.place = Some(Place::Space(space.id));
+                    }
+                }
+            });
+            ui.horizontal(|ui| {
+                let on_cell = matches!(form.place, Some(Place::Cell(..)));
+                let clicked = ui
+                    .add_enabled_ui(cell_under_view.is_some(), |ui| {
+                        ui.selectable_label(on_cell, "The cell under the view")
+                    })
+                    .inner
+                    .clicked();
+                if clicked {
+                    if let Some((row, col)) = cell_under_view {
+                        form.place = Some(Place::Cell(row, col));
+                    }
+                }
+                if let Some(Place::Cell(row, col)) = form.place {
+                    ui.label(format!("{row}, {col}"));
+                }
+            });
+
+            ui.separator();
+            match form.request(&options) {
+                Err(problems) => {
+                    for problem in problems {
+                        ui.colored_label(egui::Color32::from_rgb(220, 170, 110), problem);
+                    }
+                }
+                Ok(request) => {
+                    if ui.button(format!("Create {}", request.name)).clicked() {
+                        match island.client().create_human(&request) {
+                            Ok(accepted) => {
+                                *foundry.following.lock().unwrap_or_else(|p| p.into_inner()) =
+                                    Some(Followed {
+                                        said: format!(
+                                            "Queued as command {}; following it…",
+                                            accepted.command
+                                        ),
+                                        created: None,
+                                    });
+                                follow_creation(
+                                    island,
+                                    accepted.command,
+                                    foundry.following.clone(),
+                                );
+                            }
+                            Err(e) => {
+                                *foundry.following.lock().unwrap_or_else(|p| p.into_inner()) =
+                                    Some(Followed {
+                                        said: format!("Nobody was created: {e}"),
+                                        created: None,
+                                    });
+                            }
+                        }
+                    }
+                }
+            }
+            if let Some(followed) = foundry.following.lock().ok().and_then(|f| f.clone()) {
+                ui.label(&followed.said);
+                if let Some(agent_id) = followed.created {
+                    if foundry.selected_once.as_deref() != Some(&agent_id) {
+                        foundry.selected_once = Some(agent_id.clone());
+                        chosen = Some(agent_id);
+                        // A fresh form for the next person.
+                        foundry.form = Some(Form::new(&options));
+                    }
+                }
+            }
+        });
+    foundry.open = open;
+    if let Some(agent_id) = chosen {
+        panels.selected = Some(agent_id);
+    }
 }
 
 /// Where the left button went down, so its release can tell a click from
@@ -1661,7 +1919,21 @@ fn panels(
                     }
                 }
             }
+            ui.add_enabled_ui(may_write, |ui| {
+                if ui.button("Create somebody…").clicked() {
+                    panels.foundry.open = true;
+                }
+            });
         });
+
+    let cell_under_view = match *showing {
+        Showing::Estate => Some(snapshot.world.estate.cell),
+        Showing::Island => island
+            .0
+            .terrain()
+            .and_then(|ground| inspectors::cell_under(&view.0, ground)),
+    };
+    foundry_window(&ctx, &island.0, snapshot, &mut panels, cell_under_view);
 
     egui::Panel::right("detail")
         .default_size(340.0)
