@@ -574,6 +574,7 @@ fn main() {
             say_what_is_drawing,
             read_the_island,
             grow_the_stems,
+            lay_the_stands,
             pick_a_view,
             drive_the_camera,
             pick_on_the_estate,
@@ -747,23 +748,45 @@ fn build_the_estate(
     // nothing, and from the estate camera's angle a wood of trunks over
     // black reads as rain. Flat at the yard's level, as the yard is: the
     // layout serves no terrain heights to draw it otherwise.
+    //
+    // One flat green until the island's picture of its stand cover
+    // arrives (`lay_the_stands`), then that picture: each corner carries
+    // where it falls on the patch's image, so the wood's floor shows the
+    // stand under the trunks at the island's own 5 m.
     let (west, south, east, north) = stems::neighbourhood(layout);
     let origin = (layout.patch.x0, layout.patch.y0);
-    let south_west = scene::estate_of(origin, west, south, 0.0);
-    let north_east = scene::estate_of(origin, east, north, 0.0);
+    let corners = [
+        scene::estate_of(origin, west, south, 0.0),
+        scene::estate_of(origin, east, south, 0.0),
+        scene::estate_of(origin, east, north, 0.0),
+        scene::estate_of(origin, west, north, 0.0),
+    ];
+    const FLOOR_Y: f32 = -0.03;
+    let mut floor = Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::RENDER_WORLD,
+    );
+    floor.insert_attribute(
+        Mesh::ATTRIBUTE_POSITION,
+        corners.map(|p| [p.x, FLOOR_Y, p.z]).to_vec(),
+    );
+    floor.insert_attribute(Mesh::ATTRIBUTE_NORMAL, vec![[0.0, 1.0, 0.0]; 4]);
+    floor.insert_attribute(
+        Mesh::ATTRIBUTE_UV_0,
+        corners.map(|p| stems::stand_uv(layout, p)).to_vec(),
+    );
+    // Wound so the face looks up: seen from above, with east to the right
+    // and north (-z) at the top, south-west, south-east, north-east runs
+    // anticlockwise. The other way round it is culled, which is how the
+    // terrain first drew as nothing.
+    floor.insert_indices(Indices::U32(vec![0, 1, 2, 0, 2, 3]));
+    let floor_look = materials.add(colour(0.24, 0.30, 0.18, 1.0));
+    commands.insert_resource(WoodFloor(floor_look.clone()));
     commands.spawn((
         OnTheEstate,
-        Mesh3d(meshes.add(box_for((
-            north_east.x - south_west.x,
-            0.02,
-            south_west.z - north_east.z,
-        )))),
-        MeshMaterial3d(materials.add(colour(0.24, 0.30, 0.18, 1.0))),
-        Transform::from_xyz(
-            (south_west.x + north_east.x) / 2.0,
-            -0.04,
-            (south_west.z + north_east.z) / 2.0,
-        ),
+        Mesh3d(meshes.add(floor)),
+        MeshMaterial3d(floor_look),
+        Transform::IDENTITY,
         Visibility::Hidden,
     ));
 
@@ -1081,6 +1104,78 @@ fn grow_the_stems(
         trees.in_box,
         trees.total
     );
+}
+
+/// The look of the wood's floor, which `lay_the_stands` textures with the
+/// island's picture of its stand cover once that arrives.
+#[derive(Resource)]
+struct WoodFloor(Handle<StandardMaterial>);
+
+/// The stand picture's request, off the frame thread like every other
+/// read, and asked again every [`stems::STAND_POLL`].
+#[derive(Default)]
+struct StandRead {
+    asked_at: Option<std::time::Instant>,
+    answer: PngSlot,
+}
+
+/// A picture another thread fills in, or why it could not.
+type PngSlot = std::sync::Arc<std::sync::Mutex<Option<Result<Vec<u8>, String>>>>;
+
+/// Lay the island's picture of the patch's stand cover (`/api/patch.png`)
+/// on the wood's floor, and refresh it as the stand changes.
+///
+/// A failed read or an undecodable picture leaves the floor as it was and
+/// says so once; the trunks stand on plain ground rather than none.
+fn lay_the_stands(
+    island: Res<TheIsland>,
+    floor: Option<Res<WoodFloor>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut images: ResMut<Assets<Image>>,
+    mut read: Local<StandRead>,
+) {
+    let Some(floor) = floor else {
+        return;
+    };
+    let got = read.answer.lock().ok().and_then(|mut slot| slot.take());
+    match got {
+        Some(Ok(png)) => {
+            match Image::from_buffer(
+                &png,
+                bevy::image::ImageType::Extension("png"),
+                bevy::image::CompressedImageFormats::NONE,
+                true,
+                // One stand cell per pixel, shown as cells rather than
+                // blurred into a gradient the island never computed.
+                bevy::image::ImageSampler::nearest(),
+                RenderAssetUsages::RENDER_WORLD,
+            ) {
+                Ok(picture) => {
+                    if let Some(mut look) = materials.get_mut(&floor.0) {
+                        look.base_color = Color::WHITE;
+                        look.base_color_texture = Some(images.add(picture));
+                    }
+                }
+                Err(e) => warn!("the island's stand picture could not be read: {e}"),
+            }
+        }
+        Some(Err(e)) => warn!("the island's stand picture was not served: {e}"),
+        None => {}
+    }
+    if read
+        .asked_at
+        .is_some_and(|at| at.elapsed() < stems::STAND_POLL)
+    {
+        return;
+    }
+    read.asked_at = Some(std::time::Instant::now());
+    let (client, slot) = (island.0.client().clone(), read.answer.clone());
+    std::thread::spawn(move || {
+        let got = client.patch_png().map_err(|e| e.to_string());
+        if let Ok(mut slot) = slot.lock() {
+            *slot = Some(got);
+        }
+    });
 }
 
 /// Show one frame and hide the other, and move the camera with it.
