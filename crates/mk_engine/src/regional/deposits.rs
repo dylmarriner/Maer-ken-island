@@ -6,7 +6,8 @@
 //! 2010, *Quantitative Mineral Resource Assessments*), its tonnage and
 //! grade are lognormal about medians from USGS grade–tonnage models (Cox &
 //! Singer 1986, Bulletin 1693; `fixtures/reference/geology`
-//! `grade_tonnage_medians`) with log10 spreads of 0.6–0.9 in tonnage.
+//! `grade_tonnage_medians`), with each model's own log10 spreads from its
+//! 90th to its 10th percentile, read from the bulletin's figures.
 //! Kinds without a published model in the reference pack are marked as
 //! order-of-magnitude in their `source`. Placement draws are hashes of the
 //! world key and the cell, so the list is a pure function of its inputs.
@@ -158,9 +159,9 @@ pub fn deposit_models() -> [DepositModel; 20] {
             OrogenicGold,
             6.0,
             3.0e4,
-            0.9,
+            1.155,
             16.0,
-            0.3,
+            0.334,
             "g/t Au",
             (0.0, 500.0),
             CS86,
@@ -170,9 +171,9 @@ pub fn deposit_models() -> [DepositModel; 20] {
             EpithermalGoldSilver,
             3.0,
             7.7e5,
-            0.8,
+            0.837,
             7.5,
-            0.4,
+            0.441,
             "g/t Au",
             (0.0, 300.0),
             CS86,
@@ -182,9 +183,9 @@ pub fn deposit_models() -> [DepositModel; 20] {
             PorphyryCopper,
             1.5,
             1.4e8,
-            0.6,
+            0.688,
             0.54,
-            0.2,
+            0.188,
             "% Cu",
             (0.0, 1_000.0),
             CS86,
@@ -194,9 +195,9 @@ pub fn deposit_models() -> [DepositModel; 20] {
             VolcanogenicMassiveSulfide,
             1.0,
             1.5e6,
-            0.8,
+            0.849,
             1.3,
-            0.3,
+            0.348,
             "% Cu",
             (0.0, 500.0),
             CS86,
@@ -206,9 +207,9 @@ pub fn deposit_models() -> [DepositModel; 20] {
             SedimentHostedLeadZinc,
             0.5,
             1.5e7,
-            0.6,
+            0.735,
             5.6,
-            0.25,
+            0.286,
             "% Zn",
             (0.0, 800.0),
             CS86,
@@ -218,9 +219,9 @@ pub fn deposit_models() -> [DepositModel; 20] {
             TinTungsten,
             1.0,
             7.2e6,
-            0.7,
+            0.745,
             0.28,
-            0.3,
+            0.172,
             "% Sn",
             (0.0, 500.0),
             CS86,
@@ -236,16 +237,16 @@ pub fn deposit_models() -> [DepositModel; 20] {
             (0.0, 200.0),
             OOM,
         ),
-        // Fe skarn: 7.2 Mt at 49% Fe.
+        // Fe skarn: 7.2 Mt at 50% Fe.
         m(
             Skarn,
             // Permissive ground is only the granite–carbonate contact zone,
             // so its density is high: ~1 skarn per 50 km² of contact.
             200.0,
             7.2e6,
-            0.7,
-            49.0,
-            0.05,
+            1.048,
+            50.0,
+            0.095,
             "% Fe",
             (0.0, 500.0),
             CS86,
@@ -277,14 +278,17 @@ pub fn deposit_models() -> [DepositModel; 20] {
             BandedIronFormation,
             2.0,
             1.7e8,
-            0.6,
+            0.913,
             53.0,
-            0.05,
+            0.134,
             "% Fe",
             (0.0, 300.0),
             CS86,
         ),
-        // Economic pipes 10-100 Mt at 0.1-1.5 ct/t; most pipes are poor.
+        // The bulletin has no grade-tonnage model for diamond pipes; its
+        // descriptive model 12 says mined kimberlites yield 0.1-0.6 ppm
+        // diamond (0.5-3 ct/t), and most pipes are never mined. The median
+        // for every pipe is an order of magnitude below the mined ones.
         // One pipe per kimberlite cell (2,500 per 10,000 km² of 4 km² cells).
         m(
             Kimberlite,
@@ -295,7 +299,7 @@ pub fn deposit_models() -> [DepositModel; 20] {
             0.8,
             "ct/100 t",
             (0.0, 200.0),
-            CS86,
+            OOM,
         ),
         m(
             VolcanicSilicaGems,
@@ -354,14 +358,14 @@ pub fn deposit_models() -> [DepositModel; 20] {
             (100.0, 1_500.0),
             OOM,
         ),
-        // Upwelling phosphorite: 200 Mt at 24% P2O5.
+        // Upwelling phosphorite: 330 Mt at 25% P2O5.
         m(
             Phosphate,
             1.0,
-            2.0e8,
-            0.6,
-            24.0,
-            0.15,
+            3.3e8,
+            0.862,
+            25.0,
+            0.128,
             "% P2O5",
             (0.0, 200.0),
             CS86,
@@ -537,7 +541,7 @@ fn permits_site(kind: DepositKind, s: &Site, scale: f64) -> bool {
 }
 
 /// Standard normal from two uniforms (Box–Muller).
-fn normal(u1: f64, u2: f64) -> f64 {
+pub(crate) fn normal(u1: f64, u2: f64) -> f64 {
     (-2.0 * u1.max(1e-300).ln()).sqrt() * (std::f64::consts::TAU * u2).cos()
 }
 
@@ -627,4 +631,52 @@ pub fn generate_primary_deposits(
         d.id = id as u32;
     }
     deposits
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::validation::{default_reference_dir, ReferenceDomain, ReferenceLibrary};
+
+    /// The pack row each bulletin-sourced model is drawn from.
+    fn pack_row(kind: DepositKind) -> Option<&'static str> {
+        use DepositKind::*;
+        Some(match kind {
+            OrogenicGold => "low_sulfide_au_quartz_vein__au_g_t",
+            EpithermalGoldSilver => "comstock_epithermal__au_g_t",
+            PorphyryCopper => "porphyry_cu__cu_pct",
+            VolcanogenicMassiveSulfide => "kuroko_vms__cu_pct",
+            SedimentHostedLeadZinc => "sedex_zn_pb__zn_pct",
+            TinTungsten => "sn_greisen__sn_pct",
+            Skarn => "fe_skarn__fe_pct",
+            BandedIronFormation => "superior_bif__fe_pct",
+            Phosphate => "phosphorite__p2o5_pct",
+            _ => return None,
+        })
+    }
+
+    #[test]
+    fn every_bulletin_model_is_the_bulletin_s_and_the_rest_say_they_are_not() {
+        let library = ReferenceLibrary::load(&default_reference_dir()).unwrap();
+        let table = library
+            .item(ReferenceDomain::Geology, "grade_tonnage_medians")
+            .and_then(|i| i.table())
+            .unwrap();
+        for model in deposit_models() {
+            let Some(row) = pack_row(model.kind) else {
+                assert_ne!(model.source, CS86, "{:?} has no pack row", model.kind);
+                continue;
+            };
+            assert_eq!(model.source, CS86, "{:?}", model.kind);
+            let pack = |column: &str| table.get(row, column).unwrap();
+            assert_eq!(
+                model.median_tonnage_t,
+                pack("median_tonnage_mt") * 1e6,
+                "{row}"
+            );
+            assert_eq!(model.median_grade, pack("median_grade"), "{row}");
+            assert_eq!(model.tonnage_log10_sd, pack("tonnage_log10_sd"), "{row}");
+            assert_eq!(model.grade_log10_sd, pack("grade_log10_sd"), "{row}");
+        }
+    }
 }

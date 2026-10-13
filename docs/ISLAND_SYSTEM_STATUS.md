@@ -33,6 +33,7 @@ document was wrong about whether rendering here was possible at all.
 | **Integrated island life**: physics + ecology + estate + 200,000 trees + founders + energy + materials, audited (Phase 3 Task 9) | Done; one week measured | `regional/life.rs`, `tests/island_life_acceptance.rs`, `benchmarks/island_week.md` |
 | Island ecology fields: biomes, NPP, producer biomass (Phase 3 Task 1a), plus a first grazer pool (D41, assumed parameters) | Done | `regional/ecology.rs`, `tests/regional_ecology.rs` |
 | Upstream's species at island scale (Phase 3 Task 1b): 4,096 founding species on the island's habitats; plants and grazers as shares of the carbon fields, other guilds at upstream's density (D55) | Done; derived, not stored (digest unchanged) | `regional/species.rs`, `tests/island_species.rs` |
+| The island's mineral resource sites (Phase 3 Task 2, part): every primary deposit as a site; placer gold below each gold-bearing deposit where the river's gradient flattens (USGS model 39a, 0.2 g/t median, 1.1 Mt); titanomagnetite ironsand at the mouth of every river draining arc andesite (GNS 2024); sites only deplete; a day's panning with a pan or sluice moves the packs' gravel at the site's grade; deep ore and oil refused by name (D56). On the owner's island: 52 placers below 132 gold-bearing deposits, 66 ironsand mouths. The deposit models' medians and spreads were checked against the bulletin's figures (three medians corrected) | Done | `regional/resources.rs`, `tests/regional_resources.rs`, `regional/deposits.rs` tests, `fixtures/reference/geology/seismic_volcanic_mineral.json` |
 | Grid topology for human/organism movement, births and perception (Phase 3 Task 6) | Done; planetary results bit-identical | `topology.rs`, `tests/topology_hash_baseline.rs` |
 | Founders' estate laid out in metres (Phase 3 Task 5) | Done | `regional/estate_layout.rs`, `tests/island_estate_layout.rs` |
 | Canonical founders on the island: observation, bedrooms, computer rule (Phase 3 Task 8) | Done except Task-3-dependent hooks | `regional/humans.rs`, `humans/observation.rs`, `tests/island_human_runtime.rs` |
@@ -256,9 +257,9 @@ cost the resting baseline (D22).
 
 `WORK_REMAINING.md` is the full list with what each item needs; this section is the summary.
 
-- Phase 3: Task 1b (island-scale species; fauna is one placeholder grazer pool, below), Task 2 (every resource and material:
-  the catalogue, placers and ironsand, the new tools and recipes, `regional/resources.rs`; only
-  the exhaustive `node_kind_for_resource` and the estate's axe, crosscut saw and gold pan exist),
+- Phase 3: Task 2's remainder (the catalogue and the mineral sites with placers and ironsand
+  exist; left: biotic, animal, salt and water nodes, diamond and gem placers, the new tools and
+  recipes, smelting, and serving the sites to the map and the founders' choices),
   Task 9 Step 6 (Gate 3, closed 2026-10-13). Durations: felling and hauling are timed; every other action still
   takes one tick (D9).
 - Felled timber dries in the air and, once air-dry in the store, joins the wood stock for building and burning (2026-10-14, `regional/drying.rs`, D40). Splitting, the two-person crosscut and rigging are still untimed (§1c).
