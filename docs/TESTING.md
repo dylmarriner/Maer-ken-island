@@ -21,7 +21,7 @@ on 2026-10-13, 58 minutes). If it ever fails while building, `--exclude island_u
 
 Current members (find them with `grep -rn 'fn slow_\|fn deep_' --include=*.rs crates apps`):
 
-- **Slow:** fifteen tests.
+- **Slow:** sixteen tests.
   - `island_life_acceptance::slow_a_week_on_the_island_matches_the_reference_packs`: one
     simulated week, audited every step, against the reference packs, and the canonical week
     digest (`WEEK_DIGEST`). **Run it on every behaviour change.**
@@ -31,6 +31,8 @@ Current members (find them with `grep -rn 'fn slow_\|fn deep_' --include=*.rs cr
   - `island_snapshot::slow_a_full_island_survives_a_trip_through_a_file`: the full island,
     200,000 stems and a dozen 1,152,000-cell grids, through a file and run on from it.
   - `island_scheduler::slow_a_day_in_one_step_equals_1440_minute_steps`.
+  - `island_deep_time::slow_the_default_island_spins_up_to_equilibrium`: the full island's
+    1,000-year deep-time spin-up, timed, with its equilibrium trends (Phase 4 Task 2b).
   - `island_phase4_cost::slow_what_phase_4_costs`.
   - `regional_seismicity::slow_ten_thousand_years_of_seismicity_on_the_full_island`.
   - `human_population_memory::slow_the_human_runtime_stays_small_and_roughly_linear_to_five_thousand_people`
@@ -47,7 +49,7 @@ Current members (find them with `grep -rn 'fn slow_\|fn deep_' --include=*.rs cr
 
 | Pin | Test | Moves when |
 |---|---|---|
-| `WEEK_DIGEST` (`fc62629c…3da7`) | `island_life_acceptance` (slow) | anything the founders or their world do changes. Re-pin only after the week's audit and reference-pack checks pass (`docs/handoff/WORKING_PRACTICES.md`). |
+| `WEEK_DIGEST` (`54b48e5b…bb18`) | `island_life_acceptance` (slow) | anything the founders or their world do changes. Re-pin only after the week's audit and reference-pack checks pass (`docs/handoff/WORKING_PRACTICES.md`). |
 | Planetary topology (`e4ece246…73e2`) | `topology_hash_baseline` (fast) | only by a recorded upstream divergence (UPSTREAM.md), never by island stepping. Last moved by R1b's jerrycans. |
 
 ## Checking the dashboard by hand

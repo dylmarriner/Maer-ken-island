@@ -440,6 +440,7 @@ fn main() {
                 _ => headless::open_world(
                     scenario.map(PathBuf::from).as_deref(),
                     snapshot.map(PathBuf::from).as_deref(),
+                    snapshot_dir.as_deref(),
                 ),
             }
             .unwrap_or_else(|e| {

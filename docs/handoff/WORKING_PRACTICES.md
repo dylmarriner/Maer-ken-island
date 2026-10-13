@@ -35,7 +35,7 @@ checks the founders' week against the reference packs, **then** compares the fin
 with `WEEK_DIGEST`. Any change to physics, life or serialized state moves the digest.
 
 1. Run it: `cargo test --release -p mk_engine --test island_life_acceptance -- --ignored --nocapture`.
-2. Read every printed audit: 433 audits closed, no food or water shortfall, body carbon at 1.00x,
+2. Read every printed audit: every audit closed (10,514 in the week as of 2026-10-14: the household water and meal audits run each substep), no food or water shortfall, body carbon at 1.00x,
    eating about 43-47 min/day, drinking 1.4-1.8 L/day, forest NPP inside the reference range,
    intimacy about 65/yr in the four-week test.
 3. Only if every deferred assertion passed and the movement is explained by your change, copy the
@@ -52,8 +52,13 @@ with `WEEK_DIGEST`. Any change to physics, life or serialized state moves the di
 - **nightly slow tier**: `cargo test --workspace --release -- --ignored slow_`.
 
 The fast tier stays inside its limit because island test files bootstrap once
-(`OnceLock`) and restore a copy per test, and the serialization crates build at opt-level 2 in
-dev (`Cargo.toml`). Keep both when adding tests.
+(`OnceLock`) and restore a copy per test, the serialization crates build at opt-level 2 in
+dev (`Cargo.toml`), and the deep-time spin-up is shared: `.cargo/config.toml` sets
+`MK_SPINUP_CACHE` to `target/spinup-cache`, so `IslandLife::bootstrap` spins the default island
+up once and every later test binary loads it (without it the fast tier took 40 minutes against
+24). The cache key covers the canon, scenario, settings, the starting ecology and the spin-up
+model's own source, so a stale file is never loaded; deleting the directory is always safe.
+Keep all three when adding tests.
 
 ## Environment traps (cloud container)
 

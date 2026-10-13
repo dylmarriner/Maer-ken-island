@@ -173,6 +173,181 @@ pub fn yard(layout: &EstateLayout) -> Placed {
     }
 }
 
+/// How far along a ray, from `from` in the direction `along`, it first
+/// meets `placed`'s box, or `None` if it misses.
+///
+/// The box is the one drawn: centred on `at`, `size_m` across, up and
+/// deep, turned `rotation_deg` about the vertical the way Bevy's
+/// `Quat::from_rotation_y` turns it. The ray is turned back into the box's
+/// own frame and clipped against its three pairs of faces. A ray that
+/// starts inside the box hits it at distance zero.
+pub fn ray_hits(from: Point, along: Point, placed: &Placed) -> Option<f32> {
+    let (sin, cos) = placed.rotation_deg.to_radians().sin_cos();
+    // The inverse of a turn by `a` about +y: x' = x cos a - z sin a,
+    // z' = x sin a + z cos a.
+    let unturn = |x: f32, z: f32| (x * cos - z * sin, x * sin + z * cos);
+    let (ox, oz) = unturn(from.x - placed.at.x, from.z - placed.at.z);
+    let oy = from.y - placed.at.y;
+    let (dx, dz) = unturn(along.x, along.z);
+    let dy = along.y;
+
+    let mut near = f32::NEG_INFINITY;
+    let mut far = f32::INFINITY;
+    let half = (
+        placed.size_m.0 / 2.0,
+        placed.size_m.1 / 2.0,
+        placed.size_m.2 / 2.0,
+    );
+    for (o, d, h) in [(ox, dx, half.0), (oy, dy, half.1), (oz, dz, half.2)] {
+        if d.abs() < f32::EPSILON {
+            // Parallel to this pair of faces: inside the slab or never.
+            if o.abs() > h {
+                return None;
+            }
+            continue;
+        }
+        let (a, b) = ((-h - o) / d, (h - o) / d);
+        near = near.max(a.min(b));
+        far = far.min(a.max(b));
+    }
+    if far < near.max(0.0) {
+        return None;
+    }
+    Some(near.max(0.0))
+}
+
+/// What a click on the estate chose, by its index in [`things`], [`rooms`]
+/// or [`buildings`] -- which is also its index in the layout's `items`,
+/// `spaces` or `buildings`, because each of those maps one to one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Picked {
+    Thing(usize),
+    Room(usize),
+    Building(usize),
+}
+
+/// What a ray picks on the estate.
+///
+/// The smallest kind of thing the ray meets wins, and the nearest of that
+/// kind: a thing before a room, a room before a building. That is not the
+/// nearest box overall, deliberately -- the buildings are drawn
+/// translucent so that what is inside them can be seen, and a click on a
+/// computer seen through the house's roof means the computer, not the
+/// roof. The yard is never picked; it is the ground everything stands on.
+pub fn pick(layout: &EstateLayout, from: Point, along: Point) -> Option<Picked> {
+    let nearest = |placed: Vec<Placed>| {
+        placed
+            .iter()
+            .enumerate()
+            .filter_map(|(i, p)| ray_hits(from, along, p).map(|t| (i, t)))
+            .min_by(|a, b| a.1.total_cmp(&b.1))
+            .map(|(i, _)| i)
+    };
+    nearest(things(layout))
+        .map(Picked::Thing)
+        .or_else(|| nearest(rooms(layout)).map(Picked::Room))
+        .or_else(|| nearest(buildings(layout)).map(Picked::Building))
+}
+
+/// What the inspector says about something picked on the estate: the
+/// island's own words and figures, with their sources where it gives them.
+///
+/// `None` when the index no longer names anything, which happens only if
+/// the layout changed under a selection.
+pub fn describe(layout: &EstateLayout, picked: Picked) -> Option<Vec<String>> {
+    let origin = (layout.patch.x0, layout.patch.y0);
+    let from_corner = |(x, y): (f64, f64)| {
+        format!(
+            "{:.1}, {:.1} m from the patch corner",
+            x - origin.0,
+            y - origin.1
+        )
+    };
+    let lines = match picked {
+        Picked::Thing(i) => {
+            let item = layout.items.get(i)?;
+            let (length, width, height) = item.size_m;
+            let mut lines = vec![
+                item.name.clone(),
+                format!("A {}", words(&item.kind)),
+                match &item.space {
+                    Some(space) => format!("In the {space}"),
+                    None => "Outdoors".to_string(),
+                },
+                format!("At {}", from_corner(item.position_m)),
+                format!("{length:.2} m long, {width:.2} m wide, {height:.2} m high"),
+            ];
+            if !item.size_source.is_empty() {
+                lines.push(format!("Size: {}", item.size_source));
+            }
+            lines
+        }
+        Picked::Room(i) => {
+            let space = layout.spaces.get(i)?;
+            let r = &space.rect_m;
+            let inside: Vec<&str> = layout
+                .items_in(&space.label)
+                .map(|item| item.name.as_str())
+                .collect();
+            vec![
+                space.label.clone(),
+                format!("A {}", words(&space.kind)),
+                format!(
+                    "{:.1} x {:.1} m, {:.1} m² of floor",
+                    r.width_m(),
+                    r.depth_m(),
+                    r.width_m() * r.depth_m()
+                ),
+                format!("Centred {}", from_corner(r.centre_m())),
+                match inside.len() {
+                    0 => "Nothing placed in it".to_string(),
+                    n => format!("{n} things in it: {}", inside.join(", ")),
+                },
+            ]
+        }
+        Picked::Building(i) => {
+            let building = layout.buildings.get(i)?;
+            let r = &building.rect_m;
+            let mut lines = vec![
+                building.name.clone(),
+                format!("A {}", words(&building.kind)),
+                format!(
+                    "{:.1} x {:.1} m on the ground, {:.1} m² of footprint",
+                    r.width_m(),
+                    r.depth_m(),
+                    r.width_m() * r.depth_m()
+                ),
+                format!("Centred {}", from_corner(r.centre_m())),
+            ];
+            if building.rotation_deg != 0.0 {
+                lines.push(format!("Turned {:.0}°", building.rotation_deg));
+            }
+            if building.height_m > 0.0 {
+                lines.push(format!("{:.1} m to the eaves", building.height_m));
+                if !building.height_source.is_empty() {
+                    lines.push(format!("Height: {}", building.height_source));
+                }
+            } else {
+                lines.push("Its height is not served; drawn a storey high".to_string());
+            }
+            lines
+        }
+    };
+    Some(lines)
+}
+
+/// `ShedTool` as "shed tool", `ComputerRoom` as "computer room".
+fn words(kind: &str) -> String {
+    let mut out = String::with_capacity(kind.len() + 4);
+    for (i, c) in kind.chars().enumerate() {
+        if c.is_uppercase() && i > 0 {
+            out.push(' ');
+        }
+        out.extend(c.to_lowercase());
+    }
+    out
+}
+
 /// Where a camera should sit to see the whole estate, in the estate
 /// frame: what to look at, and how far away.
 ///
@@ -379,5 +554,144 @@ mod tests {
     #[test]
     fn an_empty_estate_is_not_framed_at_all() {
         assert_eq!(framing(&EstateLayout::default()), None);
+    }
+
+    /// Straight down from well above a point of the estate frame.
+    fn from_above(x: f32, z: f32) -> (Point, Point) {
+        (Point::new(x, 100.0, z), Point::new(0.0, -1.0, 0.0))
+    }
+
+    #[test]
+    fn a_click_on_a_machine_picks_the_machine_not_the_room_or_the_house() {
+        // The machine is inside the room, which is inside the house: three
+        // boxes under one click. The smallest is what was meant.
+        let layout = layout();
+        let machine = &things(&layout)[0];
+        let (from, along) = from_above(machine.at.x, machine.at.z);
+        assert_eq!(pick(&layout, from, along), Some(Picked::Thing(0)));
+    }
+
+    #[test]
+    fn a_click_on_bare_floor_picks_the_room_and_outside_it_the_building() {
+        let layout = layout();
+        // The computer room's floor between its two machines: the room
+        // is 4 m square and they stand a metre in from opposite corners.
+        let room = &rooms(&layout)[0];
+        let (from, along) = from_above(room.at.x, room.at.z);
+        assert_eq!(pick(&layout, from, along), Some(Picked::Room(0)));
+
+        // The tool shed has no rooms in this layout, so its roof is all
+        // there is to pick.
+        let shed = &buildings(&layout)[1];
+        let (from, along) = from_above(shed.at.x, shed.at.z);
+        assert_eq!(pick(&layout, from, along), Some(Picked::Building(1)));
+    }
+
+    #[test]
+    fn a_click_on_the_open_yard_picks_nothing() {
+        let layout = layout();
+        // The yard's south-west corner, clear of both buildings.
+        let corner = estate_of(
+            (layout.patch.x0, layout.patch.y0),
+            113_951.0,
+            124_001.0,
+            0.0,
+        );
+        let (from, along) = from_above(corner.x, corner.z);
+        assert_eq!(pick(&layout, from, along), None);
+    }
+
+    #[test]
+    fn a_turned_box_is_hit_where_it_is_drawn_not_where_it_would_be_unturned() {
+        // Four metres long and half a metre wide, turned a quarter: drawn
+        // along z, so a point 1.5 m along z is on it and 1.5 m along x is
+        // not. Unturned, those two answers swap.
+        let beam = Placed {
+            name: "Beam".to_string(),
+            kind: "Beam".to_string(),
+            at: Point::new(0.0, 0.5, 0.0),
+            size_m: (4.0, 1.0, 0.5),
+            rotation_deg: 90.0,
+            model: None,
+        };
+        let (from, along) = from_above(0.0, 1.5);
+        assert!(ray_hits(from, along, &beam).is_some());
+        let (from, along) = from_above(1.5, 0.0);
+        assert_eq!(ray_hits(from, along, &beam), None);
+
+        let unturned = Placed {
+            rotation_deg: 0.0,
+            ..beam
+        };
+        let (from, along) = from_above(1.5, 0.0);
+        assert!(ray_hits(from, along, &unturned).is_some());
+        let (from, along) = from_above(0.0, 1.5);
+        assert_eq!(ray_hits(from, along, &unturned), None);
+    }
+
+    #[test]
+    fn a_ray_meets_a_box_at_its_near_face_and_never_behind_its_start() {
+        let cube = Placed {
+            name: "Cube".to_string(),
+            kind: "Cube".to_string(),
+            at: Point::new(0.0, 0.0, 0.0),
+            size_m: (2.0, 2.0, 2.0),
+            rotation_deg: 0.0,
+            model: None,
+        };
+        let toward = ray_hits(
+            Point::new(-10.0, 0.0, 0.0),
+            Point::new(1.0, 0.0, 0.0),
+            &cube,
+        );
+        assert_eq!(toward, Some(9.0), "the near face is at x = -1");
+        // The same line pointed the other way has the cube behind it.
+        let away = ray_hits(
+            Point::new(-10.0, 0.0, 0.0),
+            Point::new(-1.0, 0.0, 0.0),
+            &cube,
+        );
+        assert_eq!(away, None);
+        // Starting inside, it is already there.
+        let inside = ray_hits(Point::new(0.5, 0.0, 0.0), Point::new(0.0, 0.0, 1.0), &cube);
+        assert_eq!(inside, Some(0.0));
+    }
+
+    #[test]
+    fn the_inspector_says_what_the_island_says_about_what_was_picked() {
+        let layout = layout();
+        let machine = describe(&layout, Picked::Thing(0)).unwrap();
+        assert_eq!(machine[0], "Gem-D's Computer (gaming, 3 monitors)");
+        assert!(machine.contains(&"A computer".to_string()));
+        assert!(machine.contains(&"In the Computer Room".to_string()));
+        assert!(machine
+            .iter()
+            .any(|l| l == "0.50 m long, 0.25 m wide, 0.45 m high"));
+        assert!(
+            machine.iter().any(|l| l.contains("a desktop tower case")),
+            "a figure comes with where it came from: {machine:?}"
+        );
+
+        let room = describe(&layout, Picked::Room(0)).unwrap();
+        assert!(room.contains(&"4.0 x 4.0 m, 16.0 m² of floor".to_string()));
+        assert!(
+            room.iter().any(|l| l.starts_with("2 things in it")),
+            "{room:?}"
+        );
+
+        let house = describe(&layout, Picked::Building(0)).unwrap();
+        assert!(house.contains(&"A house".to_string()));
+        assert!(house.contains(&"Turned 30°".to_string()));
+        assert!(house.contains(&"3.0 m to the eaves".to_string()));
+
+        // A stale index is nothing, not a panic.
+        assert_eq!(describe(&layout, Picked::Thing(99)), None);
+    }
+
+    #[test]
+    fn a_kind_in_camel_case_is_said_in_words() {
+        assert_eq!(words("ComputerRoom"), "computer room");
+        assert_eq!(words("VehicleAttachment"), "vehicle attachment");
+        assert_eq!(words("House"), "house");
     }
 }

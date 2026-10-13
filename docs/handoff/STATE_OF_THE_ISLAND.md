@@ -68,7 +68,7 @@ house, and a 2 MW town site 129 m lower on the same river.
 
 | System | File |
 |---|---|
-| World composition, cadence scheduler | `world.rs`, `scheduler.rs` (no deep-time spin-up yet: Phase 4 Task 2b, `WORK_REMAINING.md` §3) |
+| World composition, cadence scheduler, deep-time spin-up | `world.rs`, `scheduler.rs`, `deep_time.rs` (1,000 local years of plants, grazers and soil before the founders arrive; cached under `<save_root>/spinup/`) |
 | Snapshot (one deflated, digest-prefixed file) | `crates/mk_engine/src/io/island_snapshot.rs` |
 | A folder per human | `human_store.rs` |
 | External commands, replay, interventions | `commands.rs`, `replay.rs`, `interventions.rs`, `create_human.rs` |
@@ -101,7 +101,7 @@ Every number the model uses that describes the real world lives in a cited pack,
 
 | Pin | Where | Current value |
 |---|---|---|
-| The founders' week | `crates/mk_engine/tests/island_life_acceptance.rs` `WEEK_DIGEST` | `fc62629c…3da7` (re-pinned with soil carbon, R0, on top of R1b) |
+| The founders' week | `crates/mk_engine/tests/island_life_acceptance.rs` `WEEK_DIGEST` | `54b48e5b…bb18` (re-pinned with the deep-time spin-up, Phase 4 Task 2b, on top of R0) |
 | The planetary topology | `crates/mk_engine/tests/topology_hash_baseline.rs` | `e4ece246…73e2` (moved only by starter-shed data: the R1b jerrycans) |
 
 `WORKING_PRACTICES.md` says how and when to re-pin.

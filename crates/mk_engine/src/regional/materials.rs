@@ -587,6 +587,72 @@ impl MaterialLedger {
         self.logs.get_mut(&id)
     }
 
+    /// Every log loses water to the air for `dt_s` at `t_c` °C and `rh`
+    /// (`regional::drying`); the water leaves `MaterialWater` for the
+    /// atmosphere. Returns the kg given up.
+    pub fn dry_logs(
+        &mut self,
+        drying: &super::drying::WoodDrying,
+        t_c: f64,
+        rh: f64,
+        dt_s: f64,
+        ledger: &mut Ledger,
+    ) -> f64 {
+        let lost: f64 = self
+            .logs
+            .values_mut()
+            .map(|log| drying.dry(log, t_c, rh, dt_s))
+            .sum();
+        flow(
+            ledger,
+            FluxKind::Water,
+            Reservoir::MaterialWater,
+            Reservoir::Atmosphere,
+            lost,
+        );
+        lost
+    }
+
+    /// Water per kg of oven-dry wood at which a stored log is as dry as
+    /// the stock's air-dry wood (15% of its mass, wet basis), and joins it.
+    pub fn air_dry_moisture_content() -> f64 {
+        let w = composition(Material::Wood).water_per_kg;
+        w / (1.0 - w)
+    }
+
+    /// Every log in the store that has dried to the stock's air-dry
+    /// moisture becomes air-dry wood in the stock (WORK_REMAINING §1b): its
+    /// carbon carries over exactly, as `carbon / 0.425` kg of wood. The
+    /// stock's wood holds its water outside the water books (gathered wood
+    /// brings none in and burning sends none out), so the log's remaining
+    /// water is booked to the air here, where burning would have sent it.
+    /// Returns the kg of wood added.
+    pub fn season_stored_logs(&mut self, ledger: &mut Ledger) -> f64 {
+        let threshold = Self::air_dry_moisture_content();
+        let seasoned: Vec<u64> = self
+            .logs
+            .values()
+            .filter(|l| l.place == super::timber::LogPlace::Stored)
+            .filter(|l| l.dry_kg > 0.0 && l.moisture_content() <= threshold)
+            .map(|l| l.id)
+            .collect();
+        let mut added = 0.0;
+        for id in seasoned {
+            let log = self.logs.remove(&id).expect("listed above");
+            let kg = log.carbon_kgc / composition(Material::Wood).carbon_per_kg;
+            self.add(Material::Wood, kg);
+            flow(
+                ledger,
+                FluxKind::Water,
+                Reservoir::MaterialWater,
+                Reservoir::Atmosphere,
+                log.water_kg,
+            );
+            added += kg;
+        }
+        added
+    }
+
     /// Cross-cut log `id` into `pieces` with ids from `first_id`: the log
     /// becomes its pieces, nothing gained or lost.
     pub fn cross_cut_log(&mut self, id: u64, pieces: u32, first_id: u64) -> bool {

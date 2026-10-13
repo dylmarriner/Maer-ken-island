@@ -728,11 +728,14 @@ fn run(mut it: Loop) {
         // paused on request and then would not come back.
         let mut created_somebody = false;
         let mut applied_anything = false;
+        // Held back until the projection shows what they did: see where
+        // they are recorded, below.
+        let mut resolved = Vec::new();
         while let Ok(Queued { id, command }) = it.inbox.try_recv() {
             let outcome = apply(&mut it.life, &it.pacing, it.snapshots.as_ref(), command);
             created_somebody |= matches!(outcome, Outcome::Created { .. });
             applied_anything |= !matches!(outcome, Outcome::Refused { .. });
-            record(&it.outcomes, id, outcome);
+            resolved.push((id, outcome));
         }
         // Read after the drain, not before: an operator may have changed
         // the speed or paused since the last iteration, and one of the
@@ -782,6 +785,34 @@ fn run(mut it: Loop) {
             it.views.economy = IslandProjection::economy_now(&it.life);
             it.views.economy_at_tick = it.life.tick;
             it.views.timeline = IslandProjection::timeline_now(&it.life);
+            // The cached digest describes the island before these
+            // commands, at the same tick, so it is no longer the island's
+            // now. Said rather than recomputed: a full state digest is
+            // too slow to take on every command, and the next refresh
+            // (every `DIGEST_EVERY` ticks) makes it current again.
+            it.digest.current = false;
+
+            // Published now, whether or not the island steps this
+            // iteration, and before any command is marked resolved. A
+            // client that waits for its command to say `created` and then
+            // asks for the person must find them: recording the outcome
+            // first left a window -- the whole of the next step on the
+            // full island -- in which the command said the person existed
+            // and the projection said nobody had that id. CI caught it
+            // (`a_new_person_can_be_read_the_moment_they_exist`, 404 on
+            // "ata"). A paused island needs this for the same reason: the
+            // clock did not move, but the world did.
+            publish(
+                &it.projection,
+                &it.life,
+                &pacing.speed,
+                None,
+                it.digest.clone(),
+                it.views.clone(),
+            );
+        }
+        for (id, outcome) in resolved {
+            record(&it.outcomes, id, outcome);
         }
 
         if !stepping {
@@ -790,21 +821,6 @@ fn run(mut it: Loop) {
             // speed window is cleared so that resuming does not report a
             // speed measured across the pause.
             recent.clear();
-            if applied_anything {
-                // Something did change — somebody was created, or an
-                // intervention landed — so the page has to be told, even
-                // though the clock did not move. A paused island that
-                // quietly held a stale projection would show an operator
-                // a world without the person they just made.
-                publish(
-                    &it.projection,
-                    &it.life,
-                    &pacing.speed,
-                    None,
-                    it.digest.clone(),
-                    it.views.clone(),
-                );
-            }
             std::thread::sleep(Duration::from_millis(50));
             continue;
         }
@@ -1342,6 +1358,26 @@ mod tests {
         // A nonsense multiplier falls back to real time rather than
         // dividing by zero.
         assert_eq!(SimSpeed::Times(0).budget(60), Some(Duration::from_secs(60)));
+    }
+
+    /// A digest taken at this tick is current until something changes the
+    /// island without moving the clock -- a command -- and then it is not.
+    #[test]
+    fn a_digest_from_before_a_command_is_not_called_current() {
+        let life = island();
+        let digest = IslandProjection::digest_now(&life);
+        let views = Views::of(&life);
+        let fresh = IslandProjection::of(&life, "x", None, digest.clone(), views.clone());
+        assert!(fresh.digest.current);
+        let stale = Digest {
+            current: false,
+            ..digest
+        };
+        let after = IslandProjection::of(&life, "x", None, stale, views);
+        assert!(
+            !after.digest.current,
+            "a pre-command digest passed as current"
+        );
     }
 }
 

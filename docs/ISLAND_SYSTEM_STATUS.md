@@ -261,11 +261,17 @@ cost the resting baseline (D22).
   the exhaustive `node_kind_for_resource` and the estate's axe, crosscut saw and gold pan exist),
   Task 9 Step 6 (Gate 3, closed 2026-10-13). Durations: felling and hauling are timed; every other action still
   takes one tick (D9).
-- Felled timber does not dry yet, so it never becomes usable building or fuel wood (D40).
-- **Phase 4 Task 2b, the deep-time spin-up, is not started**: no `regional/deep_time.rs`, no
-  `IslandWorldState::spin_up`, no cache. The island starts from its first settled orbit rather
-  than from centuries of soils and forest. This page previously called Phase 4 done without
-  that exception.
+- Felled timber dries in the air and, once air-dry in the store, joins the wood stock for building and burning (2026-10-14, `regional/drying.rs`, D40). Splitting, the two-person crosscut and rigging are still untimed (§1c).
+- **Phase 4 Task 2b, the deep-time spin-up, is done** (2026-10-14): before the founders
+  arrive, `regional/deep_time.rs` runs the plants, grazers and RothC soil monthly for the
+  scenario's 1,000 local years on each cell's climatology, cached under
+  `<save_root>/spinup/`. Evidence: `tests/island_deep_time.rs` -- equilibrium on the small
+  island (every trend under 1% per century), determinism at 1 and 4 threads, the physical state
+  untouched, the cache key moving with canon, scenario, seed and settings, cache-then-run equal
+  to spin-up-then-run, a damaged cache replaced, and a refusal once humans exist. The full
+  island: 1,000 years in 10.8 s on 8 threads (release); plants settle 5.0% below the
+  bootstrap's NPP x residence, soil 2.3% lower, grazers 2.0% higher, all under 0.01% per
+  century at the end. Weather, rivers and terrain are not stepped (D20).
 - The rest of Phase 4 is **done**: world composition, the cadence scheduler, the island snapshot, a folder
   per human, external commands and replay, operator interventions, the headless runner, and the
   dashboard with a world behind it. **The map it lacked is drawn, and it is clickable**:

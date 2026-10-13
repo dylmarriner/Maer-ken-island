@@ -16,7 +16,9 @@ the memory being measured. The output is JSON: `bootstrap_ms`, `ticks_per_second
 ecology, human-store cadence), `snapshot_bytes`, `save_ms`, `load_ms`, a check that the snapshot
 round-trips to the same state hash, `human_store_sync_ms`, `peak_rss_bytes` (`VmHWM`, Linux),
 `threads` and, with `--compare-threads`, the single-thread against all-cores speedup.
-`spin_up_1000y_seconds` is `null` until a deep-time spin-up exists.
+`spin_up_years` and `spin_up_seconds` are the scenario's own deep-time spin-up, which `bootstrap_ms`
+includes; `spin_up_1000y_seconds` scales it to 1,000 years (null when the scenario spins up
+none). On 2026-10-14 the full island took 10.8 s for 1,000 years on 8 threads.
 
 Wall-clock numbers depend on what else the machine is doing; on the shared development machine
 they vary by 10-50% between runs, and a one-off I/O stall once added 8 s to a 3 s run. Repeat a

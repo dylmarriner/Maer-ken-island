@@ -237,6 +237,16 @@ struct Panels {
     show_estate: bool,
     /// The cell under the view, as the backend last described it.
     under_view: UnderView,
+    /// What a click on the estate last picked, if anything.
+    picked: Option<estate::Picked>,
+}
+
+/// Where the left button went down, so its release can tell a click from
+/// the end of a drag that turned the camera.
+#[derive(Resource, Default)]
+struct Press {
+    at: Option<Vec2>,
+    travelled: f32,
 }
 
 /// The cell inspector's state: which cell was asked about, and what came
@@ -517,6 +527,7 @@ fn main() {
     .insert_resource(View::default())
     .insert_resource(EstateOrigin::default())
     .insert_resource(Panels::default())
+    .insert_resource(Press::default())
     .insert_resource(showing)
     .insert_resource(Detail(detail))
     .insert_resource(ClearColor(Color::srgb(0.02, 0.04, 0.08)))
@@ -555,6 +566,7 @@ fn main() {
             read_the_island,
             pick_a_view,
             drive_the_camera,
+            pick_on_the_estate,
             place_islanders,
             show_what_was_chosen,
         )
@@ -1115,6 +1127,77 @@ fn drive_the_camera(
     }
 }
 
+/// A click on the estate picks what is under the pointer, through the
+/// tested geometry in `estate.rs`.
+///
+/// A click is a press and a release with the pointer nearly still: the
+/// same button turns the camera when it is dragged, and the end of a
+/// drag picking whatever it happened to finish over would make every turn
+/// of the view change the inspector. Over a panel the click is the
+/// panel's. On the island view nothing is pickable -- a building there is
+/// a thousandth of a pixel -- so the pick is left as it was.
+fn pick_on_the_estate(
+    showing: Res<Showing>,
+    island: Res<TheIsland>,
+    buttons: Res<ButtonInput<MouseButton>>,
+    windows: Query<&Window, With<bevy::window::PrimaryWindow>>,
+    camera: Query<(&Camera, &Transform), With<Camera3d>>,
+    // Together because they change together: what the press was, and what
+    // its click picked.
+    (mut press, mut panels): (ResMut<Press>, ResMut<Panels>),
+    mut contexts: EguiContexts,
+) {
+    /// How far, in pixels, a press may wander and still be a click.
+    const STILL_PX: f32 = 4.0;
+
+    let Ok(window) = windows.single() else {
+        return;
+    };
+    let cursor = window.cursor_position();
+    if buttons.just_pressed(MouseButton::Left) {
+        let over_ui = contexts
+            .ctx_mut()
+            .map(|ctx| ctx.egui_wants_pointer_input())
+            .unwrap_or(false);
+        *press = Press {
+            at: if over_ui { None } else { cursor },
+            travelled: 0.0,
+        };
+        return;
+    }
+    if buttons.pressed(MouseButton::Left) {
+        if let (Some(start), Some(now)) = (press.at, cursor) {
+            press.travelled = press.travelled.max(start.distance(now));
+        }
+        return;
+    }
+    if !buttons.just_released(MouseButton::Left) {
+        return;
+    }
+    let (Some(_), Some(cursor)) = (press.at.take(), cursor) else {
+        return;
+    };
+    if press.travelled > STILL_PX || *showing != Showing::Estate {
+        return;
+    }
+    let (Some(layout), Ok((camera, pose))) = (island.0.estate(), camera.single()) else {
+        return;
+    };
+    // The pose `drive_the_camera` set this frame, not the `GlobalTransform`
+    // Bevy propagates from it in `PostUpdate`: that is still last frame's,
+    // and a ray from it would miss a small thing while the view moves. The
+    // camera has no parent, so its own transform is its place in the world.
+    let Ok(ray) = camera.viewport_to_world(&GlobalTransform::from(*pose), cursor) else {
+        return;
+    };
+    let from = Point::new(ray.origin.x, ray.origin.y, ray.origin.z);
+    let along = Point::new(ray.direction.x, ray.direction.y, ray.direction.z);
+    // A click on nothing clears the pick, the way clicking empty desktop
+    // deselects: a stale description of something no longer under
+    // attention is worse than none.
+    panels.picked = estate::pick(layout, from, along);
+}
+
 /// Move the islanders to where the island says they are.
 ///
 /// Moved rather than respawned: a person is the same person between
@@ -1415,6 +1498,28 @@ fn panels(
                         ui.label(
                         "Drawn with a founder's model: nobody created later has one of their own.",
                     );
+                    }
+                }
+            }
+
+            if *showing == Showing::Estate {
+                ui.separator();
+                ui.heading("On the estate");
+                match panels
+                    .picked
+                    .zip(island.0.estate())
+                    .and_then(|(picked, layout)| estate::describe(layout, picked))
+                {
+                    None => {
+                        ui.label("Click a building, a room or a thing to read it.");
+                    }
+                    Some(lines) => {
+                        for line in lines {
+                            ui.label(line);
+                        }
+                        if ui.button("Clear").clicked() {
+                            panels.picked = None;
+                        }
                     }
                 }
             }

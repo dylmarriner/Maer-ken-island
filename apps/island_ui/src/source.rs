@@ -289,7 +289,7 @@ impl LocalBackend {
         use island::serve::server::ServeConfig;
         use std::sync::Mutex as StdMutex;
 
-        let mut life = island::run::open_world(scenario, snapshot)?;
+        let mut life = island::run::open_world(scenario, snapshot, None)?;
         // Opt-in and off unless an operator set COMPUTER_ACTIONS_ENABLED,
         // exactly as `island serve` does it -- this is the same backend.
         if let Some(bridge) = mk_engine::humans::computer_bridge::HttpComputerBridge::from_env() {

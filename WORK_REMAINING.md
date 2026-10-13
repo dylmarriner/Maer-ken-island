@@ -36,12 +36,12 @@ this list holds the current state. The evidence for what is *done* is in
 
 | Area | Item | State | Blocked on |
 |---|---|---|---|
-| Timber | Drying, seasoning, splitting, crosscut, rigging (D40) | Open | Cited drying model and rates |
+| Timber | Splitting, crosscut, rigging, routes (D40); drying and seasoning done 2026-10-14 | Open | Splitting and sawing rates |
 | Living world | Phase 3 Task 1b: species at island scale | Done (D55 open: upstream densities) | — |
 | Living world | Phase 3 Task 2: every resource and material, placers, recipes | Open (partly started) | Cited placer decay, shaft size, abundances |
 | Living world | D9: actions take one tick | Open (felling, hauling done) | Cited durations per task |
 | Living world | D31: NPP ignores soil nutrients | Open | Regional soils model and data |
-| Runtime | Phase 4 Task 2b: deep-time spin-up | **Not started** | Engineering; long compute run |
+| Runtime | Phase 4 Task 2b: deep-time spin-up | **Done** (2026-10-14) | — |
 | Industry | Phase 4b Task 1 remainder: reference tables | Open | Sources (petroleum, refinery, staffing, wages, demand) |
 | Industry | Phase 4b Task 4: oil and gas field (D14, D19) | Open | Task 1 tables; a petroleum deposit |
 | Industry | Phase 4b Task 5: refinery, gas plant, fuel depot (D16) | Open | Task 1 tables |
@@ -70,32 +70,24 @@ hardwoods, 1.06 for softwoods, from `fixtures/reference/labour/timber.json`). A 
 to the building workshop by the quickest of the CAT 330 excavator, the ute (after cross-cutting
 it into pieces they can lift) or on foot. The log is stored green and stays green.
 
-### 1a. Drying
+### 1a. Drying (done 2026-10-14)
 
-- **Needs (sources):** the equilibrium moisture content of wood in air of a given temperature and
-  humidity (the Wood Handbook, ch. 4, gives the Hailwood-Horrobin equation with Simpson's
-  coefficients), and an air-drying rate or time for stock of a given thickness (USDA FPL
-  GTR-117, *Air Drying of Lumber*). Whole logs with bark dry far slower than sawn stock; a cited
-  figure for that, or a recorded deviation for using the sawn-stock rate, is needed. Fetch the
-  documents and transcribe the exact values; do not use remembered ones.
-- **Files:** `regional/timber.rs` (a drying step on `Log`), `regional/materials.rs` (log water
-  leaving), `regional/life.rs` (call it each step with the estate's air temperature and
-  humidity from the physical state), `fixtures/reference/labour/timber.json` (the new values).
-- **Ledger:** water leaves as `MaterialWater → Atmosphere`.
-- **Tests:** a log in warm dry air loses water faster than one in cold wet air; it never falls
-  below the equilibrium moisture content; the books still close; a reference-pack check that the
-  drying time for a cited thickness is within the source's range.
-- **Done when:** a stored log reaches air-dry in a time the source supports, and D40's drying
-  clause is closed.
+`regional/drying.rs`: every log approaches the Wood Handbook's equilibrium moisture content
+(Eq. 4-5, Table 4-2 reproduced) for the estate's hourly air, at a rate fitted to Simpson & Hart
+(2000, FPL-GTR-121) Table 2 and scaled by vapour pressure and by thickness squared; the water
+leaves `MaterialWater` for the atmosphere through the audit. Tests: `regional::drying` (the
+equation against the table, the fit re-checked against all 72 Madison times, warm dry air
+faster than cold wet, never below equilibrium, thickness scaling, steps compose) and
+`tests/island_timber_drying.rs` (a stored log on the island dries, the books close). Left in
+D40: end grain, bark, species and re-wetting.
 
-### 1b. Seasoned wood joins the stock
+### 1b. Seasoned wood joins the stock (done 2026-10-14)
 
-- **What:** once a piece reaches air-dry it becomes `Material::Wood`, usable for building and
-  burning. The stock's composition is air-dry (15% water), and the stock does **not** count its
-  bound water in `MaterialWater`, so the conversion must book the water consistently (see the
-  D40 row and `materials.rs`).
-- **Tests:** converting a seasoned log moves exactly its dry mass and carbon into the stock; the
-  audit closes across the conversion; burning seasoned wood books the same carbon as before.
+A stored log that has dried to the stock's air-dry moisture (15% wet basis, 0.176 kg per kg
+dry) becomes `Material::Wood` with its carbon exact (`MaterialLedger::season_stored_logs`,
+every hour after drying). The stock's wood carries its bound water outside the water books, so
+the log's last water is booked to the air at that moment rather than when the wood burns
+(D40). Test: `tests/island_timber_drying.rs::a_seasoned_stored_log_joins_the_wood_stock`.
 
 ### 1c. Splitting, the crosscut saw, rigging and routes
 
@@ -163,29 +155,15 @@ animal and fish resource nodes (§2b), which can now read the habitats.
 
 ---
 
-## 3. Phase 4 Task 2b: deep-time spin-up (not started)
+## 3. Phase 4 Task 2b: deep-time spin-up (done 2026-10-14)
 
-The status page previously said Phase 4 was done; this task is the exception.
-
-- **What:** before any human exists, run the world for centuries in a fast mode (geology
-  annually; soils annually; hydrology, ecology and vegetation succession monthly; weather replaced
-  by a climatology measured from one full-detail year and re-measured every 100 years), so the
-  island starts with mature soils, rivers and forests. Humans are never fast-forwarded.
-- **Files:** create `crates/mk_engine/src/regional/deep_time.rs`; modify
-  `crates/mk_island/src/scenario.rs` (`spin_up_years`, default 1,000) and `regional/world.rs`
-  (`IslandWorldState::spin_up(years) -> Result<SpinUpReport, IslandWorldError>`, refused once
-  humans exist).
-- **Cache:** the spun-up state is snapshotted under `<save_root>/spinup/<digest>.snap`, keyed by
-  canon + scenario + seed + spin-up settings, so later runs load it.
-- **Tests:** `crates/mk_engine/tests/island_deep_time.rs` on the small test island
-  (`IslandProfile::test_small`, seed 16): deterministic, cache key changes with any input,
-  soil carbon and forest biomass trends under 1% per century over the last 100 years, refused
-  once humans exist, the climate of one full-detail year after spin-up matches the climatology
-  within Phase 2 tolerances, cache-load-then-run equals spin-up-then-run.
-- **Measure:** the full-island 1,000-year spin-up in release (target: a few hours, once per
-  scenario) and record it in the Phase 5 benchmark.
-- **Deviation:** D20 (deep-time climatology during spin-up) is already recorded as Accepted.
-- **Digest:** the week digest will change (the island starts spun up); re-pin per the rules.
+`regional/deep_time.rs` runs the plants, grazers and RothC soil monthly for the scenario's
+`spin_up_years` (1,000 by default) before the founders arrive, and caches the result under
+`<save_root>/spinup/<key>.snap`. The full island takes 10.8 s on 8 threads in release. The plan's
+evidence is in `docs/ISLAND_SYSTEM_STATUS.md` and the departures (weather, rivers and terrain not
+stepped) in D20. What is left grows out of other items: once a soils model with nutrients (D31,
+§2d) or succession and disturbance (R10) exists, it belongs in the same per-cell loop, and its
+equilibrium is what the spin-up will then be for.
 
 ---
 
@@ -339,7 +317,7 @@ dashboard; the desktop panels).
 |---|---|---|
 | 3 | Individual stems in 3D (2a), interiors (2b), industry and town (2d, after Phase 4b), resource visuals and inventory icons (2c, after Phase 3 Task 2), tests for every building kind and vehicle | Engineering |
 | 4 | Human detail view, inspector, foundry panel; portraits | **Owner picks the two portraits** from upstream `apps/mk_ui/assets/portraits/`, and confirms their provenance before any distribution |
-| 5 | Done 2026-10-14 for the clock, controls and terrain cell (`apps/island_ui/src/inspectors.rs`): six speeds with requested and achieved, Save, the local date (year, day of 288, time of a 36-hour day) with Earth time elapsed, and the cell under the view with its biome, climate and production. Left: picking a tree, room or item with the mouse (the estate inspector lists them) | Engineering |
+| 5 | Done 2026-10-14 for the clock, controls and terrain cell (`apps/island_ui/src/inspectors.rs`): six speeds with requested and achieved, Save, the local date (year, day of 288, time of a 36-hour day) with Earth time elapsed, and the cell under the view with its biome, climate and production. A click on the estate picks a building, room or item and the right panel describes it (`estate.rs` `pick`). Left: picking a tree, once the stems are drawn | Engineering |
 | 6 | `island_bench`, the allocation-bound test (`construction-counters` feature), the resolution gate | **Owner confirms targets** (default: headless one simulated day per real minute; real time with the UI open) and **decides on formal predictive processing** (wire it into decisions upstream, or stop running it) |
 | 7 | The sync script is done (2026-10-14, `scripts/sync_maerken_upstream.py`, `UPSTREAM.md` § Sync procedure). The creator moved into `apps/island` (`island::population`) and `apps/island_humans` is retired. Pruning is the owner's call (the inventory recommends not to) | Engineering |
 | 8 | Final acceptance: every design criterion run and recorded | All of the above |
@@ -430,5 +408,5 @@ invertebrate densities, fire danger indices (see each report's "unsourced" secti
   push; the `dependency audit` CI job replaced it.
 - **Firecrawl credits ran out** on 2026-10-12. WebSearch and the TinyFish fetcher still work for
   sources; the container's own network blocks most hosts.
-- **Persist digests.** `WEEK_DIGEST` is `fc62629c…3da7`; the planetary topology pin is
+- **Persist digests.** `WEEK_DIGEST` is `54b48e5b…bb18`; the planetary topology pin is
   `e4ece246…73e2`. Any change that moves either is a behaviour change and must say so.
