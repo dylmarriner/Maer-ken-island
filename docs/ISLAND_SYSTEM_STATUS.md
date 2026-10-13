@@ -60,6 +60,7 @@ document was wrong about whether rendering here was possible at all.
 | Meals and drinks taken where the person stands: plants on their cell or around it; water within two cells, or the household stream near home, else dug from damp soil (from the merged local line) | Done | `regional/life.rs` (`meals`), `regional/materials.rs` (`cells_around`, `gather_soil_water`), `tests/island_foraging.rs`, `tests/island_water_supply.rs` (slow) |
 | Deaths on the island: the body's carbon and water leave the human stock through the audit, the dead leave the estate and are never re-adopted (from the merged local line) | Done | `regional/life.rs` (`bury_the_dead`), `tests/island_death.rs` |
 | A first grazer layer, every parameter an assumption (D41, from the merged local line) | Done as a placeholder | `regional/fauna.rs`, `regional/ecology.rs` (`step_with_grazers`), `tests/island_fauna.rs` |
+| Water at home: roof rainwater tank (realism R1, D42) | Done; hand-fetching when dry (R1b) open | `regional/household_water.rs`, `fixtures/reference/hydrology/household_water.json`, `crates/mk_engine/tests/island_household_water.rs` (188 m² roof, one 30,000 L tank; a day: 278 L used, 2.5 L of it drunk, books closed) |
 
 ## Measured (release build, development machine)
 

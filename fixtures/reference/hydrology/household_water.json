@@ -1,0 +1,154 @@
+{
+  "id": "household_water",
+  "domain": "hydrology",
+  "title": "Household water: use per person, roof-water collection and tank storage",
+  "retrieved": "2026-10-13",
+  "licence": "Numerical values cited as facts with attribution; no text, figures or datasets reproduced.",
+  "sources": [
+    {
+      "key": "esr2021",
+      "citation": "ESR (Institute of Environmental Science and Research) (2021 update). Household water supplies: the selection, operation and maintenance of individual household water supplies. ISBN 978-1-877166-06-8. https://www.esr.cri.nz/media/pltdjzz5/esr0940-household-water-supply.pdf (Table 1, p. 2; emergency water, p. 29).",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "hg2011",
+      "citation": "Harrison Grierson Consultants for Greater Wellington Regional Council (January 2011). Rainwater Tank Investigation: Rainwater Tank Analysis Report for Porirua. HG Document No. R003v4-AK129820-01, section 2.1 (equation 1). https://gw.govt.nz/assets/Documents/2011/01/Greater-Wellington-Regional-Council-Rainwater-Tank-Investigation-Rainwater-Tank-Analysis-Report-for-Porirua.pdf",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "branz_level",
+      "citation": "BRANZ, Level (the authority on sustainable building). Storing rainwater. https://www.level.org.nz/water/water-supply/mains-or-rainwater/storing-rainwater/ (retrieved 2026-10-13).",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "meola2020",
+      "citation": "Meola Creek community group (2020). Is it time for a water tank? (flyer). https://www.meolacreek.org.nz/wp-content/uploads/2020/07/Is-it-time-for-a-water-tank-flyer-FINAL.pdf",
+      "licence": "Facts cited with attribution"
+    }
+  ],
+  "items": [
+    {
+      "key": "household_water_use_per_person",
+      "description": "Average household water use per person per day, by use, for a New Zealand household on its own supply",
+      "unit": "L/person/day",
+      "source": "esr2021",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "use",
+          "columns": [
+            "litres"
+          ],
+          "rows": [
+            {
+              "label": "drinking",
+              "values": [
+                2.0
+              ]
+            },
+            {
+              "label": "cooking_and_food_preparation",
+              "values": [
+                3.0
+              ]
+            },
+            {
+              "label": "bathing_showering_cleaning",
+              "values": [
+                100.0
+              ]
+            },
+            {
+              "label": "toilet_flushing",
+              "values": [
+                90.0
+              ]
+            },
+            {
+              "label": "clothes_washing",
+              "values": [
+                35.0
+              ]
+            },
+            {
+              "label": "general_use",
+              "values": [
+                50.0
+              ]
+            },
+            {
+              "label": "total",
+              "values": [
+                280.0
+              ]
+            }
+          ]
+        }
+      },
+      "note": "ESR Table 1. Drinking here is the 2 L the table allows; the island books what each body actually turns over (1 mL/kcal) instead, so it uses the other rows for the household."
+    },
+    {
+      "key": "emergency_water_per_person",
+      "description": "Water to store per person per day after an emergency: enough for drinking, cooking, washing hands, dishes and a sponge bath, but not a shower or laundry; and the bare minimum for drinking and cooking alone",
+      "unit": "L/person/day",
+      "source": "esr2021",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "level",
+          "columns": [
+            "litres"
+          ],
+          "rows": [
+            {
+              "label": "rationed",
+              "values": [
+                20.0
+              ]
+            },
+            {
+              "label": "minimum",
+              "values": [
+                3.0
+              ]
+            }
+          ]
+        }
+      },
+      "note": "ESR p. 29, citing BRANZ (2008). The island uses 'rationed' as what a household cuts back to when its tank runs low."
+    },
+    {
+      "key": "roof_water_first_flush_loss",
+      "description": "Rain lost per day before a roof delivers water to its tank (first-flush diverter, leaking spouting, inefficient collection): inflow = (daily rainfall - loss) x roof area",
+      "unit": "mm/day",
+      "source": "hg2011",
+      "confidence": "medium",
+      "value": {
+        "point": 1.0
+      },
+      "note": "Section 2.1, equation 1; the 1 mm was agreed with Greater Wellington as a modelling assumption, and the whole roof area is taken as effective."
+    },
+    {
+      "key": "largest_standard_rainwater_tank",
+      "description": "Capacity of the largest common rainwater tank: conventional above-ground cylindrical tanks 'generally have the highest volume, with single tanks holding up to 30,000 litres'",
+      "unit": "L",
+      "source": "branz_level",
+      "confidence": "medium",
+      "value": {
+        "point": 30000.0
+      },
+      "note": "The island installs whole tanks of this size, as many as the estate's driest run needs and never fewer than one."
+    },
+    {
+      "key": "sole_supply_tank_storage",
+      "description": "Typical on-site storage for a household solely dependent on rainwater tanks",
+      "unit": "L",
+      "source": "meola2020",
+      "confidence": "low",
+      "value": {
+        "point": 25000.0
+      },
+      "note": "A community flyer, used only as a cross-check on the installed size, never as an input. The same flyer recommends 30,000-50,000 L for homes of three or more bedrooms."
+    }
+  ]
+}

@@ -324,6 +324,20 @@ fn flow(ledger: &mut Ledger, kind: FluxKind, from: Reservoir, to: Reservoir, amo
     }
 }
 
+/// Set a cell's soil storage (mm) and the moisture fraction that follows
+/// from it.
+fn set_soil_storage(hydrology: &mut HydrologyState, cell: (usize, usize), storage_mm: f64) {
+    let storage_mm = storage_mm.max(0.0);
+    hydrology.soil_water.set(
+        cell.0,
+        cell.1,
+        SoilWater {
+            moisture_fraction: (storage_mm / SOIL_FIELD_CAPACITY_MM).clamp(0.0, 1.0),
+            storage_mm,
+        },
+    );
+}
+
 impl MaterialLedger {
     pub fn new() -> Self {
         Self {
@@ -450,6 +464,63 @@ impl MaterialLedger {
             take,
         );
         Ok(take)
+    }
+
+    /// Rain caught by a roof and run into a tank. The hydrology has already
+    /// put that rain on the cell, so the catch is taken back out of the
+    /// cell's soil storage (as much as is there) and enters the material
+    /// stock from `SoilWater`. Returns the kg caught.
+    pub fn capture_roof_water(
+        &mut self,
+        kg: f64,
+        hydrology: &mut HydrologyState,
+        cell: (usize, usize),
+        cell_area_m2: f64,
+        ledger: &mut Ledger,
+    ) -> f64 {
+        let soil = *hydrology.soil_water.get(cell.0, cell.1);
+        let take = kg.max(0.0).min(soil.storage_mm.max(0.0) * cell_area_m2);
+        if take <= 0.0 {
+            return 0.0;
+        }
+        set_soil_storage(hydrology, cell, soil.storage_mm - take / cell_area_m2);
+        self.add(Material::Water, take);
+        flow(
+            ledger,
+            FluxKind::Water,
+            Reservoir::SoilWater,
+            Reservoir::MaterialWater,
+            take,
+        );
+        take
+    }
+
+    /// Used household water (showers, toilets, washing) leaving the stock
+    /// for the ground, as it does from a septic tank: back into the cell's
+    /// soil storage. Returns the kg discharged.
+    pub fn discharge_water(
+        &mut self,
+        kg: f64,
+        hydrology: &mut HydrologyState,
+        cell: (usize, usize),
+        cell_area_m2: f64,
+        ledger: &mut Ledger,
+    ) -> Result<f64, MaterialError> {
+        let kg = kg.max(0.0);
+        if kg <= 0.0 {
+            return Ok(0.0);
+        }
+        self.take(Material::Water, kg)?;
+        let soil = *hydrology.soil_water.get(cell.0, cell.1);
+        set_soil_storage(hydrology, cell, soil.storage_mm + kg / cell_area_m2);
+        flow(
+            ledger,
+            FluxKind::Water,
+            Reservoir::MaterialWater,
+            Reservoir::SoilWater,
+            kg,
+        );
+        Ok(kg)
     }
 
     /// Take in the wood of a felled stem (`LocalVegetationPatch::fell_tree`):

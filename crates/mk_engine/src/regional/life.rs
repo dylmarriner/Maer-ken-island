@@ -30,6 +30,9 @@ use mk_island::{
 use super::ecology::{RegionalEcologyError, RegionalEcologyState};
 use super::energy::{solar_output_kw, EstateEnergy, ROOM_LIGHT_LUX};
 use super::estate_layout::{Space, SpaceId};
+use super::household_water::{
+    installed_capacity_kg, storage_needed_kg, HouseholdWater, HouseholdWaterSpec,
+};
 use super::human_store::{open_run, HumanStore, HumanStoreError, RunId};
 use super::humans::{
     bootstrap_regional_humans, step_regional_humans, HumanEstatePositions, RegionalHumanContext,
@@ -205,6 +208,10 @@ pub struct IslandLifeSnapshot {
     pub sleep_seconds: BTreeMap<String, (f64, f64)>,
     pub food_cell: (usize, usize),
     pub water_cell: Option<(usize, usize)>,
+    /// The house's roof and rainwater tank. `None` in an island saved
+    /// before the house had one; restoring installs it.
+    #[serde(default)]
+    pub household_water: Option<HouseholdWater>,
 }
 
 pub struct IslandLife {
@@ -285,6 +292,8 @@ pub struct IslandLife {
     pub timings: SubsystemTimings,
     food_cell: (usize, usize),
     pub water_cell: Option<(usize, usize)>,
+    /// The house's roof and rainwater tank (realism programme R1).
+    pub household_water: Option<HouseholdWater>,
     topology: GridTopology,
 }
 
@@ -412,6 +421,7 @@ impl IslandLife {
             timings: SubsystemTimings::default(),
             food_cell,
             water_cell,
+            household_water: None,
             topology,
         };
         // A log says which scenario it belongs to, so replaying it against
@@ -434,6 +444,9 @@ impl IslandLife {
         if life.energy.hydro.is_empty() {
             // Saved before the river's plant was connected.
             attach_estate_hydro(&mut life.energy, &life.placed, &life.domain);
+        }
+        if life.household_water.is_none() {
+            life.install_household_water()?;
         }
         life.replay_log = super::replay::IslandReplayLog::new(life.scenario_digest_hex());
         Ok(life)
@@ -482,6 +495,7 @@ impl IslandLife {
             sleep_seconds: self.sleep_seconds.clone(),
             food_cell: self.food_cell,
             water_cell: self.water_cell,
+            household_water: self.household_water.clone(),
         }
     }
 
@@ -545,8 +559,13 @@ impl IslandLife {
             timings: SubsystemTimings::default(),
             food_cell: snapshot.food_cell,
             water_cell: snapshot.water_cell,
+            household_water: snapshot.household_water,
             topology,
         };
+        if life.household_water.is_none() {
+            // Saved before the house had a tank.
+            life.install_household_water()?;
+        }
         life.replay_log = super::replay::IslandReplayLog::new(life.scenario_digest_hex());
         Ok(life)
     }
@@ -1308,9 +1327,35 @@ impl IslandLife {
             // losses booked together: excretion to the soil, breath and
             // sweat to the air.
             for (id, owed_kg) in &drinkers {
-                // Water: the nearest wet cell within reach; near home, also
-                // the household's stream (or the wet cell beside it).
                 let stands = life.standing_cell(id, rows, cols);
+                // At home, the tap: the tank's water is already in the
+                // stock, so drinking it moves it from the tank into the body.
+                let mut from_tank = 0.0;
+                if life.at_home(stands) && life.materials.is_registered(id) {
+                    if let Some(tank) = life.household_water.as_mut() {
+                        let kg = tank.draw(*owed_kg);
+                        if kg > 0.0 && life.materials.drink(id, kg).is_ok() {
+                            from_tank = kg;
+                            let _ = life.materials.lose_water(
+                                id,
+                                kg,
+                                EXCRETION_TO_SOIL_FRACTION,
+                                ledger,
+                            );
+                            *life.water_drunk_kg.entry(id.clone()).or_insert(0.0) += kg;
+                            life.lost_since_drink
+                                .insert(id.clone(), (owed_kg - kg).max(0.0));
+                            if kg + 1e-9 >= *owed_kg {
+                                continue;
+                            }
+                        }
+                    }
+                }
+                // Away from home, or the tank is dry: the nearest wet cell
+                // within reach; near home, also the household's stream (or
+                // the wet cell beside it). Instantaneous, which is D9's
+                // still-open part for water: fetching by hand is R1b.
+                let owed_kg = &(*owed_kg - from_tank);
                 let mut candidates = cells_around(stands, WATER_RADIUS_CELLS, rows, cols);
                 if let Some(home) = life.water_cell {
                     if stands.0.abs_diff(home.0).max(stands.1.abs_diff(home.1)) <= HOME_RANGE_CELLS
@@ -1358,6 +1403,123 @@ impl IslandLife {
                     }
                     Err(_) => life.shortfalls.water += 1,
                 }
+            }
+        })
+    }
+
+    /// Whether a medium cell is home: one of the four cells the estate's
+    /// patch covers.
+    fn at_home(&self, cell: (usize, usize)) -> bool {
+        let (row, col) = self.placed.location;
+        (row..=row + 1).contains(&cell.0) && (col..=col + 1).contains(&cell.1)
+    }
+
+    /// The living who are at home now.
+    fn people_at_home(&self) -> usize {
+        let (rows, cols) = (
+            self.domain.rows(DomainLevel::Medium),
+            self.domain.cols(DomainLevel::Medium),
+        );
+        self.humans
+            .registry
+            .iter()
+            .filter(|h| matches!(h.profile.status, mk_core::human::HumanStatus::Alive))
+            .filter(|h| self.at_home(self.standing_cell(h.agent_id(), rows, cols)))
+            .count()
+    }
+
+    /// Put a rainwater tank on the house: its roof is the house's footprint,
+    /// and its size is what the estate's climatology needs for the people
+    /// at home (whole tanks, at least one). It starts full, as a lived-in
+    /// house's would: the water comes out of the estate cell's soil, where
+    /// earlier rain put it. An estate with no house gets no tank.
+    fn install_household_water(&mut self) -> Result<(), IslandLifeError> {
+        let Some(house) = self
+            .placed
+            .layout
+            .buildings
+            .iter()
+            .find(|b| b.kind == crate::organisms::property::PropertyBuildingKind::House)
+        else {
+            return Ok(());
+        };
+        let roof_m2 =
+            (house.rect_m.x1 - house.rect_m.x0).abs() * (house.rect_m.y1 - house.rect_m.y0).abs();
+        let spec = HouseholdWaterSpec::from_reference(self.labour.library())
+            .map_err(|e| IslandLifeError::Labour(LabourError::MissingReference(e)))?;
+        let (row, col) = self.placed.location;
+        let year = super::ecology::cell_year(&self.domain, &self.physical, row, col);
+        let bins = year.precipitation_mm_day.len() as f64;
+        let days_per_bin = self.canon.orbital_period_s / bins / 86_400.0;
+        let needed = storage_needed_kg(
+            &spec,
+            roof_m2,
+            self.people_at_home().max(1),
+            &year.precipitation_mm_day,
+            days_per_bin,
+        );
+        let mut tank = HouseholdWater::new(spec, roof_m2, installed_capacity_kg(&spec, needed));
+        let area = self.domain.cell_area_m2(DomainLevel::Medium);
+        let capacity = tank.capacity_kg;
+        let mut filled = 0.0;
+        self.audited(|life, ledger| {
+            filled = life.materials.capture_roof_water(
+                capacity,
+                &mut life.physical.hydrology,
+                (row, col),
+                area,
+                ledger,
+            );
+        })?;
+        tank.stored_kg = filled;
+        self.household_water = Some(tank);
+        Ok(())
+    }
+
+    /// One step of the house's water: rain off the roof into the tank (what
+    /// does not fit overflows and stays on the ground), and the household's
+    /// washing, flushing and cooking out of it into the ground, as from a
+    /// septic tank. Drinking is in [`Self::meals`].
+    fn household_water_step(&mut self, dt_s: f64) -> Result<(), IslandLifeError> {
+        if self.household_water.is_none() {
+            return Ok(());
+        }
+        let (row, col) = self.placed.location;
+        let rain_mm_day = super::levels::sample_coarse_at_medium(
+            |r, c| *self.physical.weather.precipitation.get(r, c),
+            &self.domain,
+            row,
+            col,
+        );
+        let people = self.people_at_home();
+        let area = self.domain.cell_area_m2(DomainLevel::Medium);
+        self.audited(|life, ledger| {
+            let Some(tank) = life.household_water.as_mut() else {
+                return;
+            };
+            let delivered = tank.roof_delivers_kg(rain_mm_day, dt_s);
+            let caught = life.materials.capture_roof_water(
+                delivered.min(tank.room_kg()),
+                &mut life.physical.hydrology,
+                (row, col),
+                area,
+                ledger,
+            );
+            tank.fill(caught, delivered);
+            let (want, rationed) = tank.household_use_kg(people, dt_s);
+            if rationed && people > 0 {
+                tank.rationed_s += dt_s;
+            }
+            let used = tank.draw(want);
+            if used > 0.0 {
+                // The tank's water is in the stock, so this cannot fall short.
+                let _ = life.materials.discharge_water(
+                    used,
+                    &mut life.physical.hydrology,
+                    (row, col),
+                    area,
+                    ledger,
+                );
             }
         })
     }
@@ -1579,6 +1741,7 @@ impl IslandLife {
                 self.labour_kcal.remove(&id);
             }
             self.work(human_s as f64)?;
+            self.household_water_step(human_s as f64)?;
             self.meals()?;
             // A death is written at once: every other record can lag a
             // cadence and catch up, but a dead person's folder never will.
@@ -1670,6 +1833,7 @@ impl IslandLife {
         h.update(canonical(&self.hauling).as_bytes());
         h.update(canonical(&self.labour_kcal).as_bytes());
         h.update(canonical(&self.water_drunk_kg).as_bytes());
+        h.update(canonical(&self.household_water).as_bytes());
         h.update(canonical(&self.sleep_seconds).as_bytes());
         h.update(&self.sim_time_s.to_le_bytes());
         // Deliberately absent, and each for a reason that must stay true:
