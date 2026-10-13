@@ -1,0 +1,17 @@
+# cargo-audit configuration, read by CI's `dependency audit` job.
+#
+# Every ignore names who it is for, why it cannot be fixed now and when to
+# look again. Remove an entry as soon as its fix is reachable.
+
+[advisories]
+ignore = [
+    # ruzstd 0.8.3: decompression bomb (denial of service only, no memory
+    # corruption). It reaches the build through island_ui alone:
+    # bevy_egui 0.42 and bevy_core_pipeline 0.19 require bevy_image with
+    # `zstd_rust`, and every bevy_image release up to 0.20.0 pins
+    # ruzstd ^0.8, so the fixed 0.9.1 cannot be taken. island_ui only
+    # decodes zstd from Bevy's embedded tonemapping LUTs and its own bundled
+    # assets; the backend sends JSON. Look again at the next bevy_image
+    # release.
+    "RUSTSEC-2026-0344",
+]
