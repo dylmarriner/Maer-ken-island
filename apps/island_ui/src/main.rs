@@ -247,8 +247,9 @@ struct Panels {
 }
 
 /// The foundry's state across frames. The creator's options are asked
-/// for once, when the window first opens; a creation is followed on a
-/// thread of its own until the island says what became of it.
+/// for when the window first opens, and again if asking failed; a creation
+/// is sent and followed on a thread of its own until the island says what
+/// became of it, and no second one can be sent until then.
 #[derive(Default)]
 struct Foundry {
     open: bool,
@@ -256,6 +257,8 @@ struct Foundry {
     asked_for_options: bool,
     form: Option<island_ui::foundry::Form>,
     following: Slot<Followed>,
+    /// A creation is out and the island has not yet said what became of it.
+    pending: std::sync::Arc<std::sync::atomic::AtomicBool>,
     /// The person last created, once selected, so they are chosen once and
     /// not again every frame after.
     selected_once: Option<String>,
@@ -271,10 +274,38 @@ struct Followed {
     created: Option<String>,
 }
 
-/// Follow command `id` until the island has applied or refused it.
-fn follow_creation(island: &Island, id: u64, slot: Slot<Followed>) {
+/// Send `request` and follow its command until the island has applied or
+/// refused it, off the render thread, so a slow or unreachable backend
+/// never stops the window. `pending` is cleared once the outcome is known.
+fn create_and_follow(
+    island: &Island,
+    request: mk_island_api::CreateHumanRequest,
+    slot: Slot<Followed>,
+    pending: std::sync::Arc<std::sync::atomic::AtomicBool>,
+) {
     let client = island.client().clone();
+    pending.store(true, std::sync::atomic::Ordering::Release);
     std::thread::spawn(move || {
+        let say = |said: Followed| {
+            if let Ok(mut slot) = slot.lock() {
+                *slot = Some(said);
+            }
+        };
+        let id = match client.create_human(&request) {
+            Ok(accepted) => accepted.command,
+            Err(e) => {
+                say(Followed {
+                    said: format!("Nobody was created: {e}"),
+                    created: None,
+                });
+                pending.store(false, std::sync::atomic::Ordering::Release);
+                return;
+            }
+        };
+        say(Followed {
+            said: format!("Queued as command {id}; following it…"),
+            created: None,
+        });
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
         let said = loop {
             match client.outcome(id) {
@@ -320,9 +351,8 @@ fn follow_creation(island: &Island, id: u64, slot: Slot<Followed>) {
                 }
             }
         };
-        if let Ok(mut slot) = slot.lock() {
-            *slot = Some(said);
-        }
+        say(said);
+        pending.store(false, std::sync::atomic::Ordering::Release);
     });
 }
 
@@ -363,6 +393,10 @@ fn foundry_window(
                 }
                 Some(Err(e)) => {
                     ui.colored_label(egui::Color32::from_rgb(220, 120, 120), e);
+                    if ui.button("Try again").clicked() {
+                        foundry.asked_for_options = false;
+                        *foundry.options.lock().unwrap_or_else(|p| p.into_inner()) = None;
+                    }
                     return;
                 }
                 Some(Ok(options)) => options,
@@ -456,31 +490,22 @@ fn foundry_window(
                     }
                 }
                 Ok(request) => {
-                    if ui.button(format!("Create {}", request.name)).clicked() {
-                        match island.client().create_human(&request) {
-                            Ok(accepted) => {
-                                *foundry.following.lock().unwrap_or_else(|p| p.into_inner()) =
-                                    Some(Followed {
-                                        said: format!(
-                                            "Queued as command {}; following it…",
-                                            accepted.command
-                                        ),
-                                        created: None,
-                                    });
-                                follow_creation(
-                                    island,
-                                    accepted.command,
-                                    foundry.following.clone(),
-                                );
-                            }
-                            Err(e) => {
-                                *foundry.following.lock().unwrap_or_else(|p| p.into_inner()) =
-                                    Some(Followed {
-                                        said: format!("Nobody was created: {e}"),
-                                        created: None,
-                                    });
-                            }
-                        }
+                    // One creation at a time: a second click before the
+                    // island answers would make a second person.
+                    let waiting = foundry.pending.load(std::sync::atomic::Ordering::Acquire);
+                    let label = format!("Create {}", request.name);
+                    if ui.add_enabled(!waiting, egui::Button::new(label)).clicked() {
+                        *foundry.following.lock().unwrap_or_else(|p| p.into_inner()) =
+                            Some(Followed {
+                                said: format!("Sending {}…", request.name),
+                                created: None,
+                            });
+                        create_and_follow(
+                            island,
+                            request,
+                            foundry.following.clone(),
+                            foundry.pending.clone(),
+                        );
                     }
                 }
             }
