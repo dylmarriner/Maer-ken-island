@@ -259,10 +259,12 @@ pub fn trunk_target(stem: &Stem) -> Placed {
 /// computer seen through the house's roof means the computer, not the
 /// roof. The yard is never picked; it is the ground everything stands on.
 ///
-/// A tree among `stems` (the trunks drawn) is weighed against the rooms
-/// rather than ranked above or below them: a room is only ever seen
-/// through its building and a tree only outside one, so whichever of the
-/// two the ray meets first is the one in front.
+/// A tree among `stems` (the trunks drawn) is weighed by distance rather
+/// than ranked: it is picked only when the ray meets it before any room
+/// and before any building. A room is seen through its building's
+/// translucent walls, so it still wins over the building in front of it;
+/// a tree behind a building does not, or that part of the building could
+/// never be clicked.
 pub fn pick(layout: &EstateLayout, stems: &[Stem], from: Point, along: Point) -> Option<Picked> {
     let nearest = |placed: &[Placed]| {
         placed
@@ -276,14 +278,15 @@ pub fn pick(layout: &EstateLayout, stems: &[Stem], from: Point, along: Point) ->
     }
     let trunks: Vec<Placed> = stems.iter().map(trunk_target).collect();
     let room = nearest(&rooms(layout));
-    let tree = nearest(&trunks);
-    match (room, tree) {
-        (Some((_, r)), Some((i, t))) if t < r => return Some(Picked::Tree(stems[i].id)),
-        (Some((i, _)), _) => return Some(Picked::Room(i)),
-        (None, Some((i, _))) => return Some(Picked::Tree(stems[i].id)),
-        (None, None) => {}
+    let building = nearest(&buildings(layout));
+    let in_front = |t: f32, other: Option<(usize, f32)>| other.is_none_or(|(_, d)| t < d);
+    if let Some((i, t)) = nearest(&trunks) {
+        if in_front(t, room) && in_front(t, building) {
+            return Some(Picked::Tree(stems[i].id));
+        }
     }
-    nearest(&buildings(layout)).map(|(i, _)| Picked::Building(i))
+    room.map(|(i, _)| Picked::Room(i))
+        .or(building.map(|(i, _)| Picked::Building(i)))
 }
 
 /// What the inspector says about something picked on the estate: the
@@ -664,6 +667,30 @@ mod tests {
         assert_eq!(
             pick(&layout, &[oak], past_oak, along),
             Some(Picked::Room(0))
+        );
+
+        // A tree behind the shed, seen past it, is hidden by it: the
+        // shed is what the click meets first. Looked at from the south
+        // (+z) towards the north, clear of the house to the west.
+        let shed = &buildings(&layout)[1];
+        let hidden = Stem {
+            id: 43,
+            base: Point::new(shed.at.x, 0.0, shed.at.z - 20.0),
+            height_m: 20.0,
+            radius_m: 0.4,
+            shrub: false,
+        };
+        let north = Point::new(0.0, 0.0, -1.0);
+        let south_of_shed = Point::new(shed.at.x, 1.0, shed.at.z + 20.0);
+        assert_eq!(
+            pick(&layout, &[hidden], south_of_shed, north),
+            Some(Picked::Building(1))
+        );
+        // And with nothing in the way, the same tree is picked.
+        let north_of_shed = Point::new(shed.at.x, 1.0, shed.at.z - 10.0);
+        assert_eq!(
+            pick(&layout, &[hidden], north_of_shed, north),
+            Some(Picked::Tree(43))
         );
     }
 
