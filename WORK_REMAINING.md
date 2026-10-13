@@ -337,6 +337,15 @@ page does not yet use the map.
 
 ## Housekeeping
 
+- **The repository is public.** The licence stays all rights reserved (`LICENSE`), so the code is
+  readable but not licensed for reuse. Two things follow:
+  - The founders' GLB models (`assets/humans/GemD.glb`, `GemK.glb`) have unverified provenance
+    (`assets/CREDITS.md`) and are now distributed. **The owner should confirm their origin**, or
+    replace them.
+  - The Phase 5 portraits must have their provenance confirmed **before** they are copied in.
+  - A scan of the whole git history on 2026-10-13 found no keys, tokens or private keys;
+    `deploy/island.env` holds empty token placeholders. Keep secrets in environment variables.
+
 - **Nightly slow job:** `.github/workflows/ci.yml`'s `slow` job runs
   `cargo test --workspace --release -- --ignored slow_` without `--exclude island_ui` and
   without the ALSA and graphics packages the desktop job installs. If the nightly run is red at

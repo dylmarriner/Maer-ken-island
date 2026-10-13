@@ -187,7 +187,7 @@ its usual 17-25 and made the test compare two different things.
 
 CI runs again. Between 2026-10-06 and 2026-10-09 every job completed in 1-4 seconds with no
 runner assigned (the signature of an exhausted Actions allowance on a private repository). That
-has cleared: the jobs run, and passed on 2026-10-12 as above. The nightly slow job runs `--workspace` without `--exclude island_ui`
+has cleared: the repository is now public, the jobs run, and they passed on 2026-10-12 as above. The nightly slow job runs `--workspace` without `--exclude island_ui`
 and without the desktop job's ALSA packages, so if it fails at build time, that is the first
 thing to check (`WORK_REMAINING.md`, Housekeeping).
 

@@ -15,7 +15,7 @@ projects, not a third-party import.
 
 | File | Origin | Caveat |
 |---|---|---|
-| `humans/GemD.glb`, `humans/GemK.glb` | Imported at extraction (2026-10-01) with `crates/mk_core`/`mk_engine`; upstream `apps/mk_ui/assets/models/` | Upstream's own `CREDITS.md` records these as "pre-existing project assets; origin not re-verified". That caveat is carried here unchanged: **verify provenance before any distribution outside this private repository.** |
+| `humans/GemD.glb`, `humans/GemK.glb` | Imported at extraction (2026-10-01) with `crates/mk_core`/`mk_engine`; upstream `apps/mk_ui/assets/models/` | Upstream's own `CREDITS.md` records these as "pre-existing project assets; origin not re-verified". That caveat is carried here unchanged: **verify provenance.** The repository is now public, so these files are already distributed; until their origin is confirmed, replace them or keep the repository private. |
 
 ## The estate: buildings, computers, tools, vehicles
 
