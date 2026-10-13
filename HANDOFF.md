@@ -24,9 +24,9 @@ estate move is booked in a flux ledger that is audited at every step.
 | Phase | Scope | State |
 |---|---|---|
 | 0, 0b, 0c | Baseline, early human creator, canon and the realism standard | Done |
-| 1 | Island domain and geophysics | Done; the owner's island is provisional (Gate 1) |
-| 2 | Climate, weather, ocean, tides, hydrology, the coupled tick | Done; owner review pending (Gate 2) |
-| 3 | Ecology, estate, 200,000 trees, founders, materials, labour, energy, timber | Mostly done. Open: species (Task 1b), every resource and material (Task 2), Gate 3 |
+| 1 | Island domain and geophysics | Done; the owner's island is accepted (Gate 1 closed 2026-10-13) |
+| 2 | Climate, weather, ocean, tides, hydrology, the coupled tick | Done (Gate 2 closed 2026-10-13) |
+| 3 | Ecology, estate, 200,000 trees, founders, materials, labour, energy, timber | Mostly done. Open: species (Task 1b), every resource and material (Task 2). Gate 3 closed 2026-10-13 |
 | 4 | World, scheduler, snapshot, per-human folders, commands, replay, interventions, runner, live dashboard | Done **except Task 2b, the deep-time spin-up** (not started) |
 | 4b | Energy, industry, town, economy | Hydro done (Tasks 1-3). Oil and gas, refinery, trades, money, food and timber chains, the town: not started |
 | 5 | The application and performance | The web dashboard and the desktop app run and draw the island and estate; inspectors, benchmarks, upstream sync and pruning remain |
@@ -46,6 +46,9 @@ The newest work (merged 2026-10-12, PR #6):
   hand to the workshop (D40).
 
 `docs/handoff/SESSION_2026-10-12.md` is the full account.
+
+The session of 2026-10-13 (production readiness, the realism research and programme, water at
+home, soil carbon) is recorded in `docs/handoff/SESSION_2026-10-13.md`.
 
 ## Read in this order
 
@@ -103,7 +106,8 @@ cargo run -p island -- serve --scenario fixtures/island/default_scenario.json   
 
 ## Owner decisions outstanding
 
-- Gate 1, 2 and 3 reviews (island, weather previews, estate plan and trees).
+- Gates 1, 2 and 3 are **closed** (owner, 2026-10-13): the work built on the island, its weather
+  and the estate plan is the approval. Do not ask for them again.
 - D25: change the sea's heat exchange regionally, or in shared code and re-pin the planet.
 - Phase 4b: enterprise ownership splits, employment and dividend policies, the town's size.
 - Phase 4b, decided 2026-10-13 (`docs/handoff/WORKING_PRACTICES.md`): who lives where, the
