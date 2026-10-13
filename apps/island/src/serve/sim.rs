@@ -785,6 +785,12 @@ fn run(mut it: Loop) {
             it.views.economy = IslandProjection::economy_now(&it.life);
             it.views.economy_at_tick = it.life.tick;
             it.views.timeline = IslandProjection::timeline_now(&it.life);
+            // The cached digest describes the island before these
+            // commands, at the same tick, so it is no longer the island's
+            // now. Said rather than recomputed: a full state digest is
+            // too slow to take on every command, and the next refresh
+            // (every `DIGEST_EVERY` ticks) makes it current again.
+            it.digest.current = false;
 
             // Published now, whether or not the island steps this
             // iteration, and before any command is marked resolved. A
@@ -1352,6 +1358,26 @@ mod tests {
         // A nonsense multiplier falls back to real time rather than
         // dividing by zero.
         assert_eq!(SimSpeed::Times(0).budget(60), Some(Duration::from_secs(60)));
+    }
+
+    /// A digest taken at this tick is current until something changes the
+    /// island without moving the clock -- a command -- and then it is not.
+    #[test]
+    fn a_digest_from_before_a_command_is_not_called_current() {
+        let life = island();
+        let digest = IslandProjection::digest_now(&life);
+        let views = Views::of(&life);
+        let fresh = IslandProjection::of(&life, "x", None, digest.clone(), views.clone());
+        assert!(fresh.digest.current);
+        let stale = Digest {
+            current: false,
+            ..digest
+        };
+        let after = IslandProjection::of(&life, "x", None, stale, views);
+        assert!(
+            !after.digest.current,
+            "a pre-command digest passed as current"
+        );
     }
 }
 

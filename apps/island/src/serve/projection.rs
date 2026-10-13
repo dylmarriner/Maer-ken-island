@@ -513,8 +513,12 @@ impl IslandProjection {
             timeline,
             conversations,
             trees,
+            // Current only if it was taken at this tick *and* nothing has
+            // changed the island since: a command applies without moving
+            // the clock, so the tick alone cannot tell (`run_island` clears
+            // `current` when one lands).
             digest: Digest {
-                current: digest.at_tick == life.tick,
+                current: digest.current && digest.at_tick == life.tick,
                 ..digest
             },
         }
