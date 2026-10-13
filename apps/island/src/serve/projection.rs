@@ -817,11 +817,12 @@ fn estate(life: &IslandLife) -> Estate {
         battery_charge_kwh: energy.batteries.iter().map(|b| b.charge_kwh).sum(),
         battery_capacity_kwh: energy.batteries.iter().map(|b| b.capacity_kwh).sum(),
         fuel_litres: energy.fuel_stores.iter().map(|s| s.litres).sum(),
+        // Only where a created person may stand: the house is the
+        // founders' and their children's (`EstateLayout::is_house_space`).
         spaces: life
             .placed
             .layout
-            .spaces
-            .iter()
+            .spaces_outside_house()
             .map(|s| SpaceChoice {
                 id: s.id.0,
                 label: s.label.clone(),

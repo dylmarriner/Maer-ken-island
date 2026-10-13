@@ -260,6 +260,18 @@ impl IslandLife {
                                 .join(", ")
                         )
                     })?;
+                // Somebody created here is never a founder or a founder's
+                // child -- those are bootstrapped or born -- so the house is
+                // never theirs to live in.
+                if self.placed.layout.is_house_space(*id) {
+                    return Err(format!(
+                        "location: {} is in the founders' house, which is only for the two \
+                         founders and the children they have. Estate staff will each have a \
+                         cottage and everyone else will live in the town; neither is built \
+                         yet, so choose another estate space or a cell of the island.",
+                        space.label
+                    ));
+                }
                 let rect = space.rect_m;
                 let position_m = ((rect.x0 + rect.x1) / 2.0, (rect.y0 + rect.y1) / 2.0);
                 Ok(Placement {

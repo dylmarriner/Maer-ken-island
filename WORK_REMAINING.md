@@ -27,6 +27,10 @@ this list holds the current state. The evidence for what is *done* is in
   pass, then update `WEEK_DIGEST` (procedure in `docs/handoff/WORKING_PRACTICES.md`).
 - Behaviour-changing work runs the two reference-pack slow tests (the week and the year) before
   merging; the fast tier cannot see them.
+- **Who lives where (owner, 2026-10-13).** The founders' house is the two founders' and their
+  children's alone. Estate staff each have a separate 2-3 bedroom cottage on the estate; everyone
+  else lives in the town. Nothing may put anybody else in the house, including test scaffolding:
+  use `EstateLayout::spaces_outside_house` or a cell of the island.
 
 ## Status at a glance
 
@@ -242,6 +246,12 @@ Add to `fixtures/reference/industry/` (new packs alongside `hydro.json`), each v
   attendance in the autonomous mind go into `dylmarriner/Maer-Ken`, then sync. If upstream is
   not available, record each change as a divergence in `UPSTREAM.md` and say so.
 - **Files:** create `regional/industry/jobs.rs`; shifts run on a 24 h roster, not the 36 h sun.
+- **Staff housing (owner, 2026-10-13):** every estate staff member -- maids, kitchen staff, farm
+  hands, the staff manager or supervisor -- gets a separate 2-3 bedroom cottage on the estate,
+  added to `EstateLayout` as a building kind of its own with its own bedrooms, sited on
+  buildable ground clear of the house. Staff sleep in their own cottage (the bedroom rule in
+  `regional/humans.rs` reads a `"<id>'s Bedroom"` label) and never in the house. Needs: a
+  sourced floor area for a 2-3 bedroom cottage; the owner's staff list.
 - **D39** closes here: the hydro plant's wear, overhaul and failure need **cited overhaul
   intervals**, and maintenance labour restores it; flood closure of the intake needs a **cited
   flow threshold**.
@@ -272,6 +282,9 @@ Add to `fixtures/reference/industry/` (new packs alongside `hydro.json`), each v
 
 - **Owner decision:** the founding town's size (the plan offers a smaller one if performance
   misses its targets).
+- **Residence (owner, 2026-10-13):** everyone who is not a founder, a founder's child or estate
+  staff lives in the town. Once it exists, the Creator should offer the town (and, for staff,
+  a cottage) as where a person lives, rather than only a spot on the estate.
 - **Files:** create `regional/town.rs`, `fixtures/island/workforce.json` (generated from the seed);
   generalise `regional/estate_layout.rs` to any high-detail site.
 - **Tests:** `tests/island_town.rs`.

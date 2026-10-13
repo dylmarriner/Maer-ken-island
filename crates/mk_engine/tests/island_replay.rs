@@ -89,7 +89,14 @@ fn a_log_keeps_the_order_commands_arrived_in() {
     let mut life = island();
     life.advance(5 * STEP).unwrap();
 
-    let space = life.placed.layout.spaces[0].id.0;
+    let space = life
+        .placed
+        .layout
+        .spaces_outside_house()
+        .next()
+        .unwrap()
+        .id
+        .0;
     life.apply_command(somebody("Rua", space)).unwrap();
     life.apply_command(IslandCommand::Control(ControlCommand::Pause))
         .unwrap();
@@ -108,7 +115,14 @@ fn a_log_keeps_the_order_commands_arrived_in() {
 #[test]
 fn replaying_a_log_reaches_the_island_the_run_reached() {
     let mut live = island();
-    let space = live.placed.layout.spaces[0].id.0;
+    let space = live
+        .placed
+        .layout
+        .spaces_outside_house()
+        .next()
+        .unwrap()
+        .id
+        .0;
 
     live.advance(3 * STEP).unwrap();
     live.apply_command(somebody("Anahera", space)).unwrap();
@@ -169,7 +183,14 @@ fn control_commands_are_recorded_and_change_nothing() {
 #[test]
 fn a_replay_that_stops_halfway_and_carries_on_lands_in_the_same_place() {
     let mut live = island();
-    let space = live.placed.layout.spaces[0].id.0;
+    let space = live
+        .placed
+        .layout
+        .spaces_outside_house()
+        .next()
+        .unwrap()
+        .id
+        .0;
     live.advance(2 * STEP).unwrap();
     live.apply_command(somebody("Moana", space)).unwrap();
     live.advance(6 * STEP).unwrap();
@@ -214,7 +235,14 @@ fn a_log_from_another_island_is_refused() {
 #[test]
 fn a_log_round_trips_through_a_file() {
     let mut live = island();
-    let space = live.placed.layout.spaces[0].id.0;
+    let space = live
+        .placed
+        .layout
+        .spaces_outside_house()
+        .next()
+        .unwrap()
+        .id
+        .0;
     live.advance(STEP).unwrap();
     live.apply_command(somebody("Pare", space)).unwrap();
     live.apply_command(IslandCommand::Control(ControlCommand::Snapshot))
@@ -245,7 +273,14 @@ fn a_log_round_trips_through_a_file() {
 #[test]
 fn a_shuffled_log_still_reproduces_the_run() {
     let mut live = island();
-    let space = live.placed.layout.spaces[0].id.0;
+    let space = live
+        .placed
+        .layout
+        .spaces_outside_house()
+        .next()
+        .unwrap()
+        .id
+        .0;
     live.advance(2 * STEP).unwrap();
     live.apply_command(somebody("Wiremu", space)).unwrap();
     live.apply_command(somebody("Wiremu", space)).unwrap();

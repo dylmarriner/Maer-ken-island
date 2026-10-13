@@ -190,6 +190,35 @@ pub struct EstateLayout {
 }
 
 impl EstateLayout {
+    /// Whether a space is part of the founders' house: it belongs to the
+    /// `House` building, or stands inside the house's footprint (the
+    /// computer room keeps its own upstream building id but is a room of
+    /// the house).
+    ///
+    /// The house is the founders' household and nobody else's: the owner's
+    /// rule (2026-10-13) is that only the two founders and the children they
+    /// have live in it. Estate staff each have a cottage of their own and
+    /// everyone else lives in the town.
+    pub fn is_house_space(&self, id: SpaceId) -> bool {
+        let Some(space) = self.spaces.iter().find(|s| s.id == id) else {
+            return false;
+        };
+        let (x, y) = (
+            0.5 * (space.rect_m.x0 + space.rect_m.x1),
+            0.5 * (space.rect_m.y0 + space.rect_m.y1),
+        );
+        self.buildings
+            .iter()
+            .filter(|b| b.kind == PropertyBuildingKind::House)
+            .any(|b| b.building_id == space.building_id || b.rect_m.contains(x, y))
+    }
+
+    /// Every space on the estate that is not part of the house: where a
+    /// person who is not a founder or a founder's child may be put.
+    pub fn spaces_outside_house(&self) -> impl Iterator<Item = &SpaceLayout> {
+        self.spaces.iter().filter(|s| !self.is_house_space(s.id))
+    }
+
     /// The space a point is in.
     pub fn space_at(&self, position_m: (f64, f64)) -> Space {
         self.spaces

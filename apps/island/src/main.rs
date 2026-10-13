@@ -438,22 +438,31 @@ fn main() {
                     dir.display()
                 );
             }
+            // Where a Phase-0b import lands: the first estate space outside
+            // the house, which is the founders' and their children's alone.
+            let landing = life
+                .placed
+                .layout
+                .spaces_outside_house()
+                .next()
+                .map(|s| s.id)
+                .unwrap_or_else(|| {
+                    eprintln!("the estate has no space outside the house to import people into");
+                    std::process::exit(1);
+                });
             let world = serve::sim::spawn_with(life, speed, log, snapshots);
             // Carried in as ordinary commands, so they are recorded in the
             // replay log and reproduced by a replay exactly like anybody
-            // created later. The estate's General zone is where they land:
-            // a stored person has no island location, because there was no
+            // created later. They land at `landing`, outside the house: a
+            // stored person has no island location, because there was no
             // island when they were made.
             if let Some(dir) = flag(rest, "--import-0b") {
                 let dir = PathBuf::from(dir);
-                let commands = headless::commands_from_phase_0b(
-                    &dir,
-                    mk_engine::regional::estate_layout::SpaceId(0),
-                )
-                .unwrap_or_else(|e| {
-                    eprintln!("{e}");
-                    std::process::exit(1);
-                });
+                let commands =
+                    headless::commands_from_phase_0b(&dir, landing).unwrap_or_else(|e| {
+                        eprintln!("{e}");
+                        std::process::exit(1);
+                    });
                 println!(
                     "Carrying {} stored {} from {} into the world.",
                     commands.len(),

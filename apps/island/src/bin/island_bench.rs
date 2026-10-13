@@ -67,12 +67,13 @@ fn open(args: &[String]) -> Result<(Arc<CanonLocked>, IslandScenario), String> {
 }
 
 fn add_settlers(world: &mut IslandLife, people: u64) -> Result<(), String> {
+    // Outside the founders' house, which is theirs and their children's alone.
     let yard = world
         .placed
         .layout
-        .spaces
-        .first()
-        .ok_or("the estate has no spaces to put settlers in")?
+        .spaces_outside_house()
+        .next()
+        .ok_or("the estate has no space outside the house to put settlers in")?
         .id;
     for i in 0..people {
         world

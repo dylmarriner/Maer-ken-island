@@ -375,3 +375,42 @@ fn a_river_takes_its_channel_and_esplanade_not_its_whole_cell() {
         "no river-crossed lowland patch could take the estate"
     );
 }
+
+/// The owner's residency rule (2026-10-13): the house is the founders' and
+/// their children's alone. `is_house_space` is what enforces it, so it must
+/// take every room of the house -- the computer room included, which keeps
+/// its own building id -- and none of the estate's other buildings.
+#[test]
+fn the_house_is_its_own_rooms_and_nothing_else_on_the_estate() {
+    let layout = &base().layout;
+    let house: Vec<_> = layout
+        .buildings
+        .iter()
+        .filter(|b| b.kind == PropertyBuildingKind::House)
+        .collect();
+    assert_eq!(house.len(), 1, "the estate has one house");
+    let mut outside = 0;
+    for space in &layout.spaces {
+        let in_house = layout.is_house_space(space.id);
+        println!("{:<30} house={in_house}", space.label);
+        if space.label.ends_with("'s Bedroom") || space.label == "Computer Room" {
+            assert!(in_house, "{} is a room of the house", space.label);
+        }
+        let building = layout
+            .buildings
+            .iter()
+            .find(|b| b.building_id == space.building_id);
+        if let Some(b) = building {
+            if b.kind != PropertyBuildingKind::House
+                && !house[0].rect_m.contains(
+                    0.5 * (space.rect_m.x0 + space.rect_m.x1),
+                    0.5 * (space.rect_m.y0 + space.rect_m.y1),
+                )
+            {
+                assert!(!in_house, "{} is not in the house", space.label);
+                outside += 1;
+            }
+        }
+    }
+    assert!(outside > 0, "somewhere on the estate is not the house");
+}

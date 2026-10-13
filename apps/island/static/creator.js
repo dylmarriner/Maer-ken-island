@@ -93,11 +93,13 @@ function offerPlaces(w) {
       return option;
     }),
   );
-  const home = spaces.find((s) => /bedroom/i.test(s.label));
-  if (home) placeEl.value = String(home.id);
+  // The island offers only spaces outside the founders' house: the house is
+  // the two founders' and their children's, nobody else's.
   placeHint.textContent =
     "The island is running, so this person is put into it and starts living " +
-    "from the next step. They are placed in this space on the founders' estate.";
+    "from the next step. They are placed in this space on the founders' estate. " +
+    "The house is the founders' and their children's alone, so its rooms are " +
+    "not offered; staff cottages and the town are not built yet.";
 
   // A cell of the island, for somebody who does not start at the estate.
   // The bounds come from the world rather than being assumed, and the

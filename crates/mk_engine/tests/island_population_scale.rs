@@ -55,7 +55,8 @@ fn a_populated_island_runs_within_memory_and_time_budgets() {
     let started = Instant::now();
     let mut w = IslandLife::bootstrap(scenario, canon).unwrap();
     let boot = started.elapsed().as_secs_f64();
-    let yard = w.placed.layout.spaces[0].id;
+    // Outside the founders' house, which is theirs and their children's alone.
+    let yard = w.placed.layout.spaces_outside_house().next().unwrap().id;
     for i in 0..people {
         w.create_human(IslandCreateHuman {
             name: format!("Settler {i:05}"),

@@ -58,9 +58,15 @@ fn somebody(name: &str, location: CreateLocation) -> IslandCreateHuman {
     }
 }
 
-/// The first space in the estate's layout, whatever it is called.
+/// The first estate space outside the founders' house, whatever it is
+/// called: the house is the founders' and their children's alone.
 fn a_space(life: &IslandLife) -> (SpaceId, String) {
-    let space = &life.placed.layout.spaces[0];
+    let space = life
+        .placed
+        .layout
+        .spaces_outside_house()
+        .next()
+        .expect("the estate has somewhere that is not the house");
     (space.id, space.label.clone())
 }
 
@@ -311,4 +317,48 @@ fn somebody_born_here_is_born_at_this_islands_coordinates() {
         "born at {:.4}° but the island is at {reference:.4}°",
         made.birth_latitude
     );
+}
+
+/// The owner's residency rule (2026-10-13): the founders' house is the two
+/// founders' and their children's alone. Nobody the Creator makes is either,
+/// so every room of the house is refused -- the bedrooms and the computer
+/// room included -- with a reason that says where such a person belongs.
+#[test]
+fn nobody_created_may_be_put_in_the_founders_house() {
+    let mut life = island();
+    let before = life.humans.registry.iter().count();
+    let house: Vec<(SpaceId, String)> = life
+        .placed
+        .layout
+        .spaces
+        .iter()
+        .filter(|s| life.placed.layout.is_house_space(s.id))
+        .map(|s| (s.id, s.label.clone()))
+        .collect();
+    assert!(
+        house.iter().any(|(_, l)| l.ends_with("'s Bedroom")),
+        "the house's bedrooms are among its spaces: {house:?}"
+    );
+    for (id, label) in &house {
+        match life.create_human(somebody("Lodger", CreateLocation::EstateSpace(*id))) {
+            Err(CreateHumanError::Invalid(problems)) => assert!(
+                problems.iter().any(|p| p.contains("founders' house")
+                    && p.contains("cottage")
+                    && p.contains("town")),
+                "{label}: {problems:?}"
+            ),
+            other => panic!("{label} accepted a lodger: {other:?}"),
+        }
+    }
+    assert_eq!(
+        life.humans.registry.iter().count(),
+        before,
+        "a refused creation added somebody anyway"
+    );
+
+    // Anywhere else on the estate is fine.
+    let (space, _) = a_space(&life);
+    assert!(life
+        .create_human(somebody("Worker", CreateLocation::EstateSpace(space)))
+        .is_ok());
 }

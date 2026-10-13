@@ -45,7 +45,8 @@ fn a_death_returns_the_bodys_carbon_and_is_not_undone_by_adoption() {
     w.enable_human_store(root.path()).unwrap();
     // The founders are protected from natural death (governance veto), so
     // the person who dies is a settler.
-    let yard = w.placed.layout.spaces[0].id;
+    // Outside the founders' house, which is theirs and their children's alone.
+    let yard = w.placed.layout.spaces_outside_house().next().unwrap().id;
     let elder = w
         .create_human(IslandCreateHuman {
             name: "Elder".into(),

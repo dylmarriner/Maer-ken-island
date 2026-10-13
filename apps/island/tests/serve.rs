@@ -316,13 +316,14 @@ async fn a_person_created_through_the_api_turns_up_in_the_world() {
     let (world, port, server) = a_running_dashboard().await;
 
     // The estate's own spaces, as the creator page offers them.
-    let (_, world_body) = get(port, "/api/world").await;
-    assert!(world_body.contains("Bedroom"), "{world_body}");
+    let space = an_offered_space(port).await;
 
-    let body = r#"{"name":"Rangi","biological_sex":"female","birth_timestamp":"2001-01-02T03:04:05Z",
+    let body = format!(
+        r#"{{"name":"Rangi","biological_sex":"female","birth_timestamp":"2001-01-02T03:04:05Z",
         "age_years":30,"height_cm":170,"build":"average","hair_color":"black","eye_color":"brown",
-        "skin_tone":"olive","space":1}"#;
-    let (status, response) = post(port, "/api/world/humans", body).await;
+        "skin_tone":"olive","space":{space}}}"#
+    );
+    let (status, response) = post(port, "/api/world/humans", &body).await;
     assert_eq!(status, 202, "{response}");
     let queued: serde_json::Value = serde_json::from_str(body_of(&response)).unwrap();
     let id = queued["command"].as_u64().expect("a command id");
@@ -457,6 +458,24 @@ async fn estate_degrees(port: u16) -> (f64, f64) {
 }
 
 /// The body of an HTTP response, after the headers.
+/// The first estate space the creator page is offered, read from the island
+/// itself: never a room of the founders' house, which is theirs and their
+/// children's alone.
+async fn an_offered_space(port: u16) -> u64 {
+    let (_, body) = get(port, "/api/world").await;
+    let world: serde_json::Value = serde_json::from_str(body_of(&body)).unwrap();
+    let spaces = world["estate"]["spaces"]
+        .as_array()
+        .expect("spaces offered");
+    assert!(
+        spaces
+            .iter()
+            .all(|s| !s["label"].as_str().unwrap_or("").contains("Bedroom")),
+        "a room of the house was offered: {spaces:?}"
+    );
+    spaces[0]["id"].as_u64().expect("a space id")
+}
+
 fn body_of(response: &str) -> &str {
     response
         .split("\r\n\r\n")
@@ -510,10 +529,13 @@ async fn the_world_has_its_own_roster_and_its_own_person_pages() {
 async fn a_new_person_can_be_read_the_moment_they_exist() {
     let (world, port, server) = a_running_dashboard().await;
 
-    let body = r#"{"name":"Ata","biological_sex":"female","birth_timestamp":"1999-09-09T09:09:09Z",
+    let space = an_offered_space(port).await;
+    let body = format!(
+        r#"{{"name":"Ata","biological_sex":"female","birth_timestamp":"1999-09-09T09:09:09Z",
         "age_years":22,"height_cm":165,"build":"average","hair_color":"black","eye_color":"brown",
-        "skin_tone":"olive","space":1}"#;
-    let (status, response) = post(port, "/api/world/humans", body).await;
+        "skin_tone":"olive","space":{space}}}"#
+    );
+    let (status, response) = post(port, "/api/world/humans", &body).await;
     assert_eq!(status, 202, "{response}");
     let id = serde_json::from_str::<serde_json::Value>(body_of(&response)).unwrap()["command"]
         .as_u64()
@@ -660,7 +682,6 @@ async fn the_world_serves_its_parts_separately() {
 async fn a_phase_0b_population_can_be_carried_into_the_world() {
     use island::run::commands_from_phase_0b;
     use island::serve::sim::{spawn, SimSpeed};
-    use mk_engine::regional::estate_layout::SpaceId;
     use std::path::PathBuf;
 
     // A stored population, made the way the Phase-0b dashboard makes one.
@@ -732,9 +753,11 @@ async fn a_phase_0b_population_can_be_carried_into_the_world() {
     // digests out. `Times(600)` runs a 60-second step every 100 ms, so a
     // digest lands every six seconds rather than every half one, and a
     // test needing sixty ticks still gets them well inside its deadline.
+    // Outside the founders' house, which is theirs and their children's alone.
+    let landing = life.placed.layout.spaces_outside_house().next().unwrap().id;
     let world = spawn(life, SimSpeed::Times(600));
 
-    let commands = commands_from_phase_0b(data_dir.path(), SpaceId(0)).expect("the log reads");
+    let commands = commands_from_phase_0b(data_dir.path(), landing).expect("the log reads");
     assert_eq!(commands.len(), 2, "both stored people should be carried");
     for command in commands {
         world.send(command);

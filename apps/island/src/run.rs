@@ -140,7 +140,8 @@ pub fn run(args: RunArgs) -> Result<(), String> {
 /// be carried into the world rather than abandoned.
 ///
 /// They are placed in the estate space given, because a stored person has
-/// no island location — there was no island. Their birthplace is the one
+/// no island location — there was no island. It must be outside the house
+/// (`EstateLayout::spaces_outside_house`), or every creation is refused. Their birthplace is the one
 /// they were created with, not the estate's, since that is a fact about
 /// them rather than about where they now stand.
 pub fn commands_from_phase_0b(
