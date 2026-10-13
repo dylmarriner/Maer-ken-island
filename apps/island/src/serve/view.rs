@@ -206,18 +206,17 @@ fn spaced(name: &str) -> String {
 /// population: a person carries their parents' ids, not their parents,
 /// and nobody carries a list of their children.
 pub fn family_section(human: &HumanBeing, everyone: &[&HumanBeing]) -> Section {
-    let alive = |h: &HumanBeing| matches!(h.profile.status, HumanStatus::Alive);
+    // Each of the three states in its own words: dormant is not dead.
+    let named = |h: &HumanBeing| match h.profile.status {
+        HumanStatus::Alive => h.agent_id().to_string(),
+        HumanStatus::Dead => format!("{} (dead)", h.agent_id()),
+        HumanStatus::Dormant => format!("{} (dormant)", h.agent_id()),
+    };
     let who = |id: &str| {
-        everyone.iter().find(|h| h.agent_id() == id).map_or_else(
-            || format!("{id} (no record on the island)"),
-            |h| {
-                if alive(h) {
-                    id.to_string()
-                } else {
-                    format!("{id} (dead)")
-                }
-            },
-        )
+        everyone
+            .iter()
+            .find(|h| h.agent_id() == id)
+            .map_or_else(|| format!("{id} (no record on the island)"), |h| named(h))
     };
     let (father, mother) = match human.parent_agent_ids() {
         Some((father, mother)) => (who(&father), who(&mother)),
@@ -232,13 +231,7 @@ pub fn family_section(human: &HumanBeing, everyone: &[&HumanBeing]) -> Section {
             h.parent_agent_ids()
                 .is_some_and(|(f, m)| f == human.agent_id() || m == human.agent_id())
         })
-        .map(|h| {
-            if alive(h) {
-                h.agent_id().to_string()
-            } else {
-                format!("{} (dead)", h.agent_id())
-            }
-        })
+        .map(|h| named(h))
         .collect();
     section(
         "family",
@@ -504,11 +497,38 @@ pub fn sections(human: &HumanBeing, summary: &HumanSummary, folder: Option<&str>
         .iter()
         .find(|preference| preference.action == doing)
         .map(|preference| preference.value);
-    sections.push(section(
-        "choosing",
-        "What they are doing",
-        "What their own choice settled on, what they make of it, and what they have learned from choosing.",
-        vec![
+    let learning = [
+        noted(
+            "Worth of this, to them",
+            learned.map_or_else(
+                || "Not yet learned".to_string(),
+                // A learned zero is "nothing either way", not "-0.00".
+                |v| {
+                    if v.abs() < 0.005 {
+                        "0.00".to_string()
+                    } else {
+                        format!("{v:+.2}")
+                    }
+                },
+            ),
+            "What they have come to expect doing this brings, learned from how it went before.",
+        ),
+        noted(
+            "Reward so far",
+            format!("{:.1}", human.autonomous_mind.total_reward),
+            "Everything their choices have brought them, summed.",
+        ),
+        noted(
+            "Choices remembered",
+            human.autonomous_mind.experiences.len().to_string(),
+            "Recent choices and how they went, which their learning draws on.",
+        ),
+    ];
+    // Only the living are thinking and doing. A dead or dormant person is
+    // not stepped, so what their record holds is where they left off, and
+    // it is said in the past tense rather than as if it were now.
+    let fields = match human.profile.status {
+        HumanStatus::Alive => [
             noted(
                 "Thinking",
                 generate_thought(human),
@@ -524,26 +544,31 @@ pub fn sections(human: &HumanBeing, summary: &HumanSummary, folder: Option<&str>
                 },
                 "Whether the last thing they chose to do succeeded.",
             ),
+        ]
+        .into_iter()
+        .chain(learning)
+        .collect(),
+        status => [
             noted(
-                "Worth of this, to them",
-                learned.map_or_else(
-                    || "Not yet learned".to_string(),
-                    // A learned zero is "nothing either way", not "-0.00".
-                    |v| if v.abs() < 0.005 { "0.00".to_string() } else { format!("{v:+.2}") },
-                ),
-                "What they have come to expect doing this brings, learned from how it went before.",
+                "Doing",
+                if status == HumanStatus::Dead {
+                    "Nothing: they are dead"
+                } else {
+                    "Nothing: they are dormant"
+                },
+                "Nobody who is not alive is stepped, so nothing here is moving.",
             ),
-            noted(
-                "Reward so far",
-                format!("{:.1}", human.autonomous_mind.total_reward),
-                "Everything their choices have brought them, summed.",
-            ),
-            noted(
-                "Choices remembered",
-                human.autonomous_mind.experiences.len().to_string(),
-                "Recent choices and how they went, which their learning draws on.",
-            ),
-        ],
+            text("Last thing they did", spaced(&format!("{doing:?}"))),
+        ]
+        .into_iter()
+        .chain(learning)
+        .collect(),
+    };
+    sections.push(section(
+        "choosing",
+        "What they are doing",
+        "What their own choice settled on, what they make of it, and what they have learned from choosing.",
+        fields,
     ));
 
     sections.push(section(
@@ -846,5 +871,47 @@ mod tests {
     fn an_action_name_is_said_in_words() {
         assert_eq!(spaced("EatFood"), "Eat food");
         assert_eq!(spaced("Rest"), "Rest");
+    }
+
+    #[test]
+    fn the_dead_are_not_said_to_be_thinking_and_the_dormant_are_not_called_dead() {
+        let (population, id) = founder();
+        let mut gone = population.get(&id).unwrap().clone();
+        gone.profile.status = HumanStatus::Dead;
+        let summary = summarize(&gone);
+        let choosing = sections(&gone, &summary, None)
+            .into_iter()
+            .find(|s| s.id == "choosing")
+            .unwrap();
+        assert!(!choosing.fields.iter().any(|f| f.label == "Thinking"));
+        assert_eq!(choosing.fields[0].value, "Nothing: they are dead");
+
+        let mut resting = population.get("Gem-K").unwrap().clone();
+        resting.profile.status = HumanStatus::Dormant;
+        let founder = population.get(&id).unwrap();
+        let everyone: Vec<&HumanBeing> = vec![founder, &resting];
+        // Gem-K, dormant, as somebody's mother.
+        let mut born = HumanBeing::new("Gem-DK-2".to_string(), BiologicalSex::Male);
+        born.profile.canonical_schema = Some(
+            mk_core::human::schema::HumanSchema::canonical_minimal(born.agent_id()),
+        );
+        born.profile
+            .canonical_schema
+            .as_mut()
+            .unwrap()
+            .reproductive_systems
+            .genetics_system
+            .birth_records
+            .push(mk_core::human::schema::BirthRecordSchema {
+                birth_id: "birth_Gem-DK-2".to_string(),
+                genotype_id: "genotype_Gem-DK-2".to_string(),
+                father_id: "Gem-D".to_string(),
+                mother_id: "Gem-K".to_string(),
+                birth_timestamp: "tick-0".to_string(),
+                agent_id: "Gem-DK-2".to_string(),
+                mutations: vec![],
+            });
+        let family = family_section(&born, &everyone);
+        assert_eq!(family.fields[1].value, "Gem-K (dormant)");
     }
 }

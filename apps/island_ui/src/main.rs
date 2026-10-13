@@ -260,6 +260,11 @@ struct Press {
 struct PersonReading {
     asked: Option<String>,
     asked_at: Option<std::time::Instant>,
+    /// A request for this person is still out. A remote backend can take
+    /// longer than [`Self::EVERY`] to answer, and two requests sharing one
+    /// slot could land out of order, an older reading over a newer one;
+    /// so a re-read waits for the last to finish.
+    busy: std::sync::Arc<std::sync::atomic::AtomicBool>,
     answer: std::sync::Arc<
         std::sync::Mutex<Option<Result<island_ui::human_inspector::Person, String>>>,
     >,
@@ -271,20 +276,27 @@ impl PersonReading {
     fn follow(&mut self, island: &Island, agent_id: Option<&str>) {
         let changed = agent_id != self.asked.as_deref();
         let stale = self.asked_at.is_none_or(|at| at.elapsed() >= Self::EVERY);
-        if !changed && !stale {
+        if !changed && (!stale || self.busy.load(std::sync::atomic::Ordering::Acquire)) {
             return;
         }
         if changed {
-            // A fresh slot, so an answer about somebody no longer chosen
-            // cannot land after the one about whoever is.
+            // A fresh slot and a fresh flag, so an answer about somebody no
+            // longer chosen cannot land after the one about whoever is, and
+            // a request still out for them does not hold up this one.
             self.answer = Default::default();
+            self.busy = Default::default();
         }
         self.asked = agent_id.map(str::to_string);
         self.asked_at = Some(std::time::Instant::now());
         let Some(agent_id) = self.asked.clone() else {
             return;
         };
-        let (client, slot) = (island.client().clone(), self.answer.clone());
+        let (client, slot, busy) = (
+            island.client().clone(),
+            self.answer.clone(),
+            self.busy.clone(),
+        );
+        busy.store(true, std::sync::atomic::Ordering::Release);
         std::thread::spawn(move || {
             let got = client
                 .human(&agent_id)
@@ -293,6 +305,7 @@ impl PersonReading {
             if let Ok(mut slot) = slot.lock() {
                 *slot = Some(got);
             }
+            busy.store(false, std::sync::atomic::Ordering::Release);
         });
     }
 
