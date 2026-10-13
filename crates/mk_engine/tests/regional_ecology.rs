@@ -6,7 +6,6 @@ use std::sync::{Arc, OnceLock};
 
 use mk_core::biomes::BiomeType;
 use mk_core::canon::CanonLocked;
-use mk_engine::organisms::vegetation::PlantKind;
 use mk_engine::regional::ecology::{residence_years, whittaker_likens, RegionalEcologyState};
 use mk_engine::regional::physical::RegionalPhysicalState;
 use mk_engine::validation::{default_reference_dir, ReferenceDomain, ReferenceLibrary};
@@ -70,23 +69,6 @@ fn land_and_sea_biomes_agree_with_the_terrain_and_plants_stand_on_land() {
         }
     }
     assert!(land_cells > 0 && sea_cells > land_cells);
-
-    // The sparse plant view is on land, in land biomes, and has trees,
-    // shrubs or grass.
-    assert!(!e.vegetation.plants.is_empty());
-    let mut kinds = std::collections::HashSet::new();
-    for p in &e.vegetation.plants {
-        let (r, c) = (p.position.row as usize, p.position.col as usize);
-        assert!(*elevation.get(r, c) > 0.0, "plant {} in the sea", p.id);
-        assert!(!e.biome_grid.get(r, c).is_aquatic());
-        kinds.insert(format!("{:?}", p.kind));
-    }
-    assert!(
-        kinds.contains(&format!("{:?}", PlantKind::Tree))
-            || kinds.contains(&format!("{:?}", PlantKind::Shrub))
-            || kinds.contains(&format!("{:?}", PlantKind::Grass)),
-        "{kinds:?}"
-    );
 }
 
 #[test]
@@ -161,7 +143,6 @@ fn bootstrap_is_deterministic() {
     assert_eq!(a.biome_grid.data(), b.biome_grid.data());
     assert_eq!(a.npp_kgc_m2_yr.data(), b.npp_kgc_m2_yr.data());
     assert_eq!(a.biomass_kgc_m2.data(), b.biomass_kgc_m2.data());
-    assert_eq!(a.vegetation.plants.len(), b.vegetation.plants.len());
 }
 
 #[test]

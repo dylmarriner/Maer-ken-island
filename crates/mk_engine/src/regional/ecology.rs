@@ -25,8 +25,6 @@
 //!   `dB/dt = NPP − B / residence − harvest − disturbance`, and
 //!   [`RegionalEcologyState::renormalise_to_total`] rescales it so the
 //!   land total equals the producer species' carbon.
-//! - A **sparse vegetation view** (`VegetationSystem::seed_from_biomes`,
-//!   about one plant per 11 cells) for the upstream plant runtime.
 //!
 //! Species populations are not seeded here: upstream's are planetary
 //! totals, and reseeding them at island scale is the next step of Task 1
@@ -41,9 +39,9 @@ use super::climate::LAPSE_RATE_K_PER_M;
 use super::hydrology::discharge_m3_s;
 use super::levels::sample_coarse_at_medium;
 use super::physical::RegionalPhysicalState;
+use super::soil::{RothC, SoilCarbon, SoilInputs};
 use crate::biosphere::miami_npp_kgc_m2_yr;
 use crate::climate::CLIMATOLOGY_PHASE_BINS;
-use crate::organisms::vegetation::VegetationSystem;
 
 /// Carbon fraction of dry matter, as upstream's `update_primary_production`.
 pub const CARBON_FRACTION_OF_DRY_MASS: f64 = 0.475;
@@ -325,7 +323,11 @@ pub struct RegionalEcologyState {
     /// Grazer carbon, kgC m⁻², zero where there are no producers (see
     /// [`super::fauna`]; every parameter of that model is an assumption).
     pub herbivore_kgc_m2: Grid2<f64>,
-    pub vegetation: VegetationSystem,
+    /// The soil's carbon under every cell, which litterfall, faeces and
+    /// carcasses feed and which decomposes by RothC (`super::soil`, D43).
+    /// `None` until the island installs it, and in older snapshots.
+    #[serde(default)]
+    pub soil: Option<SoilCarbon>,
 }
 
 /// Where the grazers' carbon went in one step, summed over the land (kg C).
@@ -336,6 +338,8 @@ pub struct GrazerFlows {
     pub faeces: f64,
     pub respired: f64,
     pub deaths: f64,
+    /// Soil carbon decomposed to CO2 in the step.
+    pub soil_respired: f64,
 }
 
 /// Biome of a land or sea cell from the annual-mean climate.
@@ -427,8 +431,7 @@ pub(crate) fn cell_year(
 }
 
 impl RegionalEcologyState {
-    /// Classify the island's biomes, set NPP and an equilibrium biomass,
-    /// and seed the sparse vegetation view.
+    /// Classify the island's biomes and set NPP and an equilibrium biomass.
     pub fn bootstrap(
         domain: &IslandDomain,
         physical: &RegionalPhysicalState,
@@ -492,8 +495,6 @@ impl RegionalEcologyState {
             .map(|(&b, &n)| n * residence_years(b))
             .collect();
 
-        let mut vegetation = VegetationSystem::new();
-        vegetation.seed_from_biomes(&biome_grid);
         // Grazers start at their equilibrium wherever producers stand.
         let herbivores: Vec<f64> = biome_grid
             .data()
@@ -512,7 +513,7 @@ impl RegionalEcologyState {
             npp_kgc_m2_yr: Grid2::from_data(&spec, npp),
             biomass_kgc_m2: Grid2::from_data(&spec, biomass),
             herbivore_kgc_m2: Grid2::from_data(&spec, herbivores),
-            vegetation,
+            soil: None,
         })
     }
 
@@ -531,29 +532,67 @@ impl RegionalEcologyState {
         harvest_kgc_m2_yr: Option<&Grid2<f64>>,
         disturbance_per_yr: Option<&Grid2<f64>>,
     ) {
+        self.step_shedding(dt_seconds, harvest_kgc_m2_yr, disturbance_per_yr);
+    }
+
+    /// [`Self::step`], returning what each cell's plants shed to the ground
+    /// over the step (kg C m⁻²): the turnover `B / residence` and what a
+    /// disturbance killed. A cell whose plants cannot live sheds them all.
+    fn step_shedding(
+        &mut self,
+        dt_seconds: f64,
+        harvest_kgc_m2_yr: Option<&Grid2<f64>>,
+        disturbance_per_yr: Option<&Grid2<f64>>,
+    ) -> Vec<f64> {
+        let mut shed = vec![0.0; self.biomass_kgc_m2.data().len()];
         if !(dt_seconds.is_finite() && dt_seconds > 0.0) {
-            return;
+            return shed;
         }
         let dt_years = dt_seconds / SECONDS_PER_YEAR;
-        for i in 0..self.biomass_kgc_m2.data().len() {
+        for (i, shed) in shed.iter_mut().enumerate() {
             let residence = residence_years(self.biome_grid.data()[i]);
             let npp = self.npp_kgc_m2_yr.data()[i];
+            let b = self.biomass_kgc_m2.data()[i];
             if residence <= 0.0 || npp <= 0.0 {
+                *shed = b.max(0.0);
                 self.biomass_kgc_m2.data_mut()[i] = 0.0;
                 continue;
             }
-            let b = self.biomass_kgc_m2.data()[i];
-            // Exact solution of dB/dt = NPP - B/res over the step.
+            // Exact solution of dB/dt = NPP - B/res over the step: what it
+            // grew less what it kept is what it shed.
             let keep = (-dt_years / residence).exp();
-            let mut next = b * keep + npp * residence * (1.0 - keep);
+            let grown = b * keep + npp * residence * (1.0 - keep);
+            *shed = (b + npp * dt_years - grown).max(0.0);
+            let mut next = grown;
             if let Some(h) = harvest_kgc_m2_yr {
                 next -= h.data()[i].max(0.0) * dt_years;
             }
             if let Some(d) = disturbance_per_yr {
-                next *= (-d.data()[i].max(0.0) * dt_years).exp();
+                let survived = next * (-d.data()[i].max(0.0) * dt_years).exp();
+                *shed += (next - survived).max(0.0);
+                next = survived;
             }
             self.biomass_kgc_m2.data_mut()[i] = next.max(0.0);
         }
+        shed
+    }
+
+    /// Lay down the soil at RothC's steady state for each cell's production,
+    /// under `temperature_factor` (each cell's year-average RothC `a`).
+    pub fn install_soil(&mut self, params: RothC, temperature_factor: Vec<f64>) {
+        let vegetated: Vec<bool> = self
+            .biomass_kgc_m2
+            .data()
+            .iter()
+            .map(|b| *b > 0.0)
+            .collect();
+        self.soil = Some(SoilCarbon::steady_state(
+            params,
+            self.biome_grid.data(),
+            self.npp_kgc_m2_yr.data(),
+            temperature_factor,
+            &vegetated,
+        ));
     }
 
     /// One ecology step with the grazers: they eat a capped share of each
@@ -573,21 +612,41 @@ impl RegionalEcologyState {
         {
             *h = super::fauna::intake_kgc_m2_yr(*g, *npp);
         }
-        self.step(dt_seconds, Some(&harvest), None);
+        let shed = self.step_shedding(dt_seconds, Some(&harvest), None);
         let mut totals = GrazerFlows::default();
-        for (g, npp) in self
+        let mut inputs: Vec<SoilInputs> = shed
+            .iter()
+            .map(|litter| SoilInputs {
+                litter: *litter,
+                ..SoilInputs::default()
+            })
+            .collect();
+        for ((g, npp), input) in self
             .herbivore_kgc_m2
             .data_mut()
             .iter_mut()
             .zip(self.npp_kgc_m2_yr.data())
+            .zip(inputs.iter_mut())
         {
             let (next, f) = super::fauna::step_cell(*g, *npp, dt_years);
             *g = next;
+            input.faeces = f.faeces;
+            input.carcasses = f.deaths;
             totals.eaten += f.eaten;
             totals.growth += f.growth;
             totals.faeces += f.faeces;
             totals.respired += f.respired;
             totals.deaths += f.deaths;
+        }
+        if let Some(soil) = self.soil.as_mut() {
+            let vegetated: Vec<bool> = self
+                .biomass_kgc_m2
+                .data()
+                .iter()
+                .map(|b| *b > 0.0)
+                .collect();
+            totals.soil_respired =
+                soil.step(dt_years, self.biome_grid.data(), &inputs, &vegetated) * cell_area_m2;
         }
         for v in [
             &mut totals.eaten,

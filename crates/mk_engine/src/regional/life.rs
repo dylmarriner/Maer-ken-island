@@ -472,6 +472,9 @@ impl IslandLife {
         if life.household_water.is_none() {
             life.install_household_water()?;
         }
+        if life.ecology.soil.is_none() {
+            life.install_soil()?;
+        }
         life.replay_log = super::replay::IslandReplayLog::new(life.scenario_digest_hex());
         Ok(life)
     }
@@ -591,6 +594,10 @@ impl IslandLife {
         if life.household_water.is_none() {
             // Saved before the house had a tank.
             life.install_household_water()?;
+        }
+        if life.ecology.soil.is_none() {
+            // Saved before the island had soil carbon.
+            life.install_soil()?;
         }
         life.replay_log = super::replay::IslandReplayLog::new(life.scenario_digest_hex());
         Ok(life)
@@ -1725,6 +1732,37 @@ impl IslandLife {
         Ok(())
     }
 
+    /// Lay the soil down under every land cell at RothC's steady state for
+    /// its production (`super::soil`, D43). Its temperature modifier is the
+    /// cell's year-average of RothC's monthly factor over the climatology.
+    fn install_soil(&mut self) -> Result<(), IslandLifeError> {
+        let params = super::soil::RothC::from_reference(self.labour.library())
+            .map_err(|e| IslandLifeError::Labour(LabourError::MissingReference(e)))?;
+        let (rows, cols) = (
+            self.domain.rows(DomainLevel::Medium),
+            self.domain.cols(DomainLevel::Medium),
+        );
+        let mut factor = vec![0.0; rows * cols];
+        for (i, f) in factor.iter_mut().enumerate() {
+            if params
+                .plant_dpm_share(self.ecology.biome_grid.data()[i])
+                .is_none()
+            {
+                continue;
+            }
+            let year = super::ecology::cell_year(&self.domain, &self.physical, i / cols, i % cols);
+            let months = year.temperature_k.len() as f64;
+            *f = year
+                .temperature_k
+                .iter()
+                .map(|k| params.temperature_factor(k - 273.15))
+                .sum::<f64>()
+                / months;
+        }
+        self.ecology.install_soil(params, factor);
+        Ok(())
+    }
+
     /// One step of the house's water: rain off the roof into the tank (what
     /// does not fit overflows and stays on the ground), and the household's
     /// washing, flushing and cooking out of it into the ground, as from a
@@ -2046,6 +2084,11 @@ impl IslandLife {
         feed(self.ecology.biomass_kgc_m2.data());
         feed(self.ecology.npp_kgc_m2_yr.data());
         feed(self.ecology.herbivore_kgc_m2.data());
+        if let Some(soil) = &self.ecology.soil {
+            for pools in &soil.pools {
+                feed(pools);
+            }
+        }
         for t in &self.vegetation.trees {
             feed(&[
                 t.position_m.0,
