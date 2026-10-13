@@ -111,6 +111,9 @@ pub struct CellSetting {
     /// river on this island does, but a river running through a forest
     /// cell is still a river to what lives in it.
     pub has_a_river: bool,
+    /// Below sea level: the sea, not a lake. The classifier calls both
+    /// shallow sea and lakes `CoastalWaters`, and only one is the sea.
+    pub in_the_sea: bool,
 }
 
 /// Whether a cell of `biome` in `setting` is habitat for `affinity`.
@@ -125,7 +128,13 @@ pub struct CellSetting {
 pub fn habitat_of(affinity: &TerrainAffinity, biome: BiomeType, setting: CellSetting) -> bool {
     use BiomeType::*;
     match affinity {
-        TerrainAffinity::OpenOcean => matches!(biome, DeepOcean | ShallowOcean),
+        // Pelagic life swims over reefs and shallow coastal sea too, as
+        // upstream's own biome-to-affinity map has it
+        // (`interventions::affinities_for_biome`), but not in a lake.
+        TerrainAffinity::OpenOcean => {
+            matches!(biome, DeepOcean | ShallowOcean | ReefSea)
+                || (biome == CoastalWaters && setting.in_the_sea)
+        }
         TerrainAffinity::ReefSea => biome == ReefSea,
         TerrainAffinity::River => biome == River || (setting.has_a_river && biome.is_terrestrial()),
         TerrainAffinity::Wetland => biome == Wetland,
@@ -245,6 +254,7 @@ impl IslandBiota {
                     });
                 let setting = CellSetting {
                     on_the_coast,
+                    in_the_sea: is_sea(r, c),
                     has_a_river: !is_sea(r, c)
                         && discharge_m3_s(&physical.hydrology, domain, r, c)
                             >= RIVER_MIN_DISCHARGE_M3_S,
@@ -416,10 +426,12 @@ mod tests {
     const NOTHING: CellSetting = CellSetting {
         on_the_coast: false,
         has_a_river: false,
+        in_the_sea: false,
     };
     const EVERYTHING: CellSetting = CellSetting {
         on_the_coast: true,
         has_a_river: true,
+        in_the_sea: true,
     };
 
     #[test]
@@ -540,5 +552,18 @@ mod tests {
         seed[..8].copy_from_slice(&0x0102_0304_0506_0708u64.to_le_bytes());
         seed[8] = 0xff;
         assert_eq!(biosphere_seed(&seed), 0x0102_0304_0506_0708);
+    }
+
+    #[test]
+    fn the_shallow_sea_is_open_water_and_a_lake_is_not() {
+        let sea = CellSetting {
+            in_the_sea: true,
+            ..NOTHING
+        };
+        let open = &TerrainAffinity::OpenOcean;
+        assert!(habitat_of(open, BiomeType::CoastalWaters, sea));
+        assert!(habitat_of(open, BiomeType::ReefSea, sea));
+        // The same biome on land is a lake.
+        assert!(!habitat_of(open, BiomeType::CoastalWaters, NOTHING));
     }
 }
