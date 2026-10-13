@@ -81,6 +81,9 @@ fn ctx<'a>(b: &'a Base, energy: &'a EstateEnergy) -> RegionalHumanContext<'a> {
         energy,
         domain: &b.domain,
         solar_kw: 0.0,
+        // No way out to the internet, which is every island but one an
+        // operator has deliberately opened.
+        computer_bridge: None,
     }
 }
 

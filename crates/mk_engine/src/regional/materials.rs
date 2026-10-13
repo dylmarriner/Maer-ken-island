@@ -30,10 +30,11 @@
 //! booked. Species populations are not debited when biomass is gathered
 //! (the island's species are not seeded yet; Task 1b).
 
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
+use super::timber::Log;
 use mk_core::flux::{FluxEntry, FluxKind, Ledger, Reservoir};
-use serde::{Deserialize, Serialize};
 
 use super::ecology::RegionalEcologyState;
 use crate::conservation::O2_PER_CARBON;
@@ -307,6 +308,14 @@ pub struct MaterialLedger {
     structures: BTreeMap<u64, Structure>,
     bodies: BTreeMap<String, Body>,
     next_structure: u64,
+    /// Felled logs and their cross-cut pieces, wherever they are: on the
+    /// ground, on a vehicle, or in the store (`regional::timber`). Their
+    /// carbon is material carbon and their water material water.
+    /// `#[serde(default)]`: a ledger saved before logs existed had none.
+    #[serde(default)]
+    logs: BTreeMap<u64, Log>,
+    #[serde(default)]
+    next_log: u64,
 }
 
 fn flow(ledger: &mut Ledger, kind: FluxKind, from: Reservoir, to: Reservoir, amount: f64) {
@@ -358,11 +367,13 @@ impl MaterialLedger {
                         .values()
                         .map(|s| s.kg * composition(s.material).carbon_per_kg)
                         .sum::<f64>()
+                    + self.logs.values().map(|l| l.carbon_kgc).sum::<f64>()
             }
             Reservoir::HumanCarbon => self.bodies.values().map(|b| b.carbon_kg).sum(),
             Reservoir::MaterialWater => {
                 self.stock_kg(Material::Water)
                     + self.bodies.values().map(|b| b.water_kg).sum::<f64>()
+                    + self.logs.values().map(|l| l.water_kg).sum::<f64>()
             }
             _ => 0.0,
         }
@@ -439,6 +450,82 @@ impl MaterialLedger {
             take,
         );
         Ok(take)
+    }
+
+    /// Take in the wood of a felled stem (`LocalVegetationPatch::fell_tree`):
+    /// its usable carbon leaves living biomass for the stock, as air-dry
+    /// wood. The stem's cell already lost the carbon when it was felled,
+    /// and the brash and roots went to detritus there. Returns the kg of
+    /// wood added.
+    pub fn receive_felled_wood(&mut self, usable_carbon_kgc: f64, ledger: &mut Ledger) -> f64 {
+        let kgc = usable_carbon_kgc.max(0.0);
+        let kg = kgc / composition(Material::Wood).carbon_per_kg;
+        self.add(Material::Wood, kg);
+        flow(
+            ledger,
+            FluxKind::Carbon,
+            Reservoir::BiomassCarbon,
+            Reservoir::MaterialCarbon,
+            kgc,
+        );
+        kg
+    }
+
+    /// Take in a felled stem's log (`regional::timber::felled_log`) where
+    /// it lies: its carbon leaves living biomass and the water in its wood,
+    /// which the tree drew up from the soil it grew in, leaves the soil.
+    /// The log is given the next log id; returns it.
+    pub fn receive_felled_log(&mut self, mut log: Log, ledger: &mut Ledger) -> u64 {
+        log.id = self.reserve_log_ids(1);
+        flow(
+            ledger,
+            FluxKind::Carbon,
+            Reservoir::BiomassCarbon,
+            Reservoir::MaterialCarbon,
+            log.carbon_kgc,
+        );
+        flow(
+            ledger,
+            FluxKind::Water,
+            Reservoir::SoilWater,
+            Reservoir::MaterialWater,
+            log.water_kg,
+        );
+        let id = log.id;
+        self.logs.insert(id, log);
+        id
+    }
+
+    /// Reserve `n` consecutive log ids; returns the first.
+    pub fn reserve_log_ids(&mut self, n: u64) -> u64 {
+        let first = self.next_log.max(1);
+        self.next_log = first + n;
+        first
+    }
+
+    /// Every log and piece, by id.
+    pub fn logs(&self) -> impl Iterator<Item = &Log> {
+        self.logs.values()
+    }
+
+    pub fn log(&self, id: u64) -> Option<&Log> {
+        self.logs.get(&id)
+    }
+
+    pub fn log_mut(&mut self, id: u64) -> Option<&mut Log> {
+        self.logs.get_mut(&id)
+    }
+
+    /// Cross-cut log `id` into `pieces` with ids from `first_id`: the log
+    /// becomes its pieces, nothing gained or lost.
+    pub fn cross_cut_log(&mut self, id: u64, pieces: u32, first_id: u64) -> bool {
+        let Some(log) = self.logs.remove(&id) else {
+            return false;
+        };
+        for piece in log.cross_cut(pieces, first_id) {
+            self.logs.insert(piece.id, piece);
+        }
+        true
     }
 
     /// Mine coal or quarry limestone: carbon from the crust.
@@ -637,6 +724,45 @@ impl MaterialLedger {
         Ok(())
     }
 
+    /// Material put into the island's stores from outside the simulated
+    /// system, by an operator rather than by anybody gathering it.
+    ///
+    /// Every other way into `stock` takes the material from somewhere
+    /// interior — a cell's biomass, the crust, a river — because that is
+    /// what gathering is. An injection has no such origin, so it is booked
+    /// from [`Reservoir::OperatorIntervention`], which is a boundary
+    /// reservoir: the audit still closes on the tick it lands, and the
+    /// inflow stays visible and attributable in the ledger rather than
+    /// appearing as matter the island made from nothing.
+    pub fn inject(&mut self, m: Material, kg: f64, ledger: &mut Ledger) -> f64 {
+        let kg = kg.max(0.0);
+        if kg == 0.0 {
+            return 0.0;
+        }
+        self.add(m, kg);
+        let composition = composition(m);
+        flow(
+            ledger,
+            FluxKind::Carbon,
+            Reservoir::OperatorIntervention,
+            Reservoir::MaterialCarbon,
+            kg * composition.carbon_per_kg,
+        );
+        if m == Material::Water {
+            // Only `Material::Water` counts toward `MaterialWater`; water
+            // held inside a food is not in that stock (see `stock_of`), so
+            // booking it would open the audit it is meant to close.
+            flow(
+                ledger,
+                FluxKind::Water,
+                Reservoir::OperatorIntervention,
+                Reservoir::MaterialWater,
+                kg,
+            );
+        }
+        kg
+    }
+
     /// Draw `kg` of water from a cell: standing water first, then a small
     /// share of the river flow. Refused if the cell has none.
     pub fn gather_water(
@@ -686,6 +812,14 @@ impl MaterialLedger {
     }
 
     /// A body enters the ledger with its own carbon (18% of its mass).
+    /// The carbon in one human's body (kg), or `None` if they were never
+    /// registered. Eating adds to it and respiring draws it down, so it is
+    /// the physical answer to whether someone is actually being fed — which
+    /// the needs model, running separately, cannot give.
+    pub fn body_carbon_kg(&self, id: &str) -> Option<f64> {
+        self.bodies.get(id).map(|body| body.carbon_kg)
+    }
+
     pub fn register_human(&mut self, id: &str, weight_kg: f64) {
         self.bodies.entry(id.to_string()).or_insert(Body {
             carbon_kg: weight_kg * BODY_CARBON_PER_KG,
@@ -840,6 +974,39 @@ impl MaterialLedger {
             FluxKind::Water,
             Reservoir::MaterialWater,
             Reservoir::SoilWater,
+            body.water_kg,
+        );
+        Ok(())
+    }
+
+    /// Take a body out of the ledger because an operator removed the person
+    /// from the world, rather than because they died.
+    ///
+    /// Separate from [`MaterialLedger::on_death`] on purpose. A death leaves
+    /// the body here: its carbon goes to detritus and its water to the soil,
+    /// both interior, because a dead body is still matter on the island. A
+    /// removal does not — the person is gone, and so is what they were made
+    /// of — so it leaves through [`Reservoir::OperatorIntervention`], which
+    /// is the boundary. Booking a removal as a death would put a corpse's
+    /// worth of carbon into the island's soil for somebody who was never
+    /// there to die.
+    pub fn remove_body(&mut self, id: &str, ledger: &mut Ledger) -> Result<(), MaterialError> {
+        let body = self
+            .bodies
+            .remove(id)
+            .ok_or_else(|| MaterialError::NoSuchHuman(id.into()))?;
+        flow(
+            ledger,
+            FluxKind::Carbon,
+            Reservoir::HumanCarbon,
+            Reservoir::OperatorIntervention,
+            body.carbon_kg,
+        );
+        flow(
+            ledger,
+            FluxKind::Water,
+            Reservoir::MaterialWater,
+            Reservoir::OperatorIntervention,
             body.water_kg,
         );
         Ok(())

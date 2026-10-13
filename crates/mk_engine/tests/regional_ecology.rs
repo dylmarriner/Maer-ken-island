@@ -7,8 +7,9 @@ use std::sync::{Arc, OnceLock};
 use mk_core::biomes::BiomeType;
 use mk_core::canon::CanonLocked;
 use mk_engine::organisms::vegetation::PlantKind;
-use mk_engine::regional::ecology::{residence_years, RegionalEcologyState};
+use mk_engine::regional::ecology::{residence_years, whittaker_likens, RegionalEcologyState};
 use mk_engine::regional::physical::RegionalPhysicalState;
+use mk_engine::validation::{default_reference_dir, ReferenceDomain, ReferenceLibrary};
 use mk_island::{DomainLevel, IslandDomain, IslandProfile};
 
 const M: DomainLevel = DomainLevel::Medium;
@@ -161,4 +162,64 @@ fn bootstrap_is_deterministic() {
     assert_eq!(a.npp_kgc_m2_yr.data(), b.npp_kgc_m2_yr.data());
     assert_eq!(a.biomass_kgc_m2.data(), b.biomass_kgc_m2.data());
     assert_eq!(a.vegetation.plants.len(), b.vegetation.plants.len());
+}
+
+#[test]
+fn residence_times_are_whittaker_and_likens_rows_not_round_numbers() {
+    use whittaker_likens::*;
+    let lib = ReferenceLibrary::load(&default_reference_dir()).expect("reference packs load");
+    let table = lib
+        .item(ReferenceDomain::Ecology, "npp_and_biomass_by_biome")
+        .expect("the Whittaker & Likens table is in the pack")
+        .table()
+        .expect("as a table")
+        .clone();
+    // The code's constants are the pack's rows, so a pack revision cannot
+    // leave the model behind.
+    for (row, (npp, biomass)) in [
+        ("tropical_rain_forest", TROPICAL_RAIN_FOREST),
+        ("tropical_seasonal_forest", TROPICAL_SEASONAL_FOREST),
+        ("temperate_evergreen_forest", TEMPERATE_EVERGREEN_FOREST),
+        ("temperate_deciduous_forest", TEMPERATE_DECIDUOUS_FOREST),
+        ("boreal_forest", BOREAL_FOREST),
+        ("woodland_and_shrubland", WOODLAND_AND_SHRUBLAND),
+        ("savanna", SAVANNA),
+        ("temperate_grassland", TEMPERATE_GRASSLAND),
+        ("tundra_and_alpine", TUNDRA_AND_ALPINE),
+        ("desert_and_semidesert_scrub", DESERT_AND_SEMIDESERT_SCRUB),
+        ("extreme_desert_rock_sand_ice", EXTREME_DESERT_ROCK_SAND_ICE),
+        ("swamp_and_marsh", SWAMP_AND_MARSH),
+    ] {
+        assert_eq!(table.get(row, "npp_g_m2_yr"), Some(npp), "{row}");
+        assert_eq!(table.get(row, "biomass_kg_m2"), Some(biomass), "{row}");
+    }
+    // And each biome's residence time is its row's biomass over its NPP.
+    let ratio = |row: &str| {
+        table.get(row, "biomass_kg_m2").unwrap() * 1000.0 / table.get(row, "npp_g_m2_yr").unwrap()
+    };
+    let close = |a: f64, b: f64| (a - b).abs() < 1e-12;
+    assert!(close(
+        residence_years(BiomeType::BorealForest),
+        ratio("boreal_forest")
+    ));
+    assert!(close(residence_years(BiomeType::BorealForest), 25.0));
+    assert!(close(
+        residence_years(BiomeType::Grassland),
+        ratio("temperate_grassland")
+    ));
+    assert!(close(
+        residence_years(BiomeType::Wetland),
+        ratio("swamp_and_marsh")
+    ));
+    assert!(close(
+        residence_years(BiomeType::Desert),
+        ratio("desert_and_semidesert_scrub")
+    ));
+    // Temperate forest is the two temperate rows by world total:
+    // (5.0 x 35 + 7.0 x 30) / (5.0 x 1.3 + 7.0 x 1.2) = 385 / 14.9 years.
+    assert!(close(
+        residence_years(BiomeType::TemperateForest),
+        385.0 / 14.9
+    ));
+    assert_eq!(residence_years(BiomeType::DeepOcean), 0.0);
 }

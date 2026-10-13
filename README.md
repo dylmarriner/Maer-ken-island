@@ -4,6 +4,14 @@ Standalone island project bootstrapped from the human simulation work in `dylmar
 
 This repository carries forward the canonical Maer-Ken human schema/runtime and exposes it as a public API for island-specific simulation work.
 
+## Start here
+
+- [`HANDOFF.md`](HANDOFF.md): what the project is, where it stands, how to build and check it,
+  and what will bite you.
+- [`WORK_REMAINING.md`](WORK_REMAINING.md): everything not yet done, and what each item needs
+  (sources, owner decisions, files, tests).
+- [`docs/ISLAND_SYSTEM_STATUS.md`](docs/ISLAND_SYSTEM_STATUS.md): the evidence for what is done.
+
 ## Implementation roadmap
 
 The top-level execution map is [`docs/IMPLEMENTATION_READY_ROADMAP.md`](docs/IMPLEMENTATION_READY_ROADMAP.md).
@@ -12,13 +20,38 @@ It defines the locked scope (a uniquely shaped, New-Zealand-sized island on an E
 
 ## What is here
 
+The island is no longer one program. It is a **backend** that simulates
+and serves, and **frontends** that read it — a web dashboard that can be
+hosted anywhere, and a desktop application. They share one wire schema and
+there is exactly one way to read an island.
+
+### The island itself
+
 - `crates/mk_core/src/human/` — canonical identity, genetics, temperament, neurocognition, personality, drives, hormones, attachment, schema and profile types.
 - `crates/mk_engine/src/humans/` — live runtime systems for body, needs, cognition, emotion, memory, consciousness, reproduction, lifecycle, social behaviour and brain-state models.
-- `apps/island_humans/` — the island-facing population bootstrap and CLI.
+- `crates/mk_engine/src/regional/` — the island: geophysics, climate, ecology, the estate, materials, labour, energy, timber, the humans on it.
+- `crates/mk_engine/src/regional/industry/` — river micro-hydro: turbine choice and efficiency, flow-duration curves, site search and the electricity grid (Phase 4b).
+- `fixtures/reference/` — every real-world value the model uses, each cited (climate, hydrology, ecology, geology, humans, labour, industry).
+- `docs/island/DEVIATIONS.md` — every known departure from reality (D1-D40).
+- `crates/mk_island/` — the regional domain contract.
 - `fixtures/human/` — canonical Gem-D / Gem-K human fixtures.
-- `assets/humans/` — the founder GLB models.
-- `tools/blender/generate_human_model.py` — the Maer-Ken human model generator.
 - `docs/canon/` — the copied HumanReplicationSchema and human schema-family authority.
+
+### The backend, and what reads it
+
+- `apps/island/` — `island serve`, `run`, `replay`, `inspect` and `export`. The simulation, the HTTP API and the dashboard's pages.
+- `crates/mk_island_api/` — every shape that crosses the network, defined once. Serde and nothing else, so a client can link it without building the island.
+- `crates/mk_island_client/` — a typed, blocking client for a backend. What the desktop application uses, and what anything else should.
+- `apps/island_ui/` — `island-ui`, the desktop application, on Bevy 0.19.
+- `apps/island_humans/` — the Phase-0b population bootstrap and CLI.
+- `apps/island_preview/` — the headless renderer for the geophysics galleries.
+- `services/computer-service/` — the opt-in Node bridge that lets a founder reach the real internet. Off unless asked for.
+
+### Assets
+
+- `assets/humans/` — the founder GLB models.
+- `assets/property/`, `assets/computers/`, `assets/tools/`, `assets/vehicles/`, `assets/terrain/` — the estate's buildings, the four machines in the computer room, the workshop equipment, the named vehicles and the terrain materials, from upstream Maer-Ken. `assets/CREDITS.md` says exactly what they are, which is less than it would be convenient to claim.
+- `tools/blender/`, `tools/assets/` — the generators they came from, so they can be rebuilt rather than only trusted.
 
 ## Current bootstrap
 
@@ -29,51 +62,109 @@ New people are built through upstream's `SpawnHuman` path from the population's 
 ## Run it
 
 ```bash
-cargo test --workspace                          # fast tier
-cargo run -p island -- serve                    # dashboard at http://127.0.0.1:8080/
-cargo run -p island_humans -- founders          # list everyone (CLI)
-cargo run -p island_humans -- create "Hine Moana" female 1992-11-03T10:15:00+13:00 -41.3 174.8 --height 166 --hair black
+cargo test --workspace --exclude island_ui    # fast tier
+cargo run -p island -- serve --scenario fixtures/island/default_scenario.json
+cargo run -p island_humans -- founders        # list everyone (CLI)
 ```
 
-### The dashboard (`island serve`)
+### On one machine
 
-- **People** (`/`): the roster, and everything stored about whoever you pick.
-- **Create a human** (`/creator`): name, sex, birth date and place, age and appearance. Each new person gets a folder immediately.
+`island serve --scenario …` is the whole thing: the island, its API and its
+dashboard at <http://127.0.0.1:8080/>. This is unchanged and still the
+simplest way to run it.
 
-`island serve [--data-dir DIR] [--bind ADDR:PORT] [--seed HEX64]`. Reading never needs a token. Creating people is allowed:
+- **Overview** (`/`): how many people there are, how old they are, where their records live, what the island's clock is doing, and what does and does not work yet.
+- **People** (`/people`): the roster and everything stored about whoever you pick, with the complete record underneath.
+- **The island** (`/island`): the map — elevation or standing vegetation across the whole island, the estate's patch 400× finer, and the individual stems in the wood around it — what has been built, and everything that has reached the island from outside.
+- **Create a human** (`/creator`): name, sex, birth date and place, age and appearance.
 
-- with `ISLAND_CONTROL_TOKEN` set: only for requests carrying `Authorization: Bearer <token>`. The Creator page has a field for it, kept in the browser tab only.
-- without a token on a loopback bind (the default `127.0.0.1:8080`): from this machine.
-- without a token on any other bind: never. Set a token before using `--bind 0.0.0.0:…`.
+### On several machines
 
-That is the older, human-only dashboard (`--data-dir`): people are created and stored, but time does not pass there. The live island below is where time runs.
-
-**Back up your storage key.** Human files are encrypted with `island-data/humans/.secret_storage_key`, generated on first run, or with `MK_STORAGE_KEY` if set. Lose the key and every human file becomes unreadable. Back it up with the data, or set `MK_STORAGE_KEY` yourself.
-
-## The live island
-
-The whole island (climate, weather, ocean, rivers, ecology, the estate, 200,000 trees, energy, materials and the people on it) runs as one deterministic world.
+The backend on one, the frontends on others:
 
 ```bash
-# Run it headless: 1,000 one-minute steps, save a snapshot, write a replay log
-cargo run --release -p island -- run --scenario fixtures/island/default_scenario.json \
-    --steps 1000 --dt 60 --save run.snap --log run.log.json --save-root island-data
-cargo run --release -p island -- inspect --snapshot run.snap            # summary and state hash
-cargo run --release -p island -- replay --scenario fixtures/island/default_scenario.json --log run.log.json
-cargo run --release -p island -- run --load run.snap --steps 1000       # continue a saved run
+# the island
+export ISLAND_CONTROL_TOKEN=…   # who may change it
+export ISLAND_READ_TOKEN=…      # who may look at it
+island serve --scenario … --bind 0.0.0.0:8080 --allow-origin https://island.example
 
-# Serve it live (real time by default; see the speed control on the page)
-cargo run --release -p island -- serve --scenario fixtures/island/default_scenario.json \
-    --save-root island-data --snapshot-out run.snap
+# the dashboard, somewhere else
+island serve --frontend-only --backend https://island.example --bind 0.0.0.0:3000
+#   …or as plain files for any web server:
+island export --to /var/www/island --backend https://island.example
+
+# the desktop application, on somebody's desk
+island-ui --server https://island.example --token "$ISLAND_READ_TOKEN"
+#   …opening on the founders' estate rather than on the island
+island-ui --server https://island.example --view estate
 ```
 
-Every command prints a `state hash`: the same scenario, seed and commands always give the same hash, in any process, at any speed, and a saved run continues to exactly the hash an uninterrupted run reaches. `--save-root` keeps a folder for every person under `<dir>/<run id>/humans/` (the run id is printed; each run gets a new one). `--import-0b <data-dir>` brings in people created with the older dashboard. `island_preview world --snapshot run.snap --out dir` renders a saved run as images.
+`docs/island/DEPLOYMENT.md` is the full account: the two tokens and what
+each is for, CORS, TLS, the systemd unit and the container, and how to
+check a deployment.
 
-The live page (`/`) shows the clock, lets you pause, step and change speed, lists the people, and adds a person (optionally choosing appearance and where they appear, e.g. the Kitchen). The API is `GET /api/status|humans|humans/{id}|estate|properties|vegetation|economy|timeline` and, behind the same write rules as above, `POST /api/humans` and `POST /api/control` (both answer `202`: the change applies at the next tick).
+`island-ui` draws two things, and CI proves both: the island at ten
+kilometres to the unit, and the founders' estate at one metre to it, with
+the Maer-Ken models standing on it. `scripts/render-smoke.sh` runs the
+application on a virtual screen against a real island, photographs each
+frame and asserts the picture is of something; both frames are uploaded as
+artifacts. For the estate it reads the log as well, because a photograph
+cannot tell a loaded model from the box underneath it — measured, an empty
+`assets/` directory costs that frame a third of its colours and the log
+names thirteen models it could not find.
 
-### What it needs
+It answers a mouse and a keyboard too, and that is checked rather than
+assumed: CI drives it with synthetic X11 input — a held drag, a scroll,
+the `e` and `i` keys and a click on the panel's own button — and asserts
+the picture changed the way each gesture should.
 
-Measured on a 16 GB development machine, release build (`benchmarks/`):
+What none of that answers is what it costs on a GPU, because every frame
+so far was rasterised on the CPU — measured at 0.6 frames a second for
+the island view and 10.8 for the estate. The application already asks
+for the best adapter a machine has and now says which one it got; on a
+software one it says so and names both remedies, a driver or
+`--detail 4`. `docs/island/RENDER_STACK.md` is the full account.
+
+### The JSON behind it all
+
+`/api/status`, `/api/version`, `/api/health` (also `/healthz`),
+`/api/world` and its parts, `/api/world/humans`, `/api/properties`,
+`/api/economy`, `/api/timeline`, `/api/conversations`, `/api/map.png`,
+`/api/vegetation.png`, `/api/patch.png`, `/api/elevation.bin`,
+`/api/cell/<row>/<col>`, `/api/trees`, `/api/humans`, `/api/activity` and
+`/api/creator/options`. The writes are `POST /api/humans`,
+`/api/world/humans`, `/api/world/interventions` and `/api/control`.
+
+Every response carries a strict content security policy and the usual
+hardening headers; the pages load no third-party script, style or font.
+One line per request is printed to stdout — set `ISLAND_ACCESS_LOG=off` to
+stop that.
+
+### Who may do what
+
+Two tokens, answering two questions. `ISLAND_CONTROL_TOKEN` decides who may
+**change** the island: set it and every write needs
+`Authorization: Bearer <token>`; without it only a loopback bind accepts
+writes at all. `ISLAND_READ_TOKEN` decides who may **look**. Reads are open
+without it, which is right on a loopback bind and a decision anywhere else
+— a backend bound to `0.0.0.0` with neither is readable in full by anyone
+who can reach the port, and it says so on startup.
+
+`/api/health` and `/api/version` answer without either, because they are
+what a caller asks before it can have one.
+
+**Back up your storage key.** Human files are encrypted with
+`island-data/humans/.secret_storage_key`, generated on first run, or with
+`MK_STORAGE_KEY` if set. Lose the key and every human file becomes
+unreadable. Back it up with the data, or set `MK_STORAGE_KEY` yourself.
+
+## What it needs
+
+Measured on a 16 GB development machine, release build, on the pre-merge
+local line (`e1afa23`, kept as `backup/local-main-e1afa23`). The merge with
+`main` changed how meals are sized and added felling, hauling and
+micro-hydro, so treat these as orders of magnitude until `island_bench`
+is re-run:
 
 | | Memory (peak) | Speed |
 |---|---|---|
@@ -82,15 +173,23 @@ Measured on a 16 GB development machine, release build (`benchmarks/`):
 | 1,000 people, first hours | about 600 MB | 115 ms per simulated minute |
 | 5,000 people, first hours | about 1.0 GB | 0.5 s per simulated minute |
 | People, settled (after about a month) | about 2-7 MB each | so roughly 1,000 people on 8 GB and 2,000 or more on 16 GB |
-| Snapshot file, two people | 0.05 GB (compressed) | save about 2 s, load about 2 s |
-| Snapshot file, 5,000 people | about 0.9 GB measured before compression, so expect roughly 0.13 GB | save 30 s, load 10 s before compression |
 
-An 8 GB machine is comfortable for the founders and for hundreds of people; thousands fit only for short runs (see the settled figure above). Compiling is the heavy part: `rustc` can use 4 GB or more, so on a small or busy machine build with `cargo build -j 1`, and keep large files out of `/tmp` where it is RAM-backed.
+`cargo run --release -p island --bin island_bench -- --ticks 1000 --people 100 --tmp target/bench`
+measures bootstrap, stepping with a per-subsystem split, a snapshot round
+trip and peak memory, as JSON. Compiling is the heavy part: `rustc` can use
+4 GB or more, so on a small or busy machine build with `cargo build -j 1`,
+and keep large files out of `/tmp` where it is RAM-backed.
 
-Five simulated years of the two founders ran in a flat 250-320 MB and ended with five people alive (three children), (that run predates booking each person's meals and drinks at the cell where they stand).
-
-Limits worth knowing (full list in [`docs/ISLAND_SYSTEM_STATUS.md`](docs/ISLAND_SYSTEM_STATUS.md)): the island has plants and one grazer pool per cell (assumed parameters, deviation D33), but no predators, fish or birds and nothing for people to hunt; people work and eat through a simplified household model, not yet through timed, energy-costed tasks; children grow along WHO curves, eat by body size and stay with their mother until five, and children do not do adult work or the mature actions (round-number age limits), but they still choose their own other actions; there is no refinery, town or deep-time spin-up yet; the longest runs so far are 16 simulated years for the two founders and about two years for a 26-36 person population, and deaths do happen to settlers (in a run of 30 settlers aged 20 to 118, five died within the first 0.8 simulated years and were buried through the ledger), but no second generation has grown up yet (that needs about 18 simulated years). The founders themselves cannot die naturally.
+Limits worth knowing (full list in [`docs/ISLAND_SYSTEM_STATUS.md`](docs/ISLAND_SYSTEM_STATUS.md)): the island has plants and one grazer pool per cell (assumed parameters, deviation D41), but no predators, fish or birds and nothing for people to hunt; people eat and drink where they stand (digging for soil water when nothing wet is in reach); children grow along WHO curves and stay with their mother until five, and children do not do adult work or the mature actions (round-number age limits), but they still choose their own other actions; newborns join the household books with carbon from their mother, and the dead are buried through the ledger; there is no refinery, town or deep-time spin-up yet.
 
 ## Source authority
 
 The extraction is pinned by provenance to Maer-Ken commit `7c05f0dcf254387ffd7322dbb525fe4807228602`. See `UPSTREAM.md` before changing imported human behaviour.
+
+## Licence
+
+Proprietary. Copyright (c) 2026 Dylan Marriner, all rights reserved; see [`LICENSE`](LICENSE).
+No open-source licence is granted. Every crate declares
+`license = "LicenseRef-All-Rights-Reserved"` and the computer service `"license": "UNLICENSED"`.
+The assets under `assets/` carry the same licence; `assets/CREDITS.md` records where each came
+from and which need their provenance verified before any distribution outside this repository.

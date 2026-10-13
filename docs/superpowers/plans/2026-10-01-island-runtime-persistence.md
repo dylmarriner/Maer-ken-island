@@ -73,7 +73,7 @@ Implementation notes: `regional/world.rs` `IslandWorldState` wraps `IslandLife` 
 - [x] **Step 5:** Re-run; expect PASS. Slow tier for the 1,440-step comparison if it exceeds ~30 s debug.
 - [x] **Step 6:** Commit `feat(engine): schedule island subsystems`.
 
-Implementation notes: `regional/scheduler.rs` (`IslandScheduler`, `SchedulerCounters`, `SchedulerAccumulators`, `Due`); `IslandLife::advance` now takes its cadences from the scenario and dispatches by the simulated clock (firings depend only on the clock, so slicing time differently cannot change them). A remainder shorter than a substep is carried (3,701 s = 61 whole minutes + 41 s waiting). Verified: 1 h as one step equals 60 one-minute steps; two 3,701 s steps equal one 7,402 s step; a full day in one step equals 1,440 steps (slow tier). Geophysics and human-store firings are counted but their work is Task 2b/3b; the command queue is applied at the head of each substep (Task 4). The scheduler state is in the state digest, so the week digest was re-pinned (`bf836cb8…6e3f`, later `c0ce6600…cf41` when Task 4 added command state).
+Implementation notes: `regional/scheduler.rs` (`IslandScheduler`, `SchedulerCounters`, `SchedulerAccumulators`, `Due`); `IslandLife::advance` now takes its cadences from the scenario and dispatches by the simulated clock (firings depend only on the clock, so slicing time differently cannot change them). A remainder shorter than a substep is carried (3,701 s = 61 whole minutes + 41 s waiting). Verified: 1 h as one step equals 60 one-minute steps; two 3,701 s steps equal one 7,402 s step; a full day in one step equals 1,440 steps (slow tier). Geophysics and human-store firings are counted but their work is Task 2b/3b; the command queue (Task 4) is not yet applied at the head of a substep. The scheduler state is in the state digest, so the week digest was re-pinned (`bf836cb8…6e3f`).
 
 
 ### Task 2b: Deep-time spin-up
@@ -90,11 +90,12 @@ A realistic island starts with mature soils, rivers and forests, which take cent
 - `SpinUpReport { years, wall_seconds, equilibrium: EquilibriumMetrics }` with soil carbon, forest biomass and river discharge trends over the last 100 years.
 - The spun-up state is snapshotted and cached under `<save_root>/spinup/<digest>.snap`, keyed by the digest of canon + scenario + seed + spin-up settings. Later runs load the cache instead of repeating the spin-up. Bootstrap order becomes: geophysics → physical → ecology → deep-time spin-up → property and estate → founders → town.
 
-Task 2b status (blocked on missing models; steps deliberately not ticked): found while starting it that a spin-up has nothing to evolve yet. The regional ecology is bootstrapped at its own equilibrium (`biomass = NPP x residence`, the fixed point of its exact step), the terrain is static after bootstrap, and the geophysics cadence is counted but drives no tectonic, erosion or soil model; there is no soil-carbon pool at all, and hydrology and climate already spin up (two orbits) at bootstrap. `tests/island_deep_time.rs` pins the true part of the plan's "near equilibrium" criterion: total and per-cell biomass drift below 1e-9 over a century, as one step or 100. Building a deep-time mode now would be a stub that returns the state it was given. It becomes real work only when the soil, erosion and uplift models exist (they are not in the roadmap's Phase 3 or 4 task lists as written); until then the island starts mature by construction, which is also the honest limit of the world's age. Deviation D20 is unexercised for the same reason.
 - [ ] **Step 1:** Write tests (small test island): spin-up is deterministic and its cache key changes when any input changes; after spin-up, soil carbon and forest biomass trends over the last 100 years are below 1% per century (near equilibrium); spin-up refuses to run once humans exist; one full-detail local year after spin-up has climate statistics matching the climatology used during spin-up within the Phase-2 realism tolerances; loading the cached spin-up then running gives the same hash as spinning up and running.
 - [ ] **Step 2:** Run `cargo test -p mk_engine --test island_deep_time`; expect FAIL; implement; re-run; expect PASS.
 - [ ] **Step 3:** Measure the full-island 1,000-year spin-up in release (target: a few hours on the reference machine, done once per scenario) and record it in the Phase-5 benchmark.
 - [ ] **Step 4:** Add deviation row "deep-time climatology during spin-up" to `docs/island/DEVIATIONS.md` (seeded in Phase 0c as D20). Commit `feat(island): deep-time world spin-up before humans arrive`.
+
+> **Status (2026-10-13):** not started. There is no `regional/deep_time.rs`, no `IslandWorldState::spin_up` and no spin-up cache; the island begins from `RegionalPhysicalState::bootstrap`'s settled orbits. D20 is already recorded (Accepted). This is the one Phase 4 task still open; `WORK_REMAINING.md` §3 lists what it needs.
 
 ### Task 3: Complete island snapshot save/load
 
@@ -104,16 +105,28 @@ Task 2b status (blocked on missing models; steps deliberately not ticked): found
 - Test: `crates/mk_engine/tests/island_snapshot.rs`
 
 **Interfaces:**
-- Produces: `save_island_snapshot(state: &IslandWorldState, path: &Path) -> Result<(), IslandSnapshotError>` and `load_island_snapshot(path: &Path) -> Result<IslandWorldState, IslandSnapshotError>`.
+- Produces: `save_island_snapshot(life: &IslandLife, path: &Path) -> Result<(), IslandSnapshotError>` and `load_island_snapshot(canon: Arc<CanonLocked>, path: &Path) -> Result<IslandLife, IslandSnapshotError>`. `IslandLife` is the composition Task 1 delivered under that name; the canon is supplied by the caller rather than read from the file, so a snapshot cannot bring its own physics.
 - Error variants: digest mismatch, incompatible profile/scenario version, canon mismatch/invalid canon, serialization, filesystem.
 
 - [x] **Step 1:** Write tests for round-trip equality of `state_hash` (including estate layout, patch trees, estate positions, zonal background and pending commands), tamper rejection, truncation rejection, incompatible fixture profile version and invalid canon.
-- [x] **Step 2:** Run `cargo test -p mk_engine --test island_snapshot`; expect FAIL.
+- [ ] **Step 2:** Run `cargo test -p mk_engine --test island_snapshot`; expect FAIL. Not done as written: the tests and the module were written together, so there was never a run of this file against a missing implementation.
 - [x] **Step 3:** Implement atomic (write temp, fsync, rename) digest-prefixed JSON save/load; re-derive canon-derived values on load; validate scenario/profile compatibility before returning state.
 - [x] **Step 4:** Re-run; expect PASS.
 - [x] **Step 5:** Commit `feat(io): persist complete island world`.
 
-Implementation notes: `io/island_snapshot.rs`: magic + format version + blake3 payload digest + JSON envelope (scenario, canon, recorded state digest, `IslandLifeSnapshot`); atomic write (temp, fsync, rename); load validates magic, version, digest, scenario/profile version, canon finiteness and digest, then rebuilds the domain, topology, labour table, RNG registry and the terrain-derived caches (drainage network, coarse elevation, geothermal, diurnal surface) and requires the restored state to hash to the recorded digest. Tests: round trip equality, **a restored island runs on identically across an hour boundary** (the completeness proof), tamper, truncation, bad magic, unsupported format, incompatible scenario and profile versions, invalid and non-finite canon. 336 MB / 0.9 s save / 1.2 s load (`benchmarks/island_snapshot.md`). The pending command queue and log are in the snapshot (Task 4). **Not yet in the snapshot** because they do not exist yet: the fault system and chronicle. JSON, not bincode: upstream human state embeds `serde_json::Value`.
+**Built (2026-10-07):** the file is `magic ‖ blake3(rest) ‖ canon digest ‖ deflated JSON`, written
+to a temporary file beside the target, fsynced and renamed, with the directory entry fsynced after.
+Written plainly the full island came to 338 MB — a dozen grids of 1,152,000 cells, mostly decimal
+expansions of numbers close to their neighbours — so the state is deflated, which brings the same
+island to 44 MB, and the digest covers the compressed bytes that are actually on the disk. `IslandLife::restore` validates the scenario as
+if it had been read from disk, then derives the domain, grid topology and labour table again
+instead of trusting the file. The round-trip tests assert the state digest both immediately and
+after simulating the same hours on both sides, which is what catches state left out of the
+snapshot.
+
+Two things Step 1 names are not covered because they do not exist yet: there are no pending
+commands until Task 4, and the zonal background is part of the physical state the round trip
+already compares through the digest rather than a separate field to assert on.
 
 
 ### Task 3b: Per-human folders
@@ -130,12 +143,34 @@ Implementation notes: `io/island_snapshot.rs`: magic + format version + blake3 p
 - Upstream `HumanSystem::step` calls `registry.sync_to_storage()` every call (`humans/mod.rs:880`). Add `HumanSystem::set_auto_sync(bool)` (default `true`, preserving upstream `WorldState` behaviour). The island sets it `false` and syncs on `human_store_seconds`, at every snapshot save, and immediately when a human dies. Event files (`events/`, memories, relationships) are still appended when they happen.
 - Storage errors (returned by the Phase-0 registry changes) are counted in the audit trail and shown by the CLI/dashboard, never discarded.
 
-- [x] **Step 1:** Write tests: founders get folders on enable; a birth during a stepped run creates the child's folder in the same tick with a `born` event and parents' `reproduced` events; folders after a snapshot save match the snapshot's human state; a fresh run with the same seed under the same root uses a new `run_id` directory; with auto-sync off, full-state files are rewritten only on the store cadence; state hash is identical with the store enabled, disabled or failing.
-- [x] **Step 2:** Run `cargo test -p mk_engine --test island_human_store`; expect FAIL.
+- [x] **Step 1:** Write tests: founders get folders on enable; a birth during a stepped run creates the child's folder in the same tick with a `born` event and parents' `reproduced` events (covered as `somebody_added_after_the_store_is_open_gets_a_folder_at_once`, which pins `HumanRegistry::add_human`'s storage branch — the call every birth path reaches — rather than waiting out a pregnancy; the `born`/`reproduced` event files are *not* pinned, and nothing guards them yet); folders after a snapshot save match the snapshot's human state; a fresh run with the same seed under the same root uses a new `run_id` directory; with auto-sync off, full-state files are rewritten only on the store cadence; state hash is identical with the store enabled, disabled or failing.
+- [ ] **Step 2:** Run `cargo test -p mk_engine --test island_human_store`; expect FAIL. Not done as written, as in Task 3: the tests and the module were written together.
 - [x] **Step 3:** Implement on top of upstream `HumanStorage` (no second folder format).
 - [x] **Step 4:** Re-run, plus `cargo test -p mk_engine --lib humans::`; expect PASS. Record per-sync cost for the Phase-5 benchmark.
 - [x] **Step 5:** Record `set_auto_sync` in `UPSTREAM.md`. Commit `feat(island): keep a folder for every human`.
-Implementation notes: `regional/store.rs` (`IslandWorldState::{enable_human_store, sync_human_store, human_store_status}`, `HumanStoreStatus`, `runs.json` run counter; `run_id` = blake3(scenario digest ‖ seed ‖ run number)[..12]); `HumanSystem::set_auto_sync` / `sync_store` (runtime-only flag, `serde(skip)`, so never hashed or saved; a human who dies is written the step they die); the island syncs on the `human_store_seconds` cadence and the runner syncs before every `--save`. `CreateHuman` now adds through `add_human` so arrivals get a folder; failures are counted in the status and printed by `island run`, never discarded. Births already create folders through upstream `deliver_due_births` -> `add_human` (covered by the upstream lifecycle tests); the island-level test covers founders, arrivals, cadence, snapshot match, fresh run id, and **state hash identical with the store off, on and failing**. Cost: about 30 ms per full sync of two humans (25 syncs over one simulated day = 0.8 s of 18 s; hash identical, 293 MB vs 287 MB peak). The hourly write is a rotating shard of at most 1,000 humans (`max_per_sync`) so a large population never pays one huge pause (a full sync of 5,000 took 49 s); tested by forcing two shards on the two founders. Not covered: a birth inside a stepped island run (gestation is 268 days; too slow for a test).
+
+**Built (2026-10-07):** `open_run` claims the next run under the save root — the counter in
+`runs.json` is written back *before* any human is, so a crash mid-run burns an id rather than
+reusing one — and the id is `blake3(scenario digest ‖ seed ‖ counter)[..12]`, stable for a given
+scenario, seed and run number rather than a timestamp. The store opens through
+`HumanStorage::try_new`, which refuses a missing storage key instead of writing people's records
+in plaintext.
+
+`IslandLife::enable_human_store` sets `auto_sync` false and syncs on `human_store_seconds` (the
+cadence and its counter already existed in the scheduler and were computed but never acted on),
+at every `save_island_snapshot` — which now takes `&mut` for that reason, so a checkpoint
+checkpoints everything — and immediately when somebody dies, which is the one moment a stale file
+would be a lie rather than a lag. Failed writes are counted on the store with their most recent
+reason and surfaced by the CLI, never discarded: a human whose folder will not write still exists.
+
+What the tests are actually for: `keeping_records_does_not_change_what_happens` and
+`the_island_runs_on_when_every_write_fails` both assert an identical state digest against an
+island with no store at all. A world that ran differently when asked to keep records would not be
+worth the records.
+
+`crates/mk_engine/src/regional/world.rs` is not modified: this repository's composition is
+`regional/life.rs` (`IslandLife`), which is where the store lives.
+
 
 ### Task 4: External commands and deterministic replay
 
@@ -153,9 +188,150 @@ Implementation notes: `regional/store.rs` (`IslandWorldState::{enable_human_stor
 - [x] **Step 1:** Write a log with interventions and controls at repeated ticks and assert stable `(tick, sequence)` order.
 - [x] **Step 2:** Run uninterrupted execution and replay from the same seed and log; assert identical final `state_hash`.
 - [x] **Step 3:** Save halfway, load, continue replay; assert the same final hash.
-- [x] **Step 4:** Run `cargo test -p mk_engine --test island_replay`; expect FAIL before implementation, PASS after.
+- [x] **Step 4:** Run `cargo test -p mk_engine --test island_replay`; PASS. The FAIL half was not done as written, as in Tasks 3 and 3b: the tests and the module were written together.
 - [x] **Step 5:** Commit `feat(engine): replay deterministic island commands`.
-Implementation notes: `regional/commands.rs` (command types, `validate`, `CommandState`), `regional/replay.rs` (`replay_island`, `IslandWorldState::{queue, replay_log}`). A command queued at tick *t* takes tick *t*+1 and a sequence number and applies at the start of that substep in `(tick, sequence)` order; every applied command is logged; the queue, log, pause/step/speed state are in the state digest and the snapshot, so save/load mid-run is exact. `Pause` stops time (queued time is not banked), `Step(n)` runs *n* substeps while paused, `CreateHuman` builds the person at the yard. **Interventions other than Pause/Resume/Step are refused at queue time with `NotSupportedOnIsland`** (planetary climate edits, orbit changes, branching); no silent no-ops. Replay stops early only if the log leaves the run paused. Tests: `island_replay.rs` (ordering and refusals; uninterrupted vs replayed hash; save halfway, load, continue, same hash). The week digest was re-pinned (`c0ce6600…cf41`), identical across two processes; 49 s, 315 MB. (Later `f97c4ca2…1f52` after the digest began hashing humans one at a time to bound snapshot memory; see `benchmarks/island_population.md`.)
+
+**Built (2026-10-08).** `IslandCommand::{CreateHuman, Control}` in `regional/commands.rs` is the
+only way in from outside, and `IslandLife::apply_command` records every applied command in an
+`IslandReplayLog` with the `(tick, sequence)` it applied at. `replay_island` runs a scenario
+forward, applying the log as it goes, and reaches the same canonical digest.
+
+Measured end to end rather than only in tests: a dashboard was run at 2,000x, three people were
+created through `POST /api/world/humans` from the command line, and the session's log was
+replayed on its own:
+
+    live dashboard, tick 720   -> 628d33bc0bd85c59...
+    island replay --until 720  -> 628d33bc0bd85c59...
+
+The log recorded the three creations at ticks 480, 544 and 609 — where they actually landed —
+and the replay rebuilt all five islanders.
+
+`sequence` is why commands landing on one tick come back in order: the second creation of a name
+becomes `name-2`, which only holds if the first is already there. `replay_island` sorts by
+`(tick, sequence)` rather than trusting the file's order, and
+`a_shuffled_log_still_reproduces_the_run` reverses a log and requires the same digest.
+
+Control commands are recorded and apply nothing — pausing an island leaves the state it was
+paused in, and a speed is a statement about real time. `control_commands_are_recorded_and_change_
+nothing` asserts that rather than assuming it.
+
+`island serve --log <path>` records a dashboard session, written as each command lands rather
+than at the end, because a log that only existed in memory would be lost by the thing a log is
+for. `island run --log` does the same, and `island replay --scenario --log [--until]` runs one
+again.
+
+**`IslandCommand::Intervention` built (2026-10-08).** `regional::interventions` is upstream's
+`InterventionAction` executor adapted to `IslandLife`: `intervene` validates with upstream's own
+`validate_intervention`, then applies or refuses with `NotSupportedOnIsland { action, reason }`.
+The command carries upstream's action type rather than a translation of it, so a log records
+what was actually asked for, and an intervened-in run replays to the same digest
+(`a_run_somebody_intervened_in_replays_to_the_same_island`).
+
+Applied: `Pause`/`Resume`/`Step` (directives), `ModifyClimate` (all four parameters, with the
+heat booked from `OperatorIntervention` as upstream books it), `InjectBiomass { Producers }`,
+`InjectResource { Water }`, `ConstructStructure`, `SpawnHuman`, `RemoveHuman`. Refused, each
+naming what is missing: `SculptTerrain`/`SmoothTerrain` (the terrain is canon and hashed into
+the digest), the three animal `InjectBiomass` types (no species at island scale), the four
+non-water `InjectResource` types (the island's stores are named materials), `InjectEnergy` (the
+island's energy is the estate's plant, not a field), `TriggerDisturbance` (no disturbance
+system), `ModifyScenario` (a different scenario type, digest-checked), and
+`Scrub`/`Branch`/`Fork` (no branch registry). The table is in `UPSTREAM.md` and
+`every_action_is_supported_or_refused_by_name` walks every variant to keep the two in step.
+
+Two island differences inside the actions that are applied, both of which would have been
+defects if left as upstream has them. A `Location` off the domain is **refused** rather than
+clamped — upstream's planet has a cell for every coordinate, and clamping here would move an
+intervention aimed at the open sea onto the nearest coast. And `RemoveHuman` touches four places
+where upstream touches one: the registry, the estate position table, the body in the material
+ledger (out through the boundary, because a removal is not a death), and the two per-person
+accumulators, which are hashed — a ghost in any of them makes two islands that agree about who
+is alive disagree about their digest.
+
+`ConstructStructure` needed the island its own buildability rule first, and getting there was
+the most instructive part of this task. The island's economy is upstream's
+`ResourceEconomyState` and the recipes are the same, so the action worked immediately — and then
+refused cell (474, 544), the estate's own cell, where the founders' house already stands.
+
+Upstream's gate is `physics::MAX_CLIMB_HEIGHT_M`: an **absolute** 2 m of relief between a cell
+and each of its four neighbours, carrying its own note that the threshold "may need tuning
+against Maer-Ken's actual elevation scale". That is a statement about a grid's resolution rather
+than about terrain — the same hillside is 2 m per cell on one grid and 200 m per cell on
+another. On the island's 2 km cells it is a gradient of 0.1%. Measuring it rather than assuming
+gave the real figure: it admits **0 of 66,116 land cells**. Not almost none — none.
+
+    at or under  0.1% (upstream's gate here) :   0.0% of land
+    at or under  2%                          :  22.9%
+    at or under  5%                          :  79.6%
+    at or under 10%                          :  95.0%
+    at or under 20%                          :  99.4%
+    at or under 30%                          :  99.9%
+    steepest land on the island              :  42.5%  (849 m over 2 km)
+    the estate's own cell                    :   8.6%
+
+So `regional::geophysics::{MAX_BUILD_GRADIENT, is_buildable_cell}` asks the same question as a
+gradient, at 1 in 3 (about 18°) — where ground is conventionally classed very steep and building
+stops being a footing on a slope and becomes engineered terracing. It is a planning threshold,
+not a physical one: dry soil stands far steeper, its angle of repose nearer 30–35°, a gradient
+of 0.58–0.70. Sea neighbours are skipped rather than counted as a drop to the sea floor, which
+would refuse every coast, and the coast is where people build.
+
+**What that rule cannot do, said here rather than left to be found.** At 2 km per cell it is a
+mean gradient across kilometres, so it cannot judge a building plot: a 15% cell holds flat
+benches and steep faces and it sees neither. It excludes mountainside, and that is the whole of
+its claim. It admits 99.9% of this island's land — the island being gentle at this scale, not
+the rule being lax. Tightening it to look strict would turn down ordinary ground, which is the
+failure it exists to end.
+
+`ResourceEconomyState::place_structure` is the seam: `construct_for_operator` with the terrain
+gate lifted out in front of it. Upstream's path is unchanged and still gates; the island calls
+the inner one after making its own judgement. The recipe check and the event-log record are
+shared, so a structure the island places is as visible in the economy's books as any agent-built
+one. Measured on the real island:
+
+    constructed Wooden Shelter (structure #1) at cell (474, 544)
+    constructed Stone House    (structure #2) at cell (474, 544)
+    refused: cell (229, 348) is in the sea
+
+The mountainside refusal is covered by `the_sea_and_the_mountainside_are_both_refused`, which
+finds the island's own steepest land cell and asserts the limit is actually exceeded there
+before testing it, so it cannot pass vacuously if the terrain changes.
+
+Served at `POST /api/world/interventions`, 202 and a command id like a creation.
+
+**Three more defects, all found by running it rather than by testing it.** The sim loop's pause
+gate came *before* the command queue was drained, so a paused island was deaf: a `Resume` queued
+as an intervention sat in the inbox behind the pause it was meant to lift, and so did any
+creation made while paused. The island paused on request and would not come back. Applying a
+command does not advance the clock, so the queue is now drained first, paused or not, and a
+paused island publishes when something lands so that somebody created during a pause is visible
+rather than waiting for the resume. `Step` was in both vocabularies — upstream's directive and
+`ControlCommand::Step(u64)` — with nothing behind it; `Pacing` now carries a step budget the
+loop pays down one step per iteration, and `POST /api/control {"command":"step","ticks":n}`
+drives it. And `cells_in_region` took `radius_km` at its word: `validate_region` asks only that
+it be finite and positive, so `radius_km: 1e30` was a *valid* action and a walk over roughly
+`(2 x isize::MAX + 1)^2` offsets on the thread that owns the island — one accepted request and
+the world stops. The reach is clamped to the grid; a region larger than the island is the island.
+
+Measured on the real island (199,997 stems, the full scenario), not on a test fixture:
+
+    paused   : ticks 1075 -> 1075 across 3 real seconds
+    created while paused: 'tama' at cell (474, 544), tick 1075, and visible on the paused island
+    resumed  : 1077 -> 1132
+    step 5   : 1134 -> 1139, still 1139 three seconds later
+    step 3   : 1139 -> 1142, still 1142 two seconds later
+    refusals : SculptTerrain, TriggerDisturbance, InjectResource{Minerals},
+               InjectBiomass{Apex}, and 51.5, -0.12 as "not on this island"
+    applied  : 500 kg of water; Temperature 300 K over 37 coarse cells with 5.471e18 J booked
+               from outside; 200,000 kgC of producer carbon over 55 land cells
+
+**Two defects in Task 6's own code, found by writing this.** `IslandDomain::lat_lon_at_m` answers
+in **radians**, because its other caller does trigonometry with the result; `create_human`
+passed them straight through into a birthplace, which is degrees. Somebody born on an island at
+41° S was recorded as born at 0.716° S. And the estate path added the estate cell's origin to a
+layout rectangle that was already in absolute domain metres, putting a bedroom about 950 km
+north of the island. Nothing on the island reads a birthplace back, so every test passed both
+times; `somebody_born_here_is_born_at_this_islands_coordinates` is the one that would not have.
+
 
 ### Task 5: Phase-4 acceptance and headless runner
 
@@ -171,7 +347,29 @@ Implementation notes: `regional/commands.rs` (command types, `validate`, `Comman
 - [x] **Step 3:** Run the fixed-seed CLI twice and compare printed final hash; require exact equality.
 - [x] **Step 4:** Run fmt, clippy `-D warnings` and all Phase-4 tests; update `UPSTREAM.md`.
 - [x] **Step 5:** Commit `feat(app): add deterministic island runner`.
-- [x] **Step 6:** Add `island_preview world --snapshot <path> --out <dir>` reusing the Phase 1–3 renderers on a loaded `IslandWorldState`, so any saved run can be inspected headlessly.
+- [ ] **Step 6:** Add `island_preview world --snapshot <path> --out <dir>` reusing the Phase 1–3 renderers on a loaded `IslandWorldState`, so any saved run can be inspected headlessly.
+
+**Built (2026-10-07):** `island run` and `island inspect`, in `apps/island/src/run.rs`. Measured on
+the full island from the command line, not only in tests:
+
+    island run --scenario fixtures/island/default_scenario.json --steps 60   -> 4f6502fd…
+    island run --scenario fixtures/island/default_scenario.json --steps 60   -> 4f6502fd…
+    island run --snapshot a.mks --steps 60                                   -> d645a097…
+    island run --scenario fixtures/island/default_scenario.json --steps 120  -> d645a097…
+
+Two runs of one scenario and seed agree, and a run that stopped at 60 steps and resumed from the
+file reaches the same digest as one that never stopped — at the island's real size, 199,997 stems
+and a 43 MB snapshot. `island_runtime_acceptance.rs` pins both, plus the independence of `--dt`:
+the same simulated hour in six steps of ten lands where one step of sixty does.
+
+`--save-root` enables Task 3b's per-human folders and prints the run id. `island inspect` reads a
+snapshot and describes it without running it.
+
+**Not built:** `island replay --log`, which needs Task 4's command log, and Step 6's
+`island_preview world --snapshot`. The pacing and speed control in Task 6's interfaces section
+belong with the sim thread; `island run` is deliberately unpaced — wall-clock time never enters
+simulation state, so a headless run goes as fast as the machine allows.
+
 
 ### Task 6: Dashboard and Human Creator on the live island
 
@@ -194,12 +392,128 @@ Phase 0b built the dashboard, the Creator page, `CreateHumanRequest`, `create_hu
 - On apply: `build_authored_human` with the world `RngRegistry` and current tick; position set from the location (and `HumanEstatePositions` if inside the patch); added through the registry (folder created); `created` event written; command appended to the replay log. A folder-write failure is reported but does not undo the creation.
 - Creator page: Phase 0b form plus a location picker (estate plan from `/api/estate`, or island map from the Phase-4 preview data); removes the "time not running" banner.
 
-- [ ] **Step 1:** Write engine tests: identical requests at the same tick produce byte-identical humans; each validation rule rejects with a specific error; a created human appears at the requested space/cell with a folder and `created` event; the creation survives save/load and is reproduced by replay; storage failure still creates the human and reports the error.
-- [x] **Step 1b:** Write pacing tests: the same scenario run for 1,000 steps at `RealTime` (with a fake clock), `Times(1440)` and `AsFastAsPossible` reaches the identical state hash; at `RealTime` with a fake clock, simulated time advances one second per fake second; the achieved-speed readout drops below the requested speed when steps take longer than the pacing budget.
-Implementation notes (Step 1b): `regional/pacing.rs` (`Pacer::{steps_due, record, achieved_speed, is_behind}`, `FLAT_OUT_BATCH` 60, `MAX_CATCH_UP_STEPS` 240): pure arithmetic over caller-supplied elapsed time, remainders carried, a long stall drops its debt instead of spiralling, the achieved-speed readout flags a machine that cannot keep up. `tests/island_pacing.rs`: 1,000 steps hash identically at `RealTime` (fake clock), `Times(1440)` and `AsFastAsPossible`. The sim thread that uses it is Step 4.
-- [ ] **Step 2:** Write API tests with `ISLAND_CONTROL_TOKEN` configured: a `POST /api/humans` without the bearer token returns 401; a valid request returns 202 with the command id and the human is listed by `GET /api/humans` after one step; an invalid request returns 422 with the field errors; `--import-0b` of a Phase-0b data directory yields identical human profiles. Without a token on a loopback bind, the same valid request succeeds.
+- [x] **Step 1:** Write engine tests: identical requests at the same tick produce byte-identical humans; each validation rule rejects with a specific error; a created human appears at the requested space/cell with a folder and `created` event; the creation survives save/load and is reproduced by replay; storage failure still creates the human and reports the error.
+- [ ] **Step 1b:** Write pacing tests: the same scenario run for 1,000 steps at `RealTime` (with a fake clock), `Times(1440)` and `AsFastAsPossible` reaches the identical state hash; at `RealTime` with a fake clock, simulated time advances one second per fake second; the achieved-speed readout drops below the requested speed when steps take longer than the pacing budget.
+- [x] **Step 2:** Write API tests with `ISLAND_CONTROL_TOKEN` configured: a `POST /api/humans` without the bearer token returns 401; a valid request returns 202 with the command id and the human is listed by `GET /api/humans` after one step; an invalid request returns 422 with the field errors; `--import-0b` of a Phase-0b data directory yields identical human profiles. Without a token on a loopback bind, the same valid request succeeds.
 - [ ] **Step 3:** Run both suites; expect FAIL.
-- [ ] **Step 4:** Implement the sim thread, projection, command path and location picker; switch `serve` from the human-only population to `IslandWorldState`.
-- [ ] **Step 5:** Re-run; expect PASS. Manually create a human in the Kitchen from the browser and confirm their folder, detail view and estate position.
-Task 6 status (nearly complete; Steps 2-6 are not ticked on purpose, see the end): **done** - `island serve --scenario|--snapshot [--save-root] [--snapshot-out] [--bind]` runs the live `IslandWorldState` on its own thread (`serve/island_sim.rs`) paced by `regional/pacing.rs`, publishing an immutable `IslandProjection`; `GET /api/status|humans|humans/{id}|estate|properties|vegetation|economy|timeline`; `POST /api/humans` and `POST /api/control` (202 with the command id, 422 with the reason on refusal, 401 without the token or on a non-loopback bind with no token); a page with the creator (appearance options and an estate-space picker filled from `/api/estate`, text only). The engine's `IslandCreateHumanRequest` now carries optional authored `appearance` (height, build, hair, eye, skin, birth instant, birthplace; validated with upstream's `validate_intervention` rules) and `location` (`EstateSpace{label}`, `EstatePoint`, `IslandCell{row,col}`, refused unless it exists and is land); a created person gets a folder, a `created` event, a position, and survives save/load and replay. Both old-style (id, sex, age) requests and old replay logs still work (new fields default). Tests: `island_create_human.rs` (byte-identical people for identical requests, every rule refuses with its reason, appears in the Kitchen and on a far land cell with a folder and `created` event, survives save/load/replay, failing store still creates and reports), `island_pacing.rs`, `serve/island_api.rs` (real routes, real sim thread), plus live smoke runs. A smoke run found that commands waited up to a real minute at `RealTime`; fixed in `IslandLife::advance`. `island serve --import-0b <data-dir>` replays a Phase 0b `creations.jsonl` as `CreateHuman` commands at tick 0 (`runner::import_0b`; refused on an island that has run; each refused record is reported). **Deviation from the plan:** imported people have the same authored fields (sex, age, appearance, birth instant and place) but are *not* byte-identical to the 0b profiles, because their unauthored traits are sampled from the island's seed and tick, not 0b's. **Not done:** a map picker for `IslandCell` (the page offers estate spaces only), `agent_id` slugging from a display name (`agent_id_for_name`: the island uses the id as typed, refusing duplicates), and the clicking of the Add form in a browser (the read path of the page was checked in headless Chrome against a live server: its script ran, and the clock, population, roster and the 11 estate-space options all rendered; creation is covered by the API tests).
+- [x] **Step 4:** Implement the sim thread, projection, command path and location picker; switch `serve` from the human-only population to `IslandWorldState`.
+- [x] **Step 5:** Re-run; expect PASS. Manually create a human in the Kitchen from the browser and confirm their folder, detail view and estate position.
 - [ ] **Step 6:** Commit `feat(island): dashboard and human creator on the live island`.
+
+**Built (2026-10-07), except where noted at the end.** The island now runs behind the dashboard:
+`island serve --scenario <path> | --snapshot <path> [--speed real|max|<n>]` starts
+`IslandLife` on its own thread (`serve/sim.rs`), which publishes an `IslandProjection`
+(`serve/projection.rs`) behind an `RwLock` after every step. `GET /api/world` reads only that,
+so a request can never hold up a step and no page can catch the island half-stepped. The
+overview page shows the island's clock on its own 36-hour day, the founders with where they are
+and their body carbon, the estate's power, the patch, and whether the books closed; it refreshes
+every two seconds.
+
+Pacing works as the interfaces above require, and `how_fast_it_runs_does_not_change_what_happens`
+pins it: at any speed the thread's island is the island a plain `advance` reaches. Wall-clock time
+never enters simulation state.
+
+Two things running it taught, neither of which a test of mine would have caught:
+
+- The achieved-speed readout claimed **20,000x while the island was advancing at 2,160x**. It
+  timed `advance` only, and averaged over a count of steps — but one step in sixty also hashes
+  the island and costs hundreds of times more, so a step-count window usually fell between two of
+  them. It now times the whole loop over a five-second wall-clock window.
+- A step is **1.4 ms** and a digest is **932 ms** (`slow_what_a_step_and_a_digest_cost`), so
+  publishing the digest every step made the island hundreds of times slower than it needed to be.
+  The projection now carries a digest with the tick it was taken at, refreshed hourly, and the
+  page says "as of tick N" rather than implying it is live.
+
+The page's own copy was wrong once the clock started — it said "The island, before the clock
+starts" and "Time is not running" — so the overview now swaps both when a world is running and
+keeps the old wording when there is none. Checked in Chromium at 390 px against both: no console
+errors, no failed requests, no sideways scroll.
+
+**The write half (2026-10-07).** `IslandCommand` is queued to the sim thread and applied between
+steps, so a request never reaches into a running world. `POST /api/world/humans` answers **202**
+with a command id and a poll URL; `GET /api/world/commands/{id}` says what became of it. The
+creator page offers the estate's own 14 spaces by the layout's ids — so it cannot ask for a room
+the island will refuse — and follows the command to a created person or a refusal with reasons.
+Write auth is the same rule as storing a person: a world write is no less a write for happening a
+step later.
+
+`IslandLife::create_human` validates against the live world on its own thread, which is the only
+place those answers are true: a room that exists, a cell that is land and not sea, an age inside
+the packs' verified maximum of 122.45 years. Every problem is collected and returned together, so
+a form learns all of them at once.
+
+Two things the tests caught that the code did not do:
+
+- A created person had an estate position but no **runtime grid position**, so the next step saw
+  them outside the estate block and dropped them. The founders are placed by both; so are they
+  now (`somebody_created_in_a_room_is_in_that_room_and_in_the_world`).
+- A created person was never registered in the **material ledger**, so they carried no body
+  carbon, respired nothing and ate nothing — visibly on the page, and not actually alive. The
+  same test now requires their body carbon to fall over an hour, as a founder's does.
+
+Verified in Chromium end to end: filled the creator form, picked a room, and watched the person
+appear in the running island with body carbon beside the founders — "hine awake · Gem-D's
+Bedroom · 30 years old · 19.2 kg of body carbon". No console errors, no failed requests.
+
+**Control and the world's parts (2026-10-08).** `POST /api/control` takes `pause`, `resume` and
+`set_speed`, and the overview carries buttons for them. Pacing is read by the loop each
+iteration rather than captured at startup, so it changes without restarting the island — and
+changes nothing about the island: a pause leaves exactly the state it was paused in, and a speed
+decides only how often a fixed step happens. Measured in Chromium: pause held the clock dead
+still at tick 1080 across a second of real time, resume moved it again, and `60x` took effect.
+Control commands are applied at once rather than queued, since there is no world state for them
+to race with, and are then recorded in the replay log for the account of what the operator did.
+
+`GET /api/world/{estate|vegetation|materials|clock}` serves each part on its own path, from the
+same projection, and an unknown part is refused by name.
+
+**Placing somebody on the island, and carrying Phase 0b in (2026-10-08).** The creator page can
+put a person in a room of the estate or on a cell of the island, and the bounds come from the
+world rather than being assumed: "Rows 0 to 959, columns 0 to 1199. 66,116 of those cells are
+land; the rest are sea, and the island will refuse a creation there. The estate is at 474, 544."
+Driven in Chromium: a person created at the estate's cell reported "on the island at row 474,
+column 544", and cell (0, 0) came back "location: cell (0, 0) is in the sea" rather than being
+quietly moved somewhere that works.
+
+That check also found a real defect no test had: switching to a cell left the room dropdown on
+screen beside the row and column fields, offering a choice that did nothing. `label { display:
+flex }` is an author rule, so it beats the browser's own `[hidden] { display: none }` — the same
+reason `.banner[hidden]` already needed its own rule. The API branch was correct, so every test
+passed while the page showed a dead control.
+
+`island serve --import-0b <dir>` carries a Phase-0b stored population into the world, as ordinary
+`CreateHuman` commands at the first step, so they are recorded in the replay log and reproduced by
+a replay exactly like anybody created later rather than through a second path that would drift.
+Each keeps the birthplace they were created with — that is a fact about them — and lands in the
+estate's General zone, because a person stored before there was an island has no island location.
+
+**Now served (2026-10-08), and the reason they were not is worth keeping:** `/api/properties`,
+`/api/economy` and `/api/timeline`. This said the projection carried no property list, economy
+summary or timeline, so serving them would mean inventing the data. That was wrong, and nothing
+but measuring the island showed it — the estate holds two properties with six buildings and
+eighty-odd items each, and the replay log is a real record of everything that has reached the
+island from outside. The economy is the only one that was nearly right: it is genuinely empty,
+with no resource nodes seeded the way a planetary world seeds them. That is a fact about the
+island rather than a reason to hide the endpoint, so it is served and says so in the reply, and
+it fills as soon as somebody builds. The `/island` page reads all three. The roster is the world's. `GET /api/world/humans` and
+`/api/world/humans/{id}` serve the island's own people in the shape the People page already
+draws — the same ten per-person sections — plus where they are and whether they are asleep,
+which the stored roster has no way to know. With a world running the page uses them, and says
+what it is showing: "2 people living on the island. Their full records were read 59 steps ago;
+where they are and whether they are asleep is current." Its standing copy claimed "nothing has
+stepped them yet", so that swaps too.
+
+Full records are published on the digest's hourly cadence rather than every step, and
+additionally the moment a creation lands — `a_new_person_can_be_read_the_moment_they_exist` pins
+that. The cadence is a choice about scale rather than a present necessity: measured, copying
+every record costs 336 µs for the two founders against a 4.3 ms step on the real island (the
+1.2 ms once quoted was a 50-tree test patch; `benchmarks/phase4_cost.md`), which is cheap, but at
+Phase 4b's town it would be tens of milliseconds per step for records nobody is reading.
+
+Correcting the measurements while here: a digest is **800 ms**, not the 932 ms recorded earlier,
+and a projection without one is 3.6 ms. The earlier figure came from a timing block where an
+inserted line had left "one projection" printing the wrong timer — clippy caught the shadowed
+variable, and the numbers above are from the fixed block.
+
+`/api/humans` still serves the stored population, which is right: a dashboard started without
+`--scenario` has no world, and that endpoint is what it has.

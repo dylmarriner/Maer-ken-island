@@ -1,0 +1,57 @@
+# The island's backend as a systemd service.
+#
+#   install -m 0644 deploy/island.service /etc/systemd/system/
+#   install -m 0600 deploy/island.env     /etc/island/island.env   # and fill it in
+#   systemctl daemon-reload && systemctl enable --now island
+#
+# One process, one island, one simulation thread. Several frontends read
+# it over HTTP; see docs/island/DEPLOYMENT.md.
+
+[Unit]
+Description=Maer-Ken Island backend
+Documentation=file:///usr/share/doc/island/DEPLOYMENT.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=exec
+User=island
+Group=island
+EnvironmentFile=/etc/island/island.env
+ExecStart=/usr/local/bin/island serve \
+    --scenario /var/lib/island/scenario.json \
+    --bind ${ISLAND_BIND} \
+    --data-dir /var/lib/island/people \
+    --snapshot-dir /var/lib/island/snapshots \
+    --log /var/lib/island/commands.jsonl
+
+# Ctrl-C is what `island serve` waits for, and systemd's default TERM is
+# the same signal: it finishes the step it is on and stops. The timeout is
+# generous because a snapshot save holds the simulation thread for about
+# half a minute on the full island, and killing it mid-write would leave a
+# partial file.
+KillSignal=SIGTERM
+TimeoutStopSec=120
+Restart=on-failure
+RestartSec=5
+
+# The island writes to exactly one place and reads nothing else.
+StateDirectory=island
+ReadWritePaths=/var/lib/island
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+NoNewPrivileges=yes
+RestrictAddressFamilies=AF_INET AF_INET6
+RestrictNamespaces=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+
+# A simulated week peaks at 307 MB on the full island; this leaves room for
+# a snapshot being built beside it and still catches a leak.
+MemoryMax=2G
+
+[Install]
+WantedBy=multi-user.target

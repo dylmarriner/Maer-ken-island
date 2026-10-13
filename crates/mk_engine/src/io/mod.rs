@@ -16,4 +16,5 @@ pub use human_storage::{
     HumanStorage, HumanStorageError, LanguageStorage, LifecycleStorage, PersonalityStorage,
     SocialStorage, TechnologyStorage,
 };
+pub use island_snapshot::{load_island_snapshot, save_island_snapshot, IslandSnapshotError};
 pub use snapshot::{load_snapshot, save_snapshot, SnapshotError};

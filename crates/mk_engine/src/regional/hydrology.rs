@@ -22,6 +22,7 @@
 //! bilinear interpolation (`levels::sample_coarse_at_medium`); no medium
 //! copies are built.
 
+use serde::{Deserialize, Serialize};
 use std::cmp::{Ordering, Reverse};
 use std::collections::BinaryHeap;
 
@@ -49,7 +50,7 @@ const FILL_EPSILON_M: f64 = 1.0e-4;
 pub const RIVER_MIN_DISCHARGE_M3_S: f64 = 1.0;
 
 /// Where a land cell's channel water goes.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Receiver {
     /// Another land cell (flat index).
     Cell(u32),
@@ -63,7 +64,7 @@ pub enum Receiver {
 
 /// The drainage network of one terrain: built once per terrain, reused
 /// every step.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FlowNetwork {
     rows: usize,
     cols: usize,
@@ -283,6 +284,16 @@ pub fn step_regional_hydrology(
     )
 }
 
+/// Water a plant takes out of the river at `intake` (a medium cell's flat
+/// index) and returns at `tailrace` further down the same river: the reach
+/// between carries that much less. A hydro plant's penstock is one.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct Diversion {
+    pub intake: u32,
+    pub tailrace: u32,
+    pub flow_m3_s: f64,
+}
+
 /// [`step_regional_hydrology`] on a prebuilt `network`. `weather` and
 /// `climate` are **coarse** and sampled at each land cell. A zero or
 /// negative step returns `previous` with an empty budget.
@@ -296,6 +307,36 @@ pub fn step_regional_hydrology_on(
     domain: &IslandDomain,
     network: &FlowNetwork,
     dt_seconds: f64,
+) -> HydrologyState {
+    step_regional_hydrology_diverted(
+        canon,
+        previous,
+        weather,
+        climate,
+        topography,
+        domain,
+        network,
+        dt_seconds,
+        &[],
+    )
+}
+
+/// [`step_regional_hydrology_on`] with `diversions`: each takes up to its
+/// flow from what leaves its intake cell (never more than the river
+/// carries) and adds it to what reaches its tailrace cell, which must lie
+/// downstream. The intake's recorded `runoff` is the river arriving at the
+/// weir, before the plant takes its share.
+#[allow(clippy::too_many_arguments)]
+pub fn step_regional_hydrology_diverted(
+    canon: &CanonLocked,
+    previous: &HydrologyState,
+    weather: &WeatherState,
+    climate: &ClimateState,
+    topography: &Grid2<f64>,
+    domain: &IslandDomain,
+    network: &FlowNetwork,
+    dt_seconds: f64,
+    diversions: &[Diversion],
 ) -> HydrologyState {
     if !(dt_seconds.is_finite() && dt_seconds > 0.0) {
         return HydrologyState {
@@ -414,9 +455,17 @@ pub fn step_regional_hydrology_on(
         standing -= hillslope;
         let discharge = hillslope + if is_lake { 0.0 } else { channel_in[i] };
 
+        // A plant's intake takes its share before the river flows on; it
+        // returns at the tailrace downstream, still within this step.
+        let mut flowing_on = discharge;
+        for d in diversions.iter().filter(|d| d.intake as usize == i) {
+            let take = (d.flow_m3_s.max(0.0) * dt_seconds / cell_m2 * 1_000.0).min(flowing_on);
+            flowing_on -= take;
+            channel_in[d.tailrace as usize] += take;
+        }
         match to {
-            Receiver::Cell(j) => channel_in[j as usize] += discharge,
-            Receiver::Sea | Receiver::Edge => budget.surface_to_ocean_kg += discharge * cell_m2,
+            Receiver::Cell(j) => channel_in[j as usize] += flowing_on,
+            Receiver::Sea | Receiver::Edge => budget.surface_to_ocean_kg += flowing_on * cell_m2,
             Receiver::None => {}
         }
 
@@ -488,4 +537,42 @@ pub fn freshwater_to_coarse_ocean_kg(
         out[(r / k).min(rows - 1) * cols + (c / k).min(cols - 1)] += kg;
     }
     Grid2::from_data(&domain.storage_spec(coarse), out)
+}
+
+/// Move fresh water that [`freshwater_to_coarse_ocean_kg`] put on coarse
+/// land cells to the nearest coarse sea cell (`coarse_elevation_m <= 0`).
+///
+/// A river reaches the sea at a medium-grid outlet, but the 2 km outlet can
+/// sit inside a coarse cell that is mostly land; the ocean keeps columns only
+/// on sea cells, so water left there would leave the books (deviation D29).
+/// Nearest is by straight-line distance between cell centres, ties to the
+/// lower index. With no sea cell at all the grid is returned unchanged.
+pub fn route_to_coarse_sea(water_kg: &Grid2<f64>, coarse_elevation_m: &Grid2<f64>) -> Grid2<f64> {
+    let (rows, cols) = (water_kg.nlat(), water_kg.nlon());
+    let elevation = coarse_elevation_m.data();
+    let sea: Vec<usize> = (0..rows * cols).filter(|&i| elevation[i] <= 0.0).collect();
+    if sea.is_empty() {
+        return water_kg.clone();
+    }
+    let mut out = water_kg.data().to_vec();
+    for i in 0..rows * cols {
+        if elevation[i] <= 0.0 || out[i] == 0.0 {
+            continue;
+        }
+        let (r, c) = ((i / cols) as f64, (i % cols) as f64);
+        let nearest = sea
+            .iter()
+            .copied()
+            .min_by(|&a, &b| {
+                let d = |j: usize| {
+                    let (jr, jc) = ((j / cols) as f64, (j % cols) as f64);
+                    (jr - r).powi(2) + (jc - c).powi(2)
+                };
+                d(a).total_cmp(&d(b)).then(a.cmp(&b))
+            })
+            .expect("sea is not empty");
+        out[nearest] += out[i];
+        out[i] = 0.0;
+    }
+    Grid2::from_data(&water_kg.spec(), out)
 }

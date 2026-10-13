@@ -80,13 +80,143 @@ Phase 1 adds the regional island domain and its geophysics. Almost all of it is 
 20. `mk_engine::regional::labour` (new) and `humans::needs::EffortFocus::activity` — **a needs-model change, needs an upstream PR.** `EffortFocus` gains `activity` (serde default 0, treated as the 1.0 baseline): the energy expenditure of the current activity as a multiple of the baseline the drain rates are calibrated for (light daily activity, 1.5 MET). `NeedsSnapshot::step` multiplies the glucose drain by it (clamped 1-8) and the water loss by `1 + 0.5 (activity - 1)` (breathing and sweat; the 0.5 is an assumption, low confidence). Every existing caller uses the baseline, so planetary behaviour is unchanged (pinned hash, realism suite, 282 humans tests). The labour module builds timed tasks from the reference packs: felling by tool (time scaled by trunk cross-section from the 30 cm figures), digging, hand mining, panning (yield = grade × throughput × recovery), timber-frame building, Mifflin-St Jeor BMR from the packs' terms, energy `BMR × MET × hours`, walking (1.4 m/s, Naismith ascent, slowdown past the sustainable load, refusal above the maximum), and `ActiveTask` progress. **Not done:** routing the economy's actions (`resource_economy.rs`) through timed tasks, and `lifecycle` setting `activity` from the action: both change planetary human behaviour and belong with the integration (Task 9) after an upstream decision.
 21. `mk_core::flux` — new reservoirs `MaterialCarbon`, `MaterialWater`, `HumanCarbon` (appended last, so every earlier index and any serialized ledger is unchanged; the exhaustive `reservoir_all` test now covers 35; all three are interior reservoirs). `mk_engine::regional::materials` (new) — `MaterialLedger`: gathering biotic material debits the cell's biomass (`BiomassCarbon → MaterialCarbon`) and cannot exceed it (regrowth is the ecology's NPP); coal and limestone come from `CrustCarbon`; hunting kills whole animals through a fractional accumulator (meat carbon to material, carcass to detritus); burning and charcoal-making release carbon to `AtmosCO2` binding 2.664 kg O₂ per kg C; calcination's CO₂ carries the carbonate's own oxygen; eating moves carbon into the body, respiration returns it at a respiratory quotient of 0.85 (≈0.35 g CO₂/kcal) binding oxygen, death sends the body's carbon to detritus; water comes from standing water or 1% of river flow (`SurfaceWater`/`Rivers → MaterialWater`) and returns to the air and soil; structures hold carbon until demolition or 60-year decay. Every composition value carries its source in code (Lamlom & Savidge 2003 for wood, FAO 1987 for charcoal, USDA for food and meat, CaCO₃ stoichiometry for limestone, Heymsfield et al. 2007 for body carbon). **Not done:** species populations are not debited when biomass is gathered (needs Task 1b's island species), `conservation.rs`'s stock audit does not yet read `MaterialLedger::stock_of` (the tests audit each reservoir's stock against the ledger directly), and `resource_economy.rs`/`humans::lifecycle` do not call the hooks yet (planetary behaviour is unchanged); embedded water in foods and metabolic water's oxygen are not booked. Wiring is Task 9.
 22. `mk_engine::regional::life` (new) — `IslandLife` bundles every Phase 1-3 system and advances them at the plan's cadences (60 s humans, hourly physics, 6-hourly ecology and households), calling the step functions directly until Phase 4's scheduler exists. The founders' household routine is scripted, not autonomous: each hour they respire at 1.3 MET and the estate steps its electricity; every 6 h each takes 0.6 kg of plant food from the estate block's richest cell and 0.65 kg of water from the nearest river cell, eaten and drunk through the material ledger; each such step is audited (the ledger's net flow into `MaterialCarbon`, `HumanCarbon` and `MaterialWater` must equal the change in each stock). The patch trees' height now uses the reference pack's own Chave et al. (2014) height-diameter relation. The canonical state digest (JSON `Value`, sorted maps, hashed) of a simulated week is pinned and identical across processes. **Still open:** autonomous economy actions through the material and labour hooks, species-carbon debiting (Task 1b), Task 2's catalogue.
-23. `mk_engine::regional::ecology` island corrections (D32) and `island_preview life` — **a fidelity fix found by reviewing the preview:** upstream `classify_biome` labels ground under 283 K and 1 mm/day an ice sheet; on the island that was 34,000 of 66,000 land cells at 270-280 K (-3 to +7 °C). The island keeps `IceSheet` only below 260 K (upstream's own hard limit) and otherwise calls cold dry ground tundra (< 278 K) or shrubland; and a cell is `River` only when the river's width (Leopold & Maddock, 3 Q^0.5 m) fills half of it (previously every 1 m³/s stream made a 2 km-wide River cell, 10% of land with no vegetation). The estate moved as a result (best site now medium cell (474, 544) on the wet west coast, 200,000 trees). `island_preview life` writes `biomes.png`, `resources.png` (Phase 1 deposits and water; the full catalogue needs Task 2), `estate_plan.png` (8 px/m: footprints, spaces, doors, items, founders) and `estate_trees.png`; the default is committed under `docs/previews/phase3/`.
+23. `mk_engine::regional::ecology` island corrections (D32) and `island_preview life` — **a fidelity fix found by reviewing the preview:** upstream `classify_biome` labels ground under 283 K and 1 mm/day an ice sheet; on the island that was 34,000 of 66,000 land cells at 270-280 K (-3 to +7 °C). The island keeps `IceSheet` only below 260 K (upstream's own hard limit) and otherwise calls cold dry ground tundra (< 278 K) or shrubland; and a cell is `River` only when the river's width (Leopold & Maddock, 3 Q^0.5 m) fills half of it (previously every 1 m³/s stream made a 2 km-wide River cell, 10% of land with no vegetation). The estate moved as a result (best site now medium cell (474, 544) on the wet west coast, 200,000 trees). **Superseded (2026-10-10):** the 260/278 K annual-mean rule is replaced by Köppen-Geiger (Peel et al. 2007) on the climatology's twelve monthly bins, which needed `Climatology::month_temperature_k` / `month_precipitation_mm_day` (bins were private): warmest month < 0 °C ice, < 10 °C tundra; upstream-polar ground with a warmer summer is desert/steppe by Köppen's seasonal aridity threshold, else hemiboreal or boreal forest by months ≥ 10 °C. Residence times are now Whittaker & Likens (1975) biomass/NPP per row. Upstream's `classify_biome` has the same annual-mean flaw on the planetary grid and would take the same fix. `island_preview life` writes `biomes.png`, `resources.png` (Phase 1 deposits and water; the full catalogue needs Task 2), `estate_plan.png` (8 px/m: footprints, spaces, doors, items, founders) and `estate_trees.png`; the default is committed under `docs/previews/phase3/`.
 24. `mk_engine::regional::boundary` — `sample_regional_boundaries_with_background` (`provisional: false`) takes ocean and atmosphere edges from the background's bands; the Phase 1 sampler is kept for geophysics and now shares its loop.
-25. `mk_engine::regional::{commands, replay}` (new) — the island's external command path. `mk_interventions::InterventionAction` is shared with the planetary runtime, but on a bounded island only `Pause`, `Resume` and `Step` have meaning; every other intervention (planetary climate edits, orbit changes, branching) is refused at queue time with `NotSupportedOnIsland` rather than silently ignored. If upstream grows island-meaningful interventions, they need an island handler here and a deviation row. Replay is by `(tick, sequence)` against the same scenario digest; the log and queue are part of the state digest and the snapshot.
-26. `mk_engine::humans::HumanSystem::set_auto_sync` / `sync_store` — upstream `step` rewrites every human's folder every call (`sync_to_storage`). Default is unchanged (`true`), so `WorldState` behaviour and the planetary hash are untouched; the island turns it off and syncs on its own cadence (`human_store_seconds`) and before snapshots, writing a dying human at once. The flag is `serde(skip)`: runtime-only. Worth proposing upstream as-is.
-27. `mk_engine::humans::{growth (new), lifecycle::deliver_birth, lifecycle::step_lifecycle}` — **upstream defect: every newborn was a 25-year-old adult.** `DevelopmentSnapshot::from_profile` treats a schema age of exactly 0 as unset and falls back to 25.0, and `conceive_embryo` builds the child from `HumanBeing::new`, so a child was born at age 25 with the adult sampled body (a 97-day-old at 59 kg and 165 cm, already fertile). Found by inspecting the child in a one-year island run. Fixed: `deliver_birth` sets development age 0 (stage Infant) and scales the body to WHO birth size; `step_lifecycle` grows height and weight toward the sampled adult body along the WHO 2006/2007 medians from `fixtures/reference/humans/life_history.json` (`humans/growth.rs`; a ratio from the previous to the current age, so no new state; exactly 1.0 for anyone 18 or older, so adults and the planetary `WorldState` hash are unchanged). Tests: `growth.rs` unit tests, `lifecycle.rs` `a_newborn_is_a_newborn_and_grows_along_the_who_curve`, `human_realism.rs` `child_growth_follows_the_who_reference_tables`. Medians only; weight beyond 5 years is a fitted power law of height (the pack's weight table ends at 5 years). Worth proposing upstream as-is.
-28. `mk_engine::humans::autonomy::age_substitute` and its call in `HumanSystem::step_on` — upstream's action chooser has no notion of age, so a toddler could mine, build, code, send email, harm or take part in intimacy. A chosen action that is not for the person's age is swapped for a child's one (the same pattern as upstream's Intimacy-with-nobody-near swap, keeping the learner's last action in step): under 12, mining, building, crafting, coding, email and web search become exploring; under 16, harm and intimacy become approaching someone. Adults and the planetary hash baseline are unaffected; planetary children are restricted the same way. A first cut: thresholds are round numbers, not sourced, and children still choose all their other actions themselves. Worth proposing upstream.
-29. `mk_engine::humans::lifecycle::record_sexual_activity` — **upstream memory leak: `reproduction_system.sexual_activities` grew without bound.** Every reproductive attempt (about 37 a day per person at the engine's rate) was appended to the person's own schema and never trimmed: 15,451 entries (5.7 MB of a 7 MB record) after 413 simulated days, about 5 MB per person per simulated year, forever. Nothing reads the list during a run (the live count is the separate `reproduction.sexual_activity_count`; the list's length is only used when a person is first built). Found by sizing one settler's full record in a long stress run. Fixed by keeping the most recent `MAX_SEXUAL_ACTIVITY_LOG` (128) entries; a settler's record now plateaus at about 1.7 MB (the rest is the already-capped conversation history and learning state). This affects planetary runs identically. Worth proposing upstream.
+
+## Phase 4 divergences (2026-10-07)
+
+25. `mk_engine::io::island_snapshot` (new) — `save_island_snapshot`/`load_island_snapshot` write and
+    read a whole island as `magic ‖ blake3(rest) ‖ canon digest ‖ deflated JSON`, atomically
+    (temp file, fsync, rename, fsync the directory). The canon is supplied by the caller and
+    checked against the file's digest rather than read from it, and `IslandLife::restore`
+    validates the snapshot's scenario as if it had come off disk and then derives the domain,
+    grid topology and labour table again instead of trusting the file. `mk_engine` gains
+    `flate2` for this (already in the tree through `ureq`): a full island is a dozen grids of
+    1,152,000 cells and comes to 338 MB written plainly. Island-only: upstream's own
+    `io::snapshot` for `WorldState` is untouched, and the new serde derives are all on island
+    types (`regional::{physical, ecology, property, local_vegetation, estate_layout, materials}`),
+    not on imported ones.
+
+26. `mk_engine::humans::HumanSystem::set_auto_sync` — **an upstream behaviour switch, needs an
+    upstream PR.** (Merged 2026-10-13 from a parallel line: `HumanSystem` also gains
+    `sync_store`, `sync_store_shard` — one rotating share of the population per call, so a large
+    population never costs one long pause — and `canonical_chunks`, which feeds the state digest
+    one human at a time instead of building the whole system as one `serde_json::Value`. With
+    `auto_sync` off, `step` still writes the humans who died that step.) `HumanSystem::step` rewrites every human's full-state files on every call
+    (`humans/mod.rs`). `auto_sync` defaults to `true`, so the planetary `WorldState` is unchanged,
+    and it is `#[serde(skip)]` so no serialized world and no state digest moves. The island sets
+    it `false`: at a 60-second human step that is 1,440 full rewrites per simulated day. Births,
+    deaths and events are still written when they happen either way.
+    `mk_engine::regional::human_store` (new) — one run's folder tree:
+    `<save root>/<run id>/humans/`, `run id = blake3(scenario digest ‖ seed ‖ counter)[..12]` with
+    the counter in `<save root>/runs.json`, opened through `HumanStorage::try_new` so a missing
+    storage key refuses rather than writing records in plaintext. Island-only; upstream
+    `HumanStorage` and `HumanRegistry` are used as they are.
+
+27. `mk_engine::regional::interventions` (new) — upstream's `InterventionAction` executor adapted
+    to `IslandLife`. `IslandLife::intervene` validates with upstream's own
+    `validate_intervention` and then applies, or refuses with
+    `IslandInterventionError::NotSupportedOnIsland { action, reason }`; `IslandCommand::Intervention`
+    carries it into the replay log, so an intervened-in run replays to the same canonical digest
+    (`a_run_somebody_intervened_in_replays_to_the_same_island`). Island-only: upstream's
+    `interventions::InterventionExecutor` against `WorldState` is untouched, and `mk_interventions`
+    is unchanged — the island speaks upstream's action vocabulary rather than a translation of it,
+    so a log records what was actually asked for.
+
+    **Applied on the island:** `Pause`, `Resume`, `Step` (directives, as upstream);
+    `ModifyClimate` (all four parameters, against the island's own coarse climate and weather
+    grids, with the heat booked from `Reservoir::OperatorIntervention` exactly as upstream books
+    it); `InjectBiomass { Producers }`; `InjectResource { Water }`; `ConstructStructure` (the island's
+    economy is upstream's `ResourceEconomyState` and the recipes are the same, through the island's
+    own buildability rule — item 28); `SpawnHuman`; `RemoveHuman`.
+
+    **`NotSupportedOnIsland`,** with the reason each refusal gives. The list is
+    `regional::interventions::refusal` and `every_action_is_supported_or_refused_by_name` holds
+    the two together by walking every variant:
+
+    | Action | Why the island has no meaning for it |
+    |---|---|
+    | `SculptTerrain`, `SmoothTerrain` | The island's terrain is generated from its canon-locked scenario and hashed into the state digest. An edited coastline would put an island out of agreement with its own canon, and every snapshot and replay of it is checked against that. |
+    | `InjectBiomass` — `Consumers`, `Apex`, `Decomposers` | The island has no animal populations. `regional::ecology` carries standing producer carbon and NPP; species are not seeded at island scale (item 13). `Producers` is applied, against the biomass field. |
+    | `InjectResource` — `Minerals`, `Nutrients`, `Energy`, `Organic` | The island's stores are nine named materials (wood, charcoal, coal, limestone, quicklime, plant food, meat, fibre, water). Only water names the same thing in both vocabularies; the rest would have to be guessed at. |
+    | `InjectEnergy` | The island's energy is the estate's own plant — fuel stores, generators, solar arrays, batteries — not an energy field over the ground, so there is nowhere a quantity of energy at a coordinate would land. |
+    | `TriggerDisturbance` | The island runs no disturbance system; `crate::disturbance` is planetary state its physical step does not carry. |
+    | `ModifyScenario` | The island's scenario is an `IslandScenario`, whose digest every snapshot and replay is checked against. Upstream's three settable parameters are planetary and name nothing in it. |
+    | `Scrub`, `Branch`, `Fork` | The island can be saved and loaded (`io::island_snapshot`), but its runner keeps no branch registry for a fork to be rooted in. |
+
+    Two island differences inside the actions that *are* applied. A `Location` off the domain is
+    **refused** rather than clamped: upstream's planet has a cell for every coordinate, and
+    clamping here would quietly move an intervention aimed at the open sea onto the nearest coast.
+    And `RemoveHuman` touches four places where upstream touches one — the registry, the estate
+    position table, the body in the material ledger (out through the boundary, not to detritus:
+    a removal is not a death) and the two per-person accumulators, which are hashed, so a ghost
+    left in any of them would make two islands that agree about who is alive disagree about their
+    digest.
+
+    `mk_engine::regional::materials` gains `inject` and `remove_body` for the two crossings above,
+    both booked against `Reservoir::OperatorIntervention`, and `RegionalPhysicalState` gains an
+    `elevation_coarse_m()` accessor. **Note on the energy booking:** the island's physical state
+    rebuilds its ledger at the start of every physical step — it is a record of that step's fluxes,
+    not a running total — and the island keeps no cumulative energy ledger. So a climate
+    intervention's joules are readable on the step the intervention lands on and gone after the
+    next one. The material injections are different: `MaterialWater` and `MaterialCarbon` are
+    audited against the ledger on every household step, so those go through `IslandLife::audited`
+    and the audit closes on the tick they land.
+
+
+28. `mk_engine::regional::geophysics::{MAX_BUILD_GRADIENT, is_buildable_cell}` (new) and
+    `mk_engine::resource_economy::ResourceEconomyState::place_structure` (new) — **the island's
+    buildability rule, and the seam it needed.**
+
+    Upstream's `physics::is_buildable` gates on `MAX_CLIMB_HEIGHT_M`: an **absolute** 2 m of
+    relief between a cell and each of its four neighbours, ported from a game with small cells
+    and carrying its own note that it "may need tuning against Maer-Ken's actual elevation
+    scale". That is a statement about a grid's resolution, not about terrain — the same hillside
+    is 2 m per cell on one grid and 200 m per cell on another. On the island's 2 km medium cells
+    it is a gradient of 0.1%, and measured across the default island it admits **0 of 66,116 land
+    cells**. Not almost none: none, the founders' estate at 8.6% included, where the house
+    already stands.
+
+    So the island asks the same question as a gradient. `MAX_BUILD_GRADIENT` is 1 in 3 (about
+    18°), where ground is conventionally classed very steep and building stops being a footing on
+    a slope and becomes engineered terracing. It is a planning threshold, not a physical one —
+    dry soil stands far steeper, its angle of repose nearer 30–35° (a gradient of 0.58–0.70) — so
+    it is about what can be built on cheaply rather than what stands up. Sea neighbours are
+    skipped rather than counted as a drop to the sea floor, which would refuse every coast, and
+    the coast is where people build.
+
+    Measured gradient distribution over the default island's land, which is what the threshold
+    was chosen against rather than guessed at:
+
+    | at or under | share of land |
+    |---|---|
+    | 0.1% (upstream's gate here) | **0.0%** |
+    | 2% | 22.9% |
+    | 5% | 79.6% |
+    | 10% | 95.0% |
+    | 20% | 99.4% |
+    | 30% | 99.9% |
+    | steepest land on the island | 42.5% (849 m over 2 km) |
+
+    **What it cannot do, stated rather than left to be discovered.** At 2 km per cell this is a
+    mean gradient across kilometres, so it cannot judge a building plot: a 15% cell holds flat
+    benches and steep faces and this sees neither. It excludes mountainside, and that is all it
+    claims. It admits 99.9% of this island's land — which is the island being gentle at this
+    scale, not the rule being lax. A gate tightened to look strict would turn down ordinary
+    ground, which is the failure mode it exists to end.
+
+    `place_structure` is `construct_for_operator` with the terrain gate lifted out in front of
+    it: upstream's path is unchanged and still gates, and the island calls the inner one after
+    making its own judgement. The recipe check and the event-log record are shared, so a
+    structure placed by the island is as visible in the economy's books as any agent-built one;
+    the only thing a caller takes on is the terrain judgement. Suitable for upstreaming as a pure
+    refactor, and the gradient rule is a candidate for replacing `MAX_CLIMB_HEIGHT_M` upstream
+    too — the same resolution argument applies to any grid.
+
+
+29. `mk_engine::humans::{growth (new), lifecycle::deliver_birth, lifecycle::step_lifecycle}` — **upstream defect: every newborn was a 25-year-old adult.** `DevelopmentSnapshot::from_profile` treats a schema age of exactly 0 as unset and falls back to 25.0, and `conceive_embryo` builds the child from `HumanBeing::new`, so a child was born at age 25 with the adult sampled body (a 97-day-old at 59 kg and 165 cm, already fertile). Found by inspecting the child in a one-year island run. Fixed: `deliver_birth` sets development age 0 (stage Infant) and scales the body to WHO birth size; `step_lifecycle` grows height and weight toward the sampled adult body along the WHO 2006/2007 medians from `fixtures/reference/humans/life_history.json` (`humans/growth.rs`; a ratio from the previous to the current age, so no new state; exactly 1.0 for anyone 18 or older, so adults and the planetary `WorldState` hash are unchanged). Tests: `growth.rs` unit tests, `lifecycle.rs` `a_newborn_is_a_newborn_and_grows_along_the_who_curve`, `human_realism.rs` `child_growth_follows_the_who_reference_tables`. Medians only; weight beyond 5 years is a fitted power law of height (the pack's weight table ends at 5 years). Worth proposing upstream as-is.
+30. `mk_engine::humans::autonomy::age_substitute` and its call in `HumanSystem::step_on` — upstream's action chooser has no notion of age, so a toddler could mine, build, code, send email, harm or take part in intimacy. A chosen action that is not for the person's age is swapped for a child's one (the same pattern as upstream's Intimacy-with-nobody-near swap, keeping the learner's last action in step): under 12, mining, building, crafting, coding, email and web search become exploring; under 16, harm and intimacy become approaching someone. Adults and the planetary hash baseline are unaffected; planetary children are restricted the same way. A first cut: thresholds are round numbers, not sourced, and children still choose all their other actions themselves. Worth proposing upstream.
+31. `mk_engine::humans::lifecycle::record_sexual_activity` — **upstream memory leak: `reproduction_system.sexual_activities` grew without bound.** Every reproductive attempt (about 37 a day per person at the engine's rate) was appended to the person's own schema and never trimmed: 15,451 entries (5.7 MB of a 7 MB record) after 413 simulated days, about 5 MB per person per simulated year, forever. Nothing reads the list during a run (the live count is the separate `reproduction.sexual_activity_count`; the list's length is only used when a person is first built). Found by sizing one settler's full record in a long stress run. Fixed by keeping the most recent `MAX_SEXUAL_ACTIVITY_LOG` (128) entries; a settler's record now plateaus at about 1.7 MB (the rest is the already-capped conversation history and learning state). This affects planetary runs identically. Worth proposing upstream.
 
 ## Drift check (2026-10-02)
 
@@ -95,3 +225,137 @@ Upstream `dylmarriner/Maer-Ken` default-branch HEAD is `7c05f0dcf254387ffd7322db
 **Owner decision needed:** keep the pin (program plan decision 2) or resync. Nothing is waiting on upstream today, so keeping the pin is the default.
 
 Human schema or runtime changes should be compared against upstream first. Island-only rules belong in `apps/island_humans` unless the underlying human model itself is intentionally being changed.
+
+## Phase 5 imports (2026-10-09)
+
+A second import from `dylmarriner/Maer-Ken`, at
+`3508e61710749d35a22c0f0dac27a61350639ad2` — the upstream default branch
+has moved since the pin at `7c05f0d`. **Nothing of the human runtime was
+re-imported**: this is assets and one Node service, and the pin for
+`crates/mk_core` / `crates/mk_engine` is unchanged at `7c05f0d`.
+
+### What came across
+
+| From | To | What it is |
+|---|---|---|
+| `apps/mk_ui/assets/generated/gem_property/buildings/` | `assets/property/buildings/` | Five of the six `PropertyBuildingKind` variants. |
+| `.../gem_property/computers/` | `assets/computers/` | The four `PropertyItemKind::Computer` machines in the computer room. |
+| `.../gem_property/building_equipment/` | `assets/tools/` | Seven workshop models. |
+| `.../gem_property/armoury/`, `.../household/` | `assets/property/armoury/`, `.../household/` | Three each. |
+| `.../gem_property/vehicles/` | `assets/vehicles/` | The four named vehicles. |
+| `.../maerken_terrain_materials/` | `assets/terrain/` | 52 PNG textures across 13 material families, 21 biome preview GLBs. |
+| `tools/assets/generate_gem_property_assets.py`, `generate_maerken_terrain_materials.py` | `tools/assets/` | The generators, so the above can be rebuilt rather than only trusted. |
+| `apps/computer-service/` | `services/computer-service/` | The Node bridge for `ActionKind::WebSearch`/`SendEmail`, unchanged. |
+
+1.5 MB of assets in total. `assets/CREDITS.md` carries upstream's own
+description of them, which is the honest one: deterministic low-poly
+reconstructions built by a Blender script from primitives, not exports
+from the Gemini Universe source the property manifest describes — that
+repository is unavailable. The terrain files are material previews and are
+not claimed to be source-authored art. The founders' GLBs keep upstream's
+caveat that their origin was never independently re-verified.
+
+Three kinds of thing have no model upstream either — `Garage`, `ShedTool`
+and `VehicleAttachment` — and the renderer draws a placeholder and says so
+rather than substituting the shed for the garage.
+
+`services/computer-service` is imported unchanged and its own six tests
+pass here (`npm ci && npm test`). Its licence is upstream's, which is this
+repository's: all rights reserved.
+
+### Phase 5 divergences
+
+New code, not changed imports, except where noted.
+
+1. `crates/mk_island_api` (new) — the wire schema: every shape that
+   crosses the network, defined once, depending on `serde` and nothing
+   else. Upstream has no equivalent because upstream's UI is in-process.
+2. `crates/mk_island_client` (new) — a typed, blocking HTTP client for an
+   island backend.
+3. `apps/island_ui` (new) — the desktop application, on Bevy 0.19.
+   Upstream's `mk_ui`/`mk_desktop`/`mk_studio` target Bevy 0.13 and a
+   sphere; this is a flat regional frame on 0.19, so the upstream render
+   code was a behavioural reference rather than code to copy. Nothing was
+   copied from it.
+4. `mk_engine::regional::humans` — `RegionalHumanContext` gains
+   `computer_bridge`, `observe` reports `computer_bridge_available` from
+   it instead of hard-coding `0.0`, and `step_regional_humans` passes it
+   to upstream's `HumanSystem::step_on`, which has always taken one and
+   had been handed `None`. **This changes imported code**, and it is the
+   smallest change that could: upstream's gating, costs and cooldowns are
+   untouched, and `IslandLife::attach_computer_bridge` is the island's own
+   equivalent of upstream's `WorldState::with_computer_bridge`. Suitable
+   for upstreaming as the island half of an interface upstream already
+   has.
+5. `apps/island/src/serve` — `ServeConfig` (read token, allowed origins,
+   backend, access log), `/api/version`, `/api/elevation.bin`,
+   `--frontend-only` and `island export`. Upstream's `mk serve` has none
+   of this; it serves its own pages to its own machine.
+
+### Drift check (2026-10-09)
+
+Upstream default-branch HEAD is now `3508e617`, against the pin at
+`7c05f0d`. The human runtime was **not** resynced: Phase 0's defects
+(`UPSTREAM.md` items 4–7) and Phase 0c's biology changes are still
+divergences awaiting an upstream pull request, and resyncing while they
+are unmerged would mean reapplying them by hand. The owner's decision from
+2026-10-02 — keep the pin — stands, and the assets imported here do not
+touch it.
+
+## Phase 3 and 4b divergences (2026-10-12, PR #6)
+
+Imported code changed by the work merged in PR #6. Each **changes upstream behaviour** unless it
+says otherwise, and each needs an upstream pull request before the next resync, like Phase 0's
+items 4-7. The island's own modules (`regional/*`, `regional/industry/*`) are not listed; they
+have no upstream counterpart.
+
+1. `mk_engine::humans::needs` and `humans::lifecycle` — **eating and drinking are chosen** (D10).
+   A meal or a drink happens only on a step whose chosen action is eating or drinking
+   (`lifecycle::meals_for`, `drinks_for`, `is_eating`, `is_drinking`, and the `Meals` and
+   `Drinks` enums), at a sourced rate (`EATING_MINUTES_PER_DAY` from the American Time Use
+   Survey, `DRINKING_ML_PER_SECOND`, and `HYDRATION_RESERVE_L` from Adolph 1947), instead of a
+   continuous intake. `FASTING_GLUCOSE_FLOOR` is the glycogen level gluconeogenesis defends while
+   stores last, so a fasting human is hungry and weak but functional. Seeking food or water where it is at hand is
+   using it, not a day of walking.
+2. `mk_engine::humans::lifecycle` — **Siler mortality fitted to the SSA 2019 period life table**
+   (D21): `SILER_INFANT_HAZARD_PER_YEAR`, `SILER_INFANT_DECAY_PER_YEAR` and
+   `SILER_BACKGROUND_HAZARD_PER_YEAR` join the senescent term, and
+   `mortality_cumulative_hazard` integrates all three over a step, so infants, children and young
+   adults die at real rates and a death is attributed to the term that dominated.
+   `activity_met_for` charges the chosen action's Compendium MET, and `labour_met` (below)
+   overrides it for timed work; `SEXUAL_ACTIVITY_MET` is the Compendium's.
+3. `mk_engine::humans::HumanRuntimeState` — `labour_met: Option<f64>` (serde default `None`), set
+   by the island while a human works a timed task such as felling or hauling; and `decide`, which
+   gathers the mind's learn-then-choose sequence that `HumanSystem::step_on` used to inline, so
+   the island can call it for a human it steps itself. Behaviour of `step_on` is unchanged by
+   the extraction.
+4. `mk_engine::humans::autonomy` — **what was learned counts as much as the body's state lets
+   it** (alliesthesia; Cabanac 1971): `incentive` scales the learned value of eating and drinking
+   by the hunger or thirst they would relieve, and of intimacy by how far satiety has worn off,
+   so a learned taste for eating does not outbid a full stomach; every other action keeps its
+   learned value whole. A steady drain on a need no longer teaches one action to be worse than
+   another.
+5. `mk_engine::humans::reproduction` and `humans::mod` — **desire is mutual and has satiety**:
+   consent asks for the partner's own desire (libido less what their last act still satisfies,
+   against `CONSENT_DESIRE`) rather than only the initiator's; an act satisfies both partners
+   fully, and satisfaction wears off with `SEXUAL_SATIETY_TIME_CONSTANT_DAYS`, set so desire
+   returns at the General Social Survey's mean interval for couples
+   (`MEAN_INTERVAL_BETWEEN_ACTS_DAYS`, Twenge, Sherman & Wells 2017).
+6. `mk_engine::humans::circadian` — `Light` (outdoor daylight, the room's daylight factor
+   indoors, lamp lux, and whether the human is indoors to draw curtains), `eye_lux`, `is_bedtime`
+   and `wants_lamp` (D23): a house keeps its own night, and a lamp extends the light at the eyes,
+   rather than everyone seeing the sky.
+7. `mk_engine::climate` — the climatology keeps **monthly bins** (`warmest_month_k`,
+   `month_temperature_k`, `month_precipitation_mm_day`) so the island can classify Köppen-Geiger
+   biomes (D32); and the surface energy balance takes an optional regional
+   `boundary_air_k`/`sensible_conductance_w_m2_k` pair (D37, D3), relaxing the surface toward the
+   air it sits in. **With no regional input the planetary path is bit-identical**: the topology
+   digest `766d5cd8…d497` did not move.
+8. `mk_engine::resource_economy::node_kind_for_resource` — the `_ => None` wildcard is replaced by
+   the eleven resource kinds that have no node yet, each with its reason, so a kind added
+   upstream fails to compile instead of silently yielding nothing. **No behaviour change.**
+9. `mk_engine::validation::ReferenceDomain` — gains `Industry` (`fixtures/reference/industry/`)
+   for the hydro pack. **No behaviour change** for the existing domains.
+10. `mk_core::flux` — unchanged in this round. The material ledger's logs
+    (`regional/materials.rs`) and the hydrology `Diversion`s (`regional/hydrology.rs`) are island
+    code and book through the reservoirs item 21 of the Phase 4 list added.

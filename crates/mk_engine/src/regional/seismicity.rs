@@ -46,7 +46,7 @@ pub const B_VALUE: f64 = 1.0;
 /// Mainshocks at or above this magnitude produce aftershock sequences.
 pub const AFTERSHOCK_PARENT_MIN_MW: f64 = 5.5;
 /// Båth's law gap between a mainshock and its largest aftershock.
-const BATH_DELTA_M: f64 = 1.2;
+pub const BATH_DELTA_M: f64 = 1.2;
 /// Omori–Utsu parameters (Utsu et al. 1995).
 pub const OMORI_P: f64 = 1.1;
 const OMORI_C_SECONDS: f64 = 0.05 * 86_400.0;

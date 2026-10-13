@@ -5,7 +5,7 @@
 use super::genetics::GeneticsSnapshot;
 use super::registry::HumanRegistry;
 use super::reproduction::ReproductiveTimeline;
-use super::{BiologicalSex, HumanBeing, HumanStatus};
+use super::{ActionKind, BiologicalSex, HumanBeing, HumanStatus};
 use crate::io::HumanStorageError;
 use chrono::Utc;
 use mk_core::rng::{RngExt, RngKey, RngRegistry, SubsystemId};
@@ -319,35 +319,76 @@ pub fn step_lifecycle(
     // A human whose last action was actively seeking a resource converts
     // identical environmental access into more of that specific resource
     // than one who wasn't trying — see needs.rs::EffortFocus docs.
+    // What the chosen action costs the body, as a metabolic equivalent. Only
+    // actions the reference packs give a row for carry a cost: the rest keep
+    // the baseline they have always had, because inventing a MET for them
+    // would be inventing realism. `activity_met_check` keeps these numbers
+    // tied to the packs they came from.
+    //
+    // Sub-baseline activities (resting, sitting) are listed for honesty but
+    // change nothing: `regional::labour::effort_for_met` floors the multiple
+    // at 1.0, so the needs model never drains slower than its 1.5 MET
+    // calibration. Lowering that floor would move survival times the realism
+    // suite pins, so it is a separate, deliberate change.
+    // A labour task the world is running for this human costs what the
+    // task costs; otherwise the chosen action does.
+    let activity_met = human
+        .labour_met
+        .or_else(|| activity_met_for(human.economy_action.kind, observation));
+    let activity = activity_met.map_or(1.0, |met| {
+        (met / super::super::regional::labour::BASELINE_MET).max(1.0)
+    });
+    // On a step short enough to tell one meal from the next (the body
+    // clock's resolution, `circadian::MAX_RESOLVED_STEP_HOURS`), food and
+    // water come only from choosing to eat and drink; a longer step has its
+    // meals and drinks inside it.
+    let dt_hours = dt_years.max(0.0) / super::rates::HOUR_YEARS;
+    let meals = meals_for(human.economy_action.kind, dt_hours);
+    let drinks = drinks_for(human.economy_action.kind, dt_hours);
     let effort = match human.economy_action.kind {
         super::ActionKind::SeekFood | super::ActionKind::Gather => super::needs::EffortFocus {
             food: 1.5,
             water: 1.0,
             shelter: 1.0,
-            activity: 1.0,
+            activity,
+            meals,
+            drinks,
         },
         super::ActionKind::SeekWater => super::needs::EffortFocus {
             food: 1.0,
             water: 1.5,
             shelter: 1.0,
-            activity: 1.0,
+            activity,
+            meals,
+            drinks,
         },
         super::ActionKind::SeekShelter | super::ActionKind::Rest | super::ActionKind::Build => {
             super::needs::EffortFocus {
                 food: 1.0,
                 water: 1.0,
                 shelter: 1.5,
-                activity: 1.0,
+                activity,
+                meals,
+                drinks,
             }
         }
-        _ => super::needs::EffortFocus::none(),
+        _ => super::needs::EffortFocus {
+            activity,
+            meals,
+            drinks,
+            ..super::needs::EffortFocus::none()
+        },
     };
     // The body clock and sleep pressure run first: whether this human is
     // asleep this step decides what light reaches their eyes and whether
     // their sleep pressure builds or dissipates.
-    let dt_hours = dt_years.max(0.0) / super::rates::HOUR_YEARS;
     human.needs.fatigue = human.circadian.step(
-        observation.daylight_fraction,
+        super::circadian::Light {
+            daylight_fraction: observation.daylight_fraction,
+            daylight_factor: observation.daylight_factor,
+            lamp_lux: observation.lamp_lux,
+            indoors: observation.indoors,
+        },
         human.needs.fatigue,
         dt_hours,
         human.needs.sleep_pressure_rate_factor(),
@@ -528,25 +569,120 @@ pub fn step_lifecycle(
 
     let age = human.age();
     let age_years = human.development.age_years;
-    let reason =
-        if age_years > MAX_HUMAN_AGE_YEARS || dies_of_age(human, dt_years, tick, rng_registry) {
-            Some("natural_age")
-        } else if human.needs.glucose <= 0.0 {
-            Some("starvation")
-        } else if human.needs.hydration <= 0.0 {
-            Some("dehydration")
-        } else if human.body.body_temperature_c <= super::body::LETHAL_HYPOTHERMIA_C {
-            Some("hypothermia")
-        } else if human.body.body_temperature_c >= super::body::LETHAL_HYPERTHERMIA_C {
-            Some("hyperthermia")
-        } else {
-            None
-        };
+    let reason = if age_years > MAX_HUMAN_AGE_YEARS {
+        Some("natural_age")
+    } else if let Some(cause) = dies_of_hazard(human, dt_years, tick, rng_registry) {
+        Some(cause)
+    } else if human.needs.glucose <= 0.0 {
+        Some("starvation")
+    } else if human.needs.hydration <= 0.0 {
+        Some("dehydration")
+    } else if human.body.body_temperature_c <= super::body::LETHAL_HYPOTHERMIA_C {
+        Some("hypothermia")
+    } else if human.body.body_temperature_c >= super::body::LETHAL_HYPERTHERMIA_C {
+        Some("hyperthermia")
+    } else {
+        None
+    };
     if let Some(reason) = reason {
         human.profile.status = HumanStatus::Dead;
         human.death_reason = Some(reason.to_string());
         // Emit death event to the universe's fossil record
         crate::io::global_events::log_human_died(tick, human.agent_id(), age, Some(reason));
+    }
+}
+
+/// Metabolic equivalents of the actions the reference packs name, from
+/// `fixtures/reference/humans/physiology.json`'s `met_by_activity` table
+/// (Compendium of Physical Activities), each the middle of the pack's range
+/// exactly as `regional::labour::LabourTable::met` returns it.
+/// `crates/mk_engine/tests/human_realism.rs` checks them against the pack,
+/// so a pack revision cannot drift away from these silently.
+pub const WALKING_MET: f64 = 3.55;
+pub const HAND_MINING_MET: f64 = 6.75;
+pub const CARPENTRY_MET: f64 = 3.5;
+pub const SEXUAL_ACTIVITY_MET: f64 = 2.05;
+
+/// How food reaches a human over a step of `dt_hours` while doing `action`
+/// (see [`super::needs::Meals`]). Steps longer than the body clock resolves
+/// keep their meals implicit; shorter ones feed only someone who chose to
+/// eat (`SeekFood`). Gathering is collecting resources, not a meal.
+pub fn meals_for(action: ActionKind, dt_hours: f64) -> super::needs::Meals {
+    use super::needs::Meals;
+    if dt_hours > super::circadian::MAX_RESOLVED_STEP_HOURS {
+        Meals::Implicit
+    } else if is_eating(action) {
+        Meals::Eating
+    } else {
+        Meals::NotEating
+    }
+}
+
+/// Whether `action` is one a human eats during.
+pub fn is_eating(action: ActionKind) -> bool {
+    matches!(action, ActionKind::SeekFood)
+}
+
+/// How water reaches a human over a step of `dt_hours` while doing `action`
+/// (see [`super::needs::Drinks`]): as [`meals_for`], for drinking.
+pub fn drinks_for(action: ActionKind, dt_hours: f64) -> super::needs::Drinks {
+    use super::needs::Drinks;
+    if dt_hours > super::circadian::MAX_RESOLVED_STEP_HOURS {
+        Drinks::Implicit
+    } else if is_drinking(action) {
+        Drinks::Drinking
+    } else {
+        Drinks::NotDrinking
+    }
+}
+
+/// Whether `action` is one a human drinks during.
+pub fn is_drinking(action: ActionKind) -> bool {
+    matches!(action, ActionKind::SeekWater)
+}
+
+/// The metabolic equivalent of `action` where the packs give one, given what
+/// this human can see (`observation`), or `None` for the resting baseline.
+fn activity_met_for(action: ActionKind, observation: &super::AgentWorldObservation) -> Option<f64> {
+    // Seeking a resource is walking only while it is being looked for. Where
+    // it is already at hand -- the access at which `autonomy` has the human
+    // stay put and use it -- seeking food is eating, seeking water drinking
+    // and seeking shelter staying in it, at the resting baseline. Charging
+    // a whole step of walking for eating where one stands made seeking food
+    // in plenty a death spiral: 2.4 times the drain against a 1.5 times
+    // intake, so a hungry human in a cell full of food grew hungrier the
+    // more they sought it, until they died of it.
+    let at_hand = |access: f64| access >= super::autonomy::SEEK_SATISFIED_ACCESS;
+    match action {
+        ActionKind::SeekFood if at_hand(observation.caloric_access) => None,
+        ActionKind::SeekWater if at_hand(observation.hydration_access) => None,
+        ActionKind::SeekShelter if at_hand(observation.shelter_quality) => None,
+        // "walking_4_8_kmh_level": going somewhere on foot is what these are.
+        ActionKind::Move
+        | ActionKind::Explore
+        | ActionKind::SeekFood
+        | ActionKind::SeekWater
+        | ActionKind::SeekShelter => Some(WALKING_MET),
+        // "hand_mining".
+        ActionKind::Mine => Some(HAND_MINING_MET),
+        // "carpentry_general": building and crafting are both working timber
+        // and tools by hand, and the pack's row covers the activity rather
+        // than the product.
+        ActionKind::Build | ActionKind::Craft => Some(CARPENTRY_MET),
+        // Gathering wild food is walking and stooping, not the sustained
+        // cultivation "farming_manual" measures, so it is costed as the
+        // walking it mostly is. Leaving it at the baseline would be the
+        // stranger claim: a human pays to walk to the food and then picks it
+        // for free.
+        ActionKind::Gather => Some(WALKING_MET),
+        // "sexual_activity": the Compendium's codes from passive to
+        // vigorous effort.
+        ActionKind::Intimacy => Some(SEXUAL_ACTIVITY_MET),
+        // Carrying, social approach, harm, idling, resting and working at a
+        // computer have no row that fits them — the pack's
+        // "carrying_heavy_load" is a load this model does not track, and the
+        // rest are brief or sub-baseline — so they cost what they cost today.
+        _ => None,
     }
 }
 
@@ -556,32 +692,79 @@ pub fn step_lifecycle(
 /// of everyone dying at one fixed age.
 pub const GOMPERTZ_BASELINE_HAZARD_PER_YEAR: f64 = 5.0e-5;
 pub const GOMPERTZ_AGING_RATE_PER_YEAR: f64 = 0.093;
+/// The rest of a Siler (1979) hazard, `a1 e^(-b1 x) + a2 + a3 e^(b3 x)`, on
+/// top of the Gompertz term above: a hazard that is highest at birth and
+/// falls away through infancy (`a1`, `b1`), and a constant one for
+/// infection, accidents and violence at every age (`a2`). Fitted, with the
+/// Gompertz term held fixed, to the US 2019 period life table (Social
+/// Security Administration, 2022 Trustees Report) averaged over the sexes,
+/// by least squares in ln q over ages 0-40 (`fixtures/reference/humans/
+/// life_history.json`, `ssa_period_life_table_2019`). The model's q lands
+/// within a factor of about two of the table at every one of those ages;
+/// the Siler form cannot draw the young-adult accident hump, so it runs
+/// low around 20.
+pub const SILER_INFANT_HAZARD_PER_YEAR: f64 = 0.01448;
+pub const SILER_INFANT_DECAY_PER_YEAR: f64 = 2.671;
+pub const SILER_BACKGROUND_HAZARD_PER_YEAR: f64 = 6.574e-5;
 /// Keyed RNG epoch for the per-step age-mortality roll.
 const AGE_MORTALITY_EPOCH: u32 = 0x4147_4544;
 
-/// Whether this human dies of age-related causes during the `dt_years`
-/// just lived: the Gompertz cumulative hazard over the interval, rolled on
-/// a keyed per-human stream.
-fn dies_of_age(human: &HumanBeing, dt_years: f64, tick: u64, rng_registry: &RngRegistry) -> bool {
-    let dt = dt_years.max(0.0);
-    if dt == 0.0 {
-        return false;
-    }
-    let end = human.development.age_years;
-    let start = (end - dt).max(0.0);
+/// The three parts of the Siler hazard integrated from age `start` to `end`
+/// (years): (infant, extrinsic, senescent).
+pub fn mortality_cumulative_hazard(start: f64, end: f64) -> (f64, f64, f64) {
+    let (start, end) = (start.max(0.0), end.max(start.max(0.0)));
+    let infant = SILER_INFANT_HAZARD_PER_YEAR / SILER_INFANT_DECAY_PER_YEAR
+        * ((-SILER_INFANT_DECAY_PER_YEAR * start).exp()
+            - (-SILER_INFANT_DECAY_PER_YEAR * end).exp());
+    let extrinsic = SILER_BACKGROUND_HAZARD_PER_YEAR * (end - start);
     let (a, b) = (
         GOMPERTZ_BASELINE_HAZARD_PER_YEAR,
         GOMPERTZ_AGING_RATE_PER_YEAR,
     );
-    let cumulative_hazard = a / b * ((b * end).exp() - (b * start).exp());
-    let probability = 1.0 - (-cumulative_hazard).exp();
+    let senescent = a / b * ((b * end).exp() - (b * start).exp());
+    (infant, extrinsic, senescent)
+}
+
+/// Whether this human dies of the age-dependent hazard during the
+/// `dt_years` just lived, and of which part of it: the Siler cumulative
+/// hazard over the interval, rolled on a keyed per-human stream, with a
+/// death attributed to each part in proportion to its share.
+fn dies_of_hazard(
+    human: &HumanBeing,
+    dt_years: f64,
+    tick: u64,
+    rng_registry: &RngRegistry,
+) -> Option<&'static str> {
+    let dt = dt_years.max(0.0);
+    if dt == 0.0 {
+        return None;
+    }
+    let end = human.development.age_years;
+    let start = (end - dt).max(0.0);
+    let (infant, extrinsic, senescent) = mortality_cumulative_hazard(start, end);
+    let total = infant + extrinsic + senescent;
+    if total <= 0.0 {
+        return None;
+    }
+    let probability = 1.0 - (-total).exp();
     let key = RngKey::new(
         SubsystemId::Humans,
         (human.profile.human_id.0 & 0xFFFF_FFFF) as u32,
         AGE_MORTALITY_EPOCH,
         tick,
     );
-    rng_registry.gen_f64_01(key) < probability
+    let draw = rng_registry.gen_f64_01(key);
+    if draw >= probability {
+        return None;
+    }
+    let share = draw / probability * total;
+    Some(if share < infant {
+        "infant_mortality"
+    } else if share < infant + extrinsic {
+        "extrinsic_mortality"
+    } else {
+        "natural_age"
+    })
 }
 
 /// Reserve (0..1 glucose or hydration) one carried `Food` / `Water` item
@@ -1341,6 +1524,58 @@ mod tests {
     }
 
     #[test]
+    fn seeking_what_is_at_hand_is_using_it_not_walking() {
+        // The death spiral this guards: a whole step of seeking was charged
+        // as walking, 2.4 times the baseline drain, against a 1.5 times
+        // intake, so a hungry human of reduced capacity in a cell full of
+        // food grew hungrier the more they sought it, and died of it.
+        use super::super::ActionKind::*;
+        let plenty = benign_observation();
+        let scarce = super::super::AgentWorldObservation {
+            caloric_access: 0.2,
+            hydration_access: 0.2,
+            shelter_quality: 0.2,
+            ..super::super::AgentWorldObservation::default()
+        };
+        for seek in [SeekFood, SeekWater, SeekShelter] {
+            assert_eq!(activity_met_for(seek, &plenty), None, "{seek:?} at hand");
+            assert_eq!(
+                activity_met_for(seek, &scarce),
+                Some(WALKING_MET),
+                "{seek:?} out looking"
+            );
+        }
+        // Going somewhere is walking wherever one is.
+        assert_eq!(activity_met_for(Explore, &plenty), Some(WALKING_MET));
+        assert_eq!(activity_met_for(Move, &plenty), Some(WALKING_MET));
+    }
+
+    #[test]
+    fn only_a_human_who_chooses_to_eat_or_drink_does_so_on_a_short_step() {
+        use super::super::needs::Meals;
+        use super::super::ActionKind::*;
+        let resolved = super::super::circadian::MAX_RESOLVED_STEP_HOURS;
+        assert_eq!(meals_for(SeekFood, 1.0 / 60.0), Meals::Eating);
+        assert_eq!(meals_for(SeekFood, resolved), Meals::Eating);
+        for other in [Gather, Rest, Explore, SeekWater, SeekShelter, Build] {
+            assert_eq!(meals_for(other, 1.0 / 60.0), Meals::NotEating, "{other:?}");
+        }
+        // A day-long step has its meals inside it, whatever was chosen.
+        assert_eq!(meals_for(Rest, 24.0), Meals::Implicit);
+        assert_eq!(meals_for(SeekFood, 24.0), Meals::Implicit);
+        use super::super::needs::Drinks;
+        assert_eq!(drinks_for(SeekWater, 1.0 / 60.0), Drinks::Drinking);
+        for other in [SeekFood, Gather, Rest, Explore] {
+            assert_eq!(
+                drinks_for(other, 1.0 / 60.0),
+                Drinks::NotDrinking,
+                "{other:?}"
+            );
+        }
+        assert_eq!(drinks_for(Rest, 24.0), Drinks::Implicit);
+    }
+
+    #[test]
     fn step_lifecycle_ages_a_living_human() {
         let mut human = HumanBeing::new("ager".to_string(), BiologicalSex::Female);
         let start_age = human.development.age_years;
@@ -2026,7 +2261,7 @@ mod tests {
                     let mut human =
                         HumanBeing::new(format!("gompertz_{age}_{tick}"), BiologicalSex::Male);
                     human.development = super::super::development::DevelopmentSnapshot::new(age);
-                    dies_of_age(&human, 1.0, *tick, &registry_rng)
+                    dies_of_hazard(&human, 1.0, *tick, &registry_rng).is_some()
                 })
                 .count()
         };
@@ -2037,5 +2272,33 @@ mod tests {
             "30-year-olds rarely die of age in a year ({young}/400)"
         );
         assert!(old > 40, "90-year-olds often do ({old}/400)");
+    }
+
+    #[test]
+    fn a_death_is_put_down_to_the_part_of_the_hazard_that_dominates() {
+        // In the first year of life the infant term is nearly all of the
+        // hazard; at 95 ageing is.
+        let (infant, extrinsic, senescent) = mortality_cumulative_hazard(0.0, 1.0);
+        assert!(
+            infant > 10.0 * (extrinsic + senescent),
+            "{infant} {extrinsic} {senescent}"
+        );
+        let (infant, extrinsic, senescent) = mortality_cumulative_hazard(95.0, 96.0);
+        assert!(senescent > 100.0 * (infant + extrinsic));
+        let registry_rng = rng();
+        let causes: Vec<&str> = (0..20_000u64)
+            .filter_map(|tick| {
+                let mut human = HumanBeing::new(format!("siler_{tick}"), BiologicalSex::Female);
+                human.development = super::super::development::DevelopmentSnapshot::new(0.5);
+                dies_of_hazard(&human, 0.5, tick, &registry_rng)
+            })
+            .collect();
+        assert!(!causes.is_empty(), "nobody died in their first half-year");
+        let infant = causes.iter().filter(|c| **c == "infant_mortality").count();
+        assert!(
+            infant * 10 > causes.len() * 9,
+            "{infant} of {} infant",
+            causes.len()
+        );
     }
 }

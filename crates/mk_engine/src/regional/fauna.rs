@@ -3,7 +3,7 @@
 //!
 //! **Every parameter below is an assumption, not a sourced value** (the
 //! repository's reference packs have no herbivore data); they are recorded as
-//! deviation D33. The structure is chosen to be stable and to account for
+//! deviation D41. The structure is chosen to be stable and to account for
 //! every kilogram of carbon, not to be a validated ecology:
 //!
 //! - Intake is `min(INTAKE_PER_YEAR * H, MAX_INTAKE_FRACTION_OF_NPP * NPP)`,

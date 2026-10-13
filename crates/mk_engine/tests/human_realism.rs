@@ -4,7 +4,7 @@
 
 use mk_core::human::{BiologicalSex, HumanId, HumanProfile, HumanSchema};
 use mk_core::rng::RngRegistry;
-use mk_engine::humans::circadian::CircadianClock;
+use mk_engine::humans::circadian::{CircadianClock, Light};
 use mk_engine::humans::lifecycle::{
     step_lifecycle, GOMPERTZ_AGING_RATE_PER_YEAR, GOMPERTZ_BASELINE_HAZARD_PER_YEAR,
 };
@@ -174,7 +174,7 @@ fn clock_period(tau: f64, day_hours: f64, light_hours: f64, lux_fraction: f64, d
             0.0
         };
         clock.asleep = false;
-        clock.step(daylight, 0.0, h, 1.0, 1.0);
+        clock.step(Light::outdoors(daylight), 0.0, h, 1.0, 1.0);
         clock.asleep = false;
         t += h;
         if t >= start {
@@ -246,14 +246,20 @@ fn a_bright_light_pulse_shifts_the_clock_within_the_published_limits() {
         let mut t = 0.0;
         // Spin up 10 days in darkness.
         while t < 240.0 {
-            clock.step(0.0, 0.0, h, 1.0, 1.0);
+            clock.step(Light::outdoors(0.0), 0.0, h, 1.0, 1.0);
             clock.asleep = false;
             t += h;
         }
         let mut s = 0.0;
         while s < hours {
             let lit = pulse.is_some_and(|(start, len)| s >= start && s < start + len);
-            clock.step(if lit { 1.0 } else { 0.0 }, 0.0, h, 1.0, 1.0);
+            clock.step(
+                Light::outdoors(if lit { 1.0 } else { 0.0 }),
+                0.0,
+                h,
+                1.0,
+                1.0,
+            );
             clock.asleep = false;
             s += h;
         }
@@ -279,6 +285,20 @@ fn a_bright_light_pulse_shifts_the_clock_within_the_published_limits() {
 /// sleep gate active, and the hour (relative to lights-off) of the last
 /// sleep onset.
 fn sleep_per_day(day_hours: f64, light_hours: f64, lux_fraction: f64, days: f64) -> (f64, f64) {
+    sleep_per_day_in(day_hours, light_hours, lux_fraction, None, days)
+}
+
+/// As [`sleep_per_day`], for a human who stays indoors in a room with
+/// `room = Some((daylight_factor, lamp_lux))`: daylight reaches them
+/// through the windows, a lamp is there when they want it, and at bedtime
+/// the room goes dark.
+fn sleep_per_day_in(
+    day_hours: f64,
+    light_hours: f64,
+    lux_fraction: f64,
+    room: Option<(f64, f64)>,
+    days: f64,
+) -> (f64, f64) {
     let mut clock = CircadianClock::with_tau(24.0);
     let mut fatigue = 0.3;
     let h = 0.1;
@@ -292,7 +312,16 @@ fn sleep_per_day(day_hours: f64, light_hours: f64, lux_fraction: f64, days: f64)
             0.0
         };
         let was_asleep = clock.asleep;
-        fatigue = clock.step(daylight, fatigue, h, 1.0, 1.0);
+        let light = match room {
+            Some((daylight_factor, lamp_lux)) => Light {
+                daylight_fraction: daylight,
+                daylight_factor,
+                lamp_lux,
+                indoors: true,
+            },
+            None => Light::outdoors(daylight),
+        };
+        fatigue = clock.step(light, fatigue, h, 1.0, 1.0);
         if clock.asleep && !was_asleep {
             onset = t % day_hours - light_hours;
         }
@@ -342,7 +371,7 @@ fn sleep_cannot_be_resisted_forever() {
     let mut fatigue = 0.1;
     let mut hours = 0.0;
     while !clock.asleep && hours < 72.0 {
-        fatigue = clock.step(1.0, fatigue, 0.1, 1.0, 1.0);
+        fatigue = clock.step(Light::outdoors(1.0), fatigue, 0.1, 1.0, 1.0);
         hours += 0.1;
     }
     assert!(clock.asleep && hours <= 50.0, "awake for {hours} h");
@@ -353,7 +382,8 @@ fn a_living_human_sleeps_at_night_through_the_whole_runtime() {
     // The full lifecycle pipeline, half-hourly steps for 16 days under a
     // 24 h day: after ten days to entrain (a new human's clock starts at an
     // arbitrary phase, like jet lag), the clock drives the brain into sleep
-    // each night.
+    // each night. Their mind decides each step, as the runtime's does: on
+    // steps this short, eating and drinking are its choices.
     let mut human = HumanBeing::new("realism-sleeper".into(), BiologicalSex::Female);
     let rng = RngRegistry::new([7u8; 32]);
     let dt = 0.5 * HOUR_YEARS;
@@ -375,6 +405,7 @@ fn a_living_human_sleeps_at_night_through_the_whole_runtime() {
             daylight_fraction: daylight,
             ..AgentWorldObservation::default()
         };
+        human.decide(&obs, step as u64, &rng);
         step_lifecycle(&mut human, dt, step as u64, &obs, &rng, (0, 0));
         if step >= 10 * 48 && human.neurochemistry.asleep {
             asleep_steps += 1;
@@ -405,6 +436,42 @@ fn gestation_matches_the_natural_median() {
     let (lo, hi) = range("gestation_length");
     assert!(days >= lo && days <= hi);
     assert!((days - 268.0).abs() <= 3.0, "{days}");
+}
+
+/// The young ages, where infants and the young die of infection,
+/// accidents and violence rather than of age (deviation D21). Reference
+/// `ssa_period_life_table_2019` (SSA, 2019, sexes averaged). Tolerance:
+/// the infant year within 15%, every age 0-40 within a factor of 2.2 --
+/// the Siler hazard has no young-adult accident hump, so around 20 it runs
+/// at about half the table, and its Gompertz term, calibrated on adults,
+/// sits about twice the table's childhood minimum at 10.
+#[test]
+fn young_mortality_follows_the_reference_life_table() {
+    use mk_engine::humans::lifecycle::mortality_cumulative_hazard;
+    let lib = reference();
+    let table = lib
+        .item(ReferenceDomain::Humans, "ssa_period_life_table_2019")
+        .unwrap()
+        .table()
+        .unwrap()
+        .clone();
+    for age in 0..=40 {
+        let label = age.to_string();
+        let observed =
+            0.5 * (table.get(&label, "male").unwrap() + table.get(&label, "female").unwrap());
+        let (infant, extrinsic, senescent) =
+            mortality_cumulative_hazard(age as f64, age as f64 + 1.0);
+        let modelled = 1.0 - (-(infant + extrinsic + senescent)).exp();
+        let ratio = modelled / observed;
+        println!("age {age}: model {modelled:.6} table {observed:.6} ratio {ratio:.2}");
+        if age == 0 {
+            assert!((ratio - 1.0).abs() <= 0.15, "infant year: ratio {ratio:.2}");
+        }
+        assert!(
+            (1.0 / 2.2..=2.2).contains(&ratio),
+            "age {age}: model {modelled:.6} against the table's {observed:.6}"
+        );
+    }
 }
 
 #[test]
@@ -479,4 +546,298 @@ fn child_growth_follows_the_who_reference_tables() {
             );
         }
     }
+}
+
+/// The metabolic equivalents `humans::lifecycle` charges for a chosen action
+/// are the packs' own numbers, not numbers that once came from the packs.
+/// A pack revision that moves a row should fail here rather than quietly
+/// change how hungry walking makes someone.
+#[test]
+fn action_costs_match_the_compendium_rows_they_came_from() {
+    use mk_engine::humans::lifecycle::{
+        CARPENTRY_MET, HAND_MINING_MET, SEXUAL_ACTIVITY_MET, WALKING_MET,
+    };
+    use mk_engine::regional::labour::LabourTable;
+
+    let table = LabourTable::load_default().expect("the labour packs load");
+    for (constant, row, name) in [
+        (WALKING_MET, "walking_4_8_kmh_level", "walking"),
+        (HAND_MINING_MET, "hand_mining", "mining by hand"),
+        (CARPENTRY_MET, "carpentry_general", "carpentry"),
+        (SEXUAL_ACTIVITY_MET, "sexual_activity", "intimacy"),
+    ] {
+        let packed = table.met(row).unwrap_or_else(|e| panic!("{row}: {e:?}"));
+        assert!(
+            (constant - packed).abs() < 1e-9,
+            "{name} is charged at {constant} MET but the pack's {row} is {packed}"
+        );
+    }
+
+    // Walking has to cost more than the baseline the needs model is
+    // calibrated at, or none of this reaches the drain rates at all. Read
+    // from the pack rather than from the constant above, so this stays a
+    // statement about the Compendium and not about our copy of it.
+    let walking = table.met("walking_4_8_kmh_level").expect("walking");
+    let baseline = mk_engine::regional::labour::BASELINE_MET;
+    assert!(
+        walking > baseline,
+        "walking at {walking} MET is below the needs model's {baseline} MET baseline, so charging it would change nothing"
+    );
+}
+
+/// Walking somewhere now makes a person thirstier and hungrier than sitting
+/// still does. This is the behaviour the MET constants exist for; without
+/// it they would be decoration.
+#[test]
+fn walking_somewhere_costs_more_than_sitting_still() {
+    use mk_core::human::BiologicalSex;
+    use mk_core::rng::RngRegistry;
+    use mk_engine::humans::{lifecycle::step_lifecycle, ActionKind, HumanBeing};
+
+    let rng = RngRegistry::new([5u8; 32]);
+    // Half a day with nothing to eat or drink: long enough for the drain to
+    // separate them, short enough that neither has bottomed out, where a
+    // floor would hide the difference.
+    let world = observation(0.0, 0.0, 20.0);
+    let hour = 1.0 / (365.25 * 24.0);
+
+    let spend_the_morning = |action: ActionKind| {
+        let mut human = HumanBeing::new("walker".into(), BiologicalSex::Female);
+        human.development.age_years = 30.0;
+        for tick in 0..12u64 {
+            // The action is re-asserted each tick: the autonomous mind would
+            // otherwise choose its own, and this test is about the cost of a
+            // given action, not about which one a human picks.
+            human.economy_action.kind = action;
+            step_lifecycle(&mut human, hour, tick, &world, &rng, (0, 0));
+        }
+        human.needs
+    };
+
+    let walked = spend_the_morning(ActionKind::Move);
+    let sat = spend_the_morning(ActionKind::Idle);
+    assert!(
+        walked.glucose > 0.0 && sat.glucose > 0.0,
+        "both bottomed out, so this proves nothing: {} and {}",
+        walked.glucose,
+        sat.glucose
+    );
+
+    assert!(
+        walked.glucose < sat.glucose,
+        "walking left more glucose ({}) than sitting ({})",
+        walked.glucose,
+        sat.glucose
+    );
+    assert!(
+        walked.hydration < sat.hydration,
+        "walking left more water ({}) than sitting ({})",
+        walked.hydration,
+        sat.hydration
+    );
+}
+
+/// Nobody outlives the longest life anyone has actually lived.
+///
+/// `maximum_verified_lifespan` has sat in the life-history pack unchecked;
+/// this ties the runtime's hard biological ceiling to it.
+#[test]
+fn nobody_outlives_the_longest_verified_human_life() {
+    use mk_core::human::BiologicalSex;
+    use mk_core::rng::RngRegistry;
+    use mk_engine::humans::{lifecycle::step_lifecycle, HumanBeing};
+    use mk_engine::validation::ReferenceDomain;
+
+    let verified = reference()
+        .item(ReferenceDomain::Humans, "maximum_verified_lifespan")
+        .and_then(|i| i.point())
+        .expect("the pack records a longest verified life");
+
+    let rng = RngRegistry::new([9u8; 32]);
+    let world = observation(1.0, 1.0, 20.0);
+    let mut human = HumanBeing::new("methuselah".into(), BiologicalSex::Female);
+    // Fed, watered and sheltered, just past the record: only the ceiling
+    // itself can be what ends this.
+    human.development.age_years = verified + 0.5;
+    step_lifecycle(&mut human, HOUR_YEARS, 1, &world, &rng, (0, 0));
+
+    assert!(
+        matches!(human.profile.status, mk_core::human::HumanStatus::Dead),
+        "someone reached {:.2} years, past the verified record of {verified}",
+        human.development.age_years
+    );
+}
+
+/// A woman's fertility ends before menopause, not after it.
+///
+/// The pack's `menopause_age` was never checked against anything. The
+/// runtime models the end of fertility rather than menopause itself — about
+/// a decade earlier (te Velde & Pearson 2002, cited where the constants
+/// live) — so the honest check is the ordering: fertile well before the
+/// pack's earliest menopause, finished by its latest.
+#[test]
+fn fertility_ends_before_the_published_menopause_window_closes() {
+    use mk_core::human::BiologicalSex;
+    use mk_engine::humans::{lifecycle::reproductive_timeline, HumanBeing};
+    use mk_engine::validation::ReferenceDomain;
+
+    let (earliest, latest) = reference()
+        .item(ReferenceDomain::Humans, "menopause_age")
+        .and_then(|i| i.range())
+        .expect("the pack records a menopause window");
+
+    // Several women, because the age is drawn per individual.
+    for i in 0..32 {
+        let woman = HumanBeing::new(format!("woman-{i:02}"), BiologicalSex::Female);
+        let timeline = reproductive_timeline(&woman);
+        assert!(
+            timeline.fecundity(25.0) > 0.0,
+            "woman-{i:02} is infertile at 25"
+        );
+        assert_eq!(
+            timeline.fecundity(latest),
+            0.0,
+            "woman-{i:02} is still fertile at {latest}, the latest published menopause"
+        );
+    }
+
+    // And the end of fertility really does precede menopause rather than
+    // coinciding with it: the average woman is finished before the earliest
+    // published menopause age.
+    let finished_early = (0..32)
+        .filter(|i| {
+            let woman = HumanBeing::new(format!("woman-{i:02}"), BiologicalSex::Female);
+            reproductive_timeline(&woman).fecundity(earliest) == 0.0
+        })
+        .count();
+    assert!(
+        finished_early > 16,
+        "only {finished_early} of 32 women were infertile by {earliest}, so fertility is not \
+         ending the decade before menopause the constants claim"
+    );
+}
+
+/// Survival holds for a person whose chosen action is Rest, not only for
+/// one the test hands the baseline to directly.
+///
+/// The survival tests above all pass `EffortFocus::none()`, which is exactly
+/// the 1.5 MET the drain rates are calibrated at, so they cannot see what
+/// happens when a real activity level reaches the needs model. That left a
+/// blind spot: a human whose action is Rest goes through the full lifecycle,
+/// not through `NeedsSnapshot::step` directly. This walks one through it and
+/// holds them to the same published range. It does not test sleep itself —
+/// the circadian clock owns `asleep` and the action does not set it — which
+/// is why the name says resting.
+#[test]
+fn a_resting_adult_still_dies_of_thirst_within_the_published_range() {
+    use mk_core::human::BiologicalSex;
+    use mk_core::rng::RngRegistry;
+    use mk_engine::humans::{lifecycle::step_lifecycle, ActionKind, HumanBeing};
+
+    let (lo, hi) = range("survival_without_water");
+    let rng = RngRegistry::new([21u8; 32]);
+    // Fed and sheltered at a temperate 20 °C, with nothing to drink.
+    let world = observation(1.0, 0.0, 20.0);
+
+    let mut human = HumanBeing::new("resting".into(), BiologicalSex::Female);
+    human.development.age_years = 30.0;
+    let mut died_on_day = None;
+    for hour in 1..=(24 * 30) {
+        human.economy_action.kind = ActionKind::Rest;
+        step_lifecycle(&mut human, HOUR_YEARS, hour as u64, &world, &rng, (0, 0));
+        if human.needs.hydration <= 0.0 {
+            died_on_day = Some(hour as f64 / 24.0);
+            break;
+        }
+    }
+
+    let days = died_on_day.expect("a resting adult with no water runs dry within a month");
+    assert!(
+        days >= lo && days <= hi,
+        "a resting adult ran dry after {days} days, outside the published {lo}-{hi}"
+    );
+}
+
+#[test]
+fn a_house_with_lamps_and_curtains_keeps_its_own_night_on_marr_kena() {
+    // D23. Out of doors a body cannot keep a night on a 36 h day: the sun
+    // is up when its clock says sleep, and nothing puts it out. In the
+    // house, daylight comes through windows at the room's daylight factor,
+    // a lamp gives room light after dark, and at bedtime the lamp goes out
+    // and the curtains are drawn -- and sleep comes back to the adult
+    // reference of 7-9 h.
+    use mk_engine::regional::energy::ROOM_LIGHT_LUX;
+    use mk_engine::regional::humans::{BEDROOM_DAYLIGHT_FACTOR, LIVING_ROOM_DAYLIGHT_FACTOR};
+    let lib = reference();
+    let table = lib
+        .item(ReferenceDomain::Humans, "sleep_need_by_age")
+        .unwrap()
+        .table()
+        .unwrap();
+    let lo = table.get("adult_18_64_years", "min").unwrap();
+    let hi = table.get("adult_18_64_years", "max").unwrap();
+    let (outdoors, _) = sleep_per_day(36.0, 24.0, 1.0, 20.0);
+    assert!(outdoors < lo, "outdoors on a 36 h day {outdoors} h");
+    for factor in [BEDROOM_DAYLIGHT_FACTOR, LIVING_ROOM_DAYLIGHT_FACTOR] {
+        for light_hours in [18.0, 24.0] {
+            let (indoors, _) =
+                sleep_per_day_in(36.0, light_hours, 1.0, Some((factor, ROOM_LIGHT_LUX)), 20.0);
+            assert!(
+                (lo..=hi).contains(&indoors),
+                "indoors at daylight factor {factor}, {light_hours} h of daylight: {indoors} h"
+            );
+        }
+    }
+    // And the same house on a 24 h day takes nothing away.
+    let (home, _) = sleep_per_day_in(
+        24.0,
+        16.0,
+        1.0,
+        Some((LIVING_ROOM_DAYLIGHT_FACTOR, ROOM_LIGHT_LUX)),
+        20.0,
+    );
+    assert!((lo..=hi).contains(&home), "{home} h");
+}
+
+#[test]
+fn the_lighting_figures_are_the_reference_packs() {
+    use mk_engine::regional::energy::{
+        LED_LAMP_LUMENS_PER_W, ROOM_LIGHT_LUX, ROOM_UTILISATION_FACTOR,
+    };
+    use mk_engine::regional::humans::{
+        BEDROOM_DAYLIGHT_FACTOR, KITCHEN_DAYLIGHT_FACTOR, LIVING_ROOM_DAYLIGHT_FACTOR,
+    };
+    let lib = reference();
+    let point = |domain, key| lib.item(domain, key).unwrap().point().unwrap();
+    assert_eq!(
+        ROOM_LIGHT_LUX,
+        point(ReferenceDomain::Humans, "room_light_illuminance")
+    );
+    assert_eq!(
+        LED_LAMP_LUMENS_PER_W,
+        point(ReferenceDomain::Labour, "led_lamp_efficacy")
+    );
+    assert_eq!(
+        Some(ROOM_UTILISATION_FACTOR),
+        lib.item(ReferenceDomain::Labour, "room_utilisation_factor")
+            .unwrap()
+            .central()
+    );
+    let factors = lib
+        .item(ReferenceDomain::Labour, "room_daylight_factor")
+        .unwrap()
+        .table()
+        .unwrap();
+    assert_eq!(
+        factors.get("bedroom", "daylight_factor"),
+        Some(BEDROOM_DAYLIGHT_FACTOR)
+    );
+    assert_eq!(
+        factors.get("living_room", "daylight_factor"),
+        Some(LIVING_ROOM_DAYLIGHT_FACTOR)
+    );
+    assert_eq!(
+        factors.get("kitchen", "daylight_factor"),
+        Some(KITCHEN_DAYLIGHT_FACTOR)
+    );
 }

@@ -4,6 +4,8 @@
 
 **Purpose:** This file is the top-level execution map for building Maer-Ken Island. It does not replace the detailed phase plans. It defines the locked scope, dependency order, implementation contract, acceptance gates, and the exact plan files agents must follow.
 
+**Progress** is not tracked here (§9): `HANDOFF.md` says where the build stands, `WORK_REMAINING.md` lists every open item with what it needs, and `docs/ISLAND_SYSTEM_STATUS.md` holds the evidence.
+
 ## 1. Locked product scope
 
 Build a **single New-Zealand-sized Maer-Ken island** surrounded by ocean, not a full rendered planet, as a **realistic simulation of a planet and its people**.

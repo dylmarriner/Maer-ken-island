@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The island · Maer-Ken Island</title>
+<meta name="description" content="What stands on the island, what has been built, and everything that has been done to it.">
+<link rel="stylesheet" href="/static/style.css">
+<link rel="icon" href="data:,">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="inner">
+    <a class="brand" href="/"><span class="mark" aria-hidden="true">◈</span> Maer-Ken Island <span class="sub">dashboard</span></a>
+    <nav class="site-nav" aria-label="Main">
+      <a href="/">Overview</a>
+      <a href="/people">People</a>
+      <a href="/island" aria-current="page">The island</a>
+      <a href="/creator">Create a human</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+  <div class="intro">
+    <p class="eyebrow">The island</p>
+    <h1>What stands here, and what has been done to it</h1>
+    <p class="lead" id="island-lead">The estate and its contents, the structures that have been built, and a record of everything that has reached the island from outside it.</p>
+  </div>
+
+  <p class="banner is-error" id="offline" hidden>
+    <strong>The dashboard cannot reach the island server.</strong>
+    <span id="offline-detail">Check that <code>island serve</code> is still running, then reload.</span>
+  </p>
+
+  <p class="banner" id="no-world" hidden>
+    <strong>No island is running.</strong>
+    <span>This dashboard was started without <code>--scenario</code>, so there is no world to describe. The People page still works: it shows the stored population.</span>
+  </p>
+
+  <section class="panel" aria-labelledby="intervene-heading" id="intervene-panel" hidden>
+    <h2 id="intervene-heading">Reach into the world</h2>
+    <p class="panel-note">
+      An operator intervention, in the engine's own vocabulary. Each one applies between steps,
+      on the thread that owns the island, and goes into the record below with the tick it landed
+      on. Several of these have no meaning on this island and will say so rather than quietly
+      doing nothing.
+    </p>
+    <form id="intervene-form" class="field-grid" novalidate>
+      <label for="action">What to do</label>
+      <select id="action" name="action">
+        <option value="InjectResource">Put water into the island's stores</option>
+        <option value="InjectBiomass">Add standing plant carbon</option>
+        <option value="ModifyClimate">Set the surface temperature</option>
+        <option value="ConstructStructure">Build something</option>
+        <option value="RemoveHuman">Remove somebody from the world</option>
+        <option value="SculptTerrain">Raise the land (the island refuses this)</option>
+      </select>
+
+      <label for="structure" id="structure-label">What to build</label>
+      <select id="structure" name="structure">
+        <option value="WoodenShelter">Wooden Shelter</option>
+        <option value="Workshop">Workshop</option>
+        <option value="Storage">Storage</option>
+        <option value="StoneHouse">Stone House</option>
+      </select>
+
+      <label for="amount" id="amount-label">How much</label>
+      <input id="amount" name="amount" type="number" step="any" min="0" value="100" inputmode="decimal">
+
+      <label for="person" id="person-label">Who</label>
+      <select id="person" name="person"></select>
+
+      <label for="radius" id="radius-label">Within (km)</label>
+      <input id="radius" name="radius" type="number" step="any" min="0.1" value="5" inputmode="decimal">
+
+      <label for="where" id="where-label">Where</label>
+      <select id="where" name="where"></select>
+
+      <p class="hint" id="intervene-hint"></p>
+      <div class="actions">
+        <button type="submit" id="intervene-go">Do it</button>
+      </div>
+    </form>
+    <p class="banner" id="intervene-result" hidden></p>
+  </section>
+
+  <section class="panel" aria-labelledby="map-heading" id="map-panel" hidden>
+    <h2 id="map-heading">The island</h2>
+    <p class="panel-note" id="map-note"></p>
+    <div class="map-controls">
+      <button type="button" id="map-out">Zoom out</button>
+      <button type="button" id="map-in">Zoom in</button>
+      <button type="button" id="map-whole">Whole island</button>
+      <button type="button" id="map-estate">To the estate</button>
+      <button type="button" id="map-trees">To the trees</button>
+      <label for="map-layer">Showing</label>
+      <select id="map-layer">
+        <option value="elevation">Elevation</option>
+        <option value="vegetation">Vegetation</option>
+      </select>
+      <span id="map-scale"></span>
+    </div>
+    <div id="map-frame">
+      <canvas id="map" width="900" height="720" role="img" aria-label="Map of the island: land shaded by height, with the coastline and the domain's edge buffer. Zoom in far enough and the individual trees around the estate are drawn. Click a point to read that cell."></canvas>
+    </div>
+    <p class="panel-note" id="map-key"></p>
+    <div id="map-cell" aria-live="polite"></div>
+  </section>
+
+  <section class="panel" aria-labelledby="properties-heading" id="properties-panel" hidden>
+    <h2 id="properties-heading">Properties</h2>
+    <p class="panel-note" id="properties-note"></p>
+    <div id="properties"></div>
+  </section>
+
+  <section class="panel" aria-labelledby="economy-heading" id="economy-panel" hidden>
+    <h2 id="economy-heading">What has been built</h2>
+    <p class="panel-note" id="economy-note"></p>
+    <div id="economy"></div>
+  </section>
+
+  <section class="panel" aria-labelledby="timeline-heading" id="timeline-panel" hidden>
+    <h2 id="timeline-heading">What has been done to the island</h2>
+    <p class="panel-note" id="timeline-note"></p>
+    <div id="timeline"></div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="inner">
+    <p>Maer-Ken Island dashboard <span id="version"></span></p>
+    <p class="spacer"></p>
+    <div id="server-chrome"></div>
+    <p id="footer-writes">Reading is open to anyone who can reach this page.</p>
+  </div>
+</footer>
+
+<!-- Which island these pages read. A classic script, so it runs
+     before the deferred module below. Generated by the server. -->
+<script src="/static/config.js"></script>
+<script type="module" src="/static/island.js"></script>
+</body>
+</html>

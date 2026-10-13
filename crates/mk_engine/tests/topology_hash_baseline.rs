@@ -8,8 +8,12 @@ use mk_core::canon::CanonLocked;
 use mk_engine::world_integration::WorldState;
 
 /// Hash chain head after ten 3,600 s steps of `WorldState::new(default
-/// canon, [11u8; 32])`, recorded before the topology refactor.
-const EXPECTED: &str = "c771907ad278eb72c0d6a4c091cc6ca78c5e1cd6cafbd6c718a1046c391e6e73";
+/// canon, [11u8; 32])`. First recorded before the topology refactor, which
+/// left it unchanged; re-pinned (2026-10-12) when the starter property's
+/// shed gained a felling axe, a crosscut saw and a gold pan and every human
+/// a `labour_met` field. Both are state the planetary world now carries,
+/// not a change to how it steps.
+const EXPECTED: &str = "766d5cd86f3eea358b470bcc0881767488db7c1fea06423b1d217d54f06fd497";
 
 #[test]
 fn ten_planetary_steps_hash_as_before_the_topology_refactor() {

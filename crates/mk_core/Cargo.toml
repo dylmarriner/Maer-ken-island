@@ -2,6 +2,7 @@
 name = "mk_core"
 version = "0.1.0"
 edition = "2021"
+license = "LicenseRef-All-Rights-Reserved"
 rust-version = "1.75"
 
 [dependencies]

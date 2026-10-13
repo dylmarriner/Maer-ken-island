@@ -3,16 +3,26 @@
 
 use std::path::PathBuf;
 
-use mk_engine::io::island_snapshot::load_island_snapshot;
+use mk_engine::regional::life::IslandLife;
 use mk_engine::regional::materials::{cells_around, water_available_kg};
 use mk_island::DomainLevel;
+
+/// The island saved at `ISLAND_SNAPSHOT`, against the repository's canon.
+fn load_island_snapshot(path: &std::path::Path) -> Result<IslandLife, String> {
+    let canon = mk_core::canon::CanonLocked::load(
+        &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/island/canon.json"),
+    )
+    .map_err(|e| e.to_string())?;
+    mk_engine::io::island_snapshot::load_island_snapshot(std::sync::Arc::new(canon), path)
+        .map_err(|e| e.to_string())
+}
 
 #[test]
 #[ignore = "diagnostic: needs ISLAND_SNAPSHOT"]
 fn where_people_stand_and_what_water_is_around_them() {
     let path = PathBuf::from(std::env::var("ISLAND_SNAPSHOT").expect("set ISLAND_SNAPSHOT"));
-    let w = load_island_snapshot(&path).unwrap();
-    let life = &w.life;
+    let life = load_island_snapshot(&path).unwrap();
+    let life = &life;
     let m = DomainLevel::Medium;
     let (rows, cols) = (life.domain.rows(m), life.domain.cols(m));
     let area = life.domain.cell_area_m2(m);
@@ -55,24 +65,21 @@ fn where_people_stand_and_what_water_is_around_them() {
 #[ignore = "diagnostic: needs ISLAND_SNAPSHOT"]
 fn who_fails_to_drink_at_the_next_six_hourly_firing() {
     let path = PathBuf::from(std::env::var("ISLAND_SNAPSHOT").expect("set ISLAND_SNAPSHOT"));
-    let mut w = load_island_snapshot(&path).unwrap();
+    let mut life = load_island_snapshot(&path).unwrap();
     let m = DomainLevel::Medium;
-    let (rows, cols) = (w.life.domain.rows(m), w.life.domain.cols(m));
-    let area = w.life.domain.cell_area_m2(m);
+    let (rows, cols) = (life.domain.rows(m), life.domain.cols(m));
+    let area = life.domain.cell_area_m2(m);
     for _ in 0..400 {
-        let before = w.life.shortfalls.water;
-        w.step(60).unwrap();
-        let after = w.life.shortfalls.water;
+        let before = life.shortfalls.water;
+        life.advance(60).unwrap();
+        let after = life.shortfalls.water;
         if after > before {
             println!(
                 "FAIL tick {} sim_time {} shortfalls {} -> {}",
-                w.tick(),
-                w.life.sim_time_s,
-                before,
-                after
+                life.tick, life.sim_time_s, before, after
             );
-            let hy = &w.life.physical.hydrology;
-            for h in w.life.humans.registry.iter() {
+            let hy = &life.physical.hydrology;
+            for h in life.humans.registry.iter() {
                 let p = h.position;
                 let cell = (
                     p.row.clamp(0, rows as i32 - 1) as usize,
@@ -105,8 +112,8 @@ fn the_ledger_holds_a_body_for_exactly_the_living() {
     use mk_core::flux::Reservoir;
     use mk_core::human::HumanStatus;
     let path = PathBuf::from(std::env::var("ISLAND_SNAPSHOT").expect("set ISLAND_SNAPSHOT"));
-    let w = load_island_snapshot(&path).unwrap();
-    let life = &w.life;
+    let life = load_island_snapshot(&path).unwrap();
+    let life = &life;
     let (mut alive, mut dead, mut living_in_ledger, mut dead_in_ledger) = (0, 0, 0, 0);
     for h in life.humans.registry.iter() {
         let registered = life.materials.is_registered(h.agent_id());

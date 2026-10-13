@@ -17,8 +17,8 @@ use std::time::{Duration, Instant};
 use mk_core::canon::CanonLocked;
 use mk_core::human::BiologicalSex;
 use mk_engine::io::island_snapshot::{load_island_snapshot, save_island_snapshot};
-use mk_engine::regional::commands::{IslandCommand, IslandCreateHumanRequest};
-use mk_engine::regional::world::IslandWorldState;
+use mk_engine::regional::create_human::{CreateLocation, IslandCreateHuman};
+use mk_engine::regional::life::IslandLife;
 use mk_island::IslandScenario;
 use serde_json::{json, Value};
 
@@ -66,29 +66,44 @@ fn open(args: &[String]) -> Result<(Arc<CanonLocked>, IslandScenario), String> {
     ))
 }
 
-fn add_settlers(world: &mut IslandWorldState, people: u64) -> Result<(), String> {
+fn add_settlers(world: &mut IslandLife, people: u64) -> Result<(), String> {
+    let yard = world
+        .placed
+        .layout
+        .spaces
+        .first()
+        .ok_or("the estate has no spaces to put settlers in")?
+        .id;
     for i in 0..people {
         world
-            .queue(IslandCommand::CreateHuman(IslandCreateHumanRequest {
-                agent_id: format!("Settler-{i:05}"),
-                sex: if i % 2 == 0 {
+            .create_human(IslandCreateHuman {
+                name: format!("Settler {i:05}"),
+                biological_sex: if i % 2 == 0 {
                     BiologicalSex::Female
                 } else {
                     BiologicalSex::Male
                 },
+                birth_timestamp: "1990-01-01T00:00:00Z".into(),
                 age_years: 18.0 + (i % 40) as f64,
-                appearance: None,
-                location: None,
-            }))
+                height_cm: 170.0,
+                build: "average".into(),
+                hair_color: "black".into(),
+                eye_color: "brown".into(),
+                skin_tone: "olive".into(),
+                location: CreateLocation::EstateSpace(yard),
+                birthplace_here: true,
+                birth_latitude: 0.0,
+                birth_longitude: 0.0,
+            })
             .map_err(|e| e.to_string())?;
     }
     Ok(())
 }
 
-fn run_steps(world: &mut IslandWorldState, ticks: u64, dt: u64) -> Result<Duration, String> {
+fn run_steps(world: &mut IslandLife, ticks: u64, dt: u64) -> Result<Duration, String> {
     let started = Instant::now();
     for _ in 0..ticks {
-        world.step(dt).map_err(|e| e.to_string())?;
+        world.advance(dt).map_err(|e| e.to_string())?;
     }
     Ok(started.elapsed())
 }
@@ -107,7 +122,7 @@ fn rate_in_pool(
         .map_err(|e| e.to_string())?;
     pool.install(|| {
         let (canon, scenario) = open(args)?;
-        let mut world = IslandWorldState::new(canon, scenario).map_err(|e| e.to_string())?;
+        let mut world = IslandLife::bootstrap(scenario, canon).map_err(|e| e.to_string())?;
         add_settlers(&mut world, people)?;
         let elapsed = run_steps(&mut world, ticks, dt)?;
         Ok(ticks as f64 / elapsed.as_secs_f64())
@@ -123,7 +138,8 @@ fn bench(args: &[String]) -> Result<Value, String> {
 
     let (canon, scenario) = open(args)?;
     let started = Instant::now();
-    let mut world = IslandWorldState::new(canon, scenario).map_err(|e| e.to_string())?;
+    let mut world =
+        IslandLife::bootstrap(scenario, Arc::clone(&canon)).map_err(|e| e.to_string())?;
     let bootstrap = started.elapsed();
     add_settlers(&mut world, people)?;
     world
@@ -131,26 +147,25 @@ fn bench(args: &[String]) -> Result<Value, String> {
         .map_err(|e| e.to_string())?;
 
     let stepping = run_steps(&mut world, ticks, dt)?;
-    let timings = world.life.timings;
+    let timings = world.timings;
     let simulated_days = ticks as f64 * dt as f64 / 86_400.0;
-    let population = world.life.humans.registry.iter().count();
+    let population = world.humans.registry.iter().count();
 
     let t = Instant::now();
-    world.sync_human_store();
+    world.sync_humans();
     let store_sync = t.elapsed();
 
     let snapshot = tmp.join("bench.snap");
     let t = Instant::now();
-    save_island_snapshot(&world, &snapshot).map_err(|e| e.to_string())?;
+    save_island_snapshot(&mut world, &snapshot).map_err(|e| e.to_string())?;
     let save = t.elapsed();
     let snapshot_bytes = std::fs::metadata(&snapshot)
         .map_err(|e| e.to_string())?
         .len();
     let t = Instant::now();
-    let restored = load_island_snapshot(&snapshot).map_err(|e| e.to_string())?;
+    let restored = load_island_snapshot(canon, &snapshot).map_err(|e| e.to_string())?;
     let load = t.elapsed();
-    let same = restored.state_hash().map_err(|e| e.to_string())?
-        == world.state_hash().map_err(|e| e.to_string())?;
+    let same = restored.state_digest() == world.state_digest();
     let _ = std::fs::remove_file(&snapshot);
     drop(restored);
 

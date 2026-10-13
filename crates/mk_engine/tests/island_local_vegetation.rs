@@ -209,7 +209,19 @@ fn felling_removes_the_stem_adds_wood_and_moves_exactly_its_carbon() {
         (entry.source, entry.sink),
         (Reservoir::BiomassCarbon, Reservoir::DetritusCarbon)
     );
-    assert_eq!(entry.amount, tree.biomass_kgc);
+    // The brash and roots go to detritus here; the usable wood's carbon is
+    // the taker's to book.
+    assert!((entry.amount + wood.usable_carbon_kgc - tree.biomass_kgc).abs() < 1e-9);
+    assert!((wood.usable_carbon_kgc - 0.7 * tree.biomass_kgc).abs() < 1e-9);
+    let mut materials = mk_engine::regional::materials::MaterialLedger::default();
+    let before = materials.stock_of(Reservoir::MaterialCarbon);
+    let mut taken = Ledger::new();
+    let kg = materials.receive_felled_wood(wood.usable_carbon_kgc, &mut taken);
+    assert!(kg > 0.0);
+    assert!(
+        (materials.stock_of(Reservoir::MaterialCarbon) - before - wood.usable_carbon_kgc).abs()
+            < 1e-9
+    );
     // Felling it again, or a tree that never existed, is an error.
     assert!(p.fell_tree(tree.id, &mut e, &mut ledger).is_err());
     assert!(p.fell_tree(u64::MAX, &mut e, &mut ledger).is_err());
@@ -258,4 +270,39 @@ fn the_patch_follows_the_field_and_is_deterministic() {
     let snapshot = p.trees.clone();
     p.step(&e, 0);
     assert_eq!(p.trees, snapshot);
+}
+
+/// The patch and every tree in it survive a snapshot unchanged.
+///
+/// Phase 4 Task 3's largest state by far: the owner's estate carries about
+/// 200,000 individual stems, each with its own position, species, diameter
+/// and age. A round trip that lost or rounded any of them would change the
+/// island's carbon and its state digest.
+#[test]
+fn the_vegetation_patch_round_trips_through_a_snapshot() {
+    let b = base();
+    let patch = seed(b, &variant(b, BiomeType::TemperateForest, 9.0), 20_000);
+    let before = patch.trees.len();
+    assert!(before > 1_000, "only {before} trees to round trip");
+
+    let text = serde_json::to_string(&patch).expect("the patch serializes");
+    let back: mk_engine::regional::local_vegetation::LocalVegetationPatch =
+        serde_json::from_str(&text).expect("and comes back");
+
+    assert_eq!(
+        back.trees.len(),
+        before,
+        "trees were lost in the round trip"
+    );
+    assert_eq!(back.trees, patch.trees, "a tree changed in the round trip");
+    assert_eq!(
+        back.total_carbon_kgc(),
+        patch.total_carbon_kgc(),
+        "the patch's carbon changed in the round trip"
+    );
+    assert_eq!(
+        back.stands.data(),
+        patch.stands.data(),
+        "stand cover changed in the round trip"
+    );
 }

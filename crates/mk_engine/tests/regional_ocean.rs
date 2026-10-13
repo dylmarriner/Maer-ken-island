@@ -70,6 +70,14 @@ fn world() -> World {
         &background,
         &boundaries.atmosphere,
         &boundaries.ocean,
+        // Calm: no air carried in, the energy balance on its own.
+        &mk_core::grid::Grid2::new(
+            &spec,
+            mk_engine::weather::WindVector {
+                u_east: 0.0,
+                v_north: 0.0,
+            },
+        ),
     );
     let weather = step_regional_weather(
         &canon,

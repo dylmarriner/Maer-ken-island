@@ -1,0 +1,242 @@
+{
+  "manifest_id": "MAERKEN_TERRAIN_MATERIALS_V1",
+  "terrain_meshes": [
+    {
+      "id": "deep_ocean",
+      "path": "terrain_biomes/deep_ocean.glb",
+      "geometry_status": "procedural_biome_preview"
+    },
+    {
+      "id": "shallow_ocean",
+      "path": "terrain_biomes/shallow_ocean.glb",
+      "geometry_status": "procedural_biome_preview"
+    },
+    {
+      "id": "coastal_waters",
+      "path": "terrain_biomes/coastal_waters.glb",
+      "geometry_status": "procedural_biome_preview"
+    },
+    {
+      "id": "reef_sea",
+      "path": "terrain_biomes/reef_sea.glb",
+      "geometry_status": "procedural_biome_preview"
+    },
+    {
+      "id": "desert",
+      "path": "terrain_biomes/desert.glb",
+      "geometry_status": "procedural_biome_preview"
+    },
+    {
+      "id": "semi_desert",
+      "path": "terrain_biomes/semi_desert.glb",
+      "geometry_status": "procedural_biome_preview"
+    },
+    {
+      "id": "savanna",
+      "path": "terrain_biomes/savanna.glb",
+      "geometry_status": "procedural_biome_preview"
+    },
+    {
+      "id": "grassland",
+      "path": "terrain_biomes/grassland.glb",
+      "geometry_status": "procedural_biome_preview"
+    },
+    {
+      "id": "shrubland",
+      "path": "terrain_biomes/shrubland.glb",
+      "geometry_status": "procedural_biome_preview"
+    },
+    {
+      "id": "tundra",
+      "path": "terrain_biomes/tundra.glb",
+      "geometry_status": "procedural_biome_preview"
+    },
+    {
+      "id": "tropical_rainforest",
+      "path": "terrain_biomes/tropical_rainforest.glb",
+      "geometry_status": "procedural_biome_preview"
+    },
+    {
+      "id": "tropical_dry_forest",
+      "path": "terrain_biomes/tropical_dry_forest.glb",
+      "geometry_status": "procedural_biome_preview"
+    },
+    {
+      "id": "temperate_forest",
+      "path": "terrain_biomes/temperate_forest.glb",
+      "geometry_status": "procedural_biome_preview"
+    },
+    {
+      "id": "boreal_forest",
+      "path": "terrain_biomes/boreal_forest.glb",
+      "geometry_status": "procedural_biome_preview"
+    },
+    {
+      "id": "woodland",
+      "path": "terrain_biomes/woodland.glb",
+      "geometry_status": "procedural_biome_preview"
+    },
+    {
+      "id": "montane_forest",
+      "path": "terrain_biomes/montane_forest.glb",
+      "geometry_status": "procedural_biome_preview"
+    },
+    {
+      "id": "alpine",
+      "path": "terrain_biomes/alpine.glb",
+      "geometry_status": "procedural_biome_preview"
+    },
+    {
+      "id": "wetland",
+      "path": "terrain_biomes/wetland.glb",
+      "geometry_status": "procedural_biome_preview"
+    },
+    {
+      "id": "river",
+      "path": "terrain_biomes/river.glb",
+      "geometry_status": "procedural_biome_preview"
+    },
+    {
+      "id": "volcanic",
+      "path": "terrain_biomes/volcanic.glb",
+      "geometry_status": "procedural_biome_preview"
+    },
+    {
+      "id": "ice_sheet",
+      "path": "terrain_biomes/ice_sheet.glb",
+      "geometry_status": "procedural_biome_preview"
+    }
+  ],
+  "materials": [
+    {
+      "id": "ocean_deep",
+      "textures": {
+        "basecolor": "planet_materials/ocean_deep_basecolor.png",
+        "roughness": "planet_materials/ocean_deep_roughness.png",
+        "normal": "planet_materials/ocean_deep_normal.png",
+        "emission": "planet_materials/ocean_deep_emission.png"
+      },
+      "material_status": "procedural_deterministic"
+    },
+    {
+      "id": "ocean_shallow",
+      "textures": {
+        "basecolor": "planet_materials/ocean_shallow_basecolor.png",
+        "roughness": "planet_materials/ocean_shallow_roughness.png",
+        "normal": "planet_materials/ocean_shallow_normal.png",
+        "emission": "planet_materials/ocean_shallow_emission.png"
+      },
+      "material_status": "procedural_deterministic"
+    },
+    {
+      "id": "coast_sand",
+      "textures": {
+        "basecolor": "planet_materials/coast_sand_basecolor.png",
+        "roughness": "planet_materials/coast_sand_roughness.png",
+        "normal": "planet_materials/coast_sand_normal.png",
+        "emission": "planet_materials/coast_sand_emission.png"
+      },
+      "material_status": "procedural_deterministic"
+    },
+    {
+      "id": "reef",
+      "textures": {
+        "basecolor": "planet_materials/reef_basecolor.png",
+        "roughness": "planet_materials/reef_roughness.png",
+        "normal": "planet_materials/reef_normal.png",
+        "emission": "planet_materials/reef_emission.png"
+      },
+      "material_status": "procedural_deterministic"
+    },
+    {
+      "id": "desert_sand",
+      "textures": {
+        "basecolor": "planet_materials/desert_sand_basecolor.png",
+        "roughness": "planet_materials/desert_sand_roughness.png",
+        "normal": "planet_materials/desert_sand_normal.png",
+        "emission": "planet_materials/desert_sand_emission.png"
+      },
+      "material_status": "procedural_deterministic"
+    },
+    {
+      "id": "soil",
+      "textures": {
+        "basecolor": "planet_materials/soil_basecolor.png",
+        "roughness": "planet_materials/soil_roughness.png",
+        "normal": "planet_materials/soil_normal.png",
+        "emission": "planet_materials/soil_emission.png"
+      },
+      "material_status": "procedural_deterministic"
+    },
+    {
+      "id": "grass",
+      "textures": {
+        "basecolor": "planet_materials/grass_basecolor.png",
+        "roughness": "planet_materials/grass_roughness.png",
+        "normal": "planet_materials/grass_normal.png",
+        "emission": "planet_materials/grass_emission.png"
+      },
+      "material_status": "procedural_deterministic"
+    },
+    {
+      "id": "forest",
+      "textures": {
+        "basecolor": "planet_materials/forest_basecolor.png",
+        "roughness": "planet_materials/forest_roughness.png",
+        "normal": "planet_materials/forest_normal.png",
+        "emission": "planet_materials/forest_emission.png"
+      },
+      "material_status": "procedural_deterministic"
+    },
+    {
+      "id": "wetland",
+      "textures": {
+        "basecolor": "planet_materials/wetland_basecolor.png",
+        "roughness": "planet_materials/wetland_roughness.png",
+        "normal": "planet_materials/wetland_normal.png",
+        "emission": "planet_materials/wetland_emission.png"
+      },
+      "material_status": "procedural_deterministic"
+    },
+    {
+      "id": "river",
+      "textures": {
+        "basecolor": "planet_materials/river_basecolor.png",
+        "roughness": "planet_materials/river_roughness.png",
+        "normal": "planet_materials/river_normal.png",
+        "emission": "planet_materials/river_emission.png"
+      },
+      "material_status": "procedural_deterministic"
+    },
+    {
+      "id": "rock",
+      "textures": {
+        "basecolor": "planet_materials/rock_basecolor.png",
+        "roughness": "planet_materials/rock_roughness.png",
+        "normal": "planet_materials/rock_normal.png",
+        "emission": "planet_materials/rock_emission.png"
+      },
+      "material_status": "procedural_deterministic"
+    },
+    {
+      "id": "ice",
+      "textures": {
+        "basecolor": "planet_materials/ice_basecolor.png",
+        "roughness": "planet_materials/ice_roughness.png",
+        "normal": "planet_materials/ice_normal.png",
+        "emission": "planet_materials/ice_emission.png"
+      },
+      "material_status": "procedural_deterministic"
+    },
+    {
+      "id": "lava",
+      "textures": {
+        "basecolor": "planet_materials/lava_basecolor.png",
+        "roughness": "planet_materials/lava_roughness.png",
+        "normal": "planet_materials/lava_normal.png",
+        "emission": "planet_materials/lava_emission.png"
+      },
+      "material_status": "procedural_deterministic"
+    }
+  ]
+}

@@ -68,6 +68,12 @@ pub struct ObservationFacts {
     pub biome: Option<BiomeType>,
     pub computer_access: bool,
     pub computer_bridge_available: f64,
+    /// Electric light at the eye (lux), zero where there is none.
+    pub lamp_lux: f64,
+    /// Fraction of outdoor daylight reaching the eye (1 outdoors).
+    pub daylight_factor: f64,
+    /// Inside a room that can be darkened.
+    pub indoors: bool,
 }
 
 /// Assemble an observation from a cell's facts.
@@ -85,5 +91,8 @@ pub fn build_observation(f: &ObservationFacts) -> AgentWorldObservation {
         resource_abundance: f.resource_abundance,
         computer_access: if f.computer_access { 1.0 } else { 0.0 },
         computer_bridge_available: f.computer_bridge_available,
+        lamp_lux: f.lamp_lux,
+        daylight_factor: f.daylight_factor,
+        indoors: f.indoors,
     }
 }

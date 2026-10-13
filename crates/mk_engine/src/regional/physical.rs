@@ -13,6 +13,7 @@
 //! (160 × 200); hydrology is **medium** (960 × 1,200) over the land only.
 //! Nothing here allocates a planetary grid.
 
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 use mk_core::canon::CanonLocked;
@@ -20,19 +21,20 @@ use mk_core::flux::Ledger;
 use mk_core::grid::Grid2;
 use mk_core::time::Tick;
 use mk_island::{DomainLevel, IslandDomain, RegionalBoundaryState};
-use serde::{Deserialize, Serialize};
 
 use super::boundary::{sample_regional_boundaries, sample_regional_boundaries_with_background};
 use super::climate::{
-    coarse_latitudes, diurnal_offset_k, regional_coriolis, step_regional_climate, DiurnalSurface,
+    coarse_latitudes, diurnal_offset_k, diurnal_range_k, regional_coriolis, step_regional_climate,
+    DiurnalForcing, DiurnalSurface,
 };
 use super::geophysics::{
     bootstrap_regional_geophysics, RegionalGeophysics, RegionalGeophysicsError,
 };
 use super::hydrology::{
-    bootstrap_regional_hydrology, freshwater_to_coarse_ocean_kg, step_regional_hydrology_on,
-    FlowNetwork,
+    bootstrap_regional_hydrology, discharge_m3_s, freshwater_to_coarse_ocean_kg,
+    route_to_coarse_sea, step_regional_hydrology_diverted, Diversion, FlowNetwork,
 };
+use super::industry::flow_duration::RiverFlowRecord;
 use super::levels::aggregate_medium_to_coarse;
 use super::ocean::step_regional_ocean;
 use super::synoptic::{apply_synoptic, SynopticState};
@@ -79,7 +81,7 @@ impl From<RegionalGeophysicsError> for RegionalPhysicalError {
 }
 
 /// Everything the island's physical systems carry between steps.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RegionalPhysicalState {
     pub geophysics: RegionalGeophysics,
     pub zonal_background: ZonalBackgroundState,
@@ -111,27 +113,14 @@ pub struct RegionalPhysicalState {
     network: FlowNetwork,
     /// Fresh water the last step carried into the coarse ocean (kg).
     pub river_water_to_ocean_kg: f64,
-}
-
-/// The prognostic state of the physical world: everything that cannot be
-/// re-derived from the terrain. The coarse elevation, geothermal field,
-/// diurnal surface and drainage network are rebuilt on restore.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PhysicalSnapshot {
-    pub geophysics: RegionalGeophysics,
-    pub zonal_background: ZonalBackgroundState,
-    pub boundaries: RegionalBoundaryState,
-    pub insolation: InsolationField,
-    pub climate: ClimateState,
-    pub diurnal_offset_k: Grid2<f64>,
-    pub synoptic: SynopticState,
-    pub weather: WeatherState,
-    pub hydrology: HydrologyState,
-    pub ocean: OceanState,
-    pub tides: TidalState,
-    pub climatology: Climatology,
-    pub sim_time_seconds: f64,
-    pub river_water_to_ocean_kg: f64,
+    /// Flow-duration curves of the perennial river cells over the spin-up's
+    /// last orbit. Empty in a state saved before they were recorded.
+    #[serde(default)]
+    pub river_flows: RiverFlowRecord,
+    /// Water taken out of rivers and returned downstream, as the island's
+    /// plants run (set by whoever runs them before each step).
+    #[serde(default)]
+    pub diversions: Vec<Diversion>,
 }
 
 fn finite(grid: &Grid2<f64>, what: &'static str) -> Result<(), RegionalPhysicalError> {
@@ -143,6 +132,14 @@ fn finite(grid: &Grid2<f64>, what: &'static str) -> Result<(), RegionalPhysicalE
 }
 
 impl RegionalPhysicalState {
+    /// Mean elevation per coarse cell (m), derived from the terrain when
+    /// the state is built. Readable because the coarse grids — climate,
+    /// weather — are indexed against it, and anything editing one of them
+    /// needs the height of the cell it is editing.
+    pub fn elevation_coarse_m(&self) -> &Grid2<f64> {
+        &self.elevation_coarse_m
+    }
+
     /// Generate the island's geophysics for `seed`, then spin the physical
     /// systems up through two orbits so the world starts on its seasonal
     /// cycle with a climatology, running rivers and full lakes. The
@@ -217,6 +214,8 @@ impl RegionalPhysicalState {
             diurnal_surface,
             network,
             river_water_to_ocean_kg: 0.0,
+            river_flows: RiverFlowRecord::default(),
+            diversions: Vec::new(),
         };
 
         // Settle straight to equilibrium at t = 0, as the planetary world
@@ -224,9 +223,31 @@ impl RegionalPhysicalState {
         state.settle(canon, domain, seed);
         let dt = canon.orbital_period_s / SPIN_UP_STEPS_PER_ORBIT as f64;
         let steps = SPIN_UP_ORBITS * SPIN_UP_STEPS_PER_ORBIT;
+        // The last orbit's river flows, land cells only.
+        let land: Vec<usize> = state
+            .geophysics
+            .elevation_m
+            .data()
+            .iter()
+            .enumerate()
+            .filter(|(_, &h)| h > 0.0)
+            .map(|(i, _)| i)
+            .collect();
+        let mut year: Vec<Vec<f32>> = Vec::with_capacity(SPIN_UP_STEPS_PER_ORBIT);
         for step in 1..=steps {
             state.step(canon, domain, seed, step as f64 * dt, 0, dt as u64)?;
+            if step > steps - SPIN_UP_STEPS_PER_ORBIT {
+                let cols = state.hydrology.runoff.nlon();
+                year.push(
+                    land.iter()
+                        .map(|&i| {
+                            discharge_m3_s(&state.hydrology, domain, i / cols, i % cols) as f32
+                        })
+                        .collect(),
+                );
+            }
         }
+        state.river_flows = RiverFlowRecord::from_year_at(&year, &land);
         // The planetary world starts at t = 0 on the spun-up state; the
         // orbital phase is the same.
         state.sim_time_seconds = 0.0;
@@ -262,6 +283,7 @@ impl RegionalPhysicalState {
             &self.zonal_background,
             &self.boundaries.atmosphere,
             &self.boundaries.ocean,
+            &self.weather.wind,
         );
     }
 
@@ -364,6 +386,7 @@ impl RegionalPhysicalState {
             &self.zonal_background,
             &self.boundaries.atmosphere,
             &self.boundaries.ocean,
+            &self.weather.wind,
         );
 
         // 6-7. Synoptic systems, then weather: the diagnostic field,
@@ -381,15 +404,15 @@ impl RegionalPhysicalState {
         apply_orographic_precipitation(&mut self.weather, &self.elevation_coarse_m, domain);
         apply_synoptic(&mut self.weather, &mut self.synoptic, domain, canon, dt);
 
-        // Diurnal departure from the daily mean, from the weather's cloud.
-        self.diurnal_offset_k = diurnal_offset_k(
-            &self.diurnal_surface,
-            &self.elevation_coarse_m,
-            &self.weather.precipitation,
+        // Diurnal departure from the daily mean: the day's range from the
+        // sunshine, the soil's water and the weather's cloud.
+        let range = self.day_range_k(
             domain,
             canon,
-            rotation.subsolar_longitude,
+            canon.solar_constant_w_m2 / (orbit.r_over_a * orbit.r_over_a),
+            rotation.subsolar_latitude,
         );
+        self.diurnal_offset_k = diurnal_offset_k(&range, domain, rotation.subsolar_longitude);
         self.climatology.update(
             &self.climate.surface_temperature,
             &self.weather.precipitation,
@@ -398,7 +421,7 @@ impl RegionalPhysicalState {
         );
 
         // 8. Hydrology on the land cells; 9. its river water to the ocean.
-        self.hydrology = step_regional_hydrology_on(
+        self.hydrology = step_regional_hydrology_diverted(
             canon,
             &self.hydrology,
             &self.weather,
@@ -407,8 +430,14 @@ impl RegionalPhysicalState {
             domain,
             &self.network,
             dt,
+            &self.diversions,
         );
-        let river_kg = freshwater_to_coarse_ocean_kg(&self.hydrology, &self.network, domain, dt);
+        // Every outlet's water reaches a sea column, even where the outlet
+        // sits in a coarse cell that is mostly land.
+        let river_kg = route_to_coarse_sea(
+            &freshwater_to_coarse_ocean_kg(&self.hydrology, &self.network, domain, dt),
+            &self.elevation_coarse_m,
+        );
         self.river_water_to_ocean_kg = river_kg.data().iter().sum();
         let coarse_area = domain.cell_area_m2(coarse);
         let mut ocean_precipitation = self.weather.precipitation.clone();
@@ -463,83 +492,107 @@ impl RegionalPhysicalState {
         Ok(())
     }
 
-    /// The state to save.
-    pub fn to_snapshot(&self) -> PhysicalSnapshot {
-        PhysicalSnapshot {
-            geophysics: self.geophysics.clone(),
-            zonal_background: self.zonal_background.clone(),
-            boundaries: self.boundaries.clone(),
-            insolation: self.insolation.clone(),
-            climate: self.climate.clone(),
-            diurnal_offset_k: self.diurnal_offset_k.clone(),
-            synoptic: self.synoptic.clone(),
-            weather: self.weather.clone(),
-            hydrology: self.hydrology.clone(),
-            ocean: self.ocean.clone(),
-            tides: self.tides.clone(),
-            climatology: self.climatology.clone(),
-            sim_time_seconds: self.sim_time_seconds,
-            river_water_to_ocean_kg: self.river_water_to_ocean_kg,
-        }
-    }
-
-    /// Rebuild a physical state from a snapshot, re-deriving what the
-    /// terrain determines.
-    pub fn from_snapshot(snapshot: PhysicalSnapshot, domain: &IslandDomain) -> Self {
-        let coarse = DomainLevel::Coarse;
-        let spec = domain.storage_spec(coarse);
-        let elevation_coarse_m =
-            aggregate_medium_to_coarse(&snapshot.geophysics.elevation_m, domain);
-        let geothermal_coarse_w_m2 = snapshot.geophysics.volcanism.heat_flux_w_m2(&spec);
-        let diurnal_surface =
-            DiurnalSurface::from_elevation(&elevation_coarse_m, domain.cell_size_m(coarse));
-        let network = FlowNetwork::build(&snapshot.geophysics.elevation_m);
-        Self {
-            geophysics: snapshot.geophysics,
-            zonal_background: snapshot.zonal_background,
-            boundaries: snapshot.boundaries,
-            insolation: snapshot.insolation,
-            climate: snapshot.climate,
-            diurnal_offset_k: snapshot.diurnal_offset_k,
-            synoptic: snapshot.synoptic,
-            weather: snapshot.weather,
-            hydrology: snapshot.hydrology,
-            ocean: snapshot.ocean,
-            tides: snapshot.tides,
-            climatology: snapshot.climatology,
-            ledger: Ledger::new(),
-            sim_time_seconds: snapshot.sim_time_seconds,
-            elevation_coarse_m,
-            geothermal_coarse_w_m2,
-            diurnal_surface,
-            network,
-            river_water_to_ocean_kg: snapshot.river_water_to_ocean_kg,
-        }
-    }
-
     /// Peak-to-peak temperature range (K) of the coming local day at every
-    /// coarse cell, from the current surface and cloud, sampled at 24
-    /// evenly spaced local times.
+    /// coarse cell, from the sunshine of the present season and the
+    /// current soil water and cloud ([`diurnal_range_k`]).
     pub fn diurnal_range_k(&self, domain: &IslandDomain, canon: &CanonLocked) -> Grid2<f64> {
-        let spec = domain.storage_spec(DomainLevel::Coarse);
-        let mut lo = vec![f64::MAX; spec.nlat * spec.nlon];
-        let mut hi = vec![f64::MIN; spec.nlat * spec.nlon];
-        for k in 0..24 {
-            let lon = std::f64::consts::TAU * f64::from(k) / 24.0;
-            let offsets = diurnal_offset_k(
-                &self.diurnal_surface,
+        let orbit = crate::orbit::step_orbit(canon, self.sim_time_seconds);
+        let rotation =
+            crate::rotation::step_rotation(self.sim_time_seconds, orbit.mean_anomaly, canon);
+        let mut surface = self.diurnal_surface.clone();
+        if surface.land_range_share.len() != self.elevation_coarse_m.data().len() {
+            surface = DiurnalSurface::from_elevation(
                 &self.elevation_coarse_m,
-                &self.weather.precipitation,
-                domain,
-                canon,
-                lon,
+                domain.cell_size_m(DomainLevel::Coarse),
             );
-            for (i, &o) in offsets.data().iter().enumerate() {
-                lo[i] = lo[i].min(o);
-                hi[i] = hi[i].max(o);
-            }
         }
-        Grid2::from_data(&spec, hi.into_iter().zip(lo).map(|(h, l)| h - l).collect())
+        self.range_with(
+            &surface,
+            domain,
+            canon,
+            canon.solar_constant_w_m2 / (orbit.r_over_a * orbit.r_over_a),
+            rotation.subsolar_latitude,
+        )
+    }
+
+    /// As [`diurnal_range_k`](Self::diurnal_range_k) for the given sun,
+    /// rebuilding the surface description first if the state was saved
+    /// without one.
+    fn day_range_k(
+        &mut self,
+        domain: &IslandDomain,
+        canon: &CanonLocked,
+        toa_flux_w_m2: f64,
+        declination_rad: f64,
+    ) -> Grid2<f64> {
+        if self.diurnal_surface.land_range_share.len() != self.elevation_coarse_m.data().len() {
+            self.diurnal_surface = DiurnalSurface::from_elevation(
+                &self.elevation_coarse_m,
+                domain.cell_size_m(DomainLevel::Coarse),
+            );
+        }
+        self.range_with(
+            &self.diurnal_surface,
+            domain,
+            canon,
+            toa_flux_w_m2,
+            declination_rad,
+        )
+    }
+
+    fn range_with(
+        &self,
+        surface: &DiurnalSurface,
+        domain: &IslandDomain,
+        canon: &CanonLocked,
+        toa_flux_w_m2: f64,
+        declination_rad: f64,
+    ) -> Grid2<f64> {
+        let soil_moisture = self.coarse_land_soil_moisture(domain);
+        diurnal_range_k(
+            surface,
+            &self.elevation_coarse_m,
+            &DiurnalForcing {
+                toa_flux_w_m2,
+                declination_rad,
+                sea_level_pressure_pa: canon.sea_level_pressure_pa,
+                surface_temperature_k: &self.climate.surface_temperature,
+                soil_moisture: &soil_moisture,
+                precipitation_mm_day: &self.weather.precipitation,
+            },
+            domain,
+            canon,
+        )
+    }
+
+    /// Soil water as a fraction of field capacity, averaged over the land
+    /// (medium cells above sea level) of each coarse cell; zero where a
+    /// coarse cell has no medium land.
+    fn coarse_land_soil_moisture(&self, domain: &IslandDomain) -> Grid2<f64> {
+        let elevation = &self.geophysics.elevation_m;
+        let land: Vec<f64> = elevation
+            .data()
+            .iter()
+            .map(|&h| if h > 0.0 { 1.0 } else { 0.0 })
+            .collect();
+        let wet: Vec<f64> = self
+            .hydrology
+            .soil_water
+            .data()
+            .iter()
+            .zip(&land)
+            .map(|(w, l)| w.moisture_fraction * l)
+            .collect();
+        let spec = domain.storage_spec(DomainLevel::Medium);
+        let land = aggregate_medium_to_coarse(&Grid2::from_data(&spec, land), domain);
+        let wet = aggregate_medium_to_coarse(&Grid2::from_data(&spec, wet), domain);
+        let data = wet
+            .data()
+            .iter()
+            .zip(land.data())
+            .map(|(w, l)| if *l > 0.0 { w / l } else { 0.0 })
+            .collect();
+        Grid2::from_data(&domain.storage_spec(DomainLevel::Coarse), data)
     }
 
     /// The coarse elevation the atmosphere and ocean see (m).

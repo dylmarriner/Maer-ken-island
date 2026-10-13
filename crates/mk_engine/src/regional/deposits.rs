@@ -14,6 +14,7 @@
 //! Secondary deposits (placer gold, ironsand, beach heavy minerals) need
 //! rivers and coasts and are added in Phase 3.
 
+use crate::materials::catalogue::CatalogueItem;
 use mk_core::grid::Grid2;
 use mk_island::{DomainLevel, IslandDomain};
 use serde::{Deserialize, Serialize};
@@ -69,61 +70,50 @@ impl DepositKind {
         Self::BuildingStone,
     ];
 
-    /// What the deposit yields.
-    pub fn yields(self) -> &'static [&'static str] {
+    /// The catalogue materials the deposit yields, its ore first.
+    pub fn yields(self) -> &'static [CatalogueItem] {
+        use CatalogueItem::*;
         use DepositKind::*;
         match self {
-            OrogenicGold => &["gold", "quartz"],
-            EpithermalGoldSilver => &["gold", "silver", "cinnabar", "quartz", "amethyst"],
-            PorphyryCopper => &["copper", "molybdenum", "gold"],
-            VolcanogenicMassiveSulfide => &["copper", "zinc", "lead", "silver", "pyrite"],
-            SedimentHostedLeadZinc => &["lead", "zinc", "silver"],
-            TinTungsten => &["tin", "tungsten"],
+            OrogenicGold => &[GoldOre, QuartzCrystal],
+            EpithermalGoldSilver => &[GoldOre, SilverOre, Cinnabar, QuartzCrystal, Amethyst],
+            PorphyryCopper => &[CopperOre, Molybdenite, GoldOre],
+            VolcanogenicMassiveSulfide => &[CopperOre, ZincOre, LeadOre, SilverOre, Pyrite],
+            SedimentHostedLeadZinc => &[LeadOre, ZincOre, SilverOre],
+            TinTungsten => &[TinOre, TungstenOre],
+            // Beryl's gem variety is the emerald; the rest are the
+            // pegmatite's own minerals.
             Pegmatite => &[
-                "quartz crystal",
-                "feldspar",
-                "mica",
-                "beryl",
-                "emerald",
-                "topaz",
-                "tourmaline",
-                "lithium",
+                QuartzCrystal,
+                Feldspar,
+                Mica,
+                Emerald,
+                Topaz,
+                Tourmaline,
+                LithiumOre,
             ],
-            Skarn => &["iron", "copper", "tungsten", "garnet"],
+            // An iron skarn's ore is magnetite.
+            Skarn => &[MagnetiteOre, CopperOre, TungstenOre, Garnet],
             Ultramafic => &[
-                "chromite",
-                "nickel",
-                "platinum-group metals",
-                "nephrite jade",
-                "serpentine",
+                Chromite,
+                NickelOre,
+                PlatinumGroupConcentrate,
+                Nephrite,
+                Serpentine,
             ],
-            MetamorphicGems => &["garnet", "ruby", "sapphire", "kyanite", "graphite"],
-            BandedIronFormation => &["iron"],
-            Kimberlite => &["diamond"],
-            VolcanicSilicaGems => &[
-                "obsidian",
-                "opal",
-                "agate",
-                "chalcedony",
-                "amethyst",
-                "pumice",
-                "zeolite",
-            ],
-            VolcanicSulfur => &["sulfur"],
-            Coal => &["coal"],
-            Petroleum => &["crude oil", "natural gas"],
-            Evaporite => &["rock salt", "gypsum"],
-            Phosphate => &["phosphate rock"],
-            Uranium => &["uraninite"],
+            MetamorphicGems => &[Garnet, Ruby, Sapphire, Kyanite, Graphite],
+            // Banded iron formations carry both hematite and magnetite.
+            BandedIronFormation => &[IronOre, MagnetiteOre],
+            Kimberlite => &[Diamond],
+            VolcanicSilicaGems => &[Obsidian, Opal, Agate, Chalcedony, Amethyst, Pumice, Zeolite],
+            VolcanicSulfur => &[Sulfur],
+            DepositKind::Coal => &[CatalogueItem::Coal],
+            Petroleum => &[CrudeOil, NaturalGas],
+            Evaporite => &[RockSalt, Gypsum],
+            Phosphate => &[PhosphateRock],
+            Uranium => &[Uraninite],
             BuildingStone => &[
-                "granite",
-                "basalt",
-                "limestone",
-                "marble",
-                "sandstone",
-                "slate",
-                "chert",
-                "kaolin clay",
+                Granite, Basalt, Limestone, Marble, Sandstone, Slate, Flint, Kaolin,
             ],
         }
     }

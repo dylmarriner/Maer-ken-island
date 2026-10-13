@@ -1,0 +1,20 @@
+[package]
+name = "mk_island_client"
+version = "0.1.0"
+edition = "2021"
+license = "LicenseRef-All-Rights-Reserved"
+description = "Talk to a Maer-Ken Island backend over HTTP, in the shared schema."
+
+[dependencies]
+mk_island_api = { path = "../mk_island_api" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+# Blocking on purpose: every caller so far reads the island from a thread
+# of its own, and an async client would make each of them bring a runtime
+# to do it. `gzip` is in ureq's defaults and is what makes the 5.8 MB
+# terrain download a few hundred kilobytes.
+ureq = { workspace = true }
+
+
+[lints]
+workspace = true

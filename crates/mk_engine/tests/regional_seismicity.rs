@@ -169,3 +169,50 @@ fn slow_ten_thousand_years_of_seismicity_on_the_full_island() {
     let biggest = events.iter().map(|e| e.magnitude_mw).fold(0.0, f64::max);
     assert!(biggest > 7.5, "largest event Mw {biggest}");
 }
+
+/// Plate motion stays inside the observed span, and the boundaries it
+/// implies stay inside what two plates can possibly do to each other.
+///
+/// The packs' `plate_boundary_fault_slip_rate` describes one real fault —
+/// the Alpine Fault at 21-31 mm/yr — and the island's boundaries run faster
+/// than that (D33), because they are the relative motion of two
+/// independently drawn plates rather than that one transpressive setting.
+/// What can be asserted is the physics around it: no boundary slips faster
+/// than two Earth-speed plates moving straight apart, none slips backwards,
+/// and at least one moves fast enough for the island to be seismically
+/// active at all.
+#[test]
+fn plate_motion_and_the_boundaries_it_implies_stay_physical() {
+    // Earth's present-day plate speeds, DeMets et al. 2010 (MORVEL), which
+    // `PLATE_SPEED_RANGE_M_YR` is drawn from.
+    const OBSERVED_MIN_MM_YR: f64 = 10.0;
+    const OBSERVED_MAX_MM_YR: f64 = 100.0;
+
+    let s = setup([2; 32], IslandProfile::default_nz_scale());
+    let mut rates: Vec<f64> = s.faults.faults.iter().map(|f| f.slip_rate_mm_yr).collect();
+    rates.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    println!(
+        "{} faults, slip rates mm/yr: min {:.1}, median {:.1}, max {:.1}",
+        rates.len(),
+        rates.first().copied().unwrap_or(0.0),
+        rates.get(rates.len() / 2).copied().unwrap_or(0.0),
+        rates.last().copied().unwrap_or(0.0)
+    );
+    for rate in &rates {
+        assert!(
+            *rate <= 2.0 * OBSERVED_MAX_MM_YR,
+            "a boundary slips at {rate:.1} mm/yr, faster than two plates can move apart"
+        );
+        assert!(
+            *rate >= 0.0,
+            "a boundary slips backwards at {rate:.1} mm/yr"
+        );
+    }
+    // The island is seismically active: at least one boundary moves as fast
+    // as a slow plate, or there would be no Phase 1 earthquakes to speak of.
+    assert!(
+        rates.last().copied().unwrap_or(0.0) >= OBSERVED_MIN_MM_YR,
+        "the fastest boundary only slips at {:.1} mm/yr",
+        rates.last().copied().unwrap_or(0.0)
+    );
+}

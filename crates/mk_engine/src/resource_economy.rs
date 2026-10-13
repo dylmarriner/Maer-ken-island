@@ -555,6 +555,36 @@ impl ResourceEconomyState {
             self.fail(actor_id, tick, "terrain too steep to build on");
             return Err("terrain too steep to build on");
         }
+        self.place_structure(actor_id, recipe_id, position, tick)
+    }
+
+    /// Place a structure whose terrain the caller has already judged.
+    ///
+    /// [`Self::construct_for_operator`] is this with
+    /// [`crate::physics::is_buildable`] in front of it, and remains the way
+    /// in for anything on the planetary grid. This exists because that gate
+    /// is an **absolute** 2 m of relief between neighbouring cells, which is
+    /// a statement about a grid's resolution rather than about terrain: on
+    /// the island's 2 km cells it is a gradient of 0.1% and admits none of
+    /// the 66,116 land cells, the founders' own estate included. The island
+    /// judges the same question as a gradient
+    /// (`regional::geophysics::is_buildable_cell`) and then calls this.
+    ///
+    /// The recipe is still checked, and the construction is still recorded
+    /// in the event log under `actor_id`, so a structure placed this way is
+    /// as visible as any other. What a caller takes on by using it is the
+    /// terrain judgement, and nothing else.
+    pub fn place_structure(
+        &mut self,
+        actor_id: &str,
+        recipe_id: RecipeId,
+        position: GridPosition,
+        tick: Tick,
+    ) -> Result<u64, &'static str> {
+        let current = recipe(recipe_id);
+        if current.output.0 != ItemKind::Structure {
+            return Err("recipe does not produce a structure");
+        }
         let id = self.next_structure_id;
         self.structures.push(ConstructedStructure {
             id,
@@ -649,7 +679,28 @@ fn node_kind_for_resource(resource: mk_core::biomes::ResourceKind) -> Option<Res
         R::Food | R::Fruit | R::Nuts | R::Fungi | R::Meat | R::Honey => {
             Some(ResourceNodeKind::FoodPatch)
         }
-        _ => None,
+        // No node yet, each for a stated reason -- and listed rather than
+        // caught by a wildcard, so a resource kind added upstream fails to
+        // compile here instead of silently yielding nothing (Phase 3 Task 2):
+        // - water is drawn from the hydrology stores, never from a node;
+        // - gems, salt, sulfur, wax, hide, bone, feather, fish and shellfish
+        //   have no `ItemKind` to gather into, so a node for them would
+        //   yield nothing a human could carry;
+        // - herbs have an item (`ItemKind::Herbal`) but no node kind, and a
+        //   new kind would add nodes to every planetary world.
+        // Each gets its node with its item, from its real source (deposits,
+        // fauna, coast), with Task 2's node work.
+        R::Water
+        | R::Herbs
+        | R::Gem
+        | R::Salt
+        | R::Sulfur
+        | R::Wax
+        | R::Hide
+        | R::Bone
+        | R::Feather
+        | R::Fish
+        | R::Shellfish => None,
     }
 }
 

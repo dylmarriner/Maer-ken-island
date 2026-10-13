@@ -15,47 +15,57 @@
 //! `MaterialCarbon`, `HumanCarbon` and `MaterialWater` must equal the change
 //! in those stocks, or the step fails.
 
+use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
+use std::path::Path;
 use std::sync::Arc;
 
 use mk_core::canon::CanonLocked;
 use mk_core::flux::{FluxKind, Ledger, Reservoir};
 use mk_core::rng::RngRegistry;
-use mk_island::{DomainLevel, IslandDomain, IslandScenario, LocalPatchSpec};
-use serde::{Deserialize, Serialize};
-
-use super::commands::{
-    as_control, validate, CommandError, CommandState, ControlCommand, CreateLocation,
-    IslandCommand, IslandCreateHumanRequest, IslandReplayEntry, QueuedCommandId,
+use mk_island::{
+    DomainLevel, IslandDomain, IslandDomainError, IslandScenario, IslandScenarioError,
 };
+
 use super::ecology::{RegionalEcologyError, RegionalEcologyState};
-use super::energy::{solar_output_kw, EstateEnergy};
-use super::estate_layout::{EstateLayout, Space};
+use super::energy::{solar_output_kw, EstateEnergy, ROOM_LIGHT_LUX};
+use super::estate_layout::{Space, SpaceId};
+use super::human_store::{open_run, HumanStore, HumanStoreError, RunId};
 use super::humans::{
     bootstrap_regional_humans, step_regional_humans, HumanEstatePositions, RegionalHumanContext,
     RegionalHumanError,
 };
 use super::hydrology::discharge_m3_s;
-use super::labour::{LabourBody, LabourError, LabourTable};
+use super::labour::{LabourBody, LabourError, LabourTable, LabourTool};
 use super::local_vegetation::{seed_local_vegetation, LocalVegetationError, LocalVegetationPatch};
-use super::materials::{cells_around, water_search_cells, Material, MaterialError, MaterialLedger};
-use super::physical::{PhysicalSnapshot, RegionalPhysicalError, RegionalPhysicalState};
+use super::materials::{
+    cells_around, composition, water_search_cells, Material, MaterialError, MaterialLedger,
+};
+use super::physical::{RegionalPhysicalError, RegionalPhysicalState};
 use super::property::{place_regional_estate, PlaceEstateError, PlacedEstate};
 use super::scheduler::IslandScheduler;
+use super::timber::{self, HaulJob, HaulTask};
+use crate::humans::lifecycle::WALKING_MET;
 use crate::humans::HumanSystem;
-use crate::organisms::property::PropertySystem;
 use crate::resource_economy::ResourceEconomyState;
 use crate::topology::GridTopology;
 
-/// Light daily activity while the founders live at home (MET).
-const HOME_MET: f64 = 1.3;
-/// Food and water each founder takes per 6 hours: ~2.4 kg of plant food
-/// (~2,000 kcal at the packs' energy density is not claimed; carbon is
-/// what is tracked) and 2.6 L of drinking water a day.
-const FOOD_KG_PER_MEAL: f64 = 0.6;
-const WATER_KG_PER_DRINK: f64 = 0.65;
-/// Body weight from which a person eats and drinks the full ration; lighter
-/// people (children) take a share that scales with metabolic rate, weight^0.75.
-const FULL_RATION_WEIGHT_KG: f64 = 55.0;
+/// What a founder at home is doing, as the reference packs' activity names.
+/// A sleeping body burns measurably less than a waking one (Compendium of
+/// Physical Activities: sleeping 0.9-1.0 MET against 1.0-1.3 sitting
+/// quietly), and the circadian clock already knows which of the two this
+/// human is doing, so the tick asks it rather than assuming one rate all
+/// day. On a 36-hour day that difference is not academic: how long a person
+/// sleeps depends on whether they are in a house they can darken (D23), and
+/// expenditure has to follow it.
+const ASLEEP_ACTIVITY: &str = "sleeping";
+const AWAKE_AT_HOME_ACTIVITY: &str = "sitting_quietly";
+
+/// Water an adult turns over per kcal they spend: 1 mL/kcal under average
+/// conditions (National Research Council 1989, *Recommended Dietary
+/// Allowances*, 10th ed., ch. 11). What a founder burns in an hour is what
+/// they lose in water, and what the next drink has to put back.
+pub const WATER_KG_PER_KCAL: f64 = 0.001;
 /// Children younger than this stay with their mother: they do not choose
 /// where to go (they are carried, then toddle behind her).
 const DEPENDENT_AGE_YEARS: f64 = 5.0;
@@ -74,22 +84,15 @@ pub struct SubsystemTimings {
     pub substeps: u64,
     /// The people: movement, needs, cognition, estate interaction (every substep).
     pub humans: std::time::Duration,
-    /// Children following mothers and newborn adoption (every substep).
+    /// Burying the dead, children following mothers and newborn adoption
+    /// (every substep).
     pub households: std::time::Duration,
     /// Weather, ocean, tides, insolation, hydrology step and the estate energy and respiration (hourly).
     pub physics_hourly: std::time::Duration,
-    /// Ecology, vegetation, food and water (six-hourly).
+    /// Ecology, vegetation and grazers (six-hourly).
     pub ecology_six_hourly: std::time::Duration,
     /// Per-human folder writes (store cadence).
     pub human_store: std::time::Duration,
-}
-
-/// The share of a full meal or drink a person of this weight takes. Exactly
-/// 1 from `FULL_RATION_WEIGHT_KG` up, so adults are unaffected.
-fn ration_factor(weight_kg: f64) -> f64 {
-    (weight_kg / FULL_RATION_WEIGHT_KG)
-        .powf(0.75)
-        .clamp(0.05, 1.0)
 }
 
 /// A child's mother, from its birth record.
@@ -107,6 +110,7 @@ fn mother_of(human: &crate::humans::HumanBeing) -> Option<String> {
         })
         .filter(|m| !m.is_empty())
 }
+
 /// Share of the body's water loss that is excretion to the soil.
 const EXCRETION_TO_SOIL_FRACTION: f64 = 0.6;
 
@@ -120,6 +124,15 @@ pub enum IslandLifeError {
     Labour(LabourError),
     /// A household step's carbon, oxygen or water stocks did not close.
     Audit(String),
+    /// A snapshot written by a format this build does not know. Guessing at
+    /// an unknown layout would quietly restore the wrong island.
+    SnapshotVersion(u32),
+    /// A snapshot's scenario profile no longer describes a valid domain.
+    Domain(IslandDomainError),
+    /// A snapshot's scenario is not one this build can run: a format version
+    /// it does not know, or cadences and estate settings outside their
+    /// bounds.
+    Scenario(IslandScenarioError),
 }
 
 impl std::fmt::Display for IslandLifeError {
@@ -137,28 +150,59 @@ pub struct Shortfalls {
     pub water: u64,
 }
 
-/// Everything about the island that is not re-derived from the scenario and
-/// the terrain.
+/// A tree a founder is felling: which, and the seconds of work put in.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct FellingJob {
+    pub tree_id: u64,
+    pub worked_s: f64,
+}
+
+/// The shed tool a founder fells with: the estate's axe, at the felling
+/// pack's steel-axe times. The two-person crosscut saw needs a second
+/// person on the other end, which nothing here arranges yet.
+pub const FELLING_TOOL: &str = "Felling Axe";
+/// The estate's road vehicle that carries cut timber: the ute.
+pub const HAUL_UTE: &str = "Ford Raptor 4x4 Ute";
+/// The estate's machine that lifts whole logs: the excavator.
+pub const HAUL_EXCAVATOR: &str = "30-Ton Excavator (CAT 330)";
+
+/// The snapshot format. A snapshot written by another version is refused
+/// rather than guessed at.
+pub const ISLAND_SNAPSHOT_VERSION: u32 = 1;
+
+/// An island's whole persisted state. See [`IslandLife::snapshot`] for what
+/// is deliberately absent.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IslandLifeSnapshot {
-    pub physical: PhysicalSnapshot,
+    pub version: u32,
+    pub scenario: IslandScenario,
+    pub physical: RegionalPhysicalState,
     pub ecology: RegionalEcologyState,
-    pub location: (usize, usize),
-    pub patch: LocalPatchSpec,
-    pub property: PropertySystem,
-    pub layout: EstateLayout,
+    pub placed: PlacedEstate,
     pub vegetation: LocalVegetationPatch,
     pub humans: HumanSystem,
     pub positions: HumanEstatePositions,
     pub energy: EstateEnergy,
     pub materials: MaterialLedger,
     pub economy: ResourceEconomyState,
+    pub scheduler: IslandScheduler,
+    pub rng: RngRegistry,
     pub sim_time_s: u64,
     pub tick: u64,
     pub audits_closed: u64,
     pub shortfalls: Shortfalls,
-    pub scheduler: IslandScheduler,
-    pub commands: CommandState,
+    pub respired_since_meal: BTreeMap<String, f64>,
+    #[serde(default)]
+    pub lost_since_drink: BTreeMap<String, f64>,
+    #[serde(default)]
+    pub felling: BTreeMap<String, FellingJob>,
+    #[serde(default)]
+    pub hauling: BTreeMap<String, HaulJob>,
+    #[serde(default)]
+    pub labour_kcal: BTreeMap<String, f64>,
+    #[serde(default)]
+    pub water_drunk_kg: BTreeMap<String, f64>,
+    pub sleep_seconds: BTreeMap<String, (f64, f64)>,
     pub food_cell: (usize, usize),
     pub water_cell: Option<(usize, usize)>,
 }
@@ -180,14 +224,65 @@ pub struct IslandLife {
     pub tick: u64,
     pub audits_closed: u64,
     pub shortfalls: Shortfalls,
+    /// Carbon each founder has respired since their last meal (kg), which is
+    /// what the next meal has to put back.
+    respired_since_meal: BTreeMap<String, f64>,
+    /// Water each founder has lost since their last drink (kg), which is
+    /// what the next drink has to put back.
+    lost_since_drink: BTreeMap<String, f64>,
+    /// The tree each founder is felling and how long they have worked at
+    /// it: felling a stem takes the felling pack's time, across as many
+    /// steps as that is, and a founder who stops comes back to the same
+    /// tree.
+    felling: BTreeMap<String, FellingJob>,
+    /// The log each founder is moving to the store and the tasks they
+    /// still have to do (`regional::timber`).
+    hauling: BTreeMap<String, HaulJob>,
+    /// Energy (kcal) each founder's labour has cost since their respiration
+    /// was last charged, above what the same time awake at home costs.
+    labour_kcal: BTreeMap<String, f64>,
+    /// Water each founder has drunk since the island began (kg): the record
+    /// the intake checks read.
+    pub water_drunk_kg: BTreeMap<String, f64>,
+    /// Seconds each founder has spent asleep and awake since their
+    /// respiration was last charged. The sleep state can turn over at any
+    /// human substep, so sampling it once an hour would charge a whole hour
+    /// at whichever state happened to be current at the end of it.
+    sleep_seconds: BTreeMap<String, (f64, f64)>,
     pub scheduler: IslandScheduler,
-    pub commands: CommandState,
-    /// Per-human folders for this run (runtime-only; not hashed or saved).
-    pub store: Option<super::store::HumanStoreStatus>,
+    labour: LabourTable,
+    /// The world's keyed streams. Readable because creating a person in the
+    /// world draws from them (`create_human`), and a creation keyed on
+    /// anything else would not replay.
+    pub(crate) rng: RngRegistry,
+    /// A real bridge to the outside, when an operator attached one.
+    ///
+    /// Like the folders and the replay log, it is not in the snapshot and
+    /// not in the state digest -- but unlike them it is not merely a
+    /// record, and the difference matters. With one attached, a human may
+    /// reach the real internet, and what comes back is not reproducible.
+    /// That is the whole point of the feature and the whole reason it is
+    /// opt-in: an island that did it would stop being an island two runs
+    /// of which agree.
+    ///
+    /// `replay` and `inspect` never attach one, so a log replays the same
+    /// way whether or not a live human sent real email in the run that
+    /// produced it. A search's *results* enter only through this bridge;
+    /// nothing else in the island can see out.
+    computer_bridge: Option<crate::humans::computer_bridge::ComputerBridgeHandle>,
+    /// This run's folder tree, once somebody asks for one. Records rather
+    /// than state: it is absent from the snapshot and from the state digest,
+    /// and an island with one behaves exactly like an island without.
+    human_store: Option<HumanStore>,
+    /// Everything that has reached this island from outside, in order.
+    ///
+    /// A record rather than state, like the folders: it is not hashed and
+    /// not snapshotted, because it describes how the island got here rather
+    /// than where it is. The runner writes it beside a snapshot, and
+    /// `replay::replay_island` turns it back into this island.
+    pub(crate) replay_log: super::replay::IslandReplayLog,
     /// Where the step time goes (runtime-only; not hashed or saved).
     pub timings: SubsystemTimings,
-    labour: LabourTable,
-    rng: RngRegistry,
     food_cell: (usize, usize),
     pub water_cell: Option<(usize, usize)>,
     topology: GridTopology,
@@ -244,7 +339,9 @@ impl IslandLife {
             .iter()
             .find(|p| p.owner_agent_ids.iter().any(|i| i == "Gem-D"))
             .expect("the estate was placed");
-        let energy = EstateEnergy::from_config(&scenario.estate_energy, estate);
+        let mut energy = EstateEnergy::from_config(&scenario.estate_energy, estate);
+        energy.wire_lighting(&placed.layout, estate);
+        attach_estate_hydro(&mut energy, &placed, &domain);
 
         let mut materials = MaterialLedger::new();
         for h in humans.registry.iter() {
@@ -281,7 +378,7 @@ impl IslandLife {
                 });
         let topology = GridTopology::regional(&domain, medium);
         let scenario_cadences = scenario.cadences;
-        Ok(Self {
+        let mut life = Self {
             rng: RngRegistry::new(scenario.seed),
             canon,
             domain,
@@ -299,92 +396,272 @@ impl IslandLife {
             tick: 0,
             audits_closed: 0,
             shortfalls: Shortfalls::default(),
+            respired_since_meal: BTreeMap::new(),
+            lost_since_drink: BTreeMap::new(),
+            felling: BTreeMap::new(),
+            hauling: BTreeMap::new(),
+            labour_kcal: BTreeMap::new(),
+            water_drunk_kg: BTreeMap::new(),
+            sleep_seconds: BTreeMap::new(),
             scheduler: IslandScheduler::new(scenario_cadences),
-            commands: CommandState::default(),
-            store: None,
-            timings: SubsystemTimings::default(),
             labour: LabourTable::load_default().map_err(IslandLifeError::Labour)?,
+            computer_bridge: None,
+            human_store: None,
+            // Filled in below: the digest needs the built island.
+            replay_log: super::replay::IslandReplayLog::new(String::new()),
+            timings: SubsystemTimings::default(),
             food_cell,
             water_cell,
             topology,
-        })
+        };
+        // A log says which scenario it belongs to, so replaying it against
+        // a different island refuses rather than reproducing nothing and
+        // looking like it had.
+        if life.energy.lighting.is_empty() {
+            // Saved before the house was wired for lamps: wire it now, from
+            // the layout the snapshot carries, so a reload is not an island
+            // in the dark.
+            if let Some(estate) = life
+                .placed
+                .property
+                .properties
+                .iter()
+                .find(|p| p.owner_agent_ids.iter().any(|i| i == "Gem-D"))
+            {
+                life.energy.wire_lighting(&life.placed.layout, estate);
+            }
+        }
+        if life.energy.hydro.is_empty() {
+            // Saved before the river's plant was connected.
+            attach_estate_hydro(&mut life.energy, &life.placed, &life.domain);
+        }
+        life.replay_log = super::replay::IslandReplayLog::new(life.scenario_digest_hex());
+        Ok(life)
     }
 
-    /// The state to save.
-    pub fn to_snapshot(&self) -> IslandLifeSnapshot {
+    /// Everything an island carries that cannot be derived again.
+    ///
+    /// What is left out is left out deliberately: the canon is supplied by
+    /// whoever loads the snapshot, the domain follows from the scenario's
+    /// profile, the grid topology follows from the domain, and the labour
+    /// table is read from the reference packs. Storing those would let a
+    /// snapshot disagree with the canon it is loaded against, which is the
+    /// one thing a saved world must not be able to do.
+    ///
+    /// This clones the state, which on a full island is a few hundred MB
+    /// held twice for as long as the save takes. A borrowing twin of
+    /// `IslandLifeSnapshot` would avoid it, at the cost of two field lists
+    /// that have to stay in step — and a field missing from the writing half
+    /// would silently write an incomplete island. The copy is the safer
+    /// price until a measurement says otherwise.
+    pub fn snapshot(&self) -> IslandLifeSnapshot {
         IslandLifeSnapshot {
-            physical: self.physical.to_snapshot(),
+            version: ISLAND_SNAPSHOT_VERSION,
+            scenario: self.scenario.clone(),
+            physical: self.physical.clone(),
             ecology: self.ecology.clone(),
-            location: self.placed.location,
-            patch: self.placed.patch.clone(),
-            property: self.placed.property.clone(),
-            layout: self.placed.layout.clone(),
+            placed: self.placed.clone(),
             vegetation: self.vegetation.clone(),
             humans: self.humans.clone(),
             positions: self.positions.clone(),
             energy: self.energy.clone(),
             materials: self.materials.clone(),
             economy: self.economy.clone(),
+            scheduler: self.scheduler.clone(),
+            rng: self.rng.clone(),
             sim_time_s: self.sim_time_s,
             tick: self.tick,
             audits_closed: self.audits_closed,
             shortfalls: self.shortfalls,
-            scheduler: self.scheduler.clone(),
-            commands: self.commands.clone(),
+            respired_since_meal: self.respired_since_meal.clone(),
+            lost_since_drink: self.lost_since_drink.clone(),
+            felling: self.felling.clone(),
+            hauling: self.hauling.clone(),
+            labour_kcal: self.labour_kcal.clone(),
+            water_drunk_kg: self.water_drunk_kg.clone(),
+            sleep_seconds: self.sleep_seconds.clone(),
             food_cell: self.food_cell,
             water_cell: self.water_cell,
         }
     }
 
-    /// Rebuild the island from a scenario, its canon and a snapshot,
-    /// re-deriving the domain, topology, labour table, random registry and
-    /// the terrain-derived caches.
-    pub fn from_snapshot(
-        scenario: IslandScenario,
+    /// Rebuild an island from a snapshot and the canon it must agree with.
+    ///
+    /// The derived parts are rebuilt here rather than trusted from the file,
+    /// so a snapshot cannot smuggle in a domain or a topology that does not
+    /// follow from its own scenario.
+    pub fn restore(
         canon: Arc<CanonLocked>,
-        snap: IslandLifeSnapshot,
+        snapshot: IslandLifeSnapshot,
     ) -> Result<Self, IslandLifeError> {
-        let domain =
-            IslandDomain::from_profile(scenario.profile.clone()).expect("a validated scenario");
-        let physical = RegionalPhysicalState::from_snapshot(snap.physical, &domain);
+        if snapshot.version != ISLAND_SNAPSHOT_VERSION {
+            return Err(IslandLifeError::SnapshotVersion(snapshot.version));
+        }
+        // The scenario came out of a file, so it is checked exactly as one
+        // read from disk would be before anything is built from it.
+        snapshot
+            .scenario
+            .validate()
+            .map_err(IslandLifeError::Scenario)?;
+        let domain = IslandDomain::from_profile(snapshot.scenario.profile.clone())
+            .map_err(IslandLifeError::Domain)?;
         let topology = GridTopology::regional(&domain, DomainLevel::Medium);
-        Ok(Self {
-            rng: RngRegistry::new(scenario.seed),
+        let mut life = Self {
             canon,
             domain,
-            physical,
-            ecology: snap.ecology,
-            placed: PlacedEstate {
-                location: snap.location,
-                patch: snap.patch,
-                property: snap.property,
-                layout: snap.layout,
-            },
-            vegetation: snap.vegetation,
-            humans: snap.humans,
-            positions: snap.positions,
-            energy: snap.energy,
-            materials: snap.materials,
-            economy: snap.economy,
-            sim_time_s: snap.sim_time_s,
-            tick: snap.tick,
-            audits_closed: snap.audits_closed,
-            shortfalls: snap.shortfalls,
-            scheduler: snap.scheduler,
-            commands: snap.commands,
-            store: None,
-            timings: SubsystemTimings::default(),
+            scenario: snapshot.scenario,
+            physical: snapshot.physical,
+            ecology: snapshot.ecology,
+            placed: snapshot.placed,
+            vegetation: snapshot.vegetation,
+            humans: snapshot.humans,
+            positions: snapshot.positions,
+            energy: snapshot.energy,
+            materials: snapshot.materials,
+            economy: snapshot.economy,
+            scheduler: snapshot.scheduler,
+            rng: snapshot.rng,
+            sim_time_s: snapshot.sim_time_s,
+            tick: snapshot.tick,
+            audits_closed: snapshot.audits_closed,
+            shortfalls: snapshot.shortfalls,
+            respired_since_meal: snapshot.respired_since_meal,
+            lost_since_drink: snapshot.lost_since_drink,
+            felling: snapshot.felling,
+            hauling: snapshot.hauling,
+            labour_kcal: snapshot.labour_kcal,
+            water_drunk_kg: snapshot.water_drunk_kg,
+            sleep_seconds: snapshot.sleep_seconds,
             labour: LabourTable::load_default().map_err(IslandLifeError::Labour)?,
-            food_cell: snap.food_cell,
-            water_cell: snap.water_cell,
+            // A restored island keeps no records until someone attaches
+            // some: the folders belong to the run that wrote them, and a
+            // reload is a new run.
+            computer_bridge: None,
+            human_store: None,
+            // A restored island starts a fresh log: the commands that got
+            // it here are in the log beside the snapshot, not in the file.
+            // Its scenario is filled in below, as at bootstrap.
+            replay_log: super::replay::IslandReplayLog::new(String::new()),
+            timings: SubsystemTimings::default(),
+            food_cell: snapshot.food_cell,
+            water_cell: snapshot.water_cell,
             topology,
-            scenario,
-        })
+        };
+        life.replay_log = super::replay::IslandReplayLog::new(life.scenario_digest_hex());
+        Ok(life)
+    }
+
+    /// Start keeping a folder for every human, under a run of this
+    /// island's own.
+    ///
+    /// Returns the run's id, which is also the name of its directory under
+    /// `save_root`. Calling this twice starts a second run with its own
+    /// folders rather than writing into the first one's.
+    ///
+    /// The island's behaviour does not change: with the store attached, the
+    /// state digest after any number of steps is the same as without it, and
+    /// the same again if every write fails. The folders are a record of the
+    /// run, not an input to it.
+    /// Attach a real bridge to the outside, so a human at their own
+    /// machine in a powered computer room can search the web or send an
+    /// email for real.
+    ///
+    /// **This makes the island irreproducible, on purpose.** Nothing else
+    /// in it can see out; what comes back through here is whatever the
+    /// internet said at that moment, and two runs of the same seed will
+    /// not agree once a human has used it. That is the feature, and it is
+    /// why nothing attaches this unless an operator sets
+    /// `COMPUTER_ACTIONS_ENABLED=1`, and why `replay` and `inspect` never
+    /// attach it at all: a log replays identically whether or not a live
+    /// human sent real email in the run that produced it.
+    ///
+    /// Attaching it alone changes nothing. Until a human actually
+    /// succeeds at one of the two actions, the state digest is the same as
+    /// an island with no bridge -- including when the service is
+    /// unreachable, because the costs are charged on success only.
+    /// `tests/island_computer_service.rs` holds all three cases.
+    pub fn attach_computer_bridge(
+        &mut self,
+        bridge: crate::humans::computer_bridge::ComputerBridgeHandle,
+    ) {
+        self.computer_bridge = Some(bridge);
+    }
+
+    /// Whether a bridge is attached, for a dashboard saying what this
+    /// island can do.
+    pub fn has_computer_bridge(&self) -> bool {
+        self.computer_bridge.is_some()
+    }
+
+    pub fn enable_human_store(&mut self, save_root: &Path) -> Result<RunId, HumanStoreError> {
+        let (mut store, storage) =
+            open_run(save_root, &self.scenario_digest(), &self.scenario.seed)?;
+        // Storage first, and only then the policy that depends on it. The
+        // other order leaves a state nobody can see: if `set_storage` fails,
+        // `auto_sync` is already off and `human_store` is still `None`, so
+        // the island runs with nothing syncing it and no counter to say so.
+        self.humans
+            .registry
+            .set_storage(storage)
+            .map_err(HumanStoreError::Storage)?;
+        // Upstream rewrites every human's files on every step. At a
+        // 60-second human step that is 1,440 full rewrites per simulated
+        // day, so the island syncs on `human_store_seconds` instead — and
+        // immediately when somebody dies, which is the one moment a stale
+        // file would be a lie rather than a lag.
+        self.humans.set_auto_sync(false);
+        for human in self.humans.registry.iter() {
+            if matches!(human.profile.status, mk_core::human::HumanStatus::Alive) {
+                store.note_status(human.agent_id(), true, &mut Vec::new());
+            }
+        }
+        let id = store.run_id().clone();
+        self.human_store = Some(store);
+        Ok(id)
+    }
+
+    /// This run's records, if any are being kept.
+    pub fn human_store(&self) -> Option<&HumanStore> {
+        self.human_store.as_ref()
+    }
+
+    /// Identifies the scenario this island is running, so two runs of the
+    /// same one share a prefix and two different ones do not.
+    pub(crate) fn scenario_digest(&self) -> [u8; 32] {
+        let canonical = serde_json::to_vec(&self.scenario).unwrap_or_default();
+        *blake3::hash(&canonical).as_bytes()
+    }
+
+    /// Write every human's full state to their folder now.
+    ///
+    /// Failures are counted on the store and logged, never returned: a disk
+    /// that will not take a record is not a reason for the island to stop
+    /// having a history.
+    pub fn sync_humans(&mut self) {
+        let Some(mut store) = self.human_store.take() else {
+            return;
+        };
+        store.note_failures(&self.humans.registry.sync_to_storage());
+        self.human_store = Some(store);
+    }
+
+    /// Write one human's final state the moment they die.
+    fn sync_one_human(&mut self, agent_id: &str) {
+        let Some(mut store) = self.human_store.take() else {
+            return;
+        };
+        if let Err(e) = self.humans.registry.sync_human_to_storage(agent_id) {
+            store.note_failure(&e);
+        }
+        self.human_store = Some(store);
     }
 
     /// Run `f` as one audited household step: the ledger's net flows must
     /// equal the change in each material stock.
-    fn audited(&mut self, f: impl FnOnce(&mut Self, &mut Ledger)) -> Result<(), IslandLifeError> {
+    pub(super) fn audited(
+        &mut self,
+        f: impl FnOnce(&mut Self, &mut Ledger),
+    ) -> Result<(), IslandLifeError> {
         let stocks = |m: &MaterialLedger| {
             [
                 m.stock_of(Reservoir::MaterialCarbon),
@@ -416,16 +693,57 @@ impl IslandLife {
         Ok(())
     }
 
-    fn founders(&self) -> Vec<(String, LabourBody)> {
+    /// Drop every per-person accumulator for `id`.
+    ///
+    /// All of them are hashed into the state digest, so a person who
+    /// has left the world has to leave these too or two islands that agree
+    /// about who is alive will disagree about their digest. `advance`
+    /// already does this for the dead; a removal needs the same.
+    pub(super) fn forget_accumulators(&mut self, id: &str) {
+        self.respired_since_meal.remove(id);
+        self.lost_since_drink.remove(id);
+        self.felling.remove(id);
+        self.hauling.remove(id);
+        self.labour_kcal.remove(id);
+        self.water_drunk_kg.remove(id);
+        self.sleep_seconds.remove(id);
+    }
+
+    /// Every living human, with the body the labour model costs work against
+    /// and whether they are asleep right now.
+    fn founders(&self) -> Vec<(String, LabourBody, bool)> {
         self.humans
             .registry
             .iter()
             .filter(|h| matches!(h.profile.status, mk_core::human::HumanStatus::Alive))
-            .map(|h| (h.agent_id().to_string(), LabourBody::from_human(h)))
+            .map(|h| {
+                (
+                    h.agent_id().to_string(),
+                    LabourBody::from_human(h),
+                    h.circadian.asleep,
+                )
+            })
             .collect()
     }
 
     fn hourly(&mut self) -> Result<(), IslandLifeError> {
+        // The estate's plants take their water this hour at the flow they
+        // last measured, returning it at their tailraces.
+        let cols = self.domain.cols(DomainLevel::Medium);
+        self.physical.diversions = self
+            .energy
+            .hydro
+            .iter()
+            .map(|plant| {
+                let (ir, ic) = plant.site.intake_cell;
+                let (tr, tc) = plant.site.powerhouse_cell;
+                super::hydrology::Diversion {
+                    intake: (ir * cols + ic) as u32,
+                    tailrace: (tr * cols + tc) as u32,
+                    flow_m3_s: plant.diverted_m3_s(),
+                }
+            })
+            .collect();
         self.physical
             .step(
                 &self.canon,
@@ -456,53 +774,512 @@ impl IslandLife {
             .map(|s| solar_output_kw(s.rated_kw, toa, cloud))
             .sum();
         let founders = self.founders();
-        let labour = self.labour.clone();
+        // Lamps: a room is lit while someone in it wants light -- awake and
+        // not yet at bedtime -- and less daylight comes through its windows
+        // than the lamps give. Nobody deliberates over it; it is what people
+        // do with a switch by the door.
+        let daylight_lux = crate::perception::daylight_fraction(&self.physical.insolation, cr, cc)
+            * crate::humans::circadian::OUTDOOR_DAYLIGHT_LUX;
+        let wanted: std::collections::BTreeSet<SpaceId> = self
+            .humans
+            .registry
+            .iter()
+            .filter(|h| matches!(h.profile.status, mk_core::human::HumanStatus::Alive))
+            .filter(|h| h.circadian.wants_lamp(h.needs.fatigue))
+            .filter_map(|h| match self.positions.0.get(h.agent_id())?.space {
+                Space::Inside(space) => Some(space),
+                Space::Outdoors => None,
+            })
+            .filter(|space| {
+                self.placed
+                    .layout
+                    .spaces
+                    .iter()
+                    .find(|s| s.id == *space)
+                    .is_some_and(|room| {
+                        daylight_lux * super::humans::room_daylight_factor(&room.label)
+                            < ROOM_LIGHT_LUX
+                    })
+            })
+            .collect();
+        let rooms: Vec<SpaceId> = self.energy.lighting.iter().map(|l| l.space).collect();
+        for space in rooms {
+            self.energy.set_lit(space, wanted.contains(&space));
+        }
         let dt_physical = self.scenario.cadences.weather_ocean_seconds;
+        let asleep_met = self
+            .labour
+            .met(ASLEEP_ACTIVITY)
+            .map_err(IslandLifeError::Labour)?;
+        let awake_met = self
+            .labour
+            .met(AWAKE_AT_HOME_ACTIVITY)
+            .map_err(IslandLifeError::Labour)?;
+        // Each plant runs on the river's present flow at its intake.
+        let cols = self.domain.cols(DomainLevel::Medium);
+        for plant in &mut self.energy.hydro {
+            let (r, c) = plant.site.intake_cell;
+            plant.river_m3_s = if r * cols + c < self.physical.hydrology.runoff.data().len() {
+                super::hydrology::discharge_m3_s(&self.physical.hydrology, &self.domain, r, c)
+            } else {
+                0.0
+            };
+        }
         self.audited(|life, ledger| {
             life.energy.step(dt_physical as f64, solar_kw, ledger);
-            for (id, body) in &founders {
-                let kcal = labour
-                    .energy_kcal(body, HOME_MET, dt_physical as f64)
-                    .unwrap_or(0.0);
-                let _ = life.materials.respire(id, kcal, ledger);
+            for (id, body, _) in &founders {
+                // Every second is charged at the MET of the state it was
+                // actually spent in, not at whichever state the clock
+                // happened to be in when this hour's accounting ran.
+                let (asleep_s, awake_s) = life.sleep_seconds.remove(id).unwrap_or((0.0, 0.0));
+                let kcal = life
+                    .labour
+                    .energy_kcal(body, asleep_met, asleep_s)
+                    .unwrap_or(0.0)
+                    + life
+                        .labour
+                        .energy_kcal(body, awake_met, awake_s)
+                        .unwrap_or(0.0)
+                    + life.labour_kcal.remove(id).unwrap_or(0.0);
+                if let Ok(kgc) = life.materials.respire(id, kcal, ledger) {
+                    *life.respired_since_meal.entry(id.clone()).or_insert(0.0) += kgc;
+                }
+                *life.lost_since_drink.entry(id.clone()).or_insert(0.0) += kcal * WATER_KG_PER_KCAL;
             }
         })
     }
 
-    fn six_hourly(&mut self) -> Result<(), IslandLifeError> {
-        let dt_ecology = self.scenario.cadences.hydrology_ecology_resource_seconds;
-        let cell_area = self.domain.cell_area_m2(DomainLevel::Medium);
-        self.ecology.step_with_grazers(dt_ecology as f64, cell_area);
-        self.vegetation.step(&self.ecology, dt_ecology);
-        let founders = self.founders();
-        let area = self.domain.cell_area_m2(DomainLevel::Medium);
+    /// Run the labour founders have chosen. A founder who chooses to gather
+    /// while outdoors on the estate, with the shed's axe to hand, works the
+    /// estate's wood:
+    ///
+    /// - a log lying on the ground that nobody else is moving is hauled to
+    ///   the store, the founder's quickest way the estate allows
+    ///   (`regional::timber`: the excavator, the ute, or on foot), task by
+    ///   task across steps;
+    /// - otherwise they fell the tree nearest them: the work carries across
+    ///   steps until the felling pack's time for that trunk is met
+    ///   (`LabourTable::fell_tree`), and the stem comes down as a green log
+    ///   lying where it fell, its carbon and water booked through the
+    ///   ledger.
+    ///
+    /// While they work their needs drain at the MET of what they are doing
+    /// (`HumanBeing::labour_met`, read by the next step's lifecycle) and
+    /// their respiration is charged for it.
+    fn work(&mut self, dt_s: f64) -> Result<(), IslandLifeError> {
+        let has_axe = self.estate_has_tool(FELLING_TOOL);
+        let awake_met = self
+            .labour
+            .met(AWAKE_AT_HOME_ACTIVITY)
+            .map_err(IslandLifeError::Labour)?;
+        let ids: Vec<String> = self
+            .humans
+            .registry
+            .iter()
+            .filter(|h| matches!(h.profile.status, mk_core::human::HumanStatus::Alive))
+            .map(|h| h.agent_id().to_string())
+            .collect();
+        let mut felled: Vec<(String, u64)> = Vec::new();
+        let mut done_tasks: Vec<(String, HaulTask)> = Vec::new();
+        for id in ids {
+            let outdoors_at = self.positions.0.get(&id).and_then(|p| match p.space {
+                Space::Outdoors => Some(p.position_m),
+                Space::Inside(_) => None,
+            });
+            let human = self
+                .humans
+                .registry
+                .get_human(&id)
+                .expect("a listed human exists");
+            let gathering = human.economy_action.kind == crate::humans::ActionKind::Gather;
+            let body = LabourBody::from_human(human);
+            let Some(at) = outdoors_at.filter(|_| has_axe && gathering) else {
+                if let Some(h) = self.humans.registry.get_human_mut(&id) {
+                    h.labour_met = None;
+                }
+                continue;
+            };
+
+            // A log on the ground nobody is moving: haul it.
+            if !self.hauling.contains_key(&id) && !self.felling.contains_key(&id) {
+                if let Some(job) = self.plan_haul(at, &body)? {
+                    self.hauling.insert(id.clone(), job);
+                }
+            }
+            let met = if let Some(job) = self.hauling.get_mut(&id) {
+                job.worked_s += dt_s;
+                let met = job.tasks.front().map_or(WALKING_MET, |t| t.met);
+                while let Some(task) = job.tasks.front() {
+                    if job.worked_s + 1e-9 < task.duration_s {
+                        break;
+                    }
+                    job.worked_s -= task.duration_s;
+                    let task = job.tasks.pop_front().expect("a front task");
+                    done_tasks.push((id.clone(), task));
+                }
+                if job.tasks.is_empty() {
+                    self.hauling.remove(&id);
+                }
+                met
+            } else {
+                // Fell: back to the tree already started, if it still
+                // stands; otherwise the nearest.
+                let tree = self
+                    .felling
+                    .get(&id)
+                    .and_then(|job| {
+                        self.vegetation
+                            .trees
+                            .iter()
+                            .find(|t| t.id == job.tree_id && t.alive)
+                    })
+                    .or_else(|| self.vegetation.nearest_tree(at))
+                    .map(|t| (t.id, t.stem_diameter_m, t.position_m));
+                let Some((tree_id, diameter_m, tree_at)) = tree else {
+                    if let Some(h) = self.humans.registry.get_human_mut(&id) {
+                        h.labour_met = None;
+                    }
+                    continue;
+                };
+                let spec = self
+                    .labour
+                    .fell_tree(LabourTool::SteelAxe, diameter_m * 100.0)
+                    .map_err(IslandLifeError::Labour)?;
+                // The tree is where it stands: the job starts with the walk
+                // to it from wherever the founder is, at the packs' pace.
+                let distance_m = ((tree_at.0 - at.0).powi(2) + (tree_at.1 - at.1).powi(2)).sqrt();
+                let walk_s = self
+                    .labour
+                    .walking_time_s(&body, distance_m, 0.0, 0.0)
+                    .map_err(IslandLifeError::Labour)?;
+                let job = self.felling.entry(id.clone()).or_insert(FellingJob {
+                    tree_id,
+                    worked_s: 0.0,
+                });
+                if job.tree_id != tree_id {
+                    *job = FellingJob {
+                        tree_id,
+                        worked_s: 0.0,
+                    };
+                }
+                let met = if job.worked_s < walk_s {
+                    WALKING_MET
+                } else {
+                    spec.met
+                };
+                job.worked_s += dt_s;
+                if job.worked_s >= walk_s + spec.duration_s {
+                    felled.push((id.clone(), tree_id));
+                }
+                met
+            };
+            let extra = self
+                .labour
+                .energy_kcal(&body, met, dt_s)
+                .map_err(IslandLifeError::Labour)?
+                - self
+                    .labour
+                    .energy_kcal(&body, awake_met, dt_s)
+                    .map_err(IslandLifeError::Labour)?;
+            *self.labour_kcal.entry(id.clone()).or_insert(0.0) += extra.max(0.0);
+            if let Some(h) = self.humans.registry.get_human_mut(&id) {
+                h.labour_met = Some(met);
+            }
+        }
+        if felled.is_empty() && done_tasks.is_empty() {
+            return Ok(());
+        }
         self.audited(|life, ledger| {
-            let (rows, cols) = (
-                life.domain.rows(DomainLevel::Medium),
-                life.domain.cols(DomainLevel::Medium),
-            );
-            for (id, _) in &founders {
-                // Food and water are taken where the person stands.
-                let (ration, stands) =
-                    life.humans
-                        .registry
-                        .get_human(id)
-                        .map_or((1.0, life.food_cell), |h| {
-                            (
-                                ration_factor(h.body.weight_kg),
-                                (
-                                    h.position.row.clamp(0, rows as i32 - 1) as usize,
-                                    h.position.col.clamp(0, cols as i32 - 1) as usize,
-                                ),
-                            )
-                        });
-                // Food: the cell they stand on, else the nearest one around
-                // it that has plants.
+            for (id, tree_id) in &felled {
+                life.felling.remove(id);
+                let Some(tree) = life
+                    .vegetation
+                    .trees
+                    .iter()
+                    .find(|t| t.id == *tree_id && t.alive)
+                    .cloned()
+                else {
+                    continue;
+                };
+                // Conifer stands are softwood; every other forest here is
+                // broadleaf.
+                let group = match life.vegetation.biome_at(tree.position_m) {
+                    Some(mk_core::biomes::BiomeType::BorealForest) => "softwoods",
+                    _ => "hardwoods",
+                };
+                let (Ok(mc), Ok(sg)) = (
+                    life.labour.green_moisture_content(group),
+                    life.labour.basic_specific_gravity(group),
+                ) else {
+                    continue;
+                };
+                if let Ok(wood) = life
+                    .vegetation
+                    .fell_tree(*tree_id, &mut life.ecology, ledger)
+                {
+                    let log = timber::felled_log(
+                        0,
+                        tree.position_m,
+                        timber::fall_heading_rad(*tree_id, &life.scenario.seed),
+                        tree.stem_diameter_m,
+                        tree.height_m,
+                        wood.wood_kg,
+                        wood.usable_carbon_kgc,
+                        mc,
+                        sg,
+                    );
+                    life.materials.receive_felled_log(log, ledger);
+                }
+            }
+            for (id, task) in &done_tasks {
+                life.finish_haul_task(task, ledger);
+                if let Some(p) = life.positions.0.get_mut(id) {
+                    p.space = Space::Outdoors;
+                    p.position_m = task.ends_at_m;
+                }
+            }
+        })
+    }
+
+    /// The places a haul runs between: the garage's and the building
+    /// workshop's outside doors (the workshop is where timber is kept and
+    /// used), and how far it is from the workshop's door to the middle of
+    /// its floor, where the wood is stacked.
+    fn haul_site(&self) -> Option<timber::HaulSite> {
+        use crate::organisms::property::PropertyBuildingKind as Kind;
+        let layout = &self.placed.layout;
+        let door_of = |kind: Kind| {
+            let building = layout.buildings.iter().find(|b| b.kind == kind)?;
+            let r = &building.rect_m;
+            let centre = (0.5 * (r.x0 + r.x1), 0.5 * (r.y0 + r.y1));
+            let door = layout
+                .doors
+                .iter()
+                .find(|d| {
+                    let inside = |s: &Space| match s {
+                        Space::Inside(id) => layout
+                            .spaces
+                            .iter()
+                            .any(|sp| sp.id == *id && sp.building_id == building.building_id),
+                        Space::Outdoors => false,
+                    };
+                    (d.a == Space::Outdoors && inside(&d.b))
+                        || (d.b == Space::Outdoors && inside(&d.a))
+                })
+                .map_or(centre, |d| d.position_m);
+            Some((door, centre))
+        };
+        let (garage_m, _) = door_of(Kind::Garage)?;
+        let (store_m, store_centre) = door_of(Kind::Workshop)?;
+        Some(timber::HaulSite {
+            garage_m,
+            store_m,
+            store_carry_m: (store_centre.0 - store_m.0).hypot(store_centre.1 - store_m.1),
+        })
+    }
+
+    /// The quickest haul of the log on the ground nearest `at` that no
+    /// founder is already moving, or `None` if there is none.
+    fn plan_haul(
+        &mut self,
+        at: (f64, f64),
+        body: &LabourBody,
+    ) -> Result<Option<timber::HaulJob>, IslandLifeError> {
+        let claimed: std::collections::BTreeSet<u64> =
+            self.hauling.values().map(|j| j.log_id).collect();
+        let Some(log) = self
+            .materials
+            .logs()
+            .filter(|l| l.place == timber::LogPlace::Ground && !claimed.contains(&l.id))
+            .min_by(|a, b| {
+                let d = |l: &timber::Log| (l.position_m.0 - at.0).hypot(l.position_m.1 - at.1);
+                d(a).total_cmp(&d(b)).then(a.id.cmp(&b.id))
+            })
+            .cloned()
+        else {
+            return Ok(None);
+        };
+        let Some(site) = self.haul_site() else {
+            return Ok(None);
+        };
+        let road = |name: &str| {
+            let v = self.energy.vehicle_named(name)?;
+            Some(timber::RoadVehicle {
+                item_id: v.item_id,
+                litres: v.litres,
+                litres_per_km: self
+                    .energy
+                    .litres_per_km(v.item_id, super::energy::Surface::OffRoadTrack)?,
+            })
+        };
+        let tracked = |name: &str| {
+            let v = self.energy.vehicle_named(name)?;
+            Some(timber::TrackedMachine {
+                item_id: v.item_id,
+                litres: v.litres,
+                litres_per_hour: self.energy.litres_per_hour(v.item_id)?,
+            })
+        };
+        let fleet = timber::Fleet {
+            ute: road(HAUL_UTE),
+            excavator: tracked(HAUL_EXCAVATOR),
+        };
+        // Pieces cut from this log take ids reserved now, so a plan names
+        // them before they exist: as many as the most pieces any plan cuts.
+        let carry = self
+            .labour
+            .sustainable_load_kg(body)
+            .map_err(IslandLifeError::Labour)?;
+        let bed = self
+            .labour
+            .ute_bed_length_m()
+            .map_err(IslandLifeError::Labour)?;
+        let most = (log.green_kg() / carry.max(1e-6))
+            .ceil()
+            .max((log.length_m / bed.max(1e-6)).ceil())
+            .max(1.0) as u64;
+        let first = self.materials.reserve_log_ids(most);
+        let plans = timber::haul_plans(&log, at, body, &self.labour, &site, &fleet, first)
+            .map_err(IslandLifeError::Labour)?;
+        Ok(timber::quickest(plans))
+    }
+
+    /// What a finished haul task does to the world.
+    fn finish_haul_task(&mut self, task: &HaulTask, ledger: &mut Ledger) {
+        use timber::{HaulAction, LogPlace};
+        let mut put = |ids: &[u64], place: LogPlace, at: Option<(f64, f64)>| {
+            for id in ids {
+                if let Some(log) = self.materials.log_mut(*id) {
+                    log.place = place;
+                    if let Some(at) = at {
+                        log.position_m = at;
+                    }
+                }
+            }
+        };
+        match &task.action {
+            HaulAction::Walk => {}
+            HaulAction::CrossCut {
+                log_id,
+                pieces,
+                first_id,
+            } => {
+                self.materials.cross_cut_log(*log_id, *pieces, *first_id);
+            }
+            HaulAction::Load { vehicle_id, logs } => {
+                put(logs, LogPlace::Vehicle(*vehicle_id), None);
+            }
+            HaulAction::Drive {
+                vehicle_id,
+                km,
+                logs,
+            } => {
+                put(logs, LogPlace::Vehicle(*vehicle_id), Some(task.ends_at_m));
+                self.energy.drive_km(
+                    *vehicle_id,
+                    super::energy::Surface::OffRoadTrack,
+                    *km,
+                    ledger,
+                );
+            }
+            HaulAction::Unload { logs } => put(logs, LogPlace::Stored, Some(task.ends_at_m)),
+            HaulAction::CarryToStore { log_id } => {
+                put(&[*log_id], LogPlace::Stored, Some(task.ends_at_m));
+            }
+            HaulAction::Track {
+                vehicle_id,
+                hours,
+                log,
+            } => {
+                if let Some(log) = log {
+                    put(
+                        &[*log],
+                        LogPlace::Vehicle(*vehicle_id),
+                        Some(task.ends_at_m),
+                    );
+                }
+                self.energy.run_engine_hours(*vehicle_id, *hours, ledger);
+            }
+            HaulAction::Lift { vehicle_id, log_id } => {
+                put(&[*log_id], LogPlace::Vehicle(*vehicle_id), None);
+                self.energy
+                    .run_engine_hours(*vehicle_id, task.duration_s / 3_600.0, ledger);
+            }
+            HaulAction::SetDown { log_id } => {
+                put(&[*log_id], LogPlace::Stored, Some(task.ends_at_m));
+                if let Some(id) = self.energy.vehicle_named(HAUL_EXCAVATOR).map(|v| v.item_id) {
+                    self.energy
+                        .run_engine_hours(id, task.duration_s / 3_600.0, ledger);
+                }
+            }
+        }
+    }
+
+    /// Whether the founders' estate holds a tool of this name.
+    fn estate_has_tool(&self, name: &str) -> bool {
+        self.placed
+            .property
+            .properties
+            .iter()
+            .filter(|p| p.owner_agent_ids.iter().any(|i| i == "Gem-D"))
+            .flat_map(|p| p.items.iter())
+            .any(|item| item.name == name)
+    }
+
+    /// Feed and water every living founder who is eating or drinking right
+    /// now — the ones whose own choice this substep was to go and eat
+    /// (`humans::lifecycle::is_eating`) or drink (`is_drinking`), the same
+    /// choice that lets their needs take in food or water.
+    ///
+    /// A meal is what its eater has actually burned since the last one, not
+    /// a fixed portion: the hourly tick records the carbon each of them
+    /// respires, and the harvest asks the food cell for exactly the plant
+    /// matter that carbon takes to replace. Intake and expenditure come from
+    /// one model, so an adult who eats holds steady by construction, and one
+    /// who does not carries the debt until they do. A drink is the same for
+    /// water, at [`WATER_KG_PER_KCAL`] of what was burned.
+    fn meals(&mut self) -> Result<(), IslandLifeError> {
+        let drinkers: Vec<(String, f64)> = self
+            .humans
+            .registry
+            .iter()
+            .filter(|h| matches!(h.profile.status, mk_core::human::HumanStatus::Alive))
+            .filter(|h| crate::humans::lifecycle::is_drinking(h.economy_action.kind))
+            .filter_map(|h| {
+                let owed = self.lost_since_drink.get(h.agent_id()).copied()?;
+                (owed > 0.0).then(|| (h.agent_id().to_string(), owed))
+            })
+            .collect();
+        let eaters: Vec<(String, f64)> = self
+            .humans
+            .registry
+            .iter()
+            .filter(|h| matches!(h.profile.status, mk_core::human::HumanStatus::Alive))
+            .filter(|h| crate::humans::lifecycle::is_eating(h.economy_action.kind))
+            .filter_map(|h| {
+                let owed = self.respired_since_meal.get(h.agent_id()).copied()?;
+                (owed > 0.0).then(|| (h.agent_id().to_string(), owed))
+            })
+            .collect();
+        if eaters.is_empty() && drinkers.is_empty() {
+            return Ok(());
+        }
+        let area = self.domain.cell_area_m2(DomainLevel::Medium);
+        let carbon_per_kg = composition(Material::PlantFood).carbon_per_kg;
+        let (rows, cols) = (
+            self.domain.rows(DomainLevel::Medium),
+            self.domain.cols(DomainLevel::Medium),
+        );
+        self.audited(|life, ledger| {
+            for (id, owed_kgc) in &eaters {
+                // Food is taken where the person stands: the cell under them,
+                // else the nearest one around it that has plants.
+                let stands = life.standing_cell(id, rows, cols);
                 let mut ate = Err(MaterialError::NothingToHarvest);
                 for cell in cells_around(stands, FORAGE_RADIUS_CELLS, rows, cols) {
                     ate = life.materials.gather_biotic(
                         Material::PlantFood,
-                        FOOD_KG_PER_MEAL * ration,
+                        owed_kgc / carbon_per_kg,
                         &mut life.ecology,
                         cell,
                         area,
@@ -514,12 +1291,26 @@ impl IslandLife {
                 }
                 match ate {
                     Ok(kg) => {
-                        let _ = life.materials.eat(id, Material::PlantFood, kg, ledger);
+                        if life
+                            .materials
+                            .eat(id, Material::PlantFood, kg, ledger)
+                            .is_ok()
+                        {
+                            let left = (owed_kgc - kg * carbon_per_kg).max(0.0);
+                            life.respired_since_meal.insert(id.clone(), left);
+                        }
                     }
                     Err(_) => life.shortfalls.food += 1,
                 }
+            }
+            // The body's water in the ledger is what passes through it, not
+            // its standing stock, so a drink is drawn, drunk and its owed
+            // losses booked together: excretion to the soil, breath and
+            // sweat to the air.
+            for (id, owed_kg) in &drinkers {
                 // Water: the nearest wet cell within reach; near home, also
                 // the household's stream (or the wet cell beside it).
+                let stands = life.standing_cell(id, rows, cols);
                 let mut candidates = cells_around(stands, WATER_RADIUS_CELLS, rows, cols);
                 if let Some(home) = life.water_cell {
                     if stands.0.abs_diff(home.0).max(stands.1.abs_diff(home.1)) <= HOME_RANGE_CELLS
@@ -530,7 +1321,7 @@ impl IslandLife {
                 let mut drawn = Err(MaterialError::DryCell);
                 for cell in candidates {
                     drawn = life.materials.gather_water(
-                        WATER_KG_PER_DRINK * ration,
+                        *owed_kg,
                         &mut life.physical.hydrology,
                         cell,
                         area,
@@ -544,7 +1335,7 @@ impl IslandLife {
                 // needs model counts soil moisture as water access too).
                 if drawn.is_err() {
                     drawn = life.materials.gather_soil_water(
-                        WATER_KG_PER_DRINK * ration,
+                        *owed_kg,
                         &mut life.physical.hydrology,
                         stands,
                         area,
@@ -553,10 +1344,17 @@ impl IslandLife {
                 }
                 match drawn {
                     Ok(kg) => {
-                        let _ = life.materials.drink(id, kg);
-                        let _ =
-                            life.materials
-                                .lose_water(id, kg, EXCRETION_TO_SOIL_FRACTION, ledger);
+                        if life.materials.drink(id, kg).is_ok() {
+                            let _ = life.materials.lose_water(
+                                id,
+                                kg,
+                                EXCRETION_TO_SOIL_FRACTION,
+                                ledger,
+                            );
+                            *life.water_drunk_kg.entry(id.clone()).or_insert(0.0) += kg;
+                            life.lost_since_drink
+                                .insert(id.clone(), (owed_kg - kg).max(0.0));
+                        }
                     }
                     Err(_) => life.shortfalls.water += 1,
                 }
@@ -564,236 +1362,25 @@ impl IslandLife {
         })
     }
 
-    /// Queue an external command for the next human substep; it applies at
-    /// that substep's start, in `(tick, sequence)` order.
-    pub fn queue_command(
-        &mut self,
-        command: IslandCommand,
-    ) -> Result<QueuedCommandId, CommandError> {
-        validate(&command)?;
-        if let IslandCommand::CreateHuman(r) = &command {
-            self.resolve_location(r.location.as_ref())?;
-            let queued = self.commands.pending.iter().any(
-                |e| matches!(&e.command, IslandCommand::CreateHuman(q) if q.agent_id == r.agent_id),
-            );
-            if queued || self.humans.registry.get_human(&r.agent_id).is_some() {
-                return Err(CommandError::DuplicateHuman(r.agent_id.clone()));
-            }
-        }
-        let sequence = self.commands.next_sequence;
-        self.commands.next_sequence += 1;
-        self.commands.pending.push(IslandReplayEntry {
-            tick: self.tick + 1,
-            sequence,
-            command,
-        });
-        Ok(QueuedCommandId(sequence))
+    /// The medium-grid cell a person stands on; the food cell for anyone
+    /// the registry does not know.
+    fn standing_cell(&self, id: &str, rows: usize, cols: usize) -> (usize, usize) {
+        self.humans
+            .registry
+            .get_human(id)
+            .map_or(self.food_cell, |h| {
+                (
+                    h.position.row.clamp(0, rows as i32 - 1) as usize,
+                    h.position.col.clamp(0, cols as i32 - 1) as usize,
+                )
+            })
     }
 
-    /// Queue a logged command at its recorded tick and sequence (replay).
-    pub fn queue_recorded(&mut self, entry: IslandReplayEntry) {
-        self.commands.next_sequence = self.commands.next_sequence.max(entry.sequence + 1);
-        self.commands.pending.push(entry);
-    }
-
-    fn apply_control(&mut self, c: ControlCommand) {
-        match c {
-            ControlCommand::Pause => self.commands.paused = true,
-            ControlCommand::Resume => {
-                self.commands.paused = false;
-                self.commands.step_credit = 0;
-            }
-            ControlCommand::Step(n) => self.commands.step_credit += n,
-            ControlCommand::Snapshot => self.commands.snapshots_requested += 1,
-            ControlCommand::SetSpeed(speed) => self.commands.speed = speed,
-        }
-    }
-
-    /// Where an arrival appears, in metres from the island's SW corner.
-    /// Refused if the place does not exist or is not land.
-    fn resolve_location(&self, at: Option<&CreateLocation>) -> Result<(f64, f64), CommandError> {
-        let layout = &self.placed.layout;
-        let bad = |why: String| Err(CommandError::InvalidRequest(why));
-        match at {
-            None => {
-                let yard = layout.yard;
-                Ok((0.5 * (yard.x0 + yard.x1), 0.5 * (yard.y0 + yard.y1)))
-            }
-            Some(CreateLocation::EstateSpace { label }) => {
-                match layout
-                    .spaces
-                    .iter()
-                    .find(|s| s.label.eq_ignore_ascii_case(label.trim()))
-                {
-                    Some(s) => Ok((
-                        0.5 * (s.rect_m.x0 + s.rect_m.x1),
-                        0.5 * (s.rect_m.y0 + s.rect_m.y1),
-                    )),
-                    None => bad(format!("the estate has no space named {label:?}")),
-                }
-            }
-            Some(CreateLocation::EstatePoint { position_m }) => {
-                let p = &layout.patch;
-                let inside = (p.origin_x_m..p.origin_x_m + p.width_m).contains(&position_m.0)
-                    && (p.origin_y_m..p.origin_y_m + p.height_m).contains(&position_m.1);
-                if inside {
-                    Ok(*position_m)
-                } else {
-                    bad("that point is outside the estate".into())
-                }
-            }
-            Some(CreateLocation::IslandCell { row, col }) => {
-                let level = DomainLevel::Medium;
-                if *row >= self.domain.rows(level) || *col >= self.domain.cols(level) {
-                    return bad(format!("cell ({row}, {col}) is off the map"));
-                }
-                if *self.physical.geophysics.elevation_m.get(*row, *col) <= 0.0 {
-                    return bad(format!("cell ({row}, {col}) is not land"));
-                }
-                Ok(self.domain.cell_center_m(level, *row, *col))
-            }
-        }
-    }
-
-    fn create_human(&mut self, r: &IslandCreateHumanRequest) {
-        use mk_core::human::astrology::GeoCoordinates;
-        /// 2000-01-01T00:00:00Z: the island calendar's epoch.
-        const EPOCH_S: i64 = 946_684_800;
-        if self.humans.registry.get_human(&r.agent_id).is_some() {
-            return;
-        }
-        let Ok(at) = self.resolve_location(r.location.as_ref()) else {
-            return;
-        };
-        let birth_s = EPOCH_S + self.sim_time_s as i64 - (r.age_years * 365.25 * 86_400.0) as i64;
-        let Some(birth) = chrono::DateTime::from_timestamp(birth_s, 0) else {
-            return;
-        };
-        let (lat, lon) = self.domain.lat_lon_at_m(at.0, at.1);
-        let here = (lat.to_degrees(), lon.to_degrees());
-        let profile = r.spawn_profile(&birth.to_rfc3339(), here);
-        // An authored birth instant and birthplace win over the defaults.
-        let (birth, birthplace) = match &profile {
-            Some(p) => (
-                chrono::DateTime::parse_from_rfc3339(&p.birth_timestamp)
-                    .map_or(birth, |t| t.with_timezone(&chrono::Utc)),
-                (p.birth_latitude, p.birth_longitude),
-            ),
-            None => (birth, here),
-        };
-        let built = crate::humans::spawn::build_spawned_human(
-            &self.rng,
-            self.tick,
-            r.agent_id.clone(),
-            r.sex,
-            birth,
-            GeoCoordinates {
-                latitude: birthplace.0,
-                longitude: birthplace.1,
-            },
-            r.age_years,
-            profile.as_ref(),
-        );
-        if let Ok(mut human) = built {
-            let size = self.domain.cell_size_m(DomainLevel::Medium);
-            let cell = ((at.1 / size).floor() as i32, (at.0 / size).floor() as i32);
-            human.set_runtime_position(crate::humans::GridPosition::new(cell.0, cell.1));
-            self.materials
-                .register_human(&r.agent_id, human.body.weight_kg);
-            // Added first, folder second: a failed write is counted and the
-            // human still exists.
-            if let Err(e) = self.humans.registry.add_human(human) {
-                if let Some(store) = self.store.as_mut() {
-                    store.record(vec![e]);
-                }
-            }
-            let event = serde_json::json!({
-                "kind": "created",
-                "tick": self.tick,
-                "authored": r.appearance.is_some(),
-                "position_m": [at.0, at.1],
-            });
-            if let Err(e) = self.humans.registry.record_event(&r.agent_id, &event) {
-                if let Some(store) = self.store.as_mut() {
-                    store.record(vec![e]);
-                }
-            }
-            // Inside the estate patch the person has a metric position.
-            let p = &self.placed.layout.patch;
-            let in_patch = (p.origin_x_m..p.origin_x_m + p.width_m).contains(&at.0)
-                && (p.origin_y_m..p.origin_y_m + p.height_m).contains(&at.1);
-            if in_patch {
-                self.positions.0.insert(
-                    r.agent_id.clone(),
-                    super::humans::EstatePosition {
-                        space: self.placed.layout.space_at(at),
-                        position_m: at,
-                    },
-                );
-            }
-        }
-    }
-
-    /// Apply every queued command due by `tick`, in `(tick, sequence)`
-    /// order, logging each.
-    fn apply_commands(&mut self, tick: u64) {
-        let mut due: Vec<IslandReplayEntry> = Vec::new();
-        self.commands.pending.retain(|e| {
-            if e.tick <= tick {
-                due.push(e.clone());
-                false
-            } else {
-                true
-            }
-        });
-        due.sort_by_key(|e| (e.tick, e.sequence));
-        for entry in due {
-            match &entry.command {
-                IslandCommand::Control(c) => self.apply_control(*c),
-                IslandCommand::Intervention(a) => {
-                    if let Some(c) = as_control(a) {
-                        self.apply_control(c);
-                    }
-                }
-                IslandCommand::CreateHuman(r) => self.create_human(r),
-            }
-            self.commands.log.push(entry);
-        }
-    }
-
-    /// Advance by `seconds` of simulated time in human substeps; a
-    /// remainder shorter than a substep is carried to the next call. While
-    /// paused no time passes (only `Step` credits run); queued commands
-    /// apply at the start of the substep they are due for.
-    pub fn advance(&mut self, seconds: u64) -> Result<(), IslandLifeError> {
-        let mut remaining = if self.commands.paused {
-            0
-        } else {
-            self.scheduler.take_substeps(seconds)
-        };
-        if remaining == 0 && !self.commands.paused {
-            // No substep runs now, but a command (a pause, a speed change)
-            // must not wait for one: nothing happens between substeps, so
-            // applying it here is the same as at the start of the next.
-            self.apply_commands(self.tick + 1);
-        }
-        loop {
-            if !self.commands.paused && remaining == 0 {
-                break;
-            }
-            self.apply_commands(self.tick + 1);
-            if self.commands.paused {
-                if self.commands.step_credit == 0 {
-                    break;
-                }
-                self.commands.step_credit -= 1;
-            } else if remaining > 0 {
-                remaining -= 1;
-            } else {
-                break;
-            }
-            self.substep()?;
-        }
+    fn six_hourly(&mut self) -> Result<(), IslandLifeError> {
+        let dt_ecology = self.scenario.cadences.hydrology_ecology_resource_seconds;
+        let cell_area = self.domain.cell_area_m2(DomainLevel::Medium);
+        self.ecology.step_with_grazers(dt_ecology as f64, cell_area);
+        self.vegetation.step(&self.ecology, dt_ecology);
         Ok(())
     }
 
@@ -896,78 +1483,128 @@ impl IslandLife {
         }
     }
 
-    /// One human substep and whatever fires at its end.
-    fn substep(&mut self) -> Result<(), IslandLifeError> {
+    /// Advance by `seconds` of simulated time in human substeps; a
+    /// remainder shorter than a substep is carried to the next call.
+    pub fn advance(&mut self, seconds: u64) -> Result<(), IslandLifeError> {
+        let steps = self.scheduler.take_substeps(seconds);
         let human_s = self.scenario.cadences.human_seconds;
-        self.sim_time_s += human_s;
-        self.tick += 1;
-        let started = std::time::Instant::now();
-        {
-            let energy = self.energy.clone();
-            let ctx = RegionalHumanContext {
-                property: &self.placed.property,
-                layout: &self.placed.layout,
-                physical: &self.physical,
-                ecology: &self.ecology,
-                energy: &energy,
-                domain: &self.domain,
-                solar_kw: 0.0,
-            };
-            step_regional_humans(
-                &mut self.humans,
-                &mut self.positions,
-                &mut self.economy,
-                &ctx,
-                &self.topology,
-                self.tick,
-                human_s,
-                &self.rng,
-            );
+        for _ in 0..steps {
+            self.sim_time_s += human_s;
+            self.tick += 1;
+            let started = std::time::Instant::now();
+            {
+                let energy = self.energy.clone();
+                let ctx = RegionalHumanContext {
+                    computer_bridge: self.computer_bridge.as_ref().map(|h| h.as_bridge()),
+                    property: &self.placed.property,
+                    layout: &self.placed.layout,
+                    physical: &self.physical,
+                    ecology: &self.ecology,
+                    energy: &energy,
+                    domain: &self.domain,
+                    solar_kw: 0.0,
+                };
+                step_regional_humans(
+                    &mut self.humans,
+                    &mut self.positions,
+                    &mut self.economy,
+                    &ctx,
+                    &self.topology,
+                    self.tick,
+                    human_s,
+                    &self.rng,
+                );
+            }
+            let humans_done = std::time::Instant::now();
+            self.timings.humans += humans_done - started;
+            self.bury_the_dead()?;
+            self.keep_children_with_mothers();
+            self.adopt_newborns();
+            self.timings.households += humans_done.elapsed();
+            // Taken out and put back so the registry can be read while the
+            // tally is written, without rebuilding a body and cloning an
+            // agent id per human per substep just to look at one bool.
+            let mut spent = std::mem::take(&mut self.sleep_seconds);
+            // Taken out for the same reason, and only when records are being
+            // kept: an island with no store walks this loop exactly as it
+            // did before.
+            let mut store = self.human_store.take();
+            let mut died: Vec<String> = Vec::new();
+            // Accumulators belonging to people who are no longer alive. Both
+            // are hashed, and `hourly()` only clears the living, so without
+            // this a dead founder's last unspent hour and unpaid meal would
+            // sit in the digest for the rest of the run and the maps would
+            // grow with every death the island ever has.
+            let mut forget: Vec<String> = Vec::new();
+            for human in self.humans.registry.iter() {
+                let alive = matches!(human.profile.status, mk_core::human::HumanStatus::Alive);
+                if let Some(store) = store.as_mut() {
+                    store.note_status(human.agent_id(), alive, &mut died);
+                }
+                if !alive {
+                    if spent.remove(human.agent_id()).is_some()
+                        || self.respired_since_meal.contains_key(human.agent_id())
+                        || self.lost_since_drink.contains_key(human.agent_id())
+                        || self.felling.contains_key(human.agent_id())
+                        || self.hauling.contains_key(human.agent_id())
+                        || self.labour_kcal.contains_key(human.agent_id())
+                    {
+                        forget.push(human.agent_id().to_string());
+                    }
+                    continue;
+                }
+                let entry = match spent.get_mut(human.agent_id()) {
+                    Some(entry) => entry,
+                    None => spent
+                        .entry(human.agent_id().to_string())
+                        .or_insert((0.0, 0.0)),
+                };
+                if human.circadian.asleep {
+                    entry.0 += human_s as f64;
+                } else {
+                    entry.1 += human_s as f64;
+                }
+            }
+            self.sleep_seconds = spent;
+            self.human_store = store;
+            for id in forget {
+                // The dead respire nothing and are owed no meal. Dropping
+                // these moves no carbon: the ledger sent their body's carbon
+                // to detritus when they died, and these only ever recorded
+                // what the next hour and the next meal would have cost.
+                self.respired_since_meal.remove(&id);
+                self.lost_since_drink.remove(&id);
+                self.felling.remove(&id);
+                self.hauling.remove(&id);
+                self.labour_kcal.remove(&id);
+            }
+            self.work(human_s as f64)?;
+            self.meals()?;
+            // A death is written at once: every other record can lag a
+            // cadence and catch up, but a dead person's folder never will.
+            for id in died {
+                self.sync_one_human(&id);
+            }
+            let due = self.scheduler.due(self.sim_time_s);
+            if due.weather_ocean {
+                let t = std::time::Instant::now();
+                self.hourly()?;
+                self.timings.physics_hourly += t.elapsed();
+            }
+            if due.hydrology_ecology_resource {
+                let t = std::time::Instant::now();
+                self.six_hourly()?;
+                self.timings.ecology_six_hourly += t.elapsed();
+            }
+            if due.human_store {
+                let t = std::time::Instant::now();
+                self.sync_humans();
+                self.timings.human_store += t.elapsed();
+            }
+            self.timings.substeps += 1;
+            self.scheduler.record(due);
         }
-        let humans_done = std::time::Instant::now();
-        self.timings.humans += humans_done - started;
-        self.bury_the_dead()?;
-        self.keep_children_with_mothers();
-        self.adopt_newborns();
-        self.timings.households += humans_done.elapsed();
-        let due = self.scheduler.due(self.sim_time_s);
-        if due.weather_ocean {
-            let t = std::time::Instant::now();
-            self.hourly()?;
-            self.timings.physics_hourly += t.elapsed();
-        }
-        if due.hydrology_ecology_resource {
-            let t = std::time::Instant::now();
-            self.six_hourly()?;
-            self.timings.ecology_six_hourly += t.elapsed();
-        }
-        if due.human_store {
-            let t = std::time::Instant::now();
-            self.sync_store_shard();
-            self.timings.human_store += t.elapsed();
-        }
-        self.timings.substeps += 1;
-        self.scheduler.record(due);
         Ok(())
-    }
-
-    /// The cadence write: one rotating shard of at most `max_per_sync`
-    /// humans, so a large population never costs one huge pause.
-    fn sync_store_shard(&mut self) {
-        let Some(store) = self.store.as_mut() else {
-            return;
-        };
-        let n = self.humans.registry.iter().count();
-        let shards = n.div_ceil(store.max_per_sync.max(1)).max(1);
-        let shard = (self.scheduler.counters.human_store as usize) % shards;
-        store.record(self.humans.sync_store_shard(shard, shards));
-    }
-
-    /// Write every human's folder; failures are counted in the store status.
-    pub fn sync_store(&mut self) {
-        if let Some(store) = self.store.as_mut() {
-            store.record(self.humans.sync_store());
-        }
     }
 
     /// Whether a founder is inside the estate layout (has a metric position
@@ -1014,6 +1651,8 @@ impl IslandLife {
                 .collect::<Vec<_>>(),
         );
         let canonical = |v: &dyn erased::Json| v.value().to_string();
+        // One human at a time, so a large population's digest never holds
+        // the whole system as one `serde_json::Value`.
         self.humans.canonical_chunks(|bytes| {
             h.update(bytes);
         });
@@ -1022,8 +1661,25 @@ impl IslandLife {
         h.update(canonical(&self.economy).as_bytes());
         h.update(format!("{:?}", self.materials).as_bytes());
         h.update(canonical(&self.scheduler).as_bytes());
-        h.update(canonical(&self.commands).as_bytes());
+        // Both of these decide what happens next — the size of the next meal
+        // and the cost of the next hour — so a digest without them would call
+        // two states identical and then watch them diverge.
+        h.update(canonical(&self.respired_since_meal).as_bytes());
+        h.update(canonical(&self.lost_since_drink).as_bytes());
+        h.update(canonical(&self.felling).as_bytes());
+        h.update(canonical(&self.hauling).as_bytes());
+        h.update(canonical(&self.labour_kcal).as_bytes());
+        h.update(canonical(&self.water_drunk_kg).as_bytes());
+        h.update(canonical(&self.sleep_seconds).as_bytes());
         h.update(&self.sim_time_s.to_le_bytes());
+        // Deliberately absent, and each for a reason that must stay true:
+        // the placed estate is only ever read after bootstrap, the food and
+        // water cells are chosen once, `RngRegistry` carries nothing but its
+        // seed, and the audit and shortfall counts record what happened
+        // rather than deciding what happens next. Anything here that starts
+        // changing during a run belongs in the digest, and
+        // `the_digest_notices_state_that_only_matters_later` is where that
+        // gets caught.
         *h.finalize().as_bytes()
     }
 }
@@ -1039,28 +1695,228 @@ mod erased {
     }
 }
 
+/// Connect the estate's micro-hydro plant, if its placement found one, by
+/// an overhead line from the powerhouse cell's centre to the estate block's
+/// centre (the shared corner of its four cells).
+fn attach_estate_hydro(energy: &mut EstateEnergy, placed: &PlacedEstate, domain: &IslandDomain) {
+    let Some(hydro) = &placed.hydro else {
+        return;
+    };
+    let medium = DomainLevel::Medium;
+    let size = domain.cell_size_m(medium);
+    let (row, col) = placed.location;
+    let (bx, by) = ((col + 1) as f64 * size, (row + 1) as f64 * size);
+    let (px, py) = domain.cell_center_m(
+        medium,
+        hydro.estate.powerhouse_cell.0,
+        hydro.estate.powerhouse_cell.1,
+    );
+    energy.attach_hydro(hydro.estate.clone(), (px - bx).hypot(py - by) / 1_000.0);
+}
+
 #[cfg(test)]
-mod ration_tests {
-    use super::ration_factor;
+mod tests {
+    use super::*;
+
+    use std::path::PathBuf;
+
+    fn repo(path: &str) -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .join(path)
+    }
+
+    /// A founder who gathers outdoors with the shed's axe walks to the
+    /// nearest tree and fells it after exactly the walk plus the felling
+    /// pack's time for that trunk; its usable wood lands in the estate's
+    /// stock and the books close.
+    #[test]
+    fn a_founder_with_the_axe_fells_the_nearest_tree_in_the_packs_time() {
+        let mut scenario =
+            IslandScenario::load(&repo("fixtures/island/default_scenario.json")).unwrap();
+        scenario.estate_patch.tree_cap = 200;
+        let canon = Arc::new(CanonLocked::load(&repo("fixtures/island/canon.json")).unwrap());
+        let mut life = IslandLife::bootstrap(scenario, canon).expect("the island bootstraps");
+        assert!(life.estate_has_tool(FELLING_TOOL), "the shed has the axe");
+
+        // Gem-D outdoors at the patch's centre, choosing to gather.
+        let at = life.vegetation.centre_m();
+        life.positions.0.insert(
+            "Gem-D".into(),
+            super::super::humans::EstatePosition {
+                space: Space::Outdoors,
+                position_m: at,
+            },
+        );
+        life.humans
+            .registry
+            .get_human_mut("Gem-D")
+            .unwrap()
+            .economy_action
+            .kind = crate::humans::ActionKind::Gather;
+        let tree = life.vegetation.nearest_tree(at).expect("a tree").clone();
+        let body = LabourBody::from_human(life.humans.registry.get_human("Gem-D").unwrap());
+        let distance =
+            ((tree.position_m.0 - at.0).powi(2) + (tree.position_m.1 - at.1).powi(2)).sqrt();
+        let needed = life
+            .labour
+            .walking_time_s(&body, distance, 0.0, 0.0)
+            .unwrap()
+            + life
+                .labour
+                .fell_tree(LabourTool::SteelAxe, tree.stem_diameter_m * 100.0)
+                .unwrap()
+                .duration_s;
+        let audits = life.audits_closed;
+        let minute = 60.0;
+        let mut worked = 0.0;
+        while life.vegetation.trees.iter().any(|t| t.id == tree.id) {
+            assert!(
+                worked < needed + minute,
+                "still standing after {worked} s of {needed}"
+            );
+            life.work(minute).unwrap();
+            worked += minute;
+            assert!(
+                life.humans
+                    .registry
+                    .get_human("Gem-D")
+                    .unwrap()
+                    .labour_met
+                    .is_some(),
+                "working is labour"
+            );
+        }
+        assert!(
+            worked >= needed,
+            "felled after {worked} s, before its {needed}"
+        );
+        // The usable wood is on the ground where the tree fell, green.
+        let logs: Vec<timber::Log> = life.materials.logs().cloned().collect();
+        assert_eq!(logs.len(), 1, "one log came down");
+        let log = &logs[0];
+        assert_eq!(log.place, timber::LogPlace::Ground);
+        assert!((log.carbon_kgc - tree.biomass_kgc * 0.7).abs() < 1e-9);
+        let mc = life.labour.green_moisture_content("hardwoods").unwrap();
+        assert!((log.moisture_content() - mc).abs() < 1e-12, "green wood");
+        let butt = log.butt_m();
+        assert!((butt.0 - tree.position_m.0).abs() < 1e-9);
+        assert!((butt.1 - tree.position_m.1).abs() < 1e-9);
+        assert_eq!(life.materials.stock_kg(Material::Wood), 0.0);
+        assert_eq!(
+            life.audits_closed,
+            audits + 1,
+            "the felling closed its books"
+        );
+        assert!(!life.felling.contains_key("Gem-D"), "the felling is done");
+        assert!(
+            *life.labour_kcal.get("Gem-D").unwrap() > 0.0,
+            "the work cost energy"
+        );
+
+        // Keep working: Gem-D moves the log to the store, the quickest way.
+        let (carbon, water) = (log.carbon_kgc, log.water_kg);
+        life.work(minute).unwrap();
+        let job = life
+            .hauling
+            .get("Gem-D")
+            .expect("a haul is planned")
+            .clone();
+        let total = job.total_s();
+        let mut hauled = minute;
+        while life.hauling.contains_key("Gem-D") {
+            assert!(
+                hauled < total + 2.0 * minute,
+                "still hauling after {hauled} s of {total}"
+            );
+            life.work(minute).unwrap();
+            hauled += minute;
+        }
+        let stored: Vec<&timber::Log> = life.materials.logs().collect();
+        assert!(stored.iter().all(|l| l.place == timber::LogPlace::Stored));
+        let sum = |f: fn(&timber::Log) -> f64| stored.iter().map(|l| f(l)).sum::<f64>();
+        assert!(
+            (sum(|l| l.carbon_kgc) - carbon).abs() < 1e-9,
+            "no carbon lost"
+        );
+        assert!(
+            (sum(|l| l.water_kg) - water).abs() < 1e-9,
+            "the stored wood is still green"
+        );
+        let site = life.haul_site().unwrap();
+        assert!(stored.iter().all(|l| l.position_m == site.store_m));
+        println!(
+            "{:?} hauled {} piece(s), {:.0} kg green, in {:.0} s",
+            job.method,
+            stored.len(),
+            sum(|l| l.dry_kg) + water,
+            total
+        );
+    }
+
+    /// A dead founder's unspent hour and unpaid meal are dropped rather than
+    /// carried for the rest of the run.
+    ///
+    /// Both maps are hashed into the state digest and `hourly()` only clears
+    /// the living, so without this every death the island ever has would
+    /// leave a permanent entry behind — growing the maps without bound and
+    /// hashing state that stopped meaning anything the moment its owner
+    /// died. Found in review on PR #3.
+    #[test]
+    fn the_dead_stop_accumulating_hours_and_meals() {
+        let mut scenario =
+            IslandScenario::load(&repo("fixtures/island/default_scenario.json")).unwrap();
+        scenario.estate_patch.tree_cap = 200;
+        let canon = Arc::new(CanonLocked::load(&repo("fixtures/island/canon.json")).unwrap());
+        let mut life = IslandLife::bootstrap(scenario, canon).expect("the island bootstraps");
+
+        // Two hours so both accumulators have something in them: the sleep
+        // tally fills every substep, the meal debt on the hour.
+        life.advance(2 * 3_600).unwrap();
+        assert!(
+            life.respired_since_meal.contains_key("Gem-K"),
+            "nobody respired, so there is nothing to test"
+        );
+        assert!(life.lost_since_drink.contains_key("Gem-K"));
+
+        life.humans
+            .registry
+            .get_human_mut("Gem-K")
+            .unwrap()
+            .profile
+            .status = mk_core::human::HumanStatus::Dead;
+        life.advance(life.scenario.cadences.human_seconds).unwrap();
+
+        assert!(
+            !life.sleep_seconds.contains_key("Gem-K"),
+            "a dead founder is still banking hours"
+        );
+        assert!(
+            !life.respired_since_meal.contains_key("Gem-K"),
+            "a dead founder is still owed a meal"
+        );
+        assert!(
+            !life.lost_since_drink.contains_key("Gem-K"),
+            "a dead founder is still owed a drink"
+        );
+        // And the living are untouched.
+        assert!(life.sleep_seconds.contains_key("Gem-D"));
+    }
 
     #[test]
-    fn adults_take_the_full_ration_and_children_a_metabolic_share() {
-        for adult_kg in [55.0, 58.0, 72.0, 110.0] {
-            assert_eq!(ration_factor(adult_kg), 1.0, "{adult_kg} kg");
-        }
-        let infant = ration_factor(5.1);
+    fn both_home_activities_are_named_in_the_reference_packs() {
+        // A typo here would not fail to compile; it would fail the tick at
+        // runtime, so the names are checked against the pack itself.
+        let table = LabourTable::load_default().expect("the labour packs load");
+        let asleep = table
+            .met(ASLEEP_ACTIVITY)
+            .expect("sleeping is in the packs");
+        let awake = table
+            .met(AWAKE_AT_HOME_ACTIVITY)
+            .expect("sitting quietly is in the packs");
         assert!(
-            (0.1..0.2).contains(&infant),
-            "a 5 kg infant takes {infant:.3} of a ration"
+            asleep < awake,
+            "sleeping ({asleep}) should cost less than sitting quietly ({awake})"
         );
-        let child = ration_factor(20.0);
-        assert!(
-            (0.4..0.6).contains(&child),
-            "a 20 kg child takes {child:.3}"
-        );
-        assert!(
-            ration_factor(5.0) < ration_factor(20.0) && ration_factor(20.0) < ration_factor(40.0)
-        );
-        assert!(ration_factor(0.0) >= 0.05, "never zero");
     }
 }

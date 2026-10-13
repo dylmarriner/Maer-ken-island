@@ -24,7 +24,7 @@ use mk_core::rng::RngRegistry;
 use serde::{Deserialize, Serialize};
 
 use super::ecology::RegionalEcologyState;
-use super::energy::EstateEnergy;
+use super::energy::{EstateEnergy, ROOM_LIGHT_LUX};
 use super::estate_layout::{EstateLayout, Space, SpaceKind};
 use super::levels::sample_coarse_at_medium;
 use super::physical::RegionalPhysicalState;
@@ -91,6 +91,36 @@ pub struct RegionalHumanContext<'a> {
     pub domain: &'a IslandDomain,
     /// Solar output available now (kW), for the power gate.
     pub solar_kw: f64,
+    /// A real bridge to the outside, when one is attached.
+    ///
+    /// `None` is the ordinary case and the only one a replay ever sees.
+    /// With one attached, a human at their own machine in a powered
+    /// computer room may search the web or send an email for real --
+    /// which means the island stops being reproducible, deliberately, and
+    /// is why this is opt-in and why `replay`/`inspect` never attach it.
+    pub computer_bridge: Option<&'a dyn crate::humans::computer_bridge::ComputerBridge>,
+}
+
+/// Minimum average daylight factors of BS 8206-2:2008 (daylighting code
+/// of practice): the fraction of outdoor daylight a room's windows admit
+/// (`fixtures/reference/labour`, `room_daylight_factor`). They are the
+/// standard's recommended minimums for a dwelling, which an ordinary house
+/// meets or exceeds.
+pub const BEDROOM_DAYLIGHT_FACTOR: f64 = 0.01;
+pub const LIVING_ROOM_DAYLIGHT_FACTOR: f64 = 0.015;
+pub const KITCHEN_DAYLIGHT_FACTOR: f64 = 0.02;
+
+/// The daylight factor of a house space from its label: bedrooms and the
+/// kitchen have their own figures, and every other room -- lounge,
+/// bathroom, computer room, hall -- the living-room one.
+pub fn room_daylight_factor(label: &str) -> f64 {
+    if label.contains("Bedroom") {
+        BEDROOM_DAYLIGHT_FACTOR
+    } else if label == "Kitchen" {
+        KITCHEN_DAYLIGHT_FACTOR
+    } else {
+        LIVING_ROOM_DAYLIGHT_FACTOR
+    }
 }
 
 fn founders_estate(property: &PropertySystem) -> Option<&StarterProperty> {
@@ -100,7 +130,7 @@ fn founders_estate(property: &PropertySystem) -> Option<&StarterProperty> {
         .find(|p| p.owner_agent_ids.iter().any(|id| id == "Gem-D"))
 }
 
-fn medium_cell_of(domain: &IslandDomain, position_m: (f64, f64)) -> GridPosition {
+pub(crate) fn medium_cell_of(domain: &IslandDomain, position_m: (f64, f64)) -> GridPosition {
     let size = domain.cell_size_m(DomainLevel::Medium);
     GridPosition::new(
         (position_m.1 / size).floor() as i32,
@@ -263,6 +293,23 @@ pub fn observe(
     });
     let gate = founders_estate(ctx.property).is_some_and(|p| property_grants_computer(p, agent_id));
     let powered = ctx.energy.has_stored_supply(ctx.solar_kw);
+    // In the house, daylight comes through the windows and a lamp is
+    // there after dark while the estate has supply (the hourly energy step
+    // switches and charges it); at bedtime the room can be made dark.
+    // Elsewhere -- outdoors, and the working buildings with their wide
+    // doors -- the light is the day's.
+    let house_room = here.and_then(|p| match p.space {
+        Space::Inside(id) if ctx.energy.is_wired(id) => {
+            ctx.layout.spaces.iter().find(|s| s.id == id)
+        }
+        _ => None,
+    });
+    let lamp_lux = if house_room.is_some() && powered {
+        ROOM_LIGHT_LUX
+    } else {
+        0.0
+    };
+    let daylight_factor = house_room.map_or(1.0, |room| room_daylight_factor(&room.label));
     let coarse_r =
         ((domain.cell_center_m(medium, r, c).1) / domain.cell_size_m(DomainLevel::Coarse)) as usize;
     let coarse_c =
@@ -277,7 +324,19 @@ pub fn observe(
         daylight_fraction: daylight_fraction(&physical.insolation, coarse_r, coarse_c),
         biome,
         computer_access: gate && in_computer_room && powered,
-        computer_bridge_available: 0.0,
+        // Two separate affordances, and upstream is explicit about why:
+        // `computer_access` is this human being at a machine of their own
+        // in a powered room, and this is the world having a way out to
+        // the internet at all. `Code` needs only the first; a web search
+        // or an email needs both.
+        computer_bridge_available: if ctx.computer_bridge.is_some() {
+            1.0
+        } else {
+            0.0
+        },
+        lamp_lux,
+        daylight_factor,
+        indoors: house_room.is_some(),
     })
 }
 
@@ -322,7 +381,7 @@ pub fn step_regional_humans(
         economy,
         &ctx.physical.geophysics.elevation_m,
         |position, agent_id| observe(ctx, &positions_ro, &occupancy, tick, position, agent_id),
-        None,
+        ctx.computer_bridge,
     );
 
     let patch = &ctx.layout.patch;
@@ -331,23 +390,71 @@ pub fn step_regional_humans(
         (patch.origin_y_m / size).round() as i32,
         (patch.origin_x_m / size).round() as i32,
     );
+    // Reconcile the estate side-table with where everyone now stands. A
+    // human outside the estate block has no estate position. One inside it
+    // who is asleep, at bedtime by their own clock, or seeking shelter goes
+    // to their own bedroom -- going home to bed, which is what lets the
+    // house's curtains and lamps (D23) reach them at all; anyone else in
+    // the block stands outdoors at their cell's centre. A human who walked
+    // out and came back is let back in: the table used to keep out anyone
+    // who had once left it, so after a founder's first walk the house
+    // stopped existing for them.
+    let mut moves: Vec<(String, GridPosition, EstatePosition)> = Vec::new();
+    let mut leaving: Vec<String> = Vec::new();
     for human in humans.registry.iter() {
         let id = human.agent_id();
         let now = human.position;
         let in_block = (row0..row0 + 2).contains(&now.row) && (col0..col0 + 2).contains(&now.col);
-        if !in_block {
-            positions.0.remove(id);
-        } else if before.get(id) != Some(&now) && positions.0.contains_key(id) {
+        // The dead stand nowhere: without this a body in the block would be
+        // put back in the estate (and in their bedroom) every substep.
+        let alive = matches!(human.profile.status, mk_core::human::HumanStatus::Alive);
+        if !in_block || !alive {
+            leaving.push(id.to_string());
+            continue;
+        }
+        let to_bed = human.circadian.asleep
+            || human.circadian.is_bedtime(human.needs.fatigue)
+            || human.economy_action.kind == crate::humans::ActionKind::SeekShelter;
+        let bedroom = to_bed
+            .then(|| {
+                let label = format!("{id}'s Bedroom");
+                ctx.layout.spaces.iter().find(|s| s.label == label)
+            })
+            .flatten();
+        let current = positions.0.get(id).map(|p| p.space);
+        if let Some(room) = bedroom {
+            if current != Some(Space::Inside(room.id)) {
+                let at = centre(&room.rect_m);
+                moves.push((
+                    id.to_string(),
+                    medium_cell_of(ctx.domain, at),
+                    EstatePosition {
+                        space: Space::Inside(room.id),
+                        position_m: at,
+                    },
+                ));
+            }
+        } else if current.is_none() || before.get(id) != Some(&now) {
             let (x, y) =
                 ctx.domain
                     .cell_center_m(DomainLevel::Medium, now.row as usize, now.col as usize);
-            positions.0.insert(
+            moves.push((
                 id.to_string(),
+                now,
                 EstatePosition {
                     space: Space::Outdoors,
                     position_m: (x, y),
                 },
-            );
+            ));
         }
+    }
+    for id in leaving {
+        positions.0.remove(&id);
+    }
+    for (id, cell, place) in moves {
+        if let Some(human) = humans.registry.get_human_mut(&id) {
+            human.set_runtime_position(cell);
+        }
+        positions.0.insert(id, place);
     }
 }

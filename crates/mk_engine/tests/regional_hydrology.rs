@@ -8,8 +8,8 @@ use mk_engine::climate::ClimateState;
 use mk_engine::hydrology::{HydrologyState, SoilWater};
 use mk_engine::regional::hydrology::{
     bootstrap_regional_hydrology, discharge_m3_s, freshwater_to_coarse_ocean_kg,
-    regional_downhill_neighbour, step_regional_hydrology, step_regional_hydrology_on, FlowNetwork,
-    Receiver, RIVER_MIN_DISCHARGE_M3_S,
+    regional_downhill_neighbour, route_to_coarse_sea, step_regional_hydrology,
+    step_regional_hydrology_on, FlowNetwork, Receiver, RIVER_MIN_DISCHARGE_M3_S,
 };
 use mk_engine::weather::WeatherState;
 use mk_island::{DomainLevel, IslandDomain, IslandProfile};
@@ -319,4 +319,35 @@ fn a_zero_step_changes_nothing_and_steps_are_deterministic() {
     assert_eq!(zero.budget, Default::default());
     assert_eq!(zero.soil_water, a.soil_water);
     assert_eq!(zero.surface_water, a.surface_water);
+}
+
+#[test]
+fn river_water_on_a_coarse_land_cell_reaches_the_nearest_sea_cell() {
+    // A 3 x 4 coarse window: sea down the west column, land elsewhere. An
+    // outlet whose medium cell sits inside a coarse land cell would leave
+    // its water where the ocean keeps no column.
+    let spec = mk_core::grid::GridSpec::new(3, 4);
+    let elevation = mk_core::grid::Grid2::from_data(
+        &spec,
+        vec![
+            -50.0, 10.0, 20.0, 30.0, //
+            -50.0, 15.0, 25.0, 35.0, //
+            -50.0, 10.0, 20.0, 30.0,
+        ],
+    );
+    let mut water = vec![0.0; 12];
+    water[1] = 4.0e6; // beside the sea
+    water[7] = 1.0e6; // three cells inland, nearest the middle sea cell
+    water[8] = 2.0e5; // already at sea
+    let routed = route_to_coarse_sea(&mk_core::grid::Grid2::from_data(&spec, water), &elevation);
+    let out = routed.data();
+    assert_eq!(out[0], 4.0e6);
+    assert_eq!(out[4], 1.0e6);
+    assert_eq!(out[8], 2.0e5);
+    for (i, kg) in out.iter().enumerate() {
+        if elevation.data()[i] > 0.0 {
+            assert_eq!(*kg, 0.0, "water left on land cell {i}");
+        }
+    }
+    assert_eq!(out.iter().sum::<f64>(), 5.2e6);
 }

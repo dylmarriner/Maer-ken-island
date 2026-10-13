@@ -1,6 +1,6 @@
 //! The first grazer layer on the real island: seeded at equilibrium, every
 //! kilogram eaten accounted for, the plants close to a no-grazer run, and a
-//! stable herbivore total. Parameters are assumptions (deviation D33).
+//! stable herbivore total. Parameters are assumptions (deviation D41).
 
 use std::path::PathBuf;
 use std::sync::Arc;

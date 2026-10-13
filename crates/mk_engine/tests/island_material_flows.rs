@@ -539,3 +539,35 @@ fn digging_for_water_needs_damp_soil_and_moves_exactly_what_is_taken() {
     assert!((got - 1.0e-6 * area).abs() < 1e-9);
     audit.close(&m, &ledger);
 }
+
+/// The ledger survives a round trip through JSON unchanged.
+///
+/// Phase 4 Task 3 needs the whole island to save and load; this is the
+/// first state type to carry its own weight. A ledger that came back
+/// different would move carbon or water across a save, which is exactly
+/// what the flux audit exists to forbid.
+#[test]
+fn the_material_ledger_round_trips_through_a_snapshot() {
+    use mk_engine::regional::materials::MaterialLedger;
+
+    let mut ledger = Ledger::default();
+    let mut materials = MaterialLedger::new();
+    materials.register_human("gem-d", 72.0);
+    materials.register_human("gem-k", 58.0);
+    // Move both bodies off their registered state, so a round trip that
+    // silently reset them would show.
+    materials.respire("gem-d", 500.0, &mut ledger).unwrap();
+    let _ = materials.drink("gem-k", 1.5);
+
+    let text = serde_json::to_string(&materials).expect("the ledger serializes");
+    let back: MaterialLedger = serde_json::from_str(&text).expect("and comes back");
+
+    assert_eq!(back, materials, "the ledger changed across a round trip");
+    for id in ["gem-d", "gem-k"] {
+        assert_eq!(
+            back.body_carbon_kg(id),
+            materials.body_carbon_kg(id),
+            "{id}'s body carbon changed across a round trip"
+        );
+    }
+}

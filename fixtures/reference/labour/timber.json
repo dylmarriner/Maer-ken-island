@@ -1,0 +1,176 @@
+{
+  "id": "timber",
+  "domain": "labour",
+  "title": "Felled timber: green wood, and the machines and people that move it",
+  "retrieved": "2026-10-12",
+  "licence": "Numerical values cited as facts with attribution; no text, figures or datasets reproduced.",
+  "sources": [
+    {
+      "key": "woodhandbook2010_psu",
+      "citation": "Forest Products Laboratory (2010). Wood Handbook: Wood as an Engineering Material, Table 4-1 (average moisture content of green wood). Averages and basic specific gravities as compiled by C. D. Ray, 'Calculating the Green Weight of Wood Species', Penn State Extension (updated 2025-12-08), Table 1.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "edmunds_raptor2025",
+      "citation": "Edmunds, '2025 Ford F-150 Raptor Specs & Features': standard payload 1,410 lb, bed length 67.1 in, curb weight 5,710 lb.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "cat330_aexj0079",
+      "citation": "Caterpillar, Technical Specifications for 330 Hydraulic Excavator (AEXJ0079): maximum travel speed 5.3 km/h; net power ISO 9249 194 kW; reach boom lift capacities, HD Reach boom, HD R3.2 m stick, 800 mm shoes, 6,700 kg counterweight (ISO 10567: not over 87% of hydraulic lifting capacity or 75% of tipping load).",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "manner2013_piskunov2021",
+      "citation": "Manner, J., Nordfjell, T. and Lindroos, O. (2013). Effects of the number of assortments and log concentration on time consumption for forwarding. Silva Fennica 47(4); as summarised by Piskunov, M. (2021). Investigation of structure of technology cycle time of hydraulic manipulators in the process of loading forwarders with logs. Croatian Journal of Forest Engineering 42(3), doi:10.5552/crojfe.2021.863.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "compendium2024",
+      "citation": "Herrmann, S. D. et al. (2024). 2024 Adult Compendium of Physical Activities (pacompendium.com): codes 16010, 11590 and 11266.",
+      "licence": "Facts cited with attribution"
+    }
+  ],
+  "items": [
+    {
+      "key": "green_wood_moisture_content",
+      "description": "Moisture content of wood at felling (dry basis: water per kg of oven-dry wood), averaged over the Wood Handbook's North American species",
+      "unit": "fraction of oven-dry mass",
+      "source": "woodhandbook2010_psu",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "group",
+          "columns": [
+            "heartwood",
+            "sapwood",
+            "average",
+            "basic_specific_gravity"
+          ],
+          "rows": [
+            {
+              "label": "hardwoods",
+              "values": [
+                0.81,
+                0.83,
+                0.82,
+                0.52
+              ]
+            },
+            {
+              "label": "softwoods",
+              "values": [
+                0.6,
+                1.52,
+                1.06,
+                0.4
+              ]
+            }
+          ]
+        }
+      },
+      "note": "40 hardwoods and 28 softwoods in Table 4-1. Green weight = oven-dry mass x (1 + MC); above the fibre saturation point (about 30%) the wood's volume does not change with moisture."
+    },
+    {
+      "key": "light_truck_payload",
+      "description": "Payload and bed length of the estate's ute (Ford F-150 Raptor, 2025)",
+      "unit": "kg, m",
+      "source": "edmunds_raptor2025",
+      "confidence": "high",
+      "value": {
+        "table": {
+          "row_label": "quantity",
+          "columns": [
+            "value"
+          ],
+          "rows": [
+            {
+              "label": "payload_kg",
+              "values": [
+                639.6
+              ]
+            },
+            {
+              "label": "bed_length_m",
+              "values": [
+                1.704
+              ]
+            }
+          ]
+        }
+      },
+      "note": "1,410 lb = 639.6 kg; 67.1 in = 1.704 m."
+    },
+    {
+      "key": "excavator_cat330",
+      "description": "The estate's 30-tonne excavator: travel speed, power and the load it may lift",
+      "unit": "km/h, kW, kg",
+      "source": "cat330_aexj0079",
+      "confidence": "high",
+      "value": {
+        "table": {
+          "row_label": "quantity",
+          "columns": [
+            "value"
+          ],
+          "rows": [
+            {
+              "label": "max_travel_speed_km_h",
+              "values": [
+                5.3
+              ]
+            },
+            {
+              "label": "net_power_kw",
+              "values": [
+                194.0
+              ]
+            },
+            {
+              "label": "lift_over_side_6m_radius_1_5m_height_kg",
+              "values": [
+                5800.0
+              ]
+            },
+            {
+              "label": "lift_over_front_6m_radius_1_5m_height_kg",
+              "values": [
+                9100.0
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "key": "crane_log_handling_cycle",
+      "description": "Time of one hydraulic loader-crane cycle handling logs of one assortment: picking a load up, and setting one down",
+      "unit": "minutes",
+      "source": "manner2013_piskunov2021",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "operation",
+          "columns": [
+            "minutes"
+          ],
+          "rows": [
+            {
+              "label": "loading",
+              "values": [
+                0.24
+              ]
+            },
+            {
+              "label": "unloading",
+              "values": [
+                0.27
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Forwarder cranes with grapples; more assortments per load lengthen the cycle (two: 0.27/0.34 min, five: 0.35/0.60 min)."
+    }
+  ]
+}

@@ -4,9 +4,11 @@
 //! that runs them. Here every load needs energy:
 //!
 //! - **Electricity**: loads draw rated power only while in use. Supply is
-//!   solar (from the regional insolation and cloud at the estate), then the
-//!   battery, then the generator burning fuel. When supply runs out the
-//!   loads stop (a computer loses power, so loses access).
+//!   the river's micro-hydro plant (Phase 4b: its output from the river's
+//!   flow at the intake, less the line's losses on the way to the house),
+//!   then solar (from the regional insolation and cloud at the estate),
+//!   then the battery, then the generator burning fuel. When supply runs
+//!   out the loads stop (a computer loses power, so loses access).
 //! - **Vehicles** carry a tank. Road vehicles burn fuel per km at the
 //!   reference 4WD figures for the surface (EPA, `fixtures/reference/
 //!   labour`); tractors and the excavator burn fuel per engine-hour at the
@@ -17,17 +19,28 @@
 //!   stoichiometry. The hydrogen's water is not booked until Task 3's
 //!   material ledger exists.
 //!
+//! - **Lighting**: every room of the house is wired for lamps, sized by
+//!   the lumen method to give ordinary room light (Gooley et al. 2011's
+//!   < 200 lux) over the room's own floor. A room's lamps are on while
+//!   someone is awake in it and daylight is dimmer than they are, and
+//!   draw from the same supply as everything else.
+//!
 //! There is no refinery: fuel is finite until Phase 4b's production route
 //! (deviation D16).
 
 use std::collections::BTreeSet;
+
+use super::climate::CLEAR_SKY_TRANSMITTANCE;
+use super::estate_layout::{EstateLayout, SpaceId};
+use super::industry::grid::Line;
+use super::industry::hydro_sites::HydroSite;
 
 use mk_core::flux::{FluxEntry, FluxKind, Ledger, Reservoir};
 use mk_island::EstateEnergyConfig;
 use serde::{Deserialize, Serialize};
 
 use crate::conservation::O2_PER_CARBON;
-use crate::organisms::property::{PropertyItemKind, StarterProperty};
+use crate::organisms::property::{PropertyBuildingKind, PropertyItemKind, StarterProperty};
 
 /// Lower heating value of diesel (kWh per litre): 35.9 MJ/L.
 pub const DIESEL_KWH_PER_LITRE: f64 = 9.97;
@@ -35,9 +48,6 @@ pub const DIESEL_KWH_PER_LITRE: f64 = 9.97;
 pub const GENERATOR_EFFICIENCY: f64 = 0.30;
 /// Round-trip losses are split evenly between charging and discharging.
 const BATTERY_ONE_WAY_EFFICIENCY: f64 = 0.95;
-/// Clear-sky transmittance of the atmosphere to the surface (global
-/// irradiance over top-of-atmosphere), for a mid-latitude sea-level site.
-const CLEAR_SKY_TRANSMITTANCE: f64 = 0.75;
 /// Cloud's reduction of surface irradiance at full cover.
 const OVERCAST_REDUCTION: f64 = 0.75;
 /// Standard-test-condition irradiance of a panel rating (W/m²).
@@ -50,6 +60,26 @@ const INITIAL_TANK_FRACTION: f64 = 0.25;
 /// Rated power (kW) while in use of each load class.
 const COMPUTER_KW: f64 = 0.2;
 const POWER_TOOL_KW: f64 = 1.5;
+/// Illuminance of ordinary room light at the eye (lux): the room-light
+/// condition of Gooley et al. (2011), J. Clin. Endocrinol. Metab. 96:E463,
+/// "< 200 lux", at its upper bound (`fixtures/reference/humans`,
+/// `room_light_illuminance`).
+pub const ROOM_LIGHT_LUX: f64 = 200.0;
+/// Luminous efficacy of the lamps (lm/W): the ENERGY STAR Lamps v2.0
+/// minimum for an omnidirectional LED lamp (`fixtures/reference/labour`,
+/// `led_lamp_efficacy`).
+pub const LED_LAMP_LUMENS_PER_W: f64 = 80.0;
+/// Fraction of lamp output that reaches the working plane of a small
+/// domestic room: the lumen method's utilisation factor, CIBSE (2012)
+/// typical 0.5 (`room_utilisation_factor`).
+pub const ROOM_UTILISATION_FACTOR: f64 = 0.5;
+
+/// Electric power (kW) of lamps giving [`ROOM_LIGHT_LUX`] over `floor_m2`:
+/// the lumen method, `E A = F UF`, at the lamps' efficacy.
+pub fn room_lighting_kw(floor_m2: f64) -> f64 {
+    ROOM_LIGHT_LUX * floor_m2.max(0.0) / (LED_LAMP_LUMENS_PER_W * ROOM_UTILISATION_FACTOR) / 1_000.0
+}
+
 /// Diesel density and composition (average C₁₂H₂₃) and petrol (C₈H₁₅).
 const MOLAR_MASS_C: f64 = 12.011;
 const MOLAR_MASS_H: f64 = 1.008;
@@ -124,12 +154,57 @@ pub struct Battery {
     pub charge_kwh: f64,
 }
 
+/// The estate's run-of-river plant and the line that brings its power to
+/// the house (Phase 4b Task 3).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct HydroSupply {
+    pub site: HydroSite,
+    pub line: Line,
+    /// The river's flow at the intake (m^3/s), as last measured.
+    pub river_m3_s: f64,
+}
+
+impl HydroSupply {
+    /// Water the plant takes now (m^3/s), leaving the environmental flow.
+    pub fn diverted_m3_s(&self) -> f64 {
+        self.site
+            .design
+            .diverted_m3_s(self.river_m3_s, self.site.environmental_flow_m3_s)
+    }
+
+    /// Generator output now (kW).
+    pub fn generated_kw(&self) -> f64 {
+        self.site.design.output_kw(self.diverted_m3_s())
+    }
+
+    /// Power arriving at the house now (kW).
+    pub fn delivered_kw(&self) -> f64 {
+        self.line.delivered_kw(self.generated_kw())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Load {
     pub item_id: u64,
     pub name: String,
     pub kw: f64,
     pub in_use: bool,
+}
+
+/// One room's lamps.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RoomLighting {
+    pub space: SpaceId,
+    pub label: String,
+    pub kw: f64,
+    pub in_use: bool,
+}
+
+/// What draws in a step: an item, or a room's lamps.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum Draw {
+    Item(u64),
+    Room(SpaceId),
 }
 
 /// How a vehicle burns fuel.
@@ -263,6 +338,13 @@ pub fn solar_output_kw(rated_kw: f64, toa_w_m2: f64, cloud_fraction: f64) -> f64
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct EnergyStep {
     pub demand_kwh: f64,
+    /// Hydro energy that served loads or charged the batteries.
+    pub hydro_used_kwh: f64,
+    /// Hydro energy nothing could take, dumped to the plant's ballast load
+    /// (a run-of-river plant runs on whatever the river gives).
+    pub hydro_dumped_kwh: f64,
+    /// Lost in the line from the powerhouse.
+    pub line_loss_kwh: f64,
     pub solar_used_kwh: f64,
     pub solar_curtailed_kwh: f64,
     pub battery_discharged_kwh: f64,
@@ -279,8 +361,29 @@ pub struct EstateEnergy {
     pub batteries: Vec<Battery>,
     pub loads: Vec<Load>,
     pub vehicles: Vec<EstateVehicle>,
+    /// The house's lamps, room by room. `#[serde(default)]`: an estate
+    /// saved before lighting was wired had none.
+    #[serde(default)]
+    pub lighting: Vec<RoomLighting>,
+    /// Run-of-river plants feeding the house, first in the supply order.
+    /// `#[serde(default)]`: an estate saved before Phase 4b had none.
+    #[serde(default)]
+    pub hydro: Vec<HydroSupply>,
     /// Loads fully served in the last step.
     powered: BTreeSet<u64>,
+    /// Rooms whose lamps were fully served in the last step.
+    #[serde(default)]
+    lit: BTreeSet<SpaceId>,
+}
+
+/// Whether a tool or machine of this name draws electricity. Named by what
+/// powers it, so a hand tool that shares a word with a powered one (a
+/// crosscut saw and a circular saw) is not wired to the grid.
+fn is_powered_tool(name: &str) -> bool {
+    let name = name.to_lowercase();
+    ["power", "drill", "welder", "circular saw", "chainsaw"]
+        .iter()
+        .any(|word| name.contains(word))
 }
 
 impl EstateEnergy {
@@ -298,10 +401,7 @@ impl EstateEnergy {
                     in_use: false,
                 }),
                 PropertyItemKind::BuildingEquipment | PropertyItemKind::ShedTool
-                    if item.name.to_lowercase().contains("power")
-                        || item.name.to_lowercase().contains("drill")
-                        || item.name.to_lowercase().contains("saw")
-                        || item.name.to_lowercase().contains("welder") =>
+                    if is_powered_tool(&item.name) =>
                 {
                     loads.push(Load {
                         item_id: item.id,
@@ -350,7 +450,10 @@ impl EstateEnergy {
             }],
             loads,
             vehicles,
+            lighting: Vec::new(),
+            hydro: Vec::new(),
             powered: BTreeSet::new(),
+            lit: BTreeSet::new(),
         };
         // Vehicles start part-filled, drawn from the store.
         let ids: Vec<u64> = energy.vehicles.iter().map(|v| v.item_id).collect();
@@ -363,6 +466,52 @@ impl EstateEnergy {
             energy.refuel(id, want);
         }
         energy
+    }
+
+    /// Wire lamps into every space of the house (its rooms, its hall and
+    /// the computer room inside it), each sized by [`room_lighting_kw`]
+    /// from the space's floor in `layout`. Other buildings are workplaces
+    /// and stores, used by day, and are left unwired.
+    pub fn wire_lighting(&mut self, layout: &EstateLayout, property: &StarterProperty) {
+        self.lighting = layout
+            .spaces
+            .iter()
+            .filter(|space| {
+                property.buildings.iter().any(|b| {
+                    b.id == space.building_id
+                        && matches!(
+                            b.kind,
+                            PropertyBuildingKind::House | PropertyBuildingKind::ComputerRoom
+                        )
+                })
+            })
+            .map(|space| RoomLighting {
+                space: space.id,
+                label: space.label.clone(),
+                kw: room_lighting_kw(
+                    (space.rect_m.x1 - space.rect_m.x0) * (space.rect_m.y1 - space.rect_m.y0),
+                ),
+                in_use: false,
+            })
+            .collect();
+        self.lit.clear();
+    }
+
+    /// Whether `space` has lamps.
+    pub fn is_wired(&self, space: SpaceId) -> bool {
+        self.lighting.iter().any(|l| l.space == space)
+    }
+
+    /// Switch a room's lamps on or off. A space without lamps is ignored.
+    pub fn set_lit(&mut self, space: SpaceId, on: bool) {
+        if let Some(room) = self.lighting.iter_mut().find(|l| l.space == space) {
+            room.in_use = on;
+        }
+    }
+
+    /// Whether a room's lamps are on and were fully served in the last step.
+    pub fn is_lit(&self, space: SpaceId) -> bool {
+        self.lighting.iter().any(|l| l.space == space && l.in_use) && self.lit.contains(&space)
     }
 
     fn store_mut(&mut self, fuel: FuelKind) -> Option<&mut FuelStore> {
@@ -401,37 +550,74 @@ impl EstateEnergy {
             && self.powered.contains(&item_id)
     }
 
-    /// Supply the in-use loads for `dt_seconds`: solar (`solar_kw`
-    /// available), then battery, then the generator. Loads are served in
-    /// item order; one the supply cannot cover stops. Fuel burned is
+    /// Connect the run-of-river plant at `site` to the house, `length_km`
+    /// of overhead line away; the line is designed for the plant's rating.
+    pub fn attach_hydro(&mut self, site: HydroSite, length_km: f64) {
+        let line = Line::design(0, 1, site.design.rated_kw, length_km);
+        self.hydro.push(HydroSupply {
+            site,
+            line,
+            river_m3_s: 0.0,
+        });
+    }
+
+    /// Supply the in-use loads for `dt_seconds`: hydro (from each plant's
+    /// last measured river flow), solar (`solar_kw` available), then
+    /// battery, then the generator. Item loads are served
+    /// in item order, then the lit rooms in space order; one the supply
+    /// cannot cover stops. Fuel burned is
     /// booked in `ledger`.
     pub fn step(&mut self, dt_seconds: f64, solar_kw: f64, ledger: &mut Ledger) -> EnergyStep {
         self.powered.clear();
+        self.lit.clear();
         if !(dt_seconds.is_finite() && dt_seconds > 0.0) {
             return EnergyStep::default();
         }
         let hours = dt_seconds / 3_600.0;
-        let mut active: Vec<&Load> = self.loads.iter().filter(|l| l.in_use).collect();
-        active.sort_by_key(|l| l.item_id);
-        let demand_kwh: f64 = active.iter().map(|l| l.kw * hours).sum();
-        let active_ids: Vec<(u64, f64)> =
-            active.iter().map(|l| (l.item_id, l.kw * hours)).collect();
+        let mut active: Vec<(Draw, f64)> = self
+            .loads
+            .iter()
+            .filter(|l| l.in_use)
+            .map(|l| (Draw::Item(l.item_id), l.kw * hours))
+            .chain(
+                self.lighting
+                    .iter()
+                    .filter(|l| l.in_use)
+                    .map(|l| (Draw::Room(l.space), l.kw * hours)),
+            )
+            .collect();
+        active.sort_by_key(|(draw, _)| *draw);
+        let demand_kwh: f64 = active.iter().map(|(_, kwh)| kwh).sum();
+        let active_ids = active;
+
+        // Hydro first: the plant runs on what the river gives and its whole
+        // output goes down the line.
+        let generated_kwh: f64 = self.hydro.iter().map(|h| h.generated_kw()).sum::<f64>() * hours;
+        let hydro_kwh: f64 = self.hydro.iter().map(|h| h.delivered_kw()).sum::<f64>() * hours;
+        let line_loss_kwh = generated_kwh - hydro_kwh;
+        let hydro_to_load = hydro_kwh.min(demand_kwh);
+        let mut hydro_surplus = hydro_kwh - hydro_to_load;
+        let mut deficit = demand_kwh - hydro_to_load;
 
         let solar_kwh = solar_kw.max(0.0) * hours;
-        let solar_used = solar_kwh.min(demand_kwh);
+        let solar_used = solar_kwh.min(deficit);
         let mut surplus = solar_kwh - solar_used;
-        let mut deficit = demand_kwh - solar_used;
+        deficit -= solar_used;
 
-        // Surplus solar charges the batteries.
+        // Surplus hydro, then surplus solar, charges the batteries.
         for b in &mut self.batteries {
-            if surplus <= 0.0 {
-                break;
+            for spare in [&mut hydro_surplus, &mut surplus] {
+                if *spare <= 0.0 {
+                    continue;
+                }
+                let stored =
+                    (*spare * BATTERY_ONE_WAY_EFFICIENCY).min(b.capacity_kwh - b.charge_kwh);
+                b.charge_kwh += stored;
+                *spare -= stored / BATTERY_ONE_WAY_EFFICIENCY;
             }
-            let stored = (surplus * BATTERY_ONE_WAY_EFFICIENCY).min(b.capacity_kwh - b.charge_kwh);
-            b.charge_kwh += stored;
-            surplus -= stored / BATTERY_ONE_WAY_EFFICIENCY;
         }
         let curtailed = surplus.max(0.0);
+        let hydro_dumped = hydro_surplus.max(0.0);
 
         // The deficit comes from the batteries...
         let mut battery_out = 0.0;
@@ -478,14 +664,24 @@ impl EstateEnergy {
         // Serve loads in order while the supply lasts.
         let supplied = demand_kwh - deficit.max(0.0);
         let mut left = supplied;
-        for (id, need) in active_ids {
+        for (draw, need) in active_ids {
             if need <= left + 1e-12 {
                 left -= need;
-                self.powered.insert(id);
+                match draw {
+                    Draw::Item(id) => {
+                        self.powered.insert(id);
+                    }
+                    Draw::Room(space) => {
+                        self.lit.insert(space);
+                    }
+                }
             }
         }
         EnergyStep {
             demand_kwh,
+            hydro_used_kwh: hydro_kwh - hydro_dumped,
+            hydro_dumped_kwh: hydro_dumped,
+            line_loss_kwh,
             solar_used_kwh: solar_used,
             solar_curtailed_kwh: curtailed,
             battery_discharged_kwh: battery_out,
@@ -543,6 +739,35 @@ impl EstateEnergy {
         driven
     }
 
+    /// A road vehicle's fuel burn (L/km) on `surface`, or `None` for a
+    /// vehicle that is not one.
+    pub fn litres_per_km(&self, vehicle_id: u64, surface: Surface) -> Option<f64> {
+        let v = self.vehicles.iter().find(|v| v.item_id == vehicle_id)?;
+        match v.engine {
+            VehicleEngine::Road { class_factor } => {
+                Some(reference_l_per_100km(surface) * class_factor / 100.0)
+            }
+            VehicleEngine::Work { .. } => None,
+        }
+    }
+
+    /// A working machine's fuel burn (L/h), or `None` for one that is not.
+    pub fn litres_per_hour(&self, vehicle_id: u64) -> Option<f64> {
+        let v = self.vehicles.iter().find(|v| v.item_id == vehicle_id)?;
+        match v.engine {
+            VehicleEngine::Work {
+                rated_kw,
+                load_fraction,
+            } => Some(rated_kw * load_fraction * WORK_L_PER_KWH),
+            VehicleEngine::Road { .. } => None,
+        }
+    }
+
+    /// The estate vehicle called `name`, if there is one.
+    pub fn vehicle_named(&self, name: &str) -> Option<&EstateVehicle> {
+        self.vehicles.iter().find(|v| v.name == name)
+    }
+
     /// Run a working machine for `hours`: the hours it actually runs
     /// before the tank empties.
     pub fn run_engine_hours(&mut self, vehicle_id: u64, hours: f64, ledger: &mut Ledger) -> f64 {
@@ -570,5 +795,148 @@ impl EstateEnergy {
             },
         );
         run
+    }
+}
+
+#[cfg(test)]
+mod lighting_tests {
+    use super::*;
+
+    #[test]
+    fn a_hand_saw_is_not_wired_to_the_grid() {
+        assert!(super::is_powered_tool("Circular Saw"));
+        assert!(super::is_powered_tool("Power Drill"));
+        assert!(!super::is_powered_tool("Crosscut Saw"));
+        assert!(!super::is_powered_tool("Felling Axe"));
+    }
+    use crate::regional::estate_layout::{Rect, SpaceKind, SpaceLayout};
+    use mk_core::flux::Ledger;
+
+    fn building(property: &StarterProperty, kind: PropertyBuildingKind) -> u64 {
+        property
+            .buildings
+            .iter()
+            .find(|b| b.kind == kind)
+            .unwrap_or_else(|| panic!("the estate has a {kind:?}"))
+            .id
+    }
+
+    fn space(id: u32, building_id: u64, label: &str, w: f64, h: f64) -> SpaceLayout {
+        SpaceLayout {
+            id: SpaceId(id),
+            building_id,
+            label: label.to_string(),
+            kind: SpaceKind::Room,
+            rect_m: Rect {
+                x0: 0.0,
+                y0: 0.0,
+                x1: w,
+                y1: h,
+            },
+        }
+    }
+
+    /// The founders' estate with a house of a 5 x 5 m lounge, the 5 x 5 m
+    /// computer room inside it, and a shed.
+    fn wired() -> (EstateEnergy, StarterProperty) {
+        let property = StarterProperty::founders_estate((0, 0));
+        let house = building(&property, PropertyBuildingKind::House);
+        let computers = building(&property, PropertyBuildingKind::ComputerRoom);
+        let shed = building(&property, PropertyBuildingKind::Shed);
+        let layout = EstateLayout {
+            property_id: 0,
+            patch: mk_island::LocalPatchSpec {
+                origin_x_m: 0.0,
+                origin_y_m: 0.0,
+                width_m: 5.0,
+                height_m: 5.0,
+                cell_size_m: 5.0,
+                rows: 1,
+                cols: 1,
+            },
+            terrain_m: mk_core::grid::Grid2::new(&mk_core::grid::GridSpec::new(1, 1), 0.0),
+            buildings: Vec::new(),
+            spaces: vec![
+                space(1, house, "Lounge", 5.0, 5.0),
+                space(2, computers, "Computer Room", 5.0, 5.0),
+                space(3, shed, "Digging Tools", 4.0, 6.0),
+            ],
+            doors: Vec::new(),
+            items: Vec::new(),
+            yard: Rect {
+                x0: 0.0,
+                y0: 0.0,
+                x1: 1.0,
+                y1: 1.0,
+            },
+        };
+        let mut energy = EstateEnergy::from_config(&EstateEnergyConfig::default(), &property);
+        energy.wire_lighting(&layout, &property);
+        (energy, property)
+    }
+
+    #[test]
+    fn a_room_is_lit_by_the_lumen_method() {
+        // 200 lux over 25 m^2 is 5,000 lm on the floor; at a utilisation
+        // factor of 0.5 the lamps emit 10,000 lm, which at 80 lm/W is
+        // 125 W.
+        assert!((room_lighting_kw(25.0) - 0.125).abs() < 1e-12);
+        assert_eq!(room_lighting_kw(-1.0), 0.0);
+    }
+
+    #[test]
+    fn the_house_is_wired_and_the_shed_is_not() {
+        let (energy, _) = wired();
+        assert!(energy.is_wired(SpaceId(1)), "the lounge has lamps");
+        assert!(
+            energy.is_wired(SpaceId(2)),
+            "the computer room is a room of the house"
+        );
+        assert!(!energy.is_wired(SpaceId(3)), "the shed is worked by day");
+        assert!(energy.lighting.iter().all(|l| (l.kw - 0.125).abs() < 1e-12));
+    }
+
+    #[test]
+    fn a_lit_room_draws_its_lamps_from_the_supply() {
+        let (mut energy, _) = wired();
+        let mut ledger = Ledger::new();
+        energy.set_lit(SpaceId(1), true);
+        energy.set_lit(SpaceId(3), true); // not wired: ignored
+        let night = energy.step(3_600.0, 0.0, &mut ledger);
+        assert!((night.demand_kwh - 0.125).abs() < 1e-12, "{night:?}");
+        assert!((night.battery_discharged_kwh - 0.125).abs() < 1e-12);
+        assert!(energy.is_lit(SpaceId(1)));
+        assert!(!energy.is_lit(SpaceId(2)), "nobody switched it on");
+        energy.set_lit(SpaceId(1), false);
+        let dark = energy.step(3_600.0, 0.0, &mut ledger);
+        assert_eq!(dark.demand_kwh, 0.0);
+        assert!(!energy.is_lit(SpaceId(1)));
+    }
+
+    #[test]
+    fn with_no_supply_left_the_lamps_go_out() {
+        let (mut energy, _) = wired();
+        let mut ledger = Ledger::new();
+        for b in &mut energy.batteries {
+            b.charge_kwh = 0.0;
+        }
+        for s in &mut energy.fuel_stores {
+            s.litres = 0.0;
+        }
+        energy.set_lit(SpaceId(1), true);
+        let step = energy.step(3_600.0, 0.0, &mut ledger);
+        assert!((step.unmet_kwh - 0.125).abs() < 1e-12, "{step:?}");
+        assert!(!energy.is_lit(SpaceId(1)));
+    }
+
+    #[test]
+    fn an_estate_saved_before_lamps_reads_with_none() {
+        let (energy, _) = wired();
+        let mut json = serde_json::to_value(&energy).unwrap();
+        let object = json.as_object_mut().unwrap();
+        object.remove("lighting");
+        object.remove("lit");
+        let old: EstateEnergy = serde_json::from_value(json).unwrap();
+        assert!(old.lighting.is_empty());
     }
 }
