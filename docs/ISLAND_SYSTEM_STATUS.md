@@ -244,8 +244,8 @@ commit before launching a long run.
 ## Known fidelity limits
 
 Every known departure from reality is in `docs/island/DEVIATIONS.md` (D1-D40). The largest open
-ones: the driest tenth of the island gets ~320 mm of rain a year against New Zealand's driest
-basin's 360 (D38); no sea/land breezes, and the coastal damping of the day-night range is observed rather than carried (D3); storm structure is parametric (D4); river channels have no
+ones: a quarter of the island's land gets under 460 mm of rain a year where most of New Zealand
+gets 600-1600 (the median land cell, 657 mm, is in range; D38, diagnosed 2026-10-14); no sea/land breezes, and the coastal damping of the day-night range is observed rather than carried (D3); storm structure is parametric (D4); river channels have no
 in-channel storage (D28); the regional tick audits tidal heat only (D29); production ignores soil
 nutrients (D31); every human action but felling and hauling
 timber still takes exactly one tick (D9); felled wood never dries (D40); the hydro plant never

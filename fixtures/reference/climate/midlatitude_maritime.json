@@ -31,6 +31,11 @@
       "licence": "CC BY 4.0 (NIWA CliFlo data); facts cited with attribution"
     },
     {
+      "key": "niwa_overview",
+      "citation": "NIWA (now Earth Sciences New Zealand). Overview of New Zealand's climate. https://niwa.co.nz/node/98758 (retrieved 2026-10-14); rainfall map for 1981-2010.",
+      "licence": "Facts cited with attribution"
+    },
+    {
       "key": "henderson1999",
       "citation": "Henderson, R. D. and Thompson, S. M. (1999). Extreme rainfalls in the Southern Alps of New Zealand. Journal of Hydrology (New Zealand) 38(2), 309-330.",
       "licence": "Facts cited with attribution"
@@ -158,6 +163,15 @@
       "confidence": "medium",
       "value": { "range": { "min": 3.0, "max": 8.0, "typical": 5.0 } },
       "note": "Southern Alps (~5); similar ratios across the Cascades and the southern Andes."
+    },
+    {
+      "key": "typical_annual_rainfall_new_zealand",
+      "description": "Annual rainfall of most areas of New Zealand, a mid-latitude maritime island in westerlies",
+      "unit": "mm/yr",
+      "source": "niwa_overview",
+      "confidence": "high",
+      "value": { "range": { "min": 600.0, "max": 1600.0 } },
+      "note": "'Most areas of New Zealand have between 600 and 1600 mm of rainfall, spread throughout the year with a dry period during the summer.' The driest areas lie east of the mountains; the West Coast of the South Island is the wettest."
     },
     {
       "key": "sst_seasonal_range_40_45",

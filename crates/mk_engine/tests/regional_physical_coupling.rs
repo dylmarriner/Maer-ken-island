@@ -398,12 +398,25 @@ fn slow_a_year_of_island_weather_matches_the_reference_packs() {
         "lowland annual range {median_range} K"
     );
 
-    // 7. Rain on the land: every part of a mid-latitude maritime island is
-    //    watered. New Zealand's driest leeward basin gets 360 mm a year
-    //    (Alexandra, `orographic_precipitation_southern_alps`); the island's
-    //    median land cell must get at least that, and its driest tenth at
-    //    least half of it (D38 records the residual). Before the vapour
-    //    budget the median was 183 mm and the driest tenth 58.
+    // 7. Rain on the land. Most of New Zealand gets 600-1600 mm a year
+    //    (NIWA, `typical_annual_rainfall_new_zealand`), so the island's
+    //    median land cell must fall in that range. Its driest tenth must
+    //    get at least half of New Zealand's driest leeward basin (Alexandra,
+    //    360 mm, `orographic_precipitation_southern_alps`); D38 records the
+    //    residual. Before the vapour budget the median was 183 mm and the
+    //    driest tenth 58; before the wind carried specific rather than
+    //    relative humidity, 533 and 321.
+    let packs = mk_engine::validation::ReferenceLibrary::load(
+        &mk_engine::validation::default_reference_dir(),
+    )
+    .expect("reference packs");
+    let (typical_min, typical_max) = packs
+        .item(
+            mk_engine::validation::ReferenceDomain::Climate,
+            "typical_annual_rainfall_new_zealand",
+        )
+        .and_then(|i| i.range())
+        .expect("NIWA's typical rainfall");
     let mut land_rain: Vec<f64> = (0..n)
         .filter(|&i| elev.data()[i] > 0.0)
         .map(|i| rain[i])
@@ -412,7 +425,10 @@ fn slow_a_year_of_island_weather_matches_the_reference_packs() {
     let median_rain = land_rain[land_rain.len() / 2];
     let driest_tenth = land_rain[land_rain.len() / 10];
     println!("land rain: median {median_rain:.0} mm, driest tenth {driest_tenth:.0} mm");
-    assert!(median_rain >= 360.0, "median land rain {median_rain} mm");
+    assert!(
+        (typical_min..=typical_max).contains(&median_rain),
+        "median land rain {median_rain} mm, outside New Zealand's typical {typical_min}-{typical_max}"
+    );
     assert!(
         driest_tenth >= 180.0,
         "driest tenth of land {driest_tenth} mm"
