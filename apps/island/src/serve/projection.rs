@@ -276,11 +276,30 @@ pub struct Terrain {
     /// in it. A viewer that did not know about the yard could only show
     /// that as an unexplained empty square.
     pub yard: (f64, f64, f64, f64),
+    /// Per medium cell, fixed for the run: the biome, its production and
+    /// the climatology's annual mean temperature (°C) and rain (mm/yr).
+    /// Read by the cell inspector.
+    pub biome: Vec<mk_core::biomes::BiomeType>,
+    pub npp_kgc_m2_yr: Vec<f64>,
+    pub mean_temperature_c: Vec<f64>,
+    pub annual_rain_mm: Vec<f64>,
 }
 
 impl Terrain {
     /// Copy the island's terrain. Called once, at startup.
     pub fn of(life: &IslandLife) -> Self {
+        use mk_island::DomainLevel::Medium;
+        let cols = life.domain.cols(Medium);
+        let climate: Vec<(f64, f64)> = (0..life.domain.rows(Medium) * cols)
+            .map(|i| {
+                mk_engine::regional::ecology::cell_climate(
+                    &life.domain,
+                    &life.physical,
+                    i / cols,
+                    i % cols,
+                )
+            })
+            .collect();
         Self {
             domain: life.domain.clone(),
             elevation_m: life.physical.geophysics.elevation_m.clone(),
@@ -295,9 +314,20 @@ impl Terrain {
                 let y = life.placed.layout.yard;
                 (y.x0, y.y0, y.x1, y.y1)
             },
+            biome: life.ecology.biome_grid.data().to_vec(),
+            npp_kgc_m2_yr: life.ecology.npp_kgc_m2_yr.data().to_vec(),
+            mean_temperature_c: climate.iter().map(|(k, _)| k - 273.15).collect(),
+            annual_rain_mm: climate
+                .iter()
+                .map(|(_, mm_day)| mm_day * EARTH_YEAR_DAYS)
+                .collect(),
         }
     }
 }
+
+/// The climatology's mean daily rain is per Earth day; a year of it is the
+/// Earth year the ecology's rates are also written in.
+const EARTH_YEAR_DAYS: f64 = 365.25;
 
 /// A stem's id, stirred, so that taking one in n of them samples the wood
 /// rather than the order it was generated in.
@@ -424,6 +454,13 @@ pub fn cell_of(terrain: &Terrain, row: usize, col: usize) -> Option<Cell> {
             row,
             col,
         ),
+        biome: terrain
+            .biome
+            .get(row * cols + col)
+            .map(|b| format!("{b:?}")),
+        npp_kgc_m2_yr: terrain.npp_kgc_m2_yr.get(row * cols + col).copied(),
+        mean_temperature_c: terrain.mean_temperature_c.get(row * cols + col).copied(),
+        annual_rain_mm: terrain.annual_rain_mm.get(row * cols + col).copied(),
     })
 }
 
@@ -462,6 +499,7 @@ impl IslandProjection {
                 day_length_hours: day_s / 3_600.0,
                 achieved_speed,
                 requested_speed: requested_speed.to_string(),
+                year_length_days: Some(life.canon.orbital_period_s / day_s),
             },
             people: people(life),
             estate: estate(life),

@@ -148,10 +148,12 @@ The engine is already identical to upstream; this task brings the surrounding de
 - Inspector exposes simulation clock, selected terrain cell, selected space/item/tree, human summary (including current space), property/building/item/network-account summary and physical/environmental values from `IslandView`.
 - Controls send `ControlCommand::{Pause, Resume, Step(n), Snapshot, SetSpeed}` (Phase 4 Task 4): a speed selector (real time, 10×, 60×, 360×, 1,440×, max) showing both requested and achieved speed, plus the local date and time (36-hour day, 288-day year) and the equivalent elapsed Earth time; no arbitrary state mutation through the renderer.
 
-- [ ] **Step 1:** Write tests for selection lookup and inspector data coming only from current `IslandView`.
-- [ ] **Step 2:** Implement egui panels and the control command path.
-- [ ] **Step 3:** Run `cargo test -p island_ui`; expect PASS.
+- [x] **Step 1:** Write tests for selection lookup and inspector data coming only from current `IslandView`.
+- [x] **Step 2:** Implement egui panels and the control command path.
+- [x] **Step 3:** Run `cargo test -p island_ui`; expect PASS.
 - [ ] **Step 4:** Commit `feat(ui): inspect regional world state`.
+
+Task 5 status (2026-10-14): `apps/island_ui/src/inspectors.rs` (pure, tested) and the left panel. The clock reads as the local calendar (year, day of the 288-day year, time on the 36-hour day; the backend's clock now carries `year_length_days`) and as Earth time elapsed; the speed selector offers real, 10x, 60x, 360x, 1,440x and max with the achieved speed beside the requested one; Pause, Resume, Step and Save send `ControlRequest`s and nothing else changes state from the renderer. The terrain inspector is the cell under the middle of the view (the estate's own cell in the estate frame), fetched off the frame thread from `/api/cell`, which now also gives the cell's biome, NPP and climatology mean temperature and rain. Not done: picking an individual tree, room or item with the mouse; the right panel lists the estate's buildings and things and reads a chosen person.
 
 ### Task 6: Repeatable performance baselines
 

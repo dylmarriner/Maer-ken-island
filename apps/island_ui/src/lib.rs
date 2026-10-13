@@ -16,6 +16,7 @@
 
 pub mod camera;
 pub mod estate;
+pub mod inspectors;
 pub mod property;
 pub mod scene;
 pub mod source;

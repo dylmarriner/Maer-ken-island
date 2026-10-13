@@ -74,6 +74,10 @@ pub struct Clock {
     /// achieved figure rather than instead of it, because an island that
     /// cannot keep up with what was asked should say so.
     pub requested_speed: String,
+    /// Local days in the local year (the orbital period over the day):
+    /// about 288 here. `None` from a server older than the field.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub year_length_days: Option<f64>,
 }
 
 /// One islander, as a map and a roster see them.
@@ -356,6 +360,22 @@ pub struct Cell {
     /// (`MAX_BUILD_GRADIENT`) rather than upstream's, which admits nothing
     /// on a 2 km grid. Sea is never buildable.
     pub buildable: bool,
+    /// The cell's biome by the island's own classification (`Grassland`,
+    /// `TemperateForest`, `ShallowOcean`, ...). The fields from here on are
+    /// fixed for a run -- biomes and production are set when the island
+    /// is built -- and absent from a server older than them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub biome: Option<String>,
+    /// Net primary production, kg C per m² per year; zero off land.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub npp_kgc_m2_yr: Option<f64>,
+    /// The cell's annual-mean air temperature from the island's
+    /// climatology, lapse-corrected to the cell's own height (°C).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mean_temperature_c: Option<f64>,
+    /// And its annual rain from the same climatology (mm per year).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub annual_rain_mm: Option<f64>,
 }
 
 /// A rectangle on the estate patch, in domain metres: west, south, east,
