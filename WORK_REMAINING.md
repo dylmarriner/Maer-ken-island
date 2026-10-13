@@ -98,8 +98,9 @@ the log's last water is booked to the air at that moment rather than when the wo
   coordination change in `life.rs`, plus a cited two-person sawing rate.
 - **Excavator rigging:** the CAT 330 lifts with the shed's rope; attaching a sling is untimed
   because no cited figure was found. Either source a rigging time or the owner adds a grapple.
-- **Routes:** legs are straight lines; slope (`EstateLayout::terrain_m`) and obstacles are
-  ignored, and vehicles have no position of their own. A route over the patch terrain with a
+- **Routes:** legs are straight lines. Walks climb the ground's rises along them (Naismith,
+  `EstateLayout::ground_m`, 2026-10-14); obstacles are ignored, vehicle times ignore slope, and
+  vehicles have no position of their own. A route over the patch terrain with a
   slope cost, and vehicles that stay where they were parked, would close this.
 - **Files:** `regional/timber.rs`, `regional/life.rs` (`work`, `plan_haul`,
   `finish_haul_task`), `regional/labour.rs`.
