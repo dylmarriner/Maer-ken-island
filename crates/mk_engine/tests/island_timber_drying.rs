@@ -68,3 +68,37 @@ fn a_stored_green_log_dries_toward_the_air_and_the_books_close() {
     .unwrap();
     assert!(now.moisture_content() > drying.equilibrium_moisture(20.0, 0.6) + 0.3);
 }
+
+/// A stored log dry enough to be the stock's air-dry wood joins the stock:
+/// its carbon arrives exactly, the log is gone, and the books close; a
+/// log still on the ground, however dry, stays a log.
+#[test]
+fn a_seasoned_stored_log_joins_the_wood_stock() {
+    use mk_engine::regional::materials::{Material, MaterialLedger};
+    let mut life = small_island();
+    let air_dry = MaterialLedger::air_dry_moisture_content();
+    assert!((air_dry - 0.15 / 0.85).abs() < 1e-12);
+    let mut ledger = Ledger::new();
+    let mut seasoned = felled_log(0, (0.0, 0.0), 0.0, 0.1, 2.0, 20.0, 10.0, air_dry, 0.6);
+    seasoned.place = LogPlace::Stored;
+    let mut on_ground = seasoned.clone();
+    on_ground.place = LogPlace::Ground;
+    let stored = life.materials.receive_felled_log(seasoned, &mut ledger);
+    let ground = life.materials.receive_felled_log(on_ground, &mut ledger);
+    let wood_before = life.materials.stock_kg(Material::Wood);
+    let audits = life.audits_closed;
+
+    life.advance(3_600).unwrap();
+
+    assert!(life.audits_closed > audits);
+    assert!(
+        life.materials.log(stored).is_none(),
+        "the seasoned log left"
+    );
+    assert!(
+        life.materials.log(ground).is_some(),
+        "the one outside stayed"
+    );
+    let added = life.materials.stock_kg(Material::Wood) - wood_before;
+    assert!((added * 0.425 - 10.0).abs() < 1e-9, "{added} kg of wood");
+}

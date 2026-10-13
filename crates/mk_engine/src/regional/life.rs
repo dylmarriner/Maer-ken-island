@@ -1880,6 +1880,7 @@ impl IslandLife {
         self.audited(|life, ledger| {
             life.materials
                 .dry_logs(&drying, t_k - 273.15, rh, dt_s, ledger);
+            life.materials.season_stored_logs(ledger);
         })
     }
 
