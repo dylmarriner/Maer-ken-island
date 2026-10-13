@@ -579,6 +579,7 @@ fn main() {
             pick_on_the_estate,
             place_islanders,
             show_what_was_chosen,
+            outline_the_interiors,
         )
             .chain(),
     )
@@ -1081,6 +1082,30 @@ fn grow_the_stems(
         trees.in_box,
         trees.total
     );
+}
+
+/// The rooms' walls as outlines on their floors, and each door as an
+/// upright line from the floor to its building's eaves, every frame the
+/// estate is shown (gizmos are drawn afresh each frame). Lines, not
+/// solids: the island says where a wall and a door are and nothing about
+/// how thick or tall they are.
+fn outline_the_interiors(mut gizmos: Gizmos, showing: Res<Showing>, island: Res<TheIsland>) {
+    if *showing != Showing::Estate {
+        return;
+    }
+    let Some(layout) = island.0.estate() else {
+        return;
+    };
+    let wall = Color::srgb(0.85, 0.82, 0.74);
+    let door = Color::srgb(0.95, 0.62, 0.25);
+    let at = |p: Point| Vec3::new(p.x, p.y, p.z);
+    for (_, corners) in estate::room_outlines(layout) {
+        gizmos.linestrip(corners.iter().chain(corners.first()).map(|&p| at(p)), wall);
+    }
+    for (foot, eaves) in estate::door_marks(layout) {
+        let foot = at(foot);
+        gizmos.line(foot, foot + Vec3::Y * eaves, door);
+    }
 }
 
 /// Show one frame and hide the other, and move the camera with it.
