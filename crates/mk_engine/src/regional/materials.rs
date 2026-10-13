@@ -587,6 +587,32 @@ impl MaterialLedger {
         self.logs.get_mut(&id)
     }
 
+    /// Every log loses water to the air for `dt_s` at `t_c` °C and `rh`
+    /// (`regional::drying`); the water leaves `MaterialWater` for the
+    /// atmosphere. Returns the kg given up.
+    pub fn dry_logs(
+        &mut self,
+        drying: &super::drying::WoodDrying,
+        t_c: f64,
+        rh: f64,
+        dt_s: f64,
+        ledger: &mut Ledger,
+    ) -> f64 {
+        let lost: f64 = self
+            .logs
+            .values_mut()
+            .map(|log| drying.dry(log, t_c, rh, dt_s))
+            .sum();
+        flow(
+            ledger,
+            FluxKind::Water,
+            Reservoir::MaterialWater,
+            Reservoir::Atmosphere,
+            lost,
+        );
+        lost
+    }
+
     /// Cross-cut log `id` into `pieces` with ids from `first_id`: the log
     /// becomes its pieces, nothing gained or lost.
     pub fn cross_cut_log(&mut self, id: u64, pieces: u32, first_id: u64) -> bool {

@@ -29,6 +29,16 @@
       "key": "compendium2024",
       "citation": "Herrmann, S. D. et al. (2024). 2024 Adult Compendium of Physical Activities (pacompendium.com): codes 16010, 11590 and 11266.",
       "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "woodhandbook2021_ch4",
+      "citation": "Glass, S. V. and Zelinka, S. L. (2021). Chapter 4: Moisture relations and physical properties of wood. In: Wood Handbook: Wood as an Engineering Material, General Technical Report FPL-GTR-282. Madison, WI: USDA Forest Service, Forest Products Laboratory. Equation (4-5) (Simpson 1973) with its coefficients for T in degrees Celsius, and Table 4-2. Retrieved from https://research.fs.usda.gov/download/treesearch/62243.pdf.",
+      "licence": "Public domain (US Government work); values cited with attribution"
+    },
+    {
+      "key": "simpson_hart2000",
+      "citation": "Simpson, W. T. and Hart, C. A. (2000). Estimates of air drying times for several hardwoods and softwoods. General Technical Report FPL-GTR-121. Madison, WI: USDA Forest Service, Forest Products Laboratory. Table 1 (4/4 northern red oak, 1.125 in = 29 mm actual), Table 2 (estimated air drying times for 4/4 northern red oak to 30, 25 and 20% moisture content in Madison, Wisconsin, with the dry-bulb temperature and relative humidity for each stacking date) and the text (green moisture content of northern red oak 80%; the simulation's diffusion coefficient adjusted in proportion to the saturated vapour pressure of water). Retrieved from https://research.fs.usda.gov/download/treesearch/9684.pdf.",
+      "licence": "Public domain (US Government work); values cited with attribution"
     }
   ],
   "items": [
@@ -171,6 +181,455 @@
         }
       },
       "note": "Forwarder cranes with grapples; more assortments per load lengthen the cycle (two: 0.27/0.34 min, five: 0.35/0.60 min)."
+    },
+    {
+      "key": "emc_equation_celsius",
+      "description": "Coefficients of the Wood Handbook's equilibrium moisture content equation (4-5): EMC(%) = 1800/W [Kh/(1-Kh) + (K1 K h + 2 K1 K2 K^2 h^2)/(1 + K1 K h + K1 K2 K^2 h^2)], h relative humidity (0-1), each parameter c0 + c1 T + c2 T^2 with T in degrees Celsius",
+      "unit": "per degree Celsius powers",
+      "source": "woodhandbook2021_ch4",
+      "confidence": "high",
+      "value": {
+        "table": {
+          "row_label": "parameter",
+          "columns": [
+            "c0",
+            "c1",
+            "c2"
+          ],
+          "rows": [
+            {
+              "label": "W",
+              "values": [
+                349.0,
+                1.29,
+                0.0135
+              ]
+            },
+            {
+              "label": "K",
+              "values": [
+                0.805,
+                0.000736,
+                -2.73e-06
+              ]
+            },
+            {
+              "label": "K1",
+              "values": [
+                6.27,
+                -0.00938,
+                -0.000303
+              ]
+            },
+            {
+              "label": "K2",
+              "values": [
+                1.91,
+                0.0407,
+                -0.000293
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Transcribed from the 2021 chapter's text beside Equation (4-5)."
+    },
+    {
+      "key": "emc_table_points",
+      "description": "Equilibrium moisture content from Table 4-2 at four stated temperatures and relative humidities, to check the equation against",
+      "unit": "degrees Celsius, fraction, percent moisture content",
+      "source": "woodhandbook2021_ch4",
+      "confidence": "high",
+      "value": {
+        "table": {
+          "row_label": "point",
+          "columns": [
+            "t_c",
+            "rh",
+            "emc_percent"
+          ],
+          "rows": [
+            {
+              "label": "cold_humid",
+              "values": [
+                -1.1,
+                0.95,
+                24.3
+              ]
+            },
+            {
+              "label": "room_mid",
+              "values": [
+                21.1,
+                0.5,
+                9.2
+              ]
+            },
+            {
+              "label": "room_humid",
+              "values": [
+                21.1,
+                0.8,
+                16.0
+              ]
+            },
+            {
+              "label": "hot_dry",
+              "values": [
+                60.0,
+                0.3,
+                5.0
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "key": "air_drying_reference_board",
+      "description": "The stock GTR-121's Table 2 describes: 4/4 northern red oak, its actual thickness and its green moisture content",
+      "unit": "mm, percent moisture content",
+      "source": "simpson_hart2000",
+      "confidence": "high",
+      "value": {
+        "table": {
+          "row_label": "quantity",
+          "columns": [
+            "value"
+          ],
+          "rows": [
+            {
+              "label": "thickness_mm",
+              "values": [
+                29.0
+              ]
+            },
+            {
+              "label": "green_moisture_percent",
+              "values": [
+                80.0
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "key": "air_drying_madison_red_oak",
+      "description": "Estimated air drying times (days) for 4/4 northern red oak stacked on each date in Madison, Wisconsin, to 30, 25 and 20% moisture content, with that date's dry-bulb temperature and relative humidity (30-year NOAA averages). Day of year counts from 1 January = 0",
+      "unit": "day of year, degrees Fahrenheit, percent, days",
+      "source": "simpson_hart2000",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "stacking_date",
+          "columns": [
+            "day_of_year",
+            "dry_bulb_f",
+            "rh_percent",
+            "days_to_30",
+            "days_to_25",
+            "days_to_20"
+          ],
+          "rows": [
+            {
+              "label": "jan_1",
+              "values": [
+                0,
+                17.5,
+                74.9,
+                106,
+                123,
+                144
+              ]
+            },
+            {
+              "label": "jan_15",
+              "values": [
+                14,
+                17.2,
+                73.8,
+                96,
+                112,
+                133
+              ]
+            },
+            {
+              "label": "feb_1",
+              "values": [
+                31,
+                19.5,
+                73.3,
+                87,
+                102,
+                122
+              ]
+            },
+            {
+              "label": "feb_15",
+              "values": [
+                45,
+                23.6,
+                72.7,
+                77,
+                92,
+                111
+              ]
+            },
+            {
+              "label": "mar_1",
+              "values": [
+                59,
+                29.4,
+                72.2,
+                68,
+                82,
+                100
+              ]
+            },
+            {
+              "label": "mar_15",
+              "values": [
+                73,
+                35.6,
+                70.8,
+                60,
+                73,
+                91
+              ]
+            },
+            {
+              "label": "apr_1",
+              "values": [
+                90,
+                42.2,
+                68.3,
+                53,
+                65,
+                82
+              ]
+            },
+            {
+              "label": "apr_15",
+              "values": [
+                104,
+                48.2,
+                66.9,
+                47,
+                58,
+                75
+              ]
+            },
+            {
+              "label": "may_1",
+              "values": [
+                120,
+                53.8,
+                66.6,
+                42,
+                53,
+                69
+              ]
+            },
+            {
+              "label": "may_15",
+              "values": [
+                134,
+                59.0,
+                67.0,
+                38,
+                48,
+                65
+              ]
+            },
+            {
+              "label": "jun_1",
+              "values": [
+                151,
+                63.8,
+                68.0,
+                35,
+                45,
+                62
+              ]
+            },
+            {
+              "label": "jun_15",
+              "values": [
+                165,
+                67.4,
+                69.3,
+                33,
+                44,
+                63
+              ]
+            },
+            {
+              "label": "jul_1",
+              "values": [
+                181,
+                69.8,
+                70.8,
+                33,
+                44,
+                66
+              ]
+            },
+            {
+              "label": "jul_15",
+              "values": [
+                195,
+                70.4,
+                72.4,
+                34,
+                47,
+                72
+              ]
+            },
+            {
+              "label": "aug_1",
+              "values": [
+                212,
+                69.0,
+                74.1,
+                37,
+                52,
+                82
+              ]
+            },
+            {
+              "label": "aug_15",
+              "values": [
+                226,
+                66.2,
+                75.3,
+                42,
+                59,
+                111
+              ]
+            },
+            {
+              "label": "sep_1",
+              "values": [
+                243,
+                62.0,
+                75.8,
+                48,
+                73,
+                154
+              ]
+            },
+            {
+              "label": "sep_15",
+              "values": [
+                257,
+                57.1,
+                75.1,
+                60,
+                104,
+                178
+              ]
+            },
+            {
+              "label": "oct_1",
+              "values": [
+                273,
+                51.7,
+                73.4,
+                83,
+                133,
+                184
+              ]
+            },
+            {
+              "label": "oct_15",
+              "values": [
+                287,
+                45.6,
+                73.4,
+                107,
+                147,
+                183
+              ]
+            },
+            {
+              "label": "nov_1",
+              "values": [
+                304,
+                38.8,
+                75.1,
+                122,
+                151,
+                179
+              ]
+            },
+            {
+              "label": "nov_15",
+              "values": [
+                318,
+                32.0,
+                76.4,
+                124,
+                147,
+                172
+              ]
+            },
+            {
+              "label": "dec_1",
+              "values": [
+                334,
+                25.2,
+                77.1,
+                121,
+                140,
+                164
+              ]
+            },
+            {
+              "label": "dec_15",
+              "values": [
+                348,
+                20.3,
+                76.6,
+                114,
+                132,
+                154
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Table 2's temperature and humidity are the conditions for each date; drying runs on through the following months, so a fit integrates through the year's conditions rather than holding one row's."
+    },
+    {
+      "key": "air_drying_rate_fit",
+      "description": "Rate of the island's air-drying model, fitted to the Madison table: moisture content approaches the equilibrium exponentially at k = k0 (e_s(T)/e_s(20 C))^p per day for the reference board, e_s by Bolton (1980). Fitted by least squares on log drying time over all 72 Table 2 times, integrating day by day through the table's own year",
+      "unit": "per day; dimensionless",
+      "source": "simpson_hart2000",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "parameter",
+          "columns": [
+            "value"
+          ],
+          "rows": [
+            {
+              "label": "k0_per_day_at_20c",
+              "values": [
+                0.039
+              ]
+            },
+            {
+              "label": "vapour_pressure_exponent",
+              "values": [
+                0.75
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Derived here, not published: GTR-121 scales its diffusion coefficient with saturated vapour pressure and then refines it by a fitted relative activation energy, which the exponent stands in for. With these values the 72 times are reproduced with a median error of 3.4% and a worst of 21%; regional/drying.rs's tests re-run the fit's check from the table above."
     }
   ]
 }
