@@ -56,6 +56,10 @@ pub struct Snapshot {
     pub economy: Arc<Economy>,
     pub timeline: Arc<Vec<TimelineEntry>>,
     pub conversations: Arc<Vec<Conversation>>,
+    /// The estate's stems around the yard (`stems::neighbourhood`), asked
+    /// for every `stems::TREE_POLL`; `None` until first read, and for an
+    /// island with no estate.
+    pub trees: Arc<Option<mk_island_api::Trees>>,
     /// What went wrong last time, if anything. Carried rather than
     /// logged: a desktop application that silently showed an island five
     /// minutes out of date would be worse than one that said it had lost
@@ -120,7 +124,13 @@ impl Island {
 
         let latest = Arc::new(RwLock::new(Snapshot::default()));
         let stop = Arc::new(AtomicBool::new(false));
-        let poller = spawn_poller(client.clone(), Arc::clone(&latest), Arc::clone(&stop));
+        let tree_box = estate.as_ref().map(crate::stems::neighbourhood);
+        let poller = spawn_poller(
+            client.clone(),
+            Arc::clone(&latest),
+            Arc::clone(&stop),
+            tree_box,
+        );
 
         Ok(Self {
             client,
@@ -195,11 +205,13 @@ fn spawn_poller(
     client: IslandClient,
     latest: Arc<RwLock<Snapshot>>,
     stop: Arc<AtomicBool>,
+    tree_box: Option<(f64, f64, f64, f64)>,
 ) -> std::thread::JoinHandle<()> {
     std::thread::Builder::new()
         .name("island-poll".into())
         .spawn(move || {
             let mut slow_at = Instant::now() - SLOW_POLL;
+            let mut trees_at: Option<Instant> = None;
             while !stop.load(Ordering::Relaxed) {
                 let started = Instant::now();
                 let mut next = {
@@ -237,6 +249,20 @@ fn spawn_poller(
                     }
                     if let Ok(conversations) = client.conversations() {
                         next.conversations = Arc::new(conversations);
+                    }
+                }
+                if let Some((x0, y0, x1, y1)) = tree_box {
+                    if next.trouble.is_none()
+                        && trees_at.is_none_or(|at| at.elapsed() >= crate::stems::TREE_POLL)
+                    {
+                        // The attempt is what is timed, not the success: a
+                        // backend whose tree route fails would otherwise be
+                        // asked again on every quarter-second poll. A failed
+                        // read keeps the last good one on screen.
+                        trees_at = Some(Instant::now());
+                        if let Ok(trees) = client.trees_in(x0, y0, x1, y1, crate::stems::STEM_CAP) {
+                            next.trees = Arc::new(Some(trees));
+                        }
                     }
                 }
 

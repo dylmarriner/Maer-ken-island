@@ -20,6 +20,7 @@ pub mod inspectors;
 pub mod property;
 pub mod scene;
 pub mod source;
+pub mod stems;
 pub mod terrain;
 
 /// The build this binary came from.
