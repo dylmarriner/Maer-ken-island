@@ -112,7 +112,7 @@ const DAY: u64 = 86_400;
 /// against 10.4, Gem-D asleep at home 41 of 57 hours and Gem-K 41 of 56,
 /// temperate-forest NPP 567 g C/m2/yr. Nothing physical moved that the
 /// test measures; the hash did.
-const WEEK_DIGEST: &str = "73b694a2ebdb8e73a87a9828383712ae5fc42455b50981b5666618f16db10157";
+const WEEK_DIGEST: &str = "85511c3a09c2259040282974897d0813dc92a62f0dcd351be323c0dd5e2baa89";
 
 fn repo(path: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))

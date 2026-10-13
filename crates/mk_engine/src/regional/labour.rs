@@ -142,6 +142,12 @@ impl LabourTable {
         Self { set }
     }
 
+    /// The packs this table reads, for the other island models that cost
+    /// their work from the same library.
+    pub fn library(&self) -> &ReferenceLibrary {
+        &self.set
+    }
+
     /// Load the repository's reference packs.
     pub fn load_default() -> Result<Self, LabourError> {
         ReferenceLibrary::load(&crate::validation::default_reference_dir())

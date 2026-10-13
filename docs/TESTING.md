@@ -46,7 +46,7 @@ Current members (find them with `grep -rn 'fn slow_\|fn deep_' --include=*.rs cr
 
 | Pin | Test | Moves when |
 |---|---|---|
-| `WEEK_DIGEST` (`c405fc06…53c6`) | `island_life_acceptance` (slow) | anything the founders or their world do changes. Re-pin only after the week's audit and reference-pack checks pass (`docs/handoff/WORKING_PRACTICES.md`). |
+| `WEEK_DIGEST` (`85511c3a…ba89`) | `island_life_acceptance` (slow) | anything the founders or their world do changes. Re-pin only after the week's audit and reference-pack checks pass (`docs/handoff/WORKING_PRACTICES.md`). |
 | Planetary topology (`766d5cd8…d497`) | `topology_hash_baseline` (fast) | never, from island work. |
 
 ## Checking the dashboard by hand

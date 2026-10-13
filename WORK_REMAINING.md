@@ -391,5 +391,5 @@ page does not yet use the map.
   push; the `dependency audit` CI job replaced it.
 - **Firecrawl credits ran out** on 2026-10-12. WebSearch and the TinyFish fetcher still work for
   sources; the container's own network blocks most hosts.
-- **Persist digests.** `WEEK_DIGEST` is `c405fc06…53c6`; the planetary topology pin is
+- **Persist digests.** `WEEK_DIGEST` is `85511c3a…ba89`; the planetary topology pin is
   `766d5cd8…d497`. Any change that moves either is a behaviour change and must say so.
