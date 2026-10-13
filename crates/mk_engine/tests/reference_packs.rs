@@ -20,6 +20,7 @@ const REQUIRED: [(ReferenceDomain, &[&str]); 7] = [
             "orographic_precipitation_southern_alps",
             "windward_to_leeward_precipitation_ratio",
             "typical_annual_rainfall_new_zealand",
+            "sst_annual_phase_lag_40_44s",
             "sst_seasonal_range_40_45",
             "synoptic_period",
             "cyclone_lifetime",

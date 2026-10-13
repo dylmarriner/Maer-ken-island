@@ -245,6 +245,7 @@ fn slow_a_year_of_island_weather_matches_the_reference_packs() {
     let (mut temp, mut rain, mut u, mut v) =
         (vec![0.0; n], vec![0.0; n], vec![0.0; n], vec![0.0; n]);
     let mut sst_by_day = Vec::new();
+    let mut declination_by_day = Vec::new();
     // Monthly mean surface temperature per cell: twelve thirty-day months.
     let mut monthly = vec![vec![0.0; n]; 12];
     let (mut precip_kg, mut to_sea_kg, mut deep_kg) = (0.0, 0.0, 0.0);
@@ -276,6 +277,11 @@ fn slow_a_year_of_island_weather_matches_the_reference_packs() {
             }
         }
         sst_by_day.push(sst / count);
+        let t = (day * local_day) as f64;
+        let orbit = mk_engine::orbit::step_orbit(&b.canon, t);
+        declination_by_day.push(
+            mk_engine::rotation::step_rotation(t, orbit.mean_anomaly, &b.canon).subsolar_latitude,
+        );
         precip_kg += s.hydrology.budget.precipitation_kg;
         to_sea_kg += s.hydrology.budget.surface_to_ocean_kg;
         deep_kg += s.hydrology.budget.deep_drainage_kg;
@@ -368,6 +374,40 @@ fn slow_a_year_of_island_weather_matches_the_reference_packs() {
     let sst_range = sst_by_day.iter().cloned().fold(f64::MIN, f64::max)
         - sst_by_day.iter().cloned().fold(f64::MAX, f64::min);
     println!("SST seasonal range {sst_range:.2} K");
+    // Phase of the year's first harmonic, as a fraction of the year.
+    let phase = |series: &[f64]| {
+        let n = series.len() as f64;
+        let (mut a, mut b) = (0.0, 0.0);
+        for (k, x) in series.iter().enumerate() {
+            let angle = std::f64::consts::TAU * k as f64 / n;
+            a += x * angle.cos();
+            b += x * angle.sin();
+        }
+        b.atan2(a).rem_euclid(std::f64::consts::TAU) / std::f64::consts::TAU
+    };
+    // The island is in the south: its summer is when the sun is furthest
+    // south.
+    let south: Vec<f64> = declination_by_day.iter().map(|d| -d).collect();
+    let sst_lag = (phase(&sst_by_day) - phase(&south)).rem_euclid(1.0);
+    println!("SST peak lags the summer solstice by {sst_lag:.3} of the year");
+    // Observed at 40-44 S: 0.179-0.205 of the year (ERSSTv5,
+    // `sst_annual_phase_lag_40_44s`). The island's sea peaks at 0.281,
+    // about 0.08 of a year (an Earth month) late (D25); this holds it
+    // there until a prognostic marine atmosphere closes the gap.
+    let observed_lag = mk_engine::validation::ReferenceLibrary::load(
+        &mk_engine::validation::default_reference_dir(),
+    )
+    .expect("reference packs")
+    .item(
+        mk_engine::validation::ReferenceDomain::Climate,
+        "sst_annual_phase_lag_40_44s",
+    )
+    .and_then(|i| i.range())
+    .expect("the observed SST phase");
+    assert!(
+        (observed_lag.0..=observed_lag.1 + 0.08).contains(&sst_lag),
+        "SST lag {sst_lag}, observed {observed_lag:?} (D25 allows 0.08 more)"
+    );
     assert!((3.0..=6.0).contains(&sst_range), "SST range {sst_range}");
 
     // 6. The year over lowland: warmest minus coldest monthly mean, median
