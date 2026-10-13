@@ -58,7 +58,7 @@ this list holds the current state. The evidence for what is *done* is in
 | App | Phase 5 Tasks 3-8 | Partly done | See below; one owner pick (portraits) |
 | Gates | Gate 1, 2, 3 owner reviews | **Closed** (owner, 2026-10-13) | — |
 | Upstream | PRs for every divergence in `UPSTREAM.md` | Open | Owner's upstream access |
-| Realism | R0-R10: humans, work and the living world replicate Earth (section 8) | R1 done; R1b (fetching water by hand) done | Engineering and sourcing |
+| Realism | R0-R10: humans, work and the living world replicate Earth (section 8) | R0, R1 and R1b (fetching water by hand) done; R3 next | Engineering and sourcing |
 | CI | Nightly slow job and dependency audit | Green after PR #15 | See Housekeeping |
 
 ---
@@ -403,7 +403,7 @@ Ordered by what most changes the founders' daily life:
 
 | # | Step | Research | State |
 |---|---|---|---|
-| R0 | Honest register: deviation rows for every mind and sense gap; book grazer faeces and deaths to detritus; remove or wire dead code | humans §1.11, earth §4 Step 0 | Open |
+| R0 | Honest register: deviation rows for every mind and sense gap; book grazer faeces and deaths to detritus; remove or wire dead code | humans §1.11, earth §4 Step 0 | Done: D44-D54 record the mind and sense gaps; litter, faeces and carcasses feed RothC soil carbon (`regional/soil.rs`, D43); the unused sparse plant view is gone |
 | R1 | Water at home: a rainwater tank filled by simulated rain on the house roof, sized from the estate's own climate (ESR 2021 use, Harrison Grierson 2011 inflow model); people away from home drink where they find water; a dry tank means fetching by hand | work §3.2 | Tank done (PR #10, D42); R1b fetching by hand with two 20 L jerrycans when dry done (PR #12) |
 | R2 | Mass-based carrying and real containers: load limits by body mass, pace and energy by load | work §3.1, §2.2 | Open |
 | R3 | An edible food base: edible fractions, foraging with a food store at home, seasonal and soil-limited plant production (D31) | earth Steps 1-2, work §3.3 | Open |
@@ -439,5 +439,5 @@ invertebrate densities, fire danger indices (see each report's "unsourced" secti
   push; the `dependency audit` CI job replaced it.
 - **Firecrawl credits ran out** on 2026-10-12. WebSearch and the TinyFish fetcher still work for
   sources; the container's own network blocks most hosts.
-- **Persist digests.** `WEEK_DIGEST` is `3d268e8b…4338`; the planetary topology pin is
+- **Persist digests.** `WEEK_DIGEST` is `c46b2028…9f16`; the planetary topology pin is
   `e4ece246…73e2`. Any change that moves either is a behaviour change and must say so.
