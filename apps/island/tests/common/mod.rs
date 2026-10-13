@@ -75,7 +75,7 @@ async fn a_dashboard_for(
 ) {
     let data_dir = Box::leak(Box::new(tempfile::tempdir().unwrap()));
     let (population, _) =
-        island_humans::IslandHumanPopulation::open(data_dir.path(), [seed; 32]).unwrap();
+        island::population::IslandHumanPopulation::open(data_dir.path(), [seed; 32]).unwrap();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let port = listener.local_addr().unwrap().port();
     let routes = server::routes_with_world(
@@ -113,7 +113,7 @@ pub async fn a_remote_backend(
     // listener has to be new because the first one went with the task.
     let data_dir = Box::leak(Box::new(tempfile::tempdir().unwrap()));
     let (population, _) =
-        island_humans::IslandHumanPopulation::open(data_dir.path(), [12u8; 32]).unwrap();
+        island::population::IslandHumanPopulation::open(data_dir.path(), [12u8; 32]).unwrap();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let port = listener.local_addr().unwrap().port();
     let routes = server::routes_with_config(

@@ -349,7 +349,7 @@ cost the resting baseline (D22).
 
   Still open from that phase's plan: individual stems rendered in 3D (the web map draws them;
   the desktop application does not yet), the human inspector's full detail sections, the
-  foundry panel, the resolution gate and its benchmark, and retiring `apps/island_humans`. None
+  foundry panel, the resolution gate and its benchmark. None
   of those is blocked; none is done. `island_bench` and the allocation-bound test came in with
   the merged local line, and the planetary-only pruning is analysed rather than outstanding:
   `docs/island/PRUNING_INVENTORY.md` shows 9 of 35 modules (8.5% of lines, all tooling) are

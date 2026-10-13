@@ -290,7 +290,7 @@ fn main() {
         }
     }
     let mut data_dir = PathBuf::from("island-data");
-    let mut seed = island_humans::DEFAULT_SEED;
+    let mut seed = island::population::DEFAULT_SEED;
     let mut bind: std::net::SocketAddr = "127.0.0.1:8080".parse().expect("valid default");
     let mut allowed_origins: Vec<String> = Vec::new();
     let mut backend: Option<String> = None;
@@ -532,13 +532,14 @@ fn main() {
         }
     };
 
-    let (population, warnings) = match island_humans::IslandHumanPopulation::open(&data_dir, seed) {
-        Ok(opened) => opened,
-        Err(err) => {
-            eprintln!("could not open {}: {err}", data_dir.display());
-            std::process::exit(1);
-        }
-    };
+    let (population, warnings) =
+        match island::population::IslandHumanPopulation::open(&data_dir, seed) {
+            Ok(opened) => opened,
+            Err(err) => {
+                eprintln!("could not open {}: {err}", data_dir.display());
+                std::process::exit(1);
+            }
+        };
     for warning in warnings {
         eprintln!("warning: {warning}");
     }

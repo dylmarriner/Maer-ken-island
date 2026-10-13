@@ -401,7 +401,7 @@ async fn a_backend_with_no_island_says_so_rather_than_failing() {
     // words rather than showing an error.
     let data_dir = tempfile::tempdir().unwrap();
     let (population, _) =
-        island_humans::IslandHumanPopulation::open(data_dir.path(), [13u8; 32]).unwrap();
+        island::population::IslandHumanPopulation::open(data_dir.path(), [13u8; 32]).unwrap();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let port = listener.local_addr().unwrap().port();
     let routes = island::serve::server::routes_with_config(

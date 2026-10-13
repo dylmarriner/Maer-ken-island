@@ -14,5 +14,6 @@
 // on type nesting, not on anything at run time.
 #![recursion_limit = "256"]
 
+pub mod population;
 pub mod run;
 pub mod serve;

@@ -350,7 +350,7 @@ dashboard; the desktop panels).
 | 4 | Human detail view, inspector, foundry panel; portraits | **Owner picks the two portraits** from upstream `apps/mk_ui/assets/portraits/`, and confirms their provenance before any distribution |
 | 5 | Inspectors and the full control set (speed selector with achieved speed, local date and time) | Engineering |
 | 6 | `island_bench`, the allocation-bound test (`construction-counters` feature), the resolution gate | **Owner confirms targets** (default: headless one simulated day per real minute; real time with the UI open) and **decides on formal predictive processing** (wire it into decisions upstream, or stop running it) |
-| 7 | The sync script is done (2026-10-14, `scripts/sync_maerken_upstream.py`, `UPSTREAM.md` § Sync procedure). Left: move the creator out of `apps/island_humans` and retire it; pruning is the owner's call (the inventory recommends not to) | Engineering |
+| 7 | The sync script is done (2026-10-14, `scripts/sync_maerken_upstream.py`, `UPSTREAM.md` § Sync procedure). The creator moved into `apps/island` (`island::population`) and `apps/island_humans` is retired. Pruning is the owner's call (the inventory recommends not to) | Engineering |
 | 8 | Final acceptance: every design criterion run and recorded | All of the above |
 
 Also: **a GPU frame-rate figure** for `island-ui` (every frame so far was rasterised on the CPU,

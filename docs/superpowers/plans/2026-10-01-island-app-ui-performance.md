@@ -191,7 +191,7 @@ Task 6 status (partly done): `apps/island/src/bin/island_bench.rs` (JSON: bootst
 
 - [x] **Step 1:** Write script tests using temporary git repositories for unchanged, changed and missing upstream paths.
 - [x] **Step 2:** Implement check/apply modes with explicit commit pin and clean-worktree guard.
-- [ ] **Step 3:** Move the Phase 0b creator/population code out of `apps/island_humans` with its tests; point `apps/island` at the new location; then remove `apps/island_humans`.
+- [x] **Step 3:** Move the Phase 0b creator/population code out of `apps/island_humans` with its tests; point `apps/island` at the new location; then remove `apps/island_humans`.
 Task 7 status (2026-10-14): Steps 1-2 are done: `scripts/sync_maerken_upstream.py` with the file-by-file import manifest `scripts/upstream_imports.json` (built by matching every local file to the upstream trees) and eight tests on throwaway repositories, run in CI's `repository scripts` job; `UPSTREAM.md` has the procedure and the drift against upstream master. Step 4's inventory is done (`docs/island/PRUNING_INVENTORY.md`): 9 of 35 modules (8.5% of the lines) are unreachable from the apps, all tooling, with no runtime or memory benefit; **the recommendation is not to prune** (it only makes the upstream sync harder). Pruning is therefore an owner decision, not outstanding work.
 - [ ] **Step 4:** Use `cargo tree`, source search and tests to identify planetary-only modules not reachable from `apps/island`/`apps/island_ui`; remove in small commits, running the fast tier after each cut.
 - [ ] **Step 5:** Update README/docs to make `apps/island` and `apps/island_ui` the entry points.

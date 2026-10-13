@@ -1184,7 +1184,7 @@ mod tests {
         use crate::serve::server::health_reply;
         let dir = tempfile::tempdir().unwrap();
         let (population, _) =
-            island_humans::IslandHumanPopulation::open(dir.path(), [3u8; 32]).unwrap();
+            crate::population::IslandHumanPopulation::open(dir.path(), [3u8; 32]).unwrap();
         let handle = spawn(island(), SimSpeed::Times(1));
         let (status, body) = health_reply(&population, Some(&handle));
         assert_eq!(status, warp::http::StatusCode::OK);

@@ -8,7 +8,7 @@
 //! contain and knows nothing about the schema; the whole stored record is
 //! still served alongside for anyone who wants it.
 
-use island_humans::HumanSummary;
+use crate::population::HumanSummary;
 use mk_core::human::{BiologicalSex, Generation, Locality};
 use mk_engine::humans::needs::SurvivalStatus;
 use mk_engine::humans::HumanBeing;
@@ -501,7 +501,7 @@ pub fn sections(human: &HumanBeing, summary: &HumanSummary, folder: Option<&str>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use island_humans::{summarize, IslandHumanPopulation};
+    use crate::population::{summarize, IslandHumanPopulation};
 
     fn founder() -> (IslandHumanPopulation, String) {
         let population = IslandHumanPopulation::with_founders();

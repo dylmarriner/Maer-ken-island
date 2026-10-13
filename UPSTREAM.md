@@ -17,7 +17,7 @@ Imported directly from that commit:
 Intentional island divergence at extraction:
 
 1. `mk_engine::humans` is public in this repository so the island application can use the human runtime directly.
-2. `apps/island_humans` is new and owns island population bootstrapping.
+2. `apps/island_humans` was new and owned island population bootstrapping; on 2026-10-14 (Phase 5 Task 7) it moved into `apps/island` as `island::population` and the `island_humans` binary, and the crate was retired.
 3. A small amount of rustfmt-only normalization occurred in copied source files.
 
 ## Sync procedure (Phase 5 Task 7, 2026-10-14)
@@ -263,7 +263,7 @@ Upstream `dylmarriner/Maer-Ken` default-branch HEAD is `7c05f0dcf254387ffd7322db
 
 **Owner decision needed:** keep the pin (program plan decision 2) or resync. Nothing is waiting on upstream today, so keeping the pin is the default.
 
-Human schema or runtime changes should be compared against upstream first. Island-only rules belong in `apps/island_humans` unless the underlying human model itself is intentionally being changed.
+Human schema or runtime changes should be compared against upstream first. Island-only rules belong in `apps/island/src/population.rs` unless the underlying human model itself is intentionally being changed.
 
 ## Phase 5 imports (2026-10-09)
 
