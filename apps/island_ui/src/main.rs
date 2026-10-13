@@ -24,6 +24,7 @@ use island_ui::estate;
 use island_ui::inspectors;
 use island_ui::scene::{self, Point};
 use island_ui::source::{Island, LocalBackend, Snapshot};
+use island_ui::stems;
 use island_ui::{property, terrain};
 
 const USAGE: &str = "\
@@ -547,12 +548,21 @@ fn main() {
     .register_type::<bevy::gltf::GltfMeshName>()
     .register_type::<bevy::gltf::GltfMaterialExtras>()
     .register_type::<bevy::gltf::GltfMaterialName>()
-    .add_systems(Startup, (build_ground, build_the_estate, light_the_island))
+    .add_systems(
+        Startup,
+        (
+            build_ground,
+            build_the_estate,
+            light_the_island,
+            prepare_trunks,
+        ),
+    )
     .add_systems(
         Update,
         (
             say_what_is_drawing,
             read_the_island,
+            grow_the_stems,
             pick_a_view,
             drive_the_camera,
             place_islanders,
@@ -716,6 +726,32 @@ fn build_the_estate(
         Mesh3d(meshes.add(box_for(yard.size_m))),
         MeshMaterial3d(materials.add(colour(0.42, 0.44, 0.33, 1.0))),
         Transform::from_xyz(yard.at.x, yard.at.y, yard.at.z),
+        Visibility::Hidden,
+    ));
+
+    // The floor of the wood the stems stand in: the box `stems.rs` asks
+    // the island about, a little below the yard so the two never fight
+    // for the same pixels. Without it a trunk beyond the yard stands on
+    // nothing, and from the estate camera's angle a wood of trunks over
+    // black reads as rain. Flat at the yard's level, as the yard is: the
+    // layout serves no terrain heights to draw it otherwise.
+    let (west, south, east, north) = stems::neighbourhood(layout);
+    let origin = (layout.patch.x0, layout.patch.y0);
+    let south_west = scene::estate_of(origin, west, south, 0.0);
+    let north_east = scene::estate_of(origin, east, north, 0.0);
+    commands.spawn((
+        OnTheEstate,
+        Mesh3d(meshes.add(box_for((
+            north_east.x - south_west.x,
+            0.02,
+            south_west.z - north_east.z,
+        )))),
+        MeshMaterial3d(materials.add(colour(0.24, 0.30, 0.18, 1.0))),
+        Transform::from_xyz(
+            (south_west.x + north_east.x) / 2.0,
+            -0.04,
+            (south_west.z + north_east.z) / 2.0,
+        ),
         Visibility::Hidden,
     ));
 
@@ -945,6 +981,94 @@ fn measure_frames(
         island.0.address()
     );
     quit.write(bevy::app::AppExit::Success);
+}
+
+/// Marks a tree's trunk on the estate, so a fresh read can replace them.
+#[derive(Component)]
+struct Trunk;
+
+/// One cylinder and two colours shared by every trunk: a wood is
+/// thousands of the same mesh at different scales.
+#[derive(Resource)]
+struct TrunkLook {
+    mesh: Handle<Mesh>,
+    tree: Handle<StandardMaterial>,
+    shrub: Handle<StandardMaterial>,
+}
+
+fn prepare_trunks(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    let bark = |r: f32, g: f32, b: f32| StandardMaterial {
+        base_color: Color::srgb(r, g, b),
+        perceptual_roughness: 0.95,
+        ..default()
+    };
+    commands.insert_resource(TrunkLook {
+        // Unit radius and height, scaled to each stem.
+        mesh: meshes.add(Cylinder::new(1.0, 1.0)),
+        tree: materials.add(bark(0.36, 0.27, 0.19)),
+        shrub: materials.add(bark(0.33, 0.40, 0.24)),
+    });
+}
+
+/// The estate's stems, redrawn whenever the poller brings a new read of
+/// them (`stems::TREE_POLL`): each a trunk as tall and thick as the island
+/// says it is, standing where it stands.
+fn grow_the_stems(
+    mut commands: Commands,
+    latest: Res<Latest>,
+    island: Res<TheIsland>,
+    look: Option<Res<TrunkLook>>,
+    showing: Res<Showing>,
+    mut drawn: Local<usize>,
+    old: Query<Entity, With<Trunk>>,
+) {
+    let (Some(look), Some(layout)) = (look, island.0.estate()) else {
+        return;
+    };
+    let Some(trees) = latest.0.trees.as_ref() else {
+        return;
+    };
+    // The poller replaces the whole read, so the pointer says whether it
+    // is a new one.
+    let read = std::sync::Arc::as_ptr(&latest.0.trees) as usize;
+    if *drawn == read {
+        return;
+    }
+    *drawn = read;
+    for entity in &old {
+        commands.entity(entity).despawn();
+    }
+    let visibility = if *showing == Showing::Estate {
+        Visibility::Inherited
+    } else {
+        Visibility::Hidden
+    };
+    let all = stems::stems(trees, (layout.patch.x0, layout.patch.y0));
+    for stem in &all {
+        commands.spawn((
+            OnTheEstate,
+            Trunk,
+            Mesh3d(look.mesh.clone()),
+            MeshMaterial3d(if stem.shrub {
+                look.shrub.clone()
+            } else {
+                look.tree.clone()
+            }),
+            Transform::from_xyz(stem.base.x, stem.base.y + stem.height_m / 2.0, stem.base.z)
+                .with_scale(Vec3::new(stem.radius_m, stem.height_m, stem.radius_m)),
+            visibility,
+        ));
+    }
+    info!(
+        "the estate's wood: {} stems drawn of {} in view ({} in the patch)",
+        all.len(),
+        trees.in_box,
+        trees.total
+    );
 }
 
 /// Show one frame and hide the other, and move the camera with it.

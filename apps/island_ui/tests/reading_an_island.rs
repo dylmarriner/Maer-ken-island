@@ -247,6 +247,30 @@ fn the_application_reads_an_island_and_has_enough_to_draw_it() {
             floor.at
         );
     }
+    // And the wood around the yard arrives stem by stem, each standing
+    // in the box it was asked for (Phase 5 Task 3 Step 2a).
+    let (x0, y0, x1, y1) = island_ui::stems::neighbourhood(layout);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    let trees = loop {
+        if let Some(trees) = island.snapshot().trees.as_ref().clone() {
+            break trees;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the stems never arrived"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    };
+    assert!(trees.shown <= island_ui::stems::STEM_CAP);
+    for tree in &trees.trees {
+        assert!(
+            tree.x_m >= x0 && tree.x_m <= x1 && tree.y_m >= y0 && tree.y_m <= y1,
+            "stem {} is outside the box it was asked for",
+            tree.id
+        );
+    }
+    let drawn = island_ui::stems::stems(&trees, (layout.patch.x0, layout.patch.y0));
+    assert!(drawn.len() <= trees.trees.len());
     let things = island_ui::estate::things(layout);
     assert_eq!(things.len(), layout.items.len(), "one drawn thing per item");
     // The patch as drawn: its south-west corner is the frame's origin and

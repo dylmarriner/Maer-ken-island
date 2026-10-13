@@ -347,8 +347,10 @@ cost the resting baseline (D22).
   takes the frame from 3,457 colours to 2,172 and names thirteen missing files, and only the
   log half of the check fails it.
 
-  Still open from that phase's plan: individual stems rendered in 3D (the web map draws them;
-  the desktop application does not yet), the human inspector's full detail sections, the
+  Still open from that phase's plan: the rest of the 3D vegetation (the estate view draws the
+  individual stems within 250 m of the yard as trunks at their own height and diameter, up to
+  3,000, re-read every 30 s; stand cover and instanced trees beyond the patch are not drawn),
+  the human inspector's full detail sections, the
   foundry panel, the resolution gate and its benchmark. None
   of those is blocked; none is done. `island_bench` and the allocation-bound test came in with
   the merged local line, and the planetary-only pruning is analysed rather than outstanding:
