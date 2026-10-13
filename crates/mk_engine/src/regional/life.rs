@@ -136,6 +136,8 @@ pub enum IslandLifeError {
     /// it does not know, or cadences and estate settings outside their
     /// bounds.
     Scenario(IslandScenarioError),
+    /// The deep-time spin-up could not run or its cache could not be used.
+    DeepTime(super::deep_time::DeepTimeError),
 }
 
 impl std::fmt::Display for IslandLifeError {
@@ -318,6 +320,80 @@ pub struct IslandLife {
     /// Who is walking to water, or home with it (realism programme R1b).
     pub water_trips: BTreeMap<String, WaterTrip>,
     topology: GridTopology,
+    /// How the living world was spun up before the founders arrived, when
+    /// this island was bootstrapped rather than restored (a record, not
+    /// state: not hashed and not snapshotted).
+    pub spin_up: Option<super::deep_time::SpinUpReport>,
+}
+
+/// RothC's parameters and every cell's year-average temperature modifier
+/// `a`, from the reference packs and the cell's climatology.
+fn soil_for(
+    domain: &IslandDomain,
+    physical: &RegionalPhysicalState,
+    ecology: &RegionalEcologyState,
+    labour: &LabourTable,
+) -> Result<(super::soil::RothC, Vec<f64>), IslandLifeError> {
+    let params = super::soil::RothC::from_reference(labour.library())
+        .map_err(|e| IslandLifeError::Labour(LabourError::MissingReference(e)))?;
+    let (rows, cols) = (
+        domain.rows(DomainLevel::Medium),
+        domain.cols(DomainLevel::Medium),
+    );
+    let mut factor = vec![0.0; rows * cols];
+    for (i, f) in factor.iter_mut().enumerate() {
+        if params
+            .plant_dpm_share(ecology.biome_grid.data()[i])
+            .is_none()
+        {
+            continue;
+        }
+        let year = super::ecology::cell_year(domain, physical, i / cols, i % cols);
+        let months = year.temperature_k.len() as f64;
+        *f = year
+            .temperature_k
+            .iter()
+            .map(|k| params.temperature_factor(k - 273.15))
+            .sum::<f64>()
+            / months;
+    }
+    Ok((params, factor))
+}
+
+/// Spin the living world up for the scenario's years, from the cache under
+/// `save_root` when one is there and whole.
+fn spin_up_cached(
+    canon: &CanonLocked,
+    scenario: &IslandScenario,
+    domain: &IslandDomain,
+    ecology: &mut RegionalEcologyState,
+    save_root: Option<&Path>,
+) -> Result<super::deep_time::SpinUpReport, IslandLifeError> {
+    use super::deep_time as dt;
+    let settings = dt::SpinUpSettings::new(canon, scenario.spin_up_years);
+    let key = dt::cache_key(canon, scenario, settings, ecology);
+    let path = save_root.map(|root| dt::cache_path(root, &key));
+    if let Some(path) = &path {
+        match dt::load_cached(path, &key) {
+            Ok(Some((report, cached))) => {
+                *ecology = cached;
+                return Ok(report);
+            }
+            Ok(None) => {}
+            // A damaged file is not the island: spin up again and replace it.
+            Err(e) => tracing::warn!("ignoring spin-up cache {}: {e}", path.display()),
+        }
+    }
+    let report = dt::spin_up(ecology, domain.cell_area_m2(DomainLevel::Medium), settings)
+        .map_err(IslandLifeError::DeepTime)?;
+    if let Some(path) = &path {
+        // A cache that cannot be written costs the next run time, not this
+        // run its island.
+        if let Err(e) = dt::save_cached(path, &key, &report, ecology) {
+            tracing::warn!("could not save spin-up cache {}: {e}", path.display());
+        }
+    }
+    Ok(report)
 }
 
 fn net(ledger: &Ledger, reservoir: Reservoir, kind: FluxKind) -> f64 {
@@ -332,19 +408,63 @@ fn net(ledger: &Ledger, reservoir: Reservoir, kind: FluxKind) -> f64 {
         .sum()
 }
 
+/// An environment variable naming a directory where [`IslandLife::bootstrap`]
+/// keeps deep-time spin-ups, as [`IslandLife::bootstrap_cached`] does under
+/// a save root. The workspace's `.cargo/config.toml` points it into
+/// `target/` for everything cargo runs, so the many test binaries that
+/// bootstrap the default island pay for its thousand years once rather than
+/// each (CI's fast tier went from 24 to 40 minutes without it). Unset, as
+/// it is for an installed binary, nothing is cached. Safe to share because
+/// the cache key covers the model's source and the ecology it starts from
+/// (`deep_time::cache_key`).
+pub const SPIN_UP_CACHE_ENV: &str = "MK_SPINUP_CACHE";
+
 impl IslandLife {
     /// Bootstrap the whole island from a scenario: physics, ecology, the
-    /// estate and its trees, and the founders at home.
+    /// estate and its trees, and the founders at home. The spin-up is
+    /// cached under [`SPIN_UP_CACHE_ENV`] when that names a directory.
     pub fn bootstrap(
         scenario: IslandScenario,
         canon: Arc<CanonLocked>,
+    ) -> Result<Self, IslandLifeError> {
+        let shared = std::env::var_os(SPIN_UP_CACHE_ENV)
+            .filter(|dir| !dir.is_empty())
+            .map(std::path::PathBuf::from);
+        Self::bootstrap_cached(scenario, canon, shared.as_deref())
+    }
+
+    /// [`Self::bootstrap`], keeping the deep-time spin-up under
+    /// `save_root/spinup/` so a later run of the same canon, scenario and
+    /// settings loads it instead of repeating it. A damaged cache file is
+    /// spun up again and replaced.
+    ///
+    /// Bootstrap order: geophysics, physical state, ecology and soil, the
+    /// deep-time spin-up, then the estate, its trees and the founders.
+    pub fn bootstrap_cached(
+        scenario: IslandScenario,
+        canon: Arc<CanonLocked>,
+        save_root: Option<&Path>,
     ) -> Result<Self, IslandLifeError> {
         let domain =
             IslandDomain::from_profile(scenario.profile.clone()).expect("a validated scenario");
         let physical = RegionalPhysicalState::bootstrap(&canon, &domain, scenario.seed)
             .map_err(IslandLifeError::Physical)?;
-        let ecology = RegionalEcologyState::bootstrap(&domain, &physical)
+        let mut ecology = RegionalEcologyState::bootstrap(&domain, &physical)
             .map_err(IslandLifeError::Ecology)?;
+        let labour = LabourTable::load_default().map_err(IslandLifeError::Labour)?;
+        let (params, factor) = soil_for(&domain, &physical, &ecology, &labour)?;
+        ecology.install_soil(params, factor);
+        let spin_up = if scenario.spin_up_years > 0 {
+            Some(spin_up_cached(
+                &canon,
+                &scenario,
+                &domain,
+                &mut ecology,
+                save_root,
+            )?)
+        } else {
+            None
+        };
         let placed = place_regional_estate(
             &canon,
             &physical,
@@ -436,7 +556,7 @@ impl IslandLife {
             water_drunk_kg: BTreeMap::new(),
             sleep_seconds: BTreeMap::new(),
             scheduler: IslandScheduler::new(scenario_cadences),
-            labour: LabourTable::load_default().map_err(IslandLifeError::Labour)?,
+            labour,
             computer_bridge: None,
             human_store: None,
             // Filled in below: the digest needs the built island.
@@ -447,6 +567,7 @@ impl IslandLife {
             household_water: None,
             water_trips: BTreeMap::new(),
             topology,
+            spin_up,
         };
         // A log says which scenario it belongs to, so replaying it against
         // a different island refuses rather than reproducing nothing and
@@ -590,6 +711,7 @@ impl IslandLife {
             household_water: snapshot.household_water,
             water_trips: snapshot.water_trips,
             topology,
+            spin_up: None,
         };
         if life.household_water.is_none() {
             // Saved before the house had a tank.
@@ -1736,29 +1858,7 @@ impl IslandLife {
     /// its production (`super::soil`, D43). Its temperature modifier is the
     /// cell's year-average of RothC's monthly factor over the climatology.
     fn install_soil(&mut self) -> Result<(), IslandLifeError> {
-        let params = super::soil::RothC::from_reference(self.labour.library())
-            .map_err(|e| IslandLifeError::Labour(LabourError::MissingReference(e)))?;
-        let (rows, cols) = (
-            self.domain.rows(DomainLevel::Medium),
-            self.domain.cols(DomainLevel::Medium),
-        );
-        let mut factor = vec![0.0; rows * cols];
-        for (i, f) in factor.iter_mut().enumerate() {
-            if params
-                .plant_dpm_share(self.ecology.biome_grid.data()[i])
-                .is_none()
-            {
-                continue;
-            }
-            let year = super::ecology::cell_year(&self.domain, &self.physical, i / cols, i % cols);
-            let months = year.temperature_k.len() as f64;
-            *f = year
-                .temperature_k
-                .iter()
-                .map(|k| params.temperature_factor(k - 273.15))
-                .sum::<f64>()
-                / months;
-        }
+        let (params, factor) = soil_for(&self.domain, &self.physical, &self.ecology, &self.labour)?;
         self.ecology.install_soil(params, factor);
         Ok(())
     }

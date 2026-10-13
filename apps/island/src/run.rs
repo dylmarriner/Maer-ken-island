@@ -69,7 +69,11 @@ pub struct RunArgs {
 /// allows. Pacing against wall-clock time belongs to the server, where
 /// somebody is watching.
 pub fn run(args: RunArgs) -> Result<(), String> {
-    let mut life = open_world(args.scenario.as_deref(), args.snapshot.as_deref())?;
+    let mut life = open_world(
+        args.scenario.as_deref(),
+        args.snapshot.as_deref(),
+        args.save_root.as_deref(),
+    )?;
 
     if let Some(root) = &args.save_root {
         let id = life
@@ -252,8 +256,14 @@ fn elapsed(life: &IslandLife) -> String {
 /// Start from a scenario or carry on from a snapshot, but not both.
 ///
 /// Shared with `island serve --scenario`, so the dashboard's island and the
-/// headless one are opened by exactly the same rules.
-pub fn open_world(scenario: Option<&Path>, snapshot: Option<&Path>) -> Result<IslandLife, String> {
+/// headless one are opened by exactly the same rules. A new island's
+/// deep-time spin-up is kept under `spin_up_cache/spinup/` when a directory
+/// is given, so the next start of the same scenario loads it.
+pub fn open_world(
+    scenario: Option<&Path>,
+    snapshot: Option<&Path>,
+    spin_up_cache: Option<&Path>,
+) -> Result<IslandLife, String> {
     match (scenario, snapshot) {
         (Some(_), Some(_)) => {
             Err("--scenario starts a new island and --snapshot carries one on; pick one".into())
@@ -262,8 +272,23 @@ pub fn open_world(scenario: Option<&Path>, snapshot: Option<&Path>) -> Result<Is
         (Some(path), None) => {
             let scenario = IslandScenario::load(path).map_err(|e| e.to_string())?;
             let canon = canon_for(path, &scenario)?;
-            IslandLife::bootstrap(scenario, Arc::new(canon))
-                .map_err(|e| format!("the island will not start: {e}"))
+            let life = IslandLife::bootstrap_cached(scenario, Arc::new(canon), spin_up_cache)
+                .map_err(|e| format!("the island will not start: {e}"))?;
+            if let Some(report) = &life.spin_up {
+                let e = report.equilibrium;
+                println!(
+                    "deep time: {} years {} (soil {:+.3}%, plants {:+.3}% per century at the end)",
+                    report.settings.years,
+                    if report.from_cache {
+                        "loaded from the cache".to_string()
+                    } else {
+                        format!("spun up in {:.1} s", report.wall_seconds)
+                    },
+                    100.0 * e.soil_carbon_trend_per_century,
+                    100.0 * e.biomass_trend_per_century,
+                );
+            }
+            Ok(life)
         }
         (None, Some(path)) => {
             // The canon is not in the file, so it comes from where a fresh

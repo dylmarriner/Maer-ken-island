@@ -24,6 +24,7 @@ pub enum IslandScenarioError {
     InvalidCadence(String),
     InvalidEstatePatch(String),
     InvalidEnergy(String),
+    InvalidSpinUp(String),
     Profile(IslandProfileError),
 }
 
@@ -39,6 +40,7 @@ impl std::fmt::Display for IslandScenarioError {
             Self::InvalidCadence(why) => write!(f, "invalid cadence: {why}"),
             Self::InvalidEstatePatch(why) => write!(f, "invalid estate patch: {why}"),
             Self::InvalidEnergy(why) => write!(f, "invalid estate energy: {why}"),
+            Self::InvalidSpinUp(why) => write!(f, "invalid spin-up: {why}"),
             Self::Profile(e) => write!(f, "invalid profile: {e}"),
         }
     }
@@ -224,7 +226,24 @@ pub struct IslandScenario {
     pub estate_energy: EstateEnergyConfig,
     pub founders_enabled: bool,
     pub estate_enabled: bool,
+    /// Local years the living world is run before anybody lives on it
+    /// (Phase 4 Task 2b). A scenario saved before the spin-up existed has
+    /// none, and reproduces the island it always did.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub spin_up_years: u32,
 }
+
+fn is_zero(v: &u32) -> bool {
+    *v == 0
+}
+
+/// Local years of deep time a new scenario spins up (Phase 4 Task 2b).
+pub const DEFAULT_SPIN_UP_YEARS: u32 = 1_000;
+
+/// The most a scenario may ask for: a hundred thousand years is past any
+/// equilibrium the island's soils reach, and keeps a typo from running for
+/// days.
+pub const MAX_SPIN_UP_YEARS: u32 = 100_000;
 
 impl IslandScenario {
     /// The default scenario around `profile` and `seed`.
@@ -239,6 +258,7 @@ impl IslandScenario {
             estate_energy: EstateEnergyConfig::default(),
             founders_enabled: true,
             estate_enabled: true,
+            spin_up_years: DEFAULT_SPIN_UP_YEARS,
         }
     }
 
@@ -249,6 +269,12 @@ impl IslandScenario {
         self.cadences.validate()?;
         self.estate_patch.validate()?;
         self.estate_energy.validate()?;
+        if self.spin_up_years > MAX_SPIN_UP_YEARS {
+            return Err(IslandScenarioError::InvalidSpinUp(format!(
+                "spin_up_years {} is more than {MAX_SPIN_UP_YEARS}",
+                self.spin_up_years
+            )));
+        }
         self.profile
             .validate()
             .map_err(IslandScenarioError::Profile)

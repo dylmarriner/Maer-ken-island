@@ -1,0 +1,8 @@
+# Environment for everything cargo builds, runs and tests in this workspace.
+
+[env]
+# Where `IslandLife::bootstrap` keeps deep-time spin-ups
+# (`mk_engine::regional::life::SPIN_UP_CACHE_ENV`). Dozens of test binaries
+# bootstrap the default island and each would otherwise spin it up for a
+# thousand years; with this they share one. Installed binaries never see it.
+MK_SPINUP_CACHE = { value = "target/spinup-cache", relative = true }

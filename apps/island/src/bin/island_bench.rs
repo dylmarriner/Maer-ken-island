@@ -123,7 +123,8 @@ fn rate_in_pool(
         .map_err(|e| e.to_string())?;
     pool.install(|| {
         let (canon, scenario) = open(args)?;
-        let mut world = IslandLife::bootstrap(scenario, canon).map_err(|e| e.to_string())?;
+        let mut world =
+            IslandLife::bootstrap_cached(scenario, canon, None).map_err(|e| e.to_string())?;
         add_settlers(&mut world, people)?;
         let elapsed = run_steps(&mut world, ticks, dt)?;
         Ok(ticks as f64 / elapsed.as_secs_f64())
@@ -139,9 +140,10 @@ fn bench(args: &[String]) -> Result<Value, String> {
 
     let (canon, scenario) = open(args)?;
     let started = Instant::now();
-    let mut world =
-        IslandLife::bootstrap(scenario, Arc::clone(&canon)).map_err(|e| e.to_string())?;
+    let mut world = IslandLife::bootstrap_cached(scenario, Arc::clone(&canon), None)
+        .map_err(|e| e.to_string())?;
     let bootstrap = started.elapsed();
+    let spin_up = world.spin_up.clone();
     add_settlers(&mut world, people)?;
     world
         .enable_human_store(&tmp.join("store"))
@@ -188,8 +190,15 @@ fn bench(args: &[String]) -> Result<Value, String> {
         "human_store_sync_ms": ms(store_sync),
         "peak_rss_bytes": peak_rss_bytes(),
         "threads": rayon::current_num_threads(),
-        "spin_up_1000y_seconds": Value::Null,
-        "notes": ["spin_up_1000y_seconds is null: no deep-time spin-up exists (plan Task 2b is blocked on missing soil, erosion and tectonics models)."],
+        // Inside `bootstrap_ms`: the scenario's own spin-up, measured, and
+        // scaled to 1,000 years when the scenario asks for another length
+        // (it is linear in years: every year is the same twelve steps).
+        "spin_up_years": spin_up.as_ref().map(|r| r.settings.years),
+        "spin_up_seconds": spin_up.as_ref().map(|r| r.wall_seconds),
+        "spin_up_1000y_seconds": spin_up
+            .as_ref()
+            .filter(|r| r.settings.years > 0)
+            .map(|r| r.wall_seconds * 1_000.0 / r.settings.years as f64),
     });
     if args.iter().any(|a| a == "--compare-threads") {
         let cmp_ticks = ticks.min(200);

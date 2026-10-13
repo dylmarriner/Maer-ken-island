@@ -204,32 +204,56 @@ impl SoilCarbon {
         let p = self.params;
         let mut respired = 0.0;
         for (i, pools) in self.pools.iter_mut().enumerate() {
-            let Some(dpm_share) = p.plant_dpm_share(biomes[i]) else {
-                continue;
-            };
-            let input = inputs[i];
-            pools[DPM] += dpm_share * input.litter + p.manure[0] * input.faeces + input.carcasses;
-            pools[RPM] += (1.0 - dpm_share) * input.litter + p.manure[1] * input.faeces;
-            pools[HUM] += p.manure[2] * input.faeces;
-            let cover = if vegetated[i] {
-                p.cover_vegetated
-            } else {
-                p.cover_bare
-            };
-            let m = self.temperature_factor[i] * cover;
-            let mut decomposed = 0.0;
-            for (pool, k) in pools.iter_mut().zip(p.k) {
-                let lost = *pool * (1.0 - (-m * k * dt_years).exp());
-                *pool -= lost;
-                decomposed += lost;
-            }
-            let formed = decomposed * p.to_biohum;
-            pools[BIO] += formed * p.bio_share;
-            pools[HUM] += formed * (1.0 - p.bio_share);
-            respired += decomposed - formed;
+            respired += p.step_cell(
+                pools,
+                biomes[i],
+                inputs[i],
+                self.temperature_factor[i],
+                vegetated[i],
+                dt_years,
+            );
         }
         self.respired_kgc_m2 += respired;
         respired
+    }
+}
+
+impl RothC {
+    /// [`SoilCarbon::step`] for one cell's `pools` under temperature
+    /// modifier `a`: returns the carbon respired (kg C m⁻²), zero where the
+    /// biome has no soil.
+    pub fn step_cell(
+        &self,
+        pools: &mut [f64; 4],
+        biome: BiomeType,
+        input: SoilInputs,
+        a: f64,
+        vegetated: bool,
+        dt_years: f64,
+    ) -> f64 {
+        let p = self;
+        let Some(dpm_share) = p.plant_dpm_share(biome) else {
+            return 0.0;
+        };
+        pools[DPM] += dpm_share * input.litter + p.manure[0] * input.faeces + input.carcasses;
+        pools[RPM] += (1.0 - dpm_share) * input.litter + p.manure[1] * input.faeces;
+        pools[HUM] += p.manure[2] * input.faeces;
+        let cover = if vegetated {
+            p.cover_vegetated
+        } else {
+            p.cover_bare
+        };
+        let m = a * cover;
+        let mut decomposed = 0.0;
+        for (pool, k) in pools.iter_mut().zip(p.k) {
+            let lost = *pool * (1.0 - (-m * k * dt_years).exp());
+            *pool -= lost;
+            decomposed += lost;
+        }
+        let formed = decomposed * p.to_biohum;
+        pools[BIO] += formed * p.bio_share;
+        pools[HUM] += formed * (1.0 - p.bio_share);
+        decomposed - formed
     }
 }
 

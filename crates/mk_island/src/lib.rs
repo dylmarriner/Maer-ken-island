@@ -21,5 +21,5 @@ pub use profile::{
 };
 pub use scenario::{
     EstateEnergyConfig, EstatePatchConfig, IslandCadenceProfile, IslandScenario,
-    IslandScenarioError, SCENARIO_VERSION,
+    IslandScenarioError, DEFAULT_SPIN_UP_YEARS, MAX_SPIN_UP_YEARS, SCENARIO_VERSION,
 };

@@ -19,7 +19,11 @@ fn repo(p: &str) -> PathBuf {
 
 #[test]
 fn grazers_seed_at_equilibrium_balance_their_carbon_and_leave_the_plants_alone() {
-    let scenario = IslandScenario::load(&repo("fixtures/island/default_scenario.json")).unwrap();
+    // The bootstrap's seeding, before deep time moves the grazers to their
+    // own equilibrium with the soil and the grazed plants.
+    let mut scenario =
+        IslandScenario::load(&repo("fixtures/island/default_scenario.json")).unwrap();
+    scenario.spin_up_years = 0;
     let canon = Arc::new(CanonLocked::load(&repo("fixtures/island/canon.json")).unwrap());
     let life = IslandLife::bootstrap(scenario, canon).unwrap();
     let area = life.domain.cell_area_m2(DomainLevel::Medium);

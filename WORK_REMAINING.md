@@ -41,7 +41,7 @@ this list holds the current state. The evidence for what is *done* is in
 | Living world | Phase 3 Task 2: every resource and material, placers, recipes | Open (partly started) | Cited placer decay, shaft size, abundances |
 | Living world | D9: actions take one tick | Open (felling, hauling done) | Cited durations per task |
 | Living world | D31: NPP ignores soil nutrients | Open | Regional soils model and data |
-| Runtime | Phase 4 Task 2b: deep-time spin-up | **Not started** | Engineering; long compute run |
+| Runtime | Phase 4 Task 2b: deep-time spin-up | **Done** (2026-10-14) | — |
 | Industry | Phase 4b Task 1 remainder: reference tables | Open | Sources (petroleum, refinery, staffing, wages, demand) |
 | Industry | Phase 4b Task 4: oil and gas field (D14, D19) | Open | Task 1 tables; a petroleum deposit |
 | Industry | Phase 4b Task 5: refinery, gas plant, fuel depot (D16) | Open | Task 1 tables |
@@ -172,29 +172,15 @@ it into pieces they can lift) or on foot. The log is stored green and stays gree
 
 ---
 
-## 3. Phase 4 Task 2b: deep-time spin-up (not started)
+## 3. Phase 4 Task 2b: deep-time spin-up (done 2026-10-14)
 
-The status page previously said Phase 4 was done; this task is the exception.
-
-- **What:** before any human exists, run the world for centuries in a fast mode (geology
-  annually; soils annually; hydrology, ecology and vegetation succession monthly; weather replaced
-  by a climatology measured from one full-detail year and re-measured every 100 years), so the
-  island starts with mature soils, rivers and forests. Humans are never fast-forwarded.
-- **Files:** create `crates/mk_engine/src/regional/deep_time.rs`; modify
-  `crates/mk_island/src/scenario.rs` (`spin_up_years`, default 1,000) and `regional/world.rs`
-  (`IslandWorldState::spin_up(years) -> Result<SpinUpReport, IslandWorldError>`, refused once
-  humans exist).
-- **Cache:** the spun-up state is snapshotted under `<save_root>/spinup/<digest>.snap`, keyed by
-  canon + scenario + seed + spin-up settings, so later runs load it.
-- **Tests:** `crates/mk_engine/tests/island_deep_time.rs` on the small test island
-  (`IslandProfile::test_small`, seed 16): deterministic, cache key changes with any input,
-  soil carbon and forest biomass trends under 1% per century over the last 100 years, refused
-  once humans exist, the climate of one full-detail year after spin-up matches the climatology
-  within Phase 2 tolerances, cache-load-then-run equals spin-up-then-run.
-- **Measure:** the full-island 1,000-year spin-up in release (target: a few hours, once per
-  scenario) and record it in the Phase 5 benchmark.
-- **Deviation:** D20 (deep-time climatology during spin-up) is already recorded as Accepted.
-- **Digest:** the week digest will change (the island starts spun up); re-pin per the rules.
+`regional/deep_time.rs` runs the plants, grazers and RothC soil monthly for the scenario's
+`spin_up_years` (1,000 by default) before the founders arrive, and caches the result under
+`<save_root>/spinup/<key>.snap`. The full island takes 10.8 s on 8 threads in release. The plan's
+evidence is in `docs/ISLAND_SYSTEM_STATUS.md` and the departures (weather, rivers and terrain not
+stepped) in D20. What is left grows out of other items: once a soils model with nutrients (D31,
+§2d) or succession and disturbance (R10) exists, it belongs in the same per-cell loop, and its
+equilibrium is what the spin-up will then be for.
 
 ---
 
@@ -439,5 +425,5 @@ invertebrate densities, fire danger indices (see each report's "unsourced" secti
   push; the `dependency audit` CI job replaced it.
 - **Firecrawl credits ran out** on 2026-10-12. WebSearch and the TinyFish fetcher still work for
   sources; the container's own network blocks most hosts.
-- **Persist digests.** `WEEK_DIGEST` is `fc62629c…3da7`; the planetary topology pin is
+- **Persist digests.** `WEEK_DIGEST` is `54b48e5b…bb18`; the planetary topology pin is
   `e4ece246…73e2`. Any change that moves either is a behaviour change and must say so.
