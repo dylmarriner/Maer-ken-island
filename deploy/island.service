@@ -1,5 +1,9 @@
 # The island's backend as a systemd service.
 #
+#   deploy/build-release.sh
+#   install -m 0755 dist/bin/island /usr/local/bin/
+#   cp -r dist/share/island /usr/local/share/
+#   useradd --system --home /var/lib/island island
 #   install -m 0644 deploy/island.service /etc/systemd/system/
 #   install -m 0600 deploy/island.env     /etc/island/island.env   # and fill it in
 #   systemctl daemon-reload && systemctl enable --now island
@@ -18,8 +22,12 @@ Type=exec
 User=island
 Group=island
 EnvironmentFile=/etc/island/island.env
+# Where the shipped reference packs are; the path compiled into the binary
+# is the build machine's.
+Environment=ISLAND_REFERENCE_DIR=/usr/local/share/island/fixtures/reference
+# To run another scenario, put it (and its canon) elsewhere and name it here.
 ExecStart=/usr/local/bin/island serve \
-    --scenario /var/lib/island/scenario.json \
+    --scenario /usr/local/share/island/fixtures/island/default_scenario.json \
     --bind ${ISLAND_BIND} \
     --data-dir /var/lib/island/people \
     --snapshot-dir /var/lib/island/snapshots \

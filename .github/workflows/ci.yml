@@ -248,6 +248,50 @@ jobs:
         run: npm audit
         working-directory: services/computer-service
 
+  # The backend as it ships. Every other job runs inside the source tree,
+  # which hides anything the installed binary needs and does not carry:
+  # it once looked for its reference packs at a path compiled in from the
+  # build machine, and nothing here could see that. This job installs
+  # `dist/` outside the repository, hides the repository's fixtures so
+  # that compiled-in path is gone, and waits until the island answers
+  # with a clock.
+  installed:
+    name: installed backend
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned toolchain
+        run: rustup show
+      - uses: Swatinem/rust-cache@v2
+      - name: Build dist/
+        run: deploy/build-release.sh
+      - name: It starts and serves an island from the installed copy
+        run: |
+          set -eu
+          prefix="$RUNNER_TEMP/install"
+          mkdir -p "$prefix" "$RUNNER_TEMP/state"
+          cp -r dist/bin dist/share "$prefix/"
+          mv fixtures fixtures.hidden
+          cd "$RUNNER_TEMP/state"
+          ISLAND_REFERENCE_DIR="$prefix/share/island/fixtures/reference" \
+            "$prefix/bin/island" serve \
+              --scenario "$prefix/share/island/fixtures/island/default_scenario.json" \
+              --bind 127.0.0.1:8080 > serve.log 2>&1 &
+          pid=$!
+          for _ in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8080/api/world > world.json; then
+              jq -e '.clock' world.json
+              kill "$pid"
+              exit 0
+            fi
+            kill -0 "$pid" 2>/dev/null || break
+            sleep 5
+          done
+          cat serve.log
+          exit 1
+
   slow:
     name: slow tests (nightly)
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'

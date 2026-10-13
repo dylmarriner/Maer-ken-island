@@ -1,0 +1,13 @@
+# The image is built from the manifests, the sources and the fixtures, and
+# nothing else. Everything is excluded and those are let back in: `target/`
+# alone is many gigabytes, and a build context that sends it is one that
+# takes minutes before the first step runs.
+*
+!Cargo.toml
+!Cargo.lock
+!rust-toolchain.toml
+!crates/
+!apps/
+!fixtures/
+!docs/island/DEPLOYMENT.md
+**/target

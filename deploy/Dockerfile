@@ -17,13 +17,15 @@ WORKDIR /src
 COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
 COPY crates crates
 COPY apps apps
+# The founders' fixtures are compiled into the binary (`include_str!`).
+COPY fixtures fixtures
 # `-p island` and not the workspace: `island_ui` is in the workspace, pulls
 # in Bevy, and takes nine minutes to build for a window this image will
 # never open. Naming the package builds only what the backend needs, and
 # leaves the source tree the one the tests run against.
 RUN cargo build --release -p island --locked
 
-FROM debian:bookworm-slim
+FROM debian:bookworm-20261005-slim
 # curl is for the healthcheck below and nothing else. A healthcheck that
 # only proved the binary exists would pass on a backend that had stopped
 # answering, which is the one thing it is for.
@@ -32,8 +34,13 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 RUN useradd --system --home /var/lib/island --create-home island
 COPY --from=build /src/target/release/island /usr/local/bin/island
-# The scenario and its canon: the island cannot bootstrap without them.
+# The scenario and its canon, and the reference packs the founders' labour
+# is costed from: the island cannot bootstrap without them. The binary
+# looks for the packs where it was built unless told otherwise, and that
+# path is in the build stage, not here.
 COPY fixtures/island /usr/local/share/island/fixtures/island
+COPY fixtures/reference /usr/local/share/island/fixtures/reference
+ENV ISLAND_REFERENCE_DIR=/usr/local/share/island/fixtures/reference
 COPY docs/island/DEPLOYMENT.md /usr/share/doc/island/DEPLOYMENT.md
 
 USER island

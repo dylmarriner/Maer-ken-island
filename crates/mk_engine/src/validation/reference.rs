@@ -424,7 +424,20 @@ impl ReferenceLibrary {
     }
 }
 
-/// `fixtures/reference/` in this repository.
+/// Where the reference packs are: `ISLAND_REFERENCE_DIR` when it is set,
+/// else `fixtures/reference/` in the source tree this binary was built
+/// from, else `fixtures/reference/` under the working directory.
+///
+/// The source-tree path is baked in at compile time, so it only exists on
+/// the machine that built the binary. An installed backend (the container,
+/// `dist/`) names the packs it ships with through the variable.
 pub fn default_reference_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/reference")
+    if let Some(dir) = std::env::var_os("ISLAND_REFERENCE_DIR") {
+        return PathBuf::from(dir);
+    }
+    let built = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/reference");
+    if built.is_dir() {
+        return built;
+    }
+    PathBuf::from("fixtures/reference")
 }

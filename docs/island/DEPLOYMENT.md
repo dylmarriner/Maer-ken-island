@@ -109,6 +109,18 @@ accept paying twice for nothing.
 `deploy/island.service` is a systemd unit; `deploy/Dockerfile` builds the
 backend into a container. Both read the same variables as above.
 
+The backend needs three things besides the binary: the scenario, its canon,
+and the reference packs (`fixtures/reference/`) the founders' labour is
+costed from. `deploy/build-release.sh` puts them in `dist/share/island/`,
+which installs as `/usr/local/share/island/`; the image carries the same
+tree. The scenario's canon is looked for from the working directory and
+from every folder above the scenario. The packs are looked for at
+`ISLAND_REFERENCE_DIR`, then in the source tree the binary was built from
+(a path that exists only on the build machine), then under the working
+directory; the unit and the image both set the variable. Without the
+packs the backend refuses to start with `MissingReference`, rather than
+running an island whose work costs nothing.
+
 ## The web dashboard, somewhere else
 
 Two ways, and they produce the same pages.
