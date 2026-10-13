@@ -348,7 +348,7 @@ dashboard; the desktop panels).
 |---|---|---|
 | 3 | Individual stems in 3D (2a), interiors (2b), industry and town (2d, after Phase 4b), resource visuals and inventory icons (2c, after Phase 3 Task 2), tests for every building kind and vehicle | Engineering |
 | 4 | Human detail view, inspector, foundry panel; portraits | **Owner picks the two portraits** from upstream `apps/mk_ui/assets/portraits/`, and confirms their provenance before any distribution |
-| 5 | Inspectors and the full control set (speed selector with achieved speed, local date and time) | Engineering |
+| 5 | Done 2026-10-14 for the clock, controls and terrain cell (`apps/island_ui/src/inspectors.rs`): six speeds with requested and achieved, Save, the local date (year, day of 288, time of a 36-hour day) with Earth time elapsed, and the cell under the view with its biome, climate and production. Left: picking a tree, room or item with the mouse (the estate inspector lists them) | Engineering |
 | 6 | `island_bench`, the allocation-bound test (`construction-counters` feature), the resolution gate | **Owner confirms targets** (default: headless one simulated day per real minute; real time with the UI open) and **decides on formal predictive processing** (wire it into decisions upstream, or stop running it) |
 | 7 | `scripts/sync_maerken_upstream.py` with tests, move the creator out of `apps/island_humans` and retire it, prune planetary-only modules | Engineering |
 | 8 | Final acceptance: every design criterion run and recorded | All of the above |

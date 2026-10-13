@@ -354,7 +354,7 @@ fn is_volcanic(domain: &IslandDomain, p: &RegionalPhysicalState, row: usize, col
 /// The annual-mean temperature (K) and rain (mm/day) at a medium cell, the
 /// coarse climatology sampled bilinearly and the temperature lapse-
 /// corrected from the coarse mean elevation to the cell's own.
-pub(crate) fn cell_climate(
+pub fn cell_climate(
     domain: &IslandDomain,
     p: &RegionalPhysicalState,
     row: usize,

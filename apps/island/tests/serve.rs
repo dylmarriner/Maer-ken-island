@@ -1195,6 +1195,33 @@ async fn a_cell_of_the_island_can_be_asked_about_by_row_and_column() {
     assert_eq!(cell["land"], true, "{cell}");
     assert_eq!(cell["buildable"], true, "{cell}");
 
+    // And it says what grows there and in what climate, for the
+    // inspector: the estate is wooded temperate land at about 41 degrees
+    // south, so a mild mean, rain, and plants that grow. The estate sits on
+    // the island's wet side (on the full island its cell is wetter than
+    // 99.7% of the land, about 9,100 mm a year), so the rain is bounded by
+    // Earth's wettest gauges rather than a typical town's.
+    assert!(
+        cell["biome"].as_str().is_some_and(|b| !b.is_empty()),
+        "{cell}"
+    );
+    let mean = cell["mean_temperature_c"]
+        .as_f64()
+        .expect("a mean temperature");
+    assert!((0.0..25.0).contains(&mean), "{cell}");
+    let rain = cell["annual_rain_mm"].as_f64().expect("a year's rain");
+    assert!((100.0..15_000.0).contains(&rain), "{cell}");
+    assert!(
+        cell["npp_kgc_m2_yr"].as_f64().expect("production") > 0.0,
+        "{cell}"
+    );
+
+    // The clock says how long the local year is, for the calendar.
+    let year = world_json["clock"]["year_length_days"]
+        .as_f64()
+        .expect("a year length");
+    assert!((year - 288.2).abs() < 0.1, "{year}");
+
     // Off the grid is a 404 with a reason, not a panic or a zeroed cell.
     let (status, response) = get(port, "/api/cell/99999/99999").await;
     assert_eq!(status, 404, "{response}");

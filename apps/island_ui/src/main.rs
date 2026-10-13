@@ -21,6 +21,7 @@ use bevy_egui::{EguiContexts, EguiPlugin, EguiPrimaryContextPass};
 
 use island_ui::camera::Orbit;
 use island_ui::estate;
+use island_ui::inspectors;
 use island_ui::scene::{self, Point};
 use island_ui::source::{Island, LocalBackend, Snapshot};
 use island_ui::{property, terrain};
@@ -234,6 +235,49 @@ struct Panels {
     said: Option<String>,
     show_conversations: bool,
     show_estate: bool,
+    /// The cell under the view, as the backend last described it.
+    under_view: UnderView,
+}
+
+/// The cell inspector's state: which cell was asked about, and what came
+/// back. Asked on a thread of its own, because a request is a round trip
+/// and a frame cannot wait for one.
+#[derive(Default)]
+struct UnderView {
+    asked: Option<(usize, usize)>,
+    answer: std::sync::Arc<std::sync::Mutex<Option<Result<mk_island_api::Cell, String>>>>,
+}
+
+impl UnderView {
+    /// Ask about `cell` if it is not the one already asked about.
+    fn follow(&mut self, island: &Island, cell: Option<(usize, usize)>) {
+        if cell == self.asked {
+            return;
+        }
+        self.asked = cell;
+        // A fresh slot, so an answer for a cell the view has left cannot
+        // land after the one for the cell it is on.
+        self.answer = Default::default();
+        let Some((row, col)) = cell else {
+            return;
+        };
+        let (client, slot) = (island.client().clone(), self.answer.clone());
+        std::thread::spawn(move || {
+            let got = client.cell(row, col).map_err(|e| e.to_string());
+            if let Ok(mut slot) = slot.lock() {
+                *slot = Some(got);
+            }
+        });
+    }
+
+    fn lines(&self) -> Vec<String> {
+        match self.answer.lock().ok().and_then(|a| a.clone()) {
+            None if self.asked.is_some() => vec!["Asking…".into()],
+            None => vec!["The view is off the island's grid.".into()],
+            Some(Ok(cell)) => inspectors::cell_lines(&cell),
+            Some(Err(e)) => vec![e],
+        }
+    }
 }
 
 /// Marks an entity that stands for an islander, so it can be moved rather
@@ -1187,10 +1231,8 @@ fn panels(
 
             let clock = &snapshot.world.clock;
             ui.label(format!("Tick {}", clock.tick));
-            ui.label(format!(
-                "Day {:.2}, hour {:.1} of {:.0}",
-                clock.days, clock.hour_of_day, clock.day_length_hours
-            ));
+            ui.label(inspectors::local_date_line(clock));
+            ui.label(inspectors::earth_elapsed_line(clock.sim_time_s));
             match clock.achieved_speed {
                 Some(achieved) => ui.label(format!(
                     "{} asked for, {achieved:.1}x achieved",
@@ -1224,12 +1266,23 @@ fn panels(
                             mk_island_api::ControlRequest::Step { ticks: 60 },
                         ));
                     }
+                    // The backend refuses this when it was started without
+                    // a snapshot directory, and says so in the reply.
+                    if ui.button("Save").clicked() {
+                        panels.said = Some(ask(&island.0, mk_island_api::ControlRequest::Snapshot));
+                    }
                 });
             });
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 ui.add_enabled_ui(may_write, |ui| {
-                    for speed in ["real", "60", "1440", "max"] {
-                        if ui.button(speed).clicked() {
+                    for speed in inspectors::SPEEDS {
+                        if ui
+                            .selectable_label(
+                                clock.requested_speed == speed,
+                                inspectors::speed_label(speed),
+                            )
+                            .clicked()
+                        {
                             panels.said = Some(ask(
                                 &island.0,
                                 mk_island_api::ControlRequest::SetSpeed {
@@ -1283,6 +1336,22 @@ fn panels(
                         "{machines} machines in the computer room, drawn from Maer-Ken's models"
                     ));
                 }
+            }
+
+            ui.separator();
+            ui.heading("Under the view");
+            let cell = match *showing {
+                // In the estate frame the camera's focus is in metres from
+                // the patch corner, so the cell is the estate's own.
+                Showing::Estate => Some(snapshot.world.estate.cell),
+                Showing::Island => island
+                    .0
+                    .terrain()
+                    .and_then(|ground| inspectors::cell_under(&view.0, ground)),
+            };
+            panels.under_view.follow(&island.0, cell);
+            for line in panels.under_view.lines() {
+                ui.label(line);
             }
 
             ui.separator();
