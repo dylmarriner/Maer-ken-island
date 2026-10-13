@@ -293,3 +293,61 @@ divergences awaiting an upstream pull request, and resyncing while they
 are unmerged would mean reapplying them by hand. The owner's decision from
 2026-10-02 — keep the pin — stands, and the assets imported here do not
 touch it.
+
+## Phase 3 and 4b divergences (2026-10-12, PR #6)
+
+Imported code changed by the work merged in PR #6. Each **changes upstream behaviour** unless it
+says otherwise, and each needs an upstream pull request before the next resync, like Phase 0's
+items 4-7. The island's own modules (`regional/*`, `regional/industry/*`) are not listed; they
+have no upstream counterpart.
+
+1. `mk_engine::humans::needs` and `humans::lifecycle` — **eating and drinking are chosen** (D10).
+   A meal or a drink happens only on a step whose chosen action is eating or drinking
+   (`lifecycle::meals_for`, `drinks_for`, `is_eating`, `is_drinking`, and the `Meals` and
+   `Drinks` enums), at a sourced rate (`EATING_MINUTES_PER_DAY` from the American Time Use
+   Survey, `DRINKING_ML_PER_SECOND`, and `HYDRATION_RESERVE_L` from Adolph 1947), instead of a
+   continuous intake. `FASTING_GLUCOSE_FLOOR` is the glycogen level gluconeogenesis defends while
+   stores last, so a fasting human is hungry and weak but functional. Seeking food or water where it is at hand is
+   using it, not a day of walking.
+2. `mk_engine::humans::lifecycle` — **Siler mortality fitted to the SSA 2019 period life table**
+   (D21): `SILER_INFANT_HAZARD_PER_YEAR`, `SILER_INFANT_DECAY_PER_YEAR` and
+   `SILER_BACKGROUND_HAZARD_PER_YEAR` join the senescent term, and
+   `mortality_cumulative_hazard` integrates all three over a step, so infants, children and young
+   adults die at real rates and a death is attributed to the term that dominated.
+   `activity_met_for` charges the chosen action's Compendium MET, and `labour_met` (below)
+   overrides it for timed work; `SEXUAL_ACTIVITY_MET` is the Compendium's.
+3. `mk_engine::humans::HumanRuntimeState` — `labour_met: Option<f64>` (serde default `None`), set
+   by the island while a human works a timed task such as felling or hauling; and `decide`, which
+   gathers the mind's learn-then-choose sequence that `HumanSystem::step_on` used to inline, so
+   the island can call it for a human it steps itself. Behaviour of `step_on` is unchanged by
+   the extraction.
+4. `mk_engine::humans::autonomy` — **what was learned counts as much as the body's state lets
+   it** (alliesthesia; Cabanac 1971): `incentive` scales the learned value of eating and drinking
+   by the hunger or thirst they would relieve, and of intimacy by how far satiety has worn off,
+   so a learned taste for eating does not outbid a full stomach; every other action keeps its
+   learned value whole. A steady drain on a need no longer teaches one action to be worse than
+   another.
+5. `mk_engine::humans::reproduction` and `humans::mod` — **desire is mutual and has satiety**:
+   consent asks for the partner's own desire (libido less what their last act still satisfies,
+   against `CONSENT_DESIRE`) rather than only the initiator's; an act satisfies both partners
+   fully, and satisfaction wears off with `SEXUAL_SATIETY_TIME_CONSTANT_DAYS`, set so desire
+   returns at the General Social Survey's mean interval for couples
+   (`MEAN_INTERVAL_BETWEEN_ACTS_DAYS`, Twenge, Sherman & Wells 2017).
+6. `mk_engine::humans::circadian` — `Light` (outdoor daylight, the room's daylight factor
+   indoors, lamp lux, and whether the human is indoors to draw curtains), `eye_lux`, `is_bedtime`
+   and `wants_lamp` (D23): a house keeps its own night, and a lamp extends the light at the eyes,
+   rather than everyone seeing the sky.
+7. `mk_engine::climate` — the climatology keeps **monthly bins** (`warmest_month_k`,
+   `month_temperature_k`, `month_precipitation_mm_day`) so the island can classify Köppen-Geiger
+   biomes (D32); and the surface energy balance takes an optional regional
+   `boundary_air_k`/`sensible_conductance_w_m2_k` pair (D37, D3), relaxing the surface toward the
+   air it sits in. **With no regional input the planetary path is bit-identical**: the topology
+   digest `766d5cd8…d497` did not move.
+8. `mk_engine::resource_economy::node_kind_for_resource` — the `_ => None` wildcard is replaced by
+   the eleven resource kinds that have no node yet, each with its reason, so a kind added
+   upstream fails to compile instead of silently yielding nothing. **No behaviour change.**
+9. `mk_engine::validation::ReferenceDomain` — gains `Industry` (`fixtures/reference/industry/`)
+   for the hydro pack. **No behaviour change** for the existing domains.
+10. `mk_core::flux` — unchanged in this round. The material ledger's logs
+    (`regional/materials.rs`) and the hydrology `Diversion`s (`regional/hydrology.rs`) are island
+    code and book through the reservoirs item 21 of the Phase 4 list added.

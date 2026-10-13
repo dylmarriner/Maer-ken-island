@@ -4,6 +4,14 @@ Standalone island project bootstrapped from the human simulation work in `dylmar
 
 This repository carries forward the canonical Maer-Ken human schema/runtime and exposes it as a public API for island-specific simulation work.
 
+## Start here
+
+- [`HANDOFF.md`](HANDOFF.md): what the project is, where it stands, how to build and check it,
+  and what will bite you.
+- [`WORK_REMAINING.md`](WORK_REMAINING.md): everything not yet done, and what each item needs
+  (sources, owner decisions, files, tests).
+- [`docs/ISLAND_SYSTEM_STATUS.md`](docs/ISLAND_SYSTEM_STATUS.md): the evidence for what is done.
+
 ## Implementation roadmap
 
 The top-level execution map is [`docs/IMPLEMENTATION_READY_ROADMAP.md`](docs/IMPLEMENTATION_READY_ROADMAP.md).
@@ -21,7 +29,10 @@ there is exactly one way to read an island.
 
 - `crates/mk_core/src/human/` — canonical identity, genetics, temperament, neurocognition, personality, drives, hormones, attachment, schema and profile types.
 - `crates/mk_engine/src/humans/` — live runtime systems for body, needs, cognition, emotion, memory, consciousness, reproduction, lifecycle, social behaviour and brain-state models.
-- `crates/mk_engine/src/regional/` — the island: geophysics, climate, ecology, the estate, materials, energy, the humans on it.
+- `crates/mk_engine/src/regional/` — the island: geophysics, climate, ecology, the estate, materials, labour, energy, timber, the humans on it.
+- `crates/mk_engine/src/regional/industry/` — river micro-hydro: turbine choice and efficiency, flow-duration curves, site search and the electricity grid (Phase 4b).
+- `fixtures/reference/` — every real-world value the model uses, each cited (climate, hydrology, ecology, geology, humans, labour, industry).
+- `docs/island/DEVIATIONS.md` — every known departure from reality (D1-D40).
 - `crates/mk_island/` — the regional domain contract.
 - `fixtures/human/` — canonical Gem-D / Gem-K human fixtures.
 - `docs/canon/` — the copied HumanReplicationSchema and human schema-family authority.

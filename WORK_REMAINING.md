@@ -1,0 +1,349 @@
+# Work remaining
+
+Written 2026-10-13 against `main` at the merge of PR #6 (`05fd6e5`). This is the single list of
+what is not done, and for each item, **what it takes to do it**: the sources or data it needs,
+the decisions only the owner can make, the files it touches, the tests that prove it and when it
+counts as finished. Read [`HANDOFF.md`](HANDOFF.md) first for what exists.
+
+Where this list and a plan disagree, the plan (`docs/superpowers/plans/`) holds the full spec and
+this list holds the current state. The evidence for what is *done* is in
+`docs/ISLAND_SYSTEM_STATUS.md`; every departure from reality is in `docs/island/DEVIATIONS.md`.
+
+## The rules every item below inherits
+
+- **Every real-world number is sourced.** It goes in a cited pack under `fixtures/reference/`,
+  loaded through `mk_engine::validation::ReferenceLibrary`, checked by
+  `crates/mk_engine/tests/reference_packs.rs`. Never type a value from memory with a citation
+  attached; `docs/island/REALISM.md` exists because that happened once (water viscosity
+  remembered as 1.307 against a measured 1.3063).
+- **Every material movement is a ledger entry.** `IslandLife::audited` must still close at every
+  step (material carbon, human carbon, material water).
+- **A known departure is a deviation row**, added or updated in `docs/island/DEVIATIONS.md` in the
+  same change; `cargo test -p mk_core --test deviation_register` checks the format.
+- **Changes to imported upstream code are recorded in `UPSTREAM.md`**, and human-runtime changes
+  go upstream first where the plan says "upstream first".
+- **The week digest is re-pinned only after the audit passes**: run
+  `island_life_acceptance -- --ignored`, confirm the books close and the reference-pack checks
+  pass, then update `WEEK_DIGEST` (procedure in `docs/handoff/WORKING_PRACTICES.md`).
+- Behaviour-changing work runs the two reference-pack slow tests (the week and the year) before
+  merging; the fast tier cannot see them.
+
+## Status at a glance
+
+| Area | Item | State | Blocked on |
+|---|---|---|---|
+| Timber | Drying, seasoning, splitting, crosscut, rigging (D40) | Open | Cited drying model and rates |
+| Living world | Phase 3 Task 1b: species at island scale | Open | Engineering only |
+| Living world | Phase 3 Task 2: every resource and material, placers, recipes | Open (partly started) | Cited placer decay, shaft size, abundances |
+| Living world | D9: actions take one tick | Open (felling, hauling done) | Cited durations per task |
+| Living world | D31: NPP ignores soil nutrients | Open | Regional soils model and data |
+| Runtime | Phase 4 Task 2b: deep-time spin-up | **Not started** | Engineering; long compute run |
+| Industry | Phase 4b Task 1 remainder: reference tables | Open | Sources (petroleum, refinery, staffing, wages, demand) |
+| Industry | Phase 4b Task 4: oil and gas field (D14, D19) | Open | Task 1 tables; a petroleum deposit |
+| Industry | Phase 4b Task 5: refinery, gas plant, fuel depot (D16) | Open | Task 1 tables |
+| Industry | Phase 4b Task 6: jobs, trades, maintenance (D39) | Open | Upstream human-runtime change first |
+| Industry | Phase 4b Task 7: money, enterprises, payroll | Open | Owner: ownership split, policies |
+| Industry | Phase 4b Task 7b: food and timber chains | Open | Task 2 catalogue; crop/livestock data |
+| Industry | Phase 4b Task 8: town and workforce | Open | Demographic tables; owner: town size |
+| Industry | Phase 4b Task 9: dashboard pages, year acceptance | Open | Tasks 4-8 |
+| Climate | D3 rest: sea/land breezes, katabatic winds | Open | A diurnal wind solver |
+| Climate | D25: SST season lags too long | Open | Owner: change regionally or re-pin planet |
+| Climate | D4: parametric weather systems | Open | Structural; large |
+| Climate | D38: driest tenth too dry | Open | Diagnosis |
+| Climate | D29: energy audited per module | Open | End-to-end energy ledger |
+| App | Phase 5 Tasks 3-8 | Partly done | See below; one owner pick (portraits) |
+| Gates | Gate 1, 2, 3 owner reviews | Open | Owner |
+| Upstream | PRs for every divergence in `UPSTREAM.md` | Open | Owner's upstream access |
+| CI | Nightly slow job | Check | See Housekeeping |
+
+---
+
+## 1. Timber the estate can actually use (D40)
+
+**Now:** a felled tree leaves a green log where it fell (0.82 kg water per kg dry wood for
+hardwoods, 1.06 for softwoods, from `fixtures/reference/labour/timber.json`). A founder moves it
+to the building workshop by the quickest of the CAT 330 excavator, the ute (after cross-cutting
+it into pieces they can lift) or on foot. The log is stored green and stays green.
+
+### 1a. Drying
+
+- **Needs (sources):** the equilibrium moisture content of wood in air of a given temperature and
+  humidity (the Wood Handbook, ch. 4, gives the Hailwood-Horrobin equation with Simpson's
+  coefficients), and an air-drying rate or time for stock of a given thickness (USDA FPL
+  GTR-117, *Air Drying of Lumber*). Whole logs with bark dry far slower than sawn stock; a cited
+  figure for that, or a recorded deviation for using the sawn-stock rate, is needed. Fetch the
+  documents and transcribe the exact values; do not use remembered ones.
+- **Files:** `regional/timber.rs` (a drying step on `Log`), `regional/materials.rs` (log water
+  leaving), `regional/life.rs` (call it each step with the estate's air temperature and
+  humidity from the physical state), `fixtures/reference/labour/timber.json` (the new values).
+- **Ledger:** water leaves as `MaterialWater → Atmosphere`.
+- **Tests:** a log in warm dry air loses water faster than one in cold wet air; it never falls
+  below the equilibrium moisture content; the books still close; a reference-pack check that the
+  drying time for a cited thickness is within the source's range.
+- **Done when:** a stored log reaches air-dry in a time the source supports, and D40's drying
+  clause is closed.
+
+### 1b. Seasoned wood joins the stock
+
+- **What:** once a piece reaches air-dry it becomes `Material::Wood`, usable for building and
+  burning. The stock's composition is air-dry (15% water), and the stock does **not** count its
+  bound water in `MaterialWater`, so the conversion must book the water consistently (see the
+  D40 row and `materials.rs`).
+- **Tests:** converting a seasoned log moves exactly its dry mass and carbon into the stock; the
+  audit closes across the conversion; burning seasoned wood books the same carbon as before.
+
+### 1c. Splitting, the crosscut saw, rigging and routes
+
+- **Splitting firewood:** the MET is already in `fixtures/reference/humans/physiology.json`
+  (the Compendium's `chopping_splitting_wood`); a cited splitting rate (kg or pieces per hour)
+  is needed for the duration.
+- **The two-person crosscut saw:** needs both founders at the log together, which is a
+  coordination change in `life.rs`, plus a cited two-person sawing rate.
+- **Excavator rigging:** the CAT 330 lifts with the shed's rope; attaching a sling is untimed
+  because no cited figure was found. Either source a rigging time or the owner adds a grapple.
+- **Routes:** legs are straight lines; slope (`EstateLayout::terrain_m`) and obstacles are
+  ignored, and vehicles have no position of their own. A route over the patch terrain with a
+  slope cost, and vehicles that stay where they were parked, would close this.
+- **Files:** `regional/timber.rs`, `regional/life.rs` (`work`, `plan_haul`,
+  `finish_haul_task`), `regional/labour.rs`.
+
+---
+
+## 2. Living world
+
+### 2a. Phase 3 Task 1b: species at island scale
+
+- **Now:** `TreeInstance` carries `PlantKind` (tree, shrub, grass) and nothing else; fauna is
+  absent. Upstream's `BiosphereSystem` populations are planetary totals.
+- **Needs:** island-scaled initial populations for `BiosphereSystem`, and a producer-carbon total
+  for `renormalise_to_total` taken from `RegionalEcologyState::biomass_kgc_m2`. Species
+  abundances per biome need a cited basis or a recorded deviation (D7 already accepts Earth's
+  species).
+- **Files:** `regional/ecology.rs` (`RegionalEcologyState` gains the biosphere and organisms),
+  possibly `biosphere/mod.rs` (inputs passed explicitly rather than from `WorldState`; record in
+  `UPSTREAM.md`).
+- **Tests:** plan Task 1 Step 1 (species on eligible land, none in the sea, producer carbon equal
+  to `Σ biomass × area` after a step), then the regression run
+  `cargo test -p mk_engine --lib -- biosphere:: organisms::vegetation`.
+- **Unblocks:** Task 2's animal and fish nodes, Phase 4b's fishery, the interventions' animal
+  biomass types (now refused by name), and species on the map.
+
+### 2b. Phase 3 Task 2: every resource and material
+
+- **Now:** upstream's nine node kinds; `node_kind_for_resource` names every resource kind that has
+  no node yet (an exhaustive match was started); the estate's shed has an axe, a crosscut saw and
+  a gold pan. Nothing else from the task exists: no `materials/catalogue.rs`, no
+  `regional/resources.rs`, no placers.
+- **Needs (sources):** a cited downstream decay of placer-gold grade along a river; a cited
+  artisanal shaft size for hand mining; for every deposit, an abundance and grade source (the
+  Phase 1 deposits already carry their own). Densities and Mohs hardness per catalogue item
+  from a cited table.
+- **Files:** create `crates/mk_engine/src/materials/{mod.rs,catalogue.rs}`,
+  `crates/mk_engine/src/regional/resources.rs`
+  (`bootstrap_regional_resources(geophysics, ecology, physical, domain)`); modify
+  `resource_economy.rs` (`ResourceNodeKind`, `ToolKind` gaining `GoldPan`, `Sluice`, `Chisel`,
+  `LapidaryWheel`, `HuntingWeapon`, `FishingGear`, `Kiln`, `Crucible`, `Anvil`, `Drill`, recipes),
+  `agents/mod.rs` (`ItemKind`). Add, never rename, upstream variants.
+- **Tests:** `crates/mk_engine/tests/regional_resources.rs` and catalogue unit tests, as listed in
+  the plan's Task 2 Steps 1-2 (placers only downstream of a source, ironsand only on suitable
+  coasts, deposits never regenerate, a pan is needed to pan, smelting yields gold in proportion
+  to grade, deterministic ids).
+- **Then:** record the enums, tool map and every abundance source in `UPSTREAM.md`; re-render
+  `island_preview life` so `resources.png` shows the nodes (Gate 3 needs it).
+
+### 2c. D9: most actions still take one tick
+
+- **Now:** felling and hauling are timed and costed; everything else completes in one tick.
+- **Needs:** a cited duration for each action (`fixtures/reference/labour/productivity.json`
+  holds some already), and the same task machinery felling uses (`life.rs` `work`) extended to
+  them. Actions with no Compendium row cost the resting baseline (D22, accepted).
+- **Done when:** every action a founder can choose takes a sourced time and MET.
+
+### 2d. D31: NPP ignores soil nutrients
+
+- **Needs:** a regional soils model (parent rock from `geology.rs`, age from the deep-time
+  spin-up in §3, nitrogen and phosphorus) and a cited nutrient limitation on NPP. Large; it
+  follows the spin-up.
+
+---
+
+## 3. Phase 4 Task 2b: deep-time spin-up (not started)
+
+The status page previously said Phase 4 was done; this task is the exception.
+
+- **What:** before any human exists, run the world for centuries in a fast mode (geology
+  annually; soils annually; hydrology, ecology and vegetation succession monthly; weather replaced
+  by a climatology measured from one full-detail year and re-measured every 100 years), so the
+  island starts with mature soils, rivers and forests. Humans are never fast-forwarded.
+- **Files:** create `crates/mk_engine/src/regional/deep_time.rs`; modify
+  `crates/mk_island/src/scenario.rs` (`spin_up_years`, default 1,000) and `regional/world.rs`
+  (`IslandWorldState::spin_up(years) -> Result<SpinUpReport, IslandWorldError>`, refused once
+  humans exist).
+- **Cache:** the spun-up state is snapshotted under `<save_root>/spinup/<digest>.snap`, keyed by
+  canon + scenario + seed + spin-up settings, so later runs load it.
+- **Tests:** `crates/mk_engine/tests/island_deep_time.rs` on the small test island
+  (`IslandProfile::test_small`, seed 16): deterministic, cache key changes with any input,
+  soil carbon and forest biomass trends under 1% per century over the last 100 years, refused
+  once humans exist, the climate of one full-detail year after spin-up matches the climatology
+  within Phase 2 tolerances, cache-load-then-run equals spin-up-then-run.
+- **Measure:** the full-island 1,000-year spin-up in release (target: a few hours, once per
+  scenario) and record it in the Phase 5 benchmark.
+- **Deviation:** D20 (deep-time climatology during spin-up) is already recorded as Accepted.
+- **Digest:** the week digest will change (the island starts spun up); re-pin per the rules.
+
+---
+
+## 4. Phase 4b: oil and gas, refinery, trades, money, the town
+
+Plan: `docs/superpowers/plans/2026-10-02-island-phase4b-energy-industry-town.md`. Its defaults
+table is the owner's. Hydro (Tasks 1-3) is done; each later task needs its slice of Task 1's
+reference tables, which were not fetched.
+
+### 4a. Task 1 remainder: the reference tables
+
+Add to `fixtures/reference/industry/` (new packs alongside `hydro.json`), each value cited:
+
+| Table | For | Notes |
+|---|---|---|
+| Reservoir recovery factors, gas-oil ratios, water cut, Arps decline parameters | Task 4 | Published field studies or textbooks |
+| Methane leak fraction from production | Task 4, D14 | An inventory figure (e.g. a national GHG inventory) |
+| Spill and blowout frequencies | Task 4 | An offshore/onshore incident database |
+| Crude assays and product yields; refinery energy and CO₂ per barrel | Task 5 | A published assay for a light crude; refinery benchmarks |
+| Gas composition and processing yields | Task 5 | |
+| Staffing per plant type and size | Task 6 | |
+| Occupational wage ratios | Task 7 | e.g. a national statistics office's wage tables |
+| Household electricity, cooking and transport-fuel demand | Task 8 | e.g. a national energy-use survey |
+| Crop growth (growing degree days, water stress), yields per hectare, livestock feed and growth | Task 7b | FAO tables are the natural source |
+| Sawmill recovery rates; house bill of materials and labour hours by trade | Task 7b | |
+| Demographic structure for the founding town | Task 8 | A national census age/sex table |
+
+### 4b. Task 4: oil and gas field (D14, D19)
+
+- **Requires** a Phase 1 petroleum deposit on the chosen island; if there is none, the
+  enterprises are not created and the dashboard says why.
+- **Files:** create `regional/industry/petroleum.rs` (`PetroleumReservoir`, `Well`,
+  `ArpsDecline`); modify `crates/mk_core/src/flux/mod.rs` (an `AtmosCH4` reservoir, appended last
+  so earlier indices are unchanged; record in `UPSTREAM.md`) and `regional/climate.rs` (methane
+  forcing per Myhre et al. 1998 as the plan states; transcribe the formula from the paper).
+- **Tests:** `tests/petroleum_field.rs` (the plan's Step 1 list).
+- **Decision:** D19 (no drilling rigs can be made on the island) stays open or is accepted by the
+  owner as imported equipment (D15 already accepts imported plant).
+
+### 4c. Task 5: refinery, gas plant, fuel depot (D16)
+
+- **Files:** create `regional/industry/{refinery.rs,gas_plant.rs,fuel.rs}`; modify
+  `regional/energy.rs` so vehicles and generators buy fuel at the depot.
+- **Tests:** `tests/refinery.rs` (yields by assay, mass and carbon close, campaigns stop on full
+  tanks, no petrol without the reformer, a vehicle refuels and pays).
+
+### 4d. Task 6: jobs, trades, shifts, maintenance (D39) — upstream first
+
+- **Upstream first:** `TradeQualification` in `mk_core::human`, `ActionKind::Work` and job
+  attendance in the autonomous mind go into `dylmarriner/Maer-Ken`, then sync. If upstream is
+  not available, record each change as a divergence in `UPSTREAM.md` and say so.
+- **Files:** create `regional/industry/jobs.rs`; shifts run on a 24 h roster, not the 36 h sun.
+- **D39** closes here: the hydro plant's wear, overhaul and failure need **cited overhaul
+  intervals**, and maintenance labour restores it; flood closure of the intake needs a **cited
+  flow threshold**.
+- **Tests:** `tests/industry_jobs.rs` and `cargo test -p mk_engine --lib -- humans::`.
+
+### 4e. Task 7: money, enterprises, payroll
+
+- **Owner decisions:** the ownership split per enterprise (default 50/50 Gem-D and Gem-K), the
+  employment policy (overtime, sick and annual leave), the dividend policy (default 50% of profit
+  each local quarter), initial balances, the disconnection grace period.
+- **Files:** create `regional/economy/{money.rs,enterprise.rs,market.rs}`; upstream first for
+  `ActionKind::Buy` and money in human decisions.
+- **Tests:** `tests/island_economy.rs` (money conserved, bills from meters, payroll every 14
+  roster days with payslips in the person's folder, dividends equal profit × payout × share).
+
+### 4f. Task 7b: food and timber chains
+
+- **Needs:** Task 2's catalogue (grain, flour, bread, milk, meat, logs, sawn timber and so on),
+  Task 1b's species (the fishery fishes real populations), the crop and livestock tables above.
+  The estate's timber work (§1) is the seed of the forestry chain: felling, hauling and drying
+  already exist at estate scale.
+- **Files:** create `regional/industry/{farm.rs,fishery.rs,food_processing.rs,supermarket.rs,
+  forestry.rs,sawmill.rs,construction.rs}`.
+- **Tests:** `tests/food_chain.rs`, `tests/timber_chain.rs` (harvest never exceeds regrowth,
+  carbon conserved from tree to house).
+
+### 4g. Task 8: town and workforce
+
+- **Owner decision:** the founding town's size (the plan offers a smaller one if performance
+  misses its targets).
+- **Files:** create `regional/town.rs`, `fixtures/island/workforce.json` (generated from the seed);
+  generalise `regional/estate_layout.rs` to any high-detail site.
+- **Tests:** `tests/island_town.rs`.
+
+### 4h. Task 9: dashboard pages and the year's acceptance
+
+- **Pages:** Power, Petroleum, Town, Food, Timber, Payroll, Finance; owner controls as replayable
+  commands.
+- **Acceptance:** `tests/island_industry_acceptance.rs` (slow tier): one local year, every ledger
+  closes (water, carbon, oxygen, methane, money), snapshot mid-year and resume to the same hash.
+- **Benchmark** the full town and record it in the Phase 5 baseline.
+
+---
+
+## 5. Climate fidelity
+
+| Item | What is needed |
+|---|---|
+| **D3 (rest)**: sea and land breezes, katabatic winds | A diurnal wind solver on the coarse grid (land-sea temperature contrast driving an onshore/offshore flow; cold-air drainage downslope at night). The coastal damping of the day-night range is still the observed coastal/inland ratio; the land's range itself is already physical (Panwar & Kleidon 2022). |
+| **D25**: the SST season lags 1-2 months too long | Turbulent air-sea heat exchange in the mixed layer would shorten it. The ocean physics is shared with the planetary run, whose topology digest is pinned (`766d5cd8…d497`). **Owner decision:** change it regionally only, or change it in the shared code and re-pin the planet. |
+| **D4**: weather systems are parametric | No occlusion, no warm-front structure. A structural change to `synoptic.rs`; large. |
+| **D38**: the driest tenth gets ~320 mm/yr against NZ's driest basin at ~360 | Diagnose first: the vapour budget, the rain-shadow strength or the evaporation. |
+| **D29**: energy is audited per module | An end-to-end energy ledger across the coupled tick. |
+
+---
+
+## 6. Phase 5: the application
+
+Plan: `docs/superpowers/plans/2026-10-01-island-app-ui-performance.md` (its checkboxes were never
+ticked; `docs/ISLAND_SYSTEM_STATUS.md` is the evidence). Done: Tasks 0-2 (the crate on Bevy 0.19,
+the projection, terrain and camera), 4b (the computer service), and parts of 3 (the island and
+the estate drawn, the Maer-Ken models on the estate) and 5 (pause, speed and step from the
+dashboard; the desktop panels).
+
+| Task | Remaining | Needs |
+|---|---|---|
+| 3 | Individual stems in 3D (2a), interiors (2b), industry and town (2d, after Phase 4b), resource visuals and inventory icons (2c, after Phase 3 Task 2), tests for every building kind and vehicle | Engineering |
+| 4 | Human detail view, inspector, foundry panel; portraits | **Owner picks the two portraits** from upstream `apps/mk_ui/assets/portraits/`, and confirms their provenance before any distribution |
+| 5 | Inspectors and the full control set (speed selector with achieved speed, local date and time) | Engineering |
+| 6 | `island_bench`, the allocation-bound test (`construction-counters` feature), the resolution gate | **Owner confirms targets** (default: headless one simulated day per real minute; real time with the UI open) and **decides on formal predictive processing** (wire it into decisions upstream, or stop running it) |
+| 7 | `scripts/sync_maerken_upstream.py` with tests, move the creator out of `apps/island_humans` and retire it, prune planetary-only modules | Engineering |
+| 8 | Final acceptance: every design criterion run and recorded | All of the above |
+
+Also: **a GPU frame-rate figure** for `island-ui` (every frame so far was rasterised on the CPU,
+0.6 frames/s for the island view and 10.8 for the estate), and other window sizes. The Creator
+page does not yet use the map.
+
+---
+
+## 7. Owner gates and upstream
+
+- **Gate 1:** the owner reviews the island (`docs/previews/phase1/`); the island is provisional
+  until then.
+- **Gate 2:** the weather previews (`docs/previews/phase2/`).
+- **Gate 3:** the estate plan and tree map (`docs/previews/phase3/estate_plan.png`,
+  `estate_trees.png`); `resources.png` needs Phase 3 Task 2 first.
+- **Upstream pull requests** for every divergence in `UPSTREAM.md` (Phase 0 items 4-7, Phase 0c's
+  biology, and the 2026-10-12 human-runtime changes listed there). The owner kept the pin at
+  `7c05f0d` on 2026-10-09 because resyncing before these merge would mean reapplying them by
+  hand.
+
+---
+
+## Housekeeping
+
+- **Nightly slow job:** `.github/workflows/ci.yml`'s `slow` job runs
+  `cargo test --workspace --release -- --ignored slow_` without `--exclude island_ui` and
+  without the ALSA and graphics packages the desktop job installs. If the nightly run is red at
+  build time, that is the first thing to check; the fix is `--exclude island_ui`.
+- **Remove the Snyk GitHub App** (owner's action). It is out of quota and posts an error on every
+  push; the `dependency audit` CI job replaced it.
+- **Firecrawl credits ran out** on 2026-10-12. WebSearch and the TinyFish fetcher still work for
+  sources; the container's own network blocks most hosts.
+- **Persist digests.** `WEEK_DIGEST` is `c405fc06…53c6`; the planetary topology pin is
+  `766d5cd8…d497`. Any change that moves either is a behaviour change and must say so.

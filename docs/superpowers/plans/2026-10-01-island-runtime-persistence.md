@@ -95,6 +95,8 @@ A realistic island starts with mature soils, rivers and forests, which take cent
 - [ ] **Step 3:** Measure the full-island 1,000-year spin-up in release (target: a few hours on the reference machine, done once per scenario) and record it in the Phase-5 benchmark.
 - [ ] **Step 4:** Add deviation row "deep-time climatology during spin-up" to `docs/island/DEVIATIONS.md` (seeded in Phase 0c as D20). Commit `feat(island): deep-time world spin-up before humans arrive`.
 
+> **Status (2026-10-13):** not started. There is no `regional/deep_time.rs`, no `IslandWorldState::spin_up` and no spin-up cache; the island begins from `RegionalPhysicalState::bootstrap`'s settled orbits. D20 is already recorded (Accepted). This is the one Phase 4 task still open; `WORK_REMAINING.md` §3 lists what it needs.
+
 ### Task 3: Complete island snapshot save/load
 
 **Files:**

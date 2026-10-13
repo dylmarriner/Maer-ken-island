@@ -111,6 +111,8 @@ Upstream has 9 node kinds (`resource_economy.rs:13-23`) placed by biome, maps on
 - [ ] **Step 5:** Run both tests and `cargo test -p mk_engine --lib -- resource_economy:: agents::`; expect PASS, with existing upstream tests unchanged.
 - [ ] **Step 6:** Record the extended enums, tool mapping and every abundance/grade source in `UPSTREAM.md`. Commit `feat(engine): nodes for every resource and material on the island`.
 
+> **Status (2026-10-13):** started, not done. `node_kind_for_resource` is an exhaustive match that names each resource kind with no node yet and why (`UPSTREAM.md`, PR #6 item 8); the estate's shed has an axe, a crosscut saw and a gold pan, and founders fell patch trees through the ledger. Felled stems become green logs moved by excavator, ute or hand (`regional/timber.rs`, D40). Not started: `materials/catalogue.rs`, `regional/resources.rs`, placers and ironsand, the new `ToolKind`s and recipes. Blocked on sources: a cited downstream placer-gold grade decay and a cited artisanal shaft size. `WORK_REMAINING.md` §2b.
+
 ### Task 3: Physical materials — carbon, oxygen and water through the economy
 
 Upstream gathering, crafting, building, smelting, eating and drinking move no carbon, oxygen or water: a Tree node yields `Wood` without touching biomass, `regenerate()` refills nodes from nothing, `Fuel` (made from coal, `resource_economy.rs:730-734`) is consumed by smelting (`:712-713`) without CO₂, and humans eat `Food` and drink `Water` (`humans/lifecycle.rs:556-565`) with no metabolism in the ledger. This task makes every material transfer physical.
