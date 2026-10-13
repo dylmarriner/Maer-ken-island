@@ -58,6 +58,7 @@ this list holds the current state. The evidence for what is *done* is in
 | App | Phase 5 Tasks 3-8 | Partly done | See below; one owner pick (portraits) |
 | Gates | Gate 1, 2, 3 owner reviews | Open | Owner |
 | Upstream | PRs for every divergence in `UPSTREAM.md` | Open | Owner's upstream access |
+| Realism | R0-R10: humans, work and the living world replicate Earth (section 8) | R1 in progress | Engineering and sourcing |
 | CI | Nightly slow job | Check | See Housekeeping |
 
 ---
@@ -371,6 +372,54 @@ page does not yet use the map.
   hand.
 
 ---
+
+## 8. Realism programme: humans, work and the living world (research 2026-10-13)
+
+The owner's standard (2026-10-13): **everything replicates Earth life.** How humans function,
+think, feel, sense, behave, invent and create, and buildings and resources really built,
+gathered and carried. Three research passes compared the code with the real world, with
+sources: [`docs/research/2026-10-13/`](docs/research/2026-10-13/) (`humans.md`, `work.md`,
+`earth.md`, plus the raw source notes beside them). Their headline findings:
+
+- **The body is realistic; the mind barely drives anything.** `choose_action`
+  (`humans/autonomy.rs`) picks from needs and a few cell averages. Senses, memory, emotion,
+  learning, culture and language are computed every tick and nothing reads them to act. There
+  is no smell or taste; pain does not follow injury; skill never improves with practice;
+  "invention" is a timer.
+- **Most actions do nothing on the island.** The resource economy starts empty and the founders
+  hold no tools or containers, so Gather, Mine, Craft and Build fail; only felling and hauling
+  run, through `life.rs` `work`. The real labour models in `labour.rs` (dig, mine, pan, build a
+  timber frame) are called only by tests. Food and water are taken from up to 2-6 km away the
+  instant someone eats or drinks; carrying has no mass except for logs; buildings appear free.
+- **The living world is one plant-carbon field and one assumed grazer pool.** NPP is set at
+  bootstrap and ignores season and soil; people eat whole-cell biomass with no edible fraction;
+  grazer faeces and deaths leak out of the books; nothing decomposes.
+
+Rules for every step: each number is re-read at its source before it enters a pack (many
+research figures came from search summaries and are tagged so); a departure is a deviation row;
+changes to imported human code are recorded in `UPSTREAM.md` for the owner's upstream PRs; the
+week digest is re-pinned only after the audit and both reference-pack slow tests pass.
+
+Ordered by what most changes the founders' daily life:
+
+| # | Step | Research | State |
+|---|---|---|---|
+| R0 | Honest register: deviation rows for every mind and sense gap; book grazer faeces and deaths to detritus; remove or wire dead code | humans §1.11, earth §4 Step 0 | Open |
+| R1 | Water at home: a rainwater tank filled by simulated rain on the house roof, sized from the estate's own climate (ESR 2021 use, Harrison Grierson 2011 inflow model); people away from home drink where they find water; a dry tank means fetching by hand | work §3.2 | **In progress** |
+| R2 | Mass-based carrying and real containers: load limits by body mass, pace and energy by load | work §3.1, §2.2 | Open |
+| R3 | An edible food base: edible fractions, foraging with a food store at home, seasonal and soil-limited plant production (D31) | earth Steps 1-2, work §3.3 | Open |
+| R4 | Firewood, drying (D40), fire and cooking | work §3.4, §2.5-2.6 | Open |
+| R5 | Every action takes its real time (D9): gather, mine, build with delivered materials and visible progress, craft chains; skill improves with practice (power law) | work §3.5-3.8 | Open |
+| R6 | Senses and perception as things (sight, hearing, smell, taste, touch and pain from injury), memory of places, and choices that use memory, emotion, goals and personality | humans ranks 1, 3 | Open |
+| R7 | Emotion by appraisal with mood; per-person bonds and cooperation; teaching; dependent children who learn and acquire language; invention from experience, not a timer | humans ranks 2, 4-6 | Open |
+| R8 | Game and hunting, fish and shellfish, farming and livestock | earth Steps 3-4, §2.5 | Open |
+| R9 | Thermoregulation from sources, clothing and shelter; injury, accident and illness by mechanism; sleep stages | humans ranks 7-9 | Open |
+| R10 | Disturbance and succession, fire, predators, pollinators, disease of plants and animals | earth Steps 5-7 | Open |
+
+Still unsourced and needing a second pass before use (not to be typed in): edible and carcass
+fractions, fruit and seed yields, foraging return rates, firewood per person per day, cordage
+rates, novice-to-expert ratios, smell and taste thresholds, clothing insulation, bird and
+invertebrate densities, fire danger indices (see each report's "unsourced" section).
 
 ## Housekeeping
 
