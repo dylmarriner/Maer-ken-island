@@ -79,7 +79,7 @@ pub fn building(kind: &str) -> Option<Model> {
 pub fn item(kind: &str, name: &str) -> Option<Model> {
     match kind {
         "Computer" => computer(name),
-        "Vehicle" => Some(vehicle(name)),
+        "Vehicle" => vehicle(name),
         "BuildingEquipment" => Some(equipment(name)),
         "ArmouryItem" => Some(armoury(name)),
         "HouseholdItem" => Some(household(name)),
@@ -120,18 +120,32 @@ fn computer(name: &str) -> Option<Model> {
     }
 }
 
-fn vehicle(name: &str) -> Model {
+/// A vehicle's model from its name, or none when the asset set has nothing
+/// that is that vehicle.
+///
+/// The set has four vehicles: a utility truck, a trailer, a motorbike and
+/// an all-terrain utility vehicle. The estate's utes and side-by-sides are
+/// those things; its tractors, golf cart and excavator are not, and
+/// drawing a 30-tonne excavator as a pickup truck would be a picture of
+/// something the garage does not hold. Those are drawn at the size the
+/// island gives them instead, like every other thing without a model.
+fn vehicle(name: &str) -> Option<Model> {
     let lower = name.to_ascii_lowercase();
-    if lower.contains("trailer") {
-        Model::real("vehicles/utility_trailer.glb")
-    } else if lower.contains("bike") || lower.contains("motorcycle") {
-        Model::real("vehicles/motorbike.glb")
-    } else if lower.contains("quad") || lower.contains("atv") || lower.contains("terrain") {
-        Model::real("vehicles/all_terrain_utility_vehicle.glb")
+    let has = |words: &[&str]| words.iter().any(|w| lower.contains(w));
+    if has(&["trailer"]) {
+        Some(Model::real("vehicles/utility_trailer.glb"))
+    } else if has(&["excavator", "digger", "tractor", "fendt", "golf cart"]) {
+        None
+    } else if has(&["bike", "motorcycle"]) {
+        Some(Model::real("vehicles/motorbike.glb"))
+    } else if has(&["quad", "atv", "terrain", "rzr", "side-by-side", "utv"]) {
+        Some(Model::real("vehicles/all_terrain_utility_vehicle.glb"))
+    } else if has(&["ute", "truck", "pickup", "raptor"]) {
+        Some(Model::real("vehicles/utility_truck.glb"))
     } else {
-        // Truck, ute, tractor: the utility truck is the general vehicle
-        // of this set, and it is a real model rather than a placeholder.
-        Model::real("vehicles/utility_truck.glb")
+        // A vehicle this table has never heard of: no model rather than a
+        // guess at one.
+        None
     }
 }
 
@@ -337,14 +351,58 @@ mod tests {
     }
 
     #[test]
-    fn a_name_the_table_has_never_seen_still_gets_something() {
-        // The manifest can grow. An unknown vehicle is a vehicle, and
-        // drawing the truck is better than drawing nothing on top of its
-        // real size; an unknown *kind* gets no model, because guessing
-        // there would be inventing.
-        assert!(item("Vehicle", "Hovercraft").is_some());
+    fn a_name_the_table_has_never_seen_gets_no_model() {
+        // The manifest can grow. Something the table has never heard of --
+        // a vehicle or a whole kind -- is drawn at its real size with no
+        // model, because any model would be a guess at what it is. (An
+        // unknown vehicle used to get the truck; the estate's excavator and
+        // tractors were drawn as trucks that way.)
+        assert!(item("Vehicle", "Hovercraft").is_none());
         assert!(item("Submarine", "Nautilus").is_none());
         assert!(building("Lighthouse").is_none());
+    }
+
+    /// Every vehicle on the founders' estate, by the manifest's own name,
+    /// gets the model of what it is or none at all -- never another
+    /// vehicle's.
+    #[test]
+    fn every_vehicle_on_the_estate_is_drawn_as_itself_or_as_its_size() {
+        use mk_engine::organisms::property::{PropertyItemKind, StarterProperty};
+        let estate = StarterProperty::founders_estate((0, 0));
+        let vehicles: Vec<&str> = estate
+            .items
+            .iter()
+            .filter(|i| i.kind == PropertyItemKind::Vehicle)
+            .map(|i| i.name.as_str())
+            .collect();
+        let expected = [
+            (
+                "Polaris RZR 1000 Turbo",
+                Some("vehicles/all_terrain_utility_vehicle.glb"),
+            ),
+            (
+                "Polaris RZR 2000 PRO R",
+                Some("vehicles/all_terrain_utility_vehicle.glb"),
+            ),
+            ("Ford Raptor 4x4 Ute", Some("vehicles/utility_truck.glb")),
+            ("Golf Cart", None),
+            ("Fendt 900 Vario", None),
+            ("Fendt 1000 Vario", None),
+            ("30-Ton Excavator (CAT 330)", None),
+            ("Double Axle Trailer", Some("vehicles/utility_trailer.glb")),
+            (
+                "Tractor Tipper Trailer",
+                Some("vehicles/utility_trailer.glb"),
+            ),
+        ];
+        for name in &vehicles {
+            let (_, want) = expected
+                .iter()
+                .find(|(n, _)| n == name)
+                .unwrap_or_else(|| panic!("{name} is new on the estate: say what it is drawn as"));
+            assert_eq!(item("Vehicle", name).map(|m| m.path), *want, "{name}");
+        }
+        assert_eq!(vehicles.len(), expected.len(), "a vehicle left the estate");
     }
 
     #[test]
