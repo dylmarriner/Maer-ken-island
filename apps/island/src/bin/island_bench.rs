@@ -123,7 +123,8 @@ fn rate_in_pool(
         .map_err(|e| e.to_string())?;
     pool.install(|| {
         let (canon, scenario) = open(args)?;
-        let mut world = IslandLife::bootstrap(scenario, canon).map_err(|e| e.to_string())?;
+        let mut world =
+            IslandLife::bootstrap_cached(scenario, canon, None).map_err(|e| e.to_string())?;
         add_settlers(&mut world, people)?;
         let elapsed = run_steps(&mut world, ticks, dt)?;
         Ok(ticks as f64 / elapsed.as_secs_f64())
@@ -139,8 +140,8 @@ fn bench(args: &[String]) -> Result<Value, String> {
 
     let (canon, scenario) = open(args)?;
     let started = Instant::now();
-    let mut world =
-        IslandLife::bootstrap(scenario, Arc::clone(&canon)).map_err(|e| e.to_string())?;
+    let mut world = IslandLife::bootstrap_cached(scenario, Arc::clone(&canon), None)
+        .map_err(|e| e.to_string())?;
     let bootstrap = started.elapsed();
     let spin_up = world.spin_up.clone();
     add_settlers(&mut world, people)?;

@@ -87,7 +87,10 @@ fn soil_total(life: &IslandLife) -> f64 {
 /// and grazers each change by less than 1% over the last century.
 #[test]
 fn a_thousand_years_bring_the_living_world_to_equilibrium() {
-    let life = IslandLife::bootstrap(small(1_000), canon()).unwrap();
+    // Uncached: this is about the spin-up itself, and the workspace's
+    // shared cache (`MK_SPINUP_CACHE`) would hand back one another test
+    // made.
+    let life = IslandLife::bootstrap_cached(small(1_000), canon(), None).unwrap();
     let report = life.spin_up.clone().expect("the scenario spins up");
     let e = report.equilibrium;
     assert_eq!(report.settings.years, 1_000);
@@ -275,7 +278,8 @@ fn slow_the_default_island_spins_up_to_equilibrium() {
         scenario.spin_up_years >= 1_000,
         "the default scenario spins up"
     );
-    let life = IslandLife::bootstrap(scenario, canon()).unwrap();
+    // Uncached, so the time printed is a spin-up's and not a file read's.
+    let life = IslandLife::bootstrap_cached(scenario, canon(), None).unwrap();
     let report = life.spin_up.clone().unwrap();
     let e = report.equilibrium;
     println!(
