@@ -1702,8 +1702,14 @@ fn panels(
                                 ui.small(said);
                             }
                             // Most of the panel, leaving the two checkboxes
-                            // below it in view.
-                            let room = (ui.available_height() - 90.0).max(160.0);
+                            // below it in view, and on the estate what a
+                            // click picked as well.
+                            let below = if *showing == Showing::Estate {
+                                220.0
+                            } else {
+                                90.0
+                            };
+                            let room = (ui.available_height() - below).max(160.0);
                             egui::ScrollArea::vertical()
                                 .id_salt("person")
                                 .max_height(room)
