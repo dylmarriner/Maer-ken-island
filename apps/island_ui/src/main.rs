@@ -270,6 +270,16 @@ struct PersonReading {
     >,
 }
 
+/// Lowers a flag when dropped: at the end of a worker thread, whether it
+/// returned or panicked.
+struct ClearOnDrop(std::sync::Arc<std::sync::atomic::AtomicBool>);
+
+impl Drop for ClearOnDrop {
+    fn drop(&mut self) {
+        self.0.store(false, std::sync::atomic::Ordering::Release);
+    }
+}
+
 impl PersonReading {
     const EVERY: std::time::Duration = std::time::Duration::from_secs(10);
 
@@ -298,6 +308,9 @@ impl PersonReading {
         );
         busy.store(true, std::sync::atomic::Ordering::Release);
         std::thread::spawn(move || {
+            // Cleared however the thread ends, a panic included, so one
+            // failed read cannot stop every later one.
+            let _done = ClearOnDrop(busy);
             let got = client
                 .human(&agent_id)
                 .map_err(|e| e.to_string())
@@ -305,7 +318,6 @@ impl PersonReading {
             if let Ok(mut slot) = slot.lock() {
                 *slot = Some(got);
             }
-            busy.store(false, std::sync::atomic::Ordering::Release);
         });
     }
 

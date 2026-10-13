@@ -186,18 +186,38 @@ fn emotions_are_at_rest(human: &HumanBeing) -> bool {
         .is_none_or(|(_, level, baseline)| (level - baseline).abs() < 0.001)
 }
 
-/// `EatFood` as "Eat food".
+/// `EatFood` as "Eat food", and an acronym kept whole: `EatCPU` as
+/// "Eat CPU", `XMLParser` as "XML parser".
+///
+/// A word starts at a capital that follows a small letter, or at the last
+/// capital of a run that a small letter follows (the P of `XMLParser`).
 fn spaced(name: &str) -> String {
-    let mut out = String::with_capacity(name.len() + 4);
-    for (i, c) in name.chars().enumerate() {
-        if c.is_uppercase() && i > 0 {
-            out.push(' ');
-            out.extend(c.to_lowercase());
-        } else {
-            out.push(c);
+    let chars: Vec<char> = name.chars().collect();
+    let mut words: Vec<String> = Vec::new();
+    for (i, &c) in chars.iter().enumerate() {
+        let starts = i > 0
+            && c.is_uppercase()
+            && (chars[i - 1].is_lowercase()
+                || (chars[i - 1].is_uppercase()
+                    && chars.get(i + 1).is_some_and(|n| n.is_lowercase())));
+        match words.last_mut() {
+            Some(word) if !starts => word.push(c),
+            _ => words.push(c.to_string()),
         }
     }
-    out
+    words
+        .iter()
+        .enumerate()
+        .map(|(i, word)| {
+            let acronym = word.chars().count() > 1 && word.chars().all(char::is_uppercase);
+            if i == 0 || acronym {
+                word.clone()
+            } else {
+                word.to_lowercase()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// Their parents and children, by whoever the island has a record of.
@@ -871,6 +891,9 @@ mod tests {
     fn an_action_name_is_said_in_words() {
         assert_eq!(spaced("EatFood"), "Eat food");
         assert_eq!(spaced("Rest"), "Rest");
+        assert_eq!(spaced("EatCPU"), "Eat CPU");
+        assert_eq!(spaced("XMLParser"), "XML parser");
+        assert_eq!(spaced("GoToWork"), "Go to work");
     }
 
     #[test]
