@@ -1262,7 +1262,8 @@ fn drive_the_camera(
 /// a thousandth of a pixel -- so the pick is left as it was.
 fn pick_on_the_estate(
     showing: Res<Showing>,
-    island: Res<TheIsland>,
+    // The island's layout and its latest read, whose trees can be picked.
+    (island, latest): (Res<TheIsland>, Res<Latest>),
     buttons: Res<ButtonInput<MouseButton>>,
     windows: Query<&Window, With<bevy::window::PrimaryWindow>>,
     camera: Query<(&Camera, &Transform), With<Camera3d>>,
@@ -1319,7 +1320,12 @@ fn pick_on_the_estate(
     // A click on nothing clears the pick, the way clicking empty desktop
     // deselects: a stale description of something no longer under
     // attention is worse than none.
-    panels.picked = estate::pick(layout, from, along);
+    // The trunks as they are drawn, from the same read `grow_the_stems`
+    // drew them from, so what is clicked is what is on screen.
+    let trunks = (*latest.0.trees).as_ref().map_or_else(Vec::new, |trees| {
+        stems::stems(trees, (layout.patch.x0, layout.patch.y0))
+    });
+    panels.picked = estate::pick(layout, &trunks, from, along);
 }
 
 /// Move the islanders to where the island says they are.
@@ -1632,10 +1638,14 @@ fn panels(
                 match panels
                     .picked
                     .zip(island.0.estate())
-                    .and_then(|(picked, layout)| estate::describe(layout, picked))
-                {
+                    .and_then(|(picked, layout)| match picked {
+                        estate::Picked::Tree(id) => (*snapshot.trees).as_ref().and_then(|trees| {
+                            stems::describe(trees, id, (layout.patch.x0, layout.patch.y0))
+                        }),
+                        _ => estate::describe(layout, picked),
+                    }) {
                     None => {
-                        ui.label("Click a building, a room or a thing to read it.");
+                        ui.label("Click a building, a room, a thing or a tree to read it.");
                     }
                     Some(lines) => {
                         for line in lines {

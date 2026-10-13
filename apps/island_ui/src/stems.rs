@@ -70,6 +70,23 @@ pub fn stems(trees: &Trees, origin_m: (f64, f64)) -> Vec<Stem> {
         .collect()
 }
 
+/// What the inspector says about the tree `id` among `trees`: the
+/// island's own figures for it. `None` when that tree is no longer in the
+/// read -- felled since it was picked, or outside the box now asked for.
+pub fn describe(trees: &Trees, id: u64, origin_m: (f64, f64)) -> Option<Vec<String>> {
+    let tree = trees.trees.iter().find(|t| t.id == id)?;
+    Some(vec![
+        format!("{} {id}", tree.kind),
+        format!("{:.1} m tall", tree.height_m),
+        format!("{:.0} cm across the stem", tree.stem_diameter_m * 100.0),
+        format!(
+            "At {:.1}, {:.1} m from the patch corner",
+            tree.x_m - origin_m.0,
+            tree.y_m - origin_m.1
+        ),
+    ])
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -139,5 +156,24 @@ mod tests {
         assert_eq!(oak.base, Point::new(150.0, 0.0, -2_100.0));
         assert_eq!((oak.height_m, oak.radius_m), (24.0, 0.21));
         assert!(!oak.shrub && drawn[1].shrub);
+    }
+
+    #[test]
+    fn a_picked_tree_is_described_in_the_islands_figures_until_it_is_gone() {
+        let trees = Trees {
+            trees: vec![tree(7, "Tree", 1_150.0, 4_100.0, 24.0, 0.42)],
+            ..Default::default()
+        };
+        assert_eq!(
+            describe(&trees, 7, (1_000.0, 2_000.0)).unwrap(),
+            [
+                "Tree 7",
+                "24.0 m tall",
+                "42 cm across the stem",
+                "At 150.0, 2100.0 m from the patch corner",
+            ]
+        );
+        // Felled since: nothing to say rather than a stale description.
+        assert_eq!(describe(&trees, 8, (1_000.0, 2_000.0)), None);
     }
 }
