@@ -26,6 +26,8 @@
 
 ## Defaults (owner may change; recorded in the scenario)
 
+**Owner decisions of 2026-10-13 override this table where they differ** (`docs/handoff/WORKING_PRACTICES.md`): the farms are on the founders' estate, start small and grow; the estate's land is about the size of Pukekohe (cited area); the estate has its own staff (1 maid, about 2 kitchen staff or butlers, a supervisor and his wife) housed in cottages; the founders also own the hospital and doctors and a bank; profits are paid monthly, most of each month's profit, with a reserve kept; the founders decide asset sales themselves; and no further towns are built -- people may quit, leave and settle where they choose.
+
 | Item | Default | Basis |
 |---|---|---|
 | House hydro (stage 1) | run-of-river micro-hydro, 25 kW, Pelton or Turgo by head | estate peak load ~10–15 kW plus margin |
@@ -35,12 +37,18 @@
 | Refinery | skid-mounted atmospheric distillation unit, ~500 bbl/day nameplate, plus a small catalytic reformer for petrol octane | smallest real modular refineries |
 | Gas plant | separation of methane, LPG (propane/butane) and condensate; methane to a gas-fired backup generator and town supply; LPG bottled | |
 | Town | ~200 people in ~60 households: plant operators, electricians, mechanics, drillers and field crew, refinery operators; farmers, farm hands, fishers, a butcher, a miller/baker, supermarket manager and staff; forestry crew, sawmill hands, builders, carpenters, a plumber; a nurse and a teacher; with spouses and children | staffing from reference tables (Task 1) |
-| Food | mixed farm (grain, vegetables, orchard, pasture with sheep and cattle, dairy, poultry) sized to the town's energy and protein needs, an inshore fishing boat, abattoir/butchery, mill and bakery, dairy shed, supermarket | ~2,300 kcal and ~60 g protein per person per day |
+| Food | **on the founders' estate (owner, 2026-10-13):** beef, dairy, sheep and pig farms and market gardens (feed crops and vegetables), each herd starting at no less than a cited minimum breeding herd and growing as the business allows, each with the vehicles and equipment its work needs; previously: mixed farm (grain, vegetables, orchard, pasture with sheep and cattle, dairy, poultry) sized to the town's energy and protein needs, an inshore fishing boat, abattoir/butchery, mill and bakery, dairy shed, supermarket | ~2,300 kcal and ~60 g protein per person per day |
 | Timber | forestry crew (chainsaws, skidder, log truck) on a sustainable-yield harvest plan with replanting, sawmill (logs → framing, weatherboards, flooring; offcuts and sawdust → firewood and boiler fuel) | |
 | Currency | island dollar, integer cents | |
-| Shares | Gem-D 50%, Gem-K 50% of every enterprise | owner decision |
+| Shares | Gem-D 50%, Gem-K 50% of every enterprise, every home and business in the town included | owner decision |
+| Profit payout | each local month, most of the month's profit to the shareholders, the rest kept as the business's reserve (repairs, replacement, a bad month's wages, expansion); the exact share sourced or set by the owner | owner decision 2026-10-13 |
+| Asset sales | Gem-D and Gem-K decide for themselves whether, what and at what price to offer homes and businesses to villagers; a villager who can afford it decides whether to buy | owner decision 2026-10-13 |
+| Estate staff | 1 maid, about 2 kitchen staff or butlers, 1 supervisor and his wife; the supervisor organises the farm workers and all estate staff; staff and farm workers each have a 2-3 bedroom cottage on the estate | owner decision 2026-10-13 |
+| Estate land | about the area of Pukekohe (from a cited source), holding the farms, the cottages and room to expand for business and leisure | owner decision 2026-10-13 |
 | Prices | cost-based: levelised cost + 20% margin, reviewed each local month | |
 | Wages | relative occupational wage ratios from the reference labour pack, scaled so the lowest full-time wage covers a household's food, rent, fuel and electricity with a margin; paid every 14 roster days for hours actually worked | |
+| Benefits | appropriate to the job and workplace, from a cited employment-conditions source: paid annual, sick and public-holiday leave, employer retirement contributions, and for estate and farm staff the customary accommodation and produce | owner decision 2026-10-13 |
+| Free will | nobody is bound to their job, house or town: a person may quit, leave, travel the island and live where they choose, including in a shelter they build themselves; new settlements arise only from such choices | owner decision 2026-10-13 |
 
 ---
 

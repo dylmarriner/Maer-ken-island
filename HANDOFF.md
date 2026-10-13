@@ -106,9 +106,11 @@ cargo run -p island -- serve --scenario fixtures/island/default_scenario.json   
 - Gate 1, 2 and 3 reviews (island, weather previews, estate plan and trees).
 - D25: change the sea's heat exchange regionally, or in shared code and re-pin the planet.
 - Phase 4b: enterprise ownership splits, employment and dividend policies, the town's size.
-- Staff housing: the estate's staff list, so each can be given a 2-3 bedroom cottage (the
-  rule itself is decided: house for the founders and their children, cottages for staff, the
-  town for everyone else; `docs/handoff/WORKING_PRACTICES.md`, 2026-10-13).
+- Phase 4b, decided 2026-10-13 (`docs/handoff/WORKING_PRACTICES.md`): who lives where, the
+  estate's staff, farms on the estate that start small and grow on Pukekohe-sized land, the
+  founders owning the town (hospital, bank and power included), monthly profits with a reserve,
+  founders deciding asset sales, and free will in place of built towns. Still open: the exact
+  payout share and what the bank does.
 - Phase 5: the two founder portraits, the performance targets, and whether formal predictive
   processing is wired into decisions or stopped.
 - Whether the excavator gets a grapple (D40 rigging) and whether imported drilling rigs are

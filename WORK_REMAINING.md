@@ -251,7 +251,11 @@ Add to `fixtures/reference/industry/` (new packs alongside `hydro.json`), each v
   added to `EstateLayout` as a building kind of its own with its own bedrooms, sited on
   buildable ground clear of the house. Staff sleep in their own cottage (the bedroom rule in
   `regional/humans.rs` reads a `"<id>'s Bedroom"` label) and never in the house. Needs: a
-  sourced floor area for a 2-3 bedroom cottage; the owner's staff list.
+  sourced floor area for a 2-3 bedroom cottage.
+- **Estate staff (owner, 2026-10-13):** 1 maid, about 2 kitchen staff or butlers, and 1
+  supervisor with his wife; the supervisor organises the farm workers and all estate staff. Farm
+  workers in the numbers the farms' work needs (sourced labour per animal and per hectare). Every
+  worker is free to quit (Task 8's free will).
 - **D39** closes here: the hydro plant's wear, overhaul and failure need **cited overhaul
   intervals**, and maintenance labour restores it; flood closure of the intake needs a **cited
   flow threshold**.
@@ -259,9 +263,15 @@ Add to `fixtures/reference/industry/` (new packs alongside `hydro.json`), each v
 
 ### 4e. Task 7: money, enterprises, payroll
 
-- **Owner decisions:** the ownership split per enterprise (default 50/50 Gem-D and Gem-K), the
-  employment policy (overtime, sick and annual leave), the dividend policy (default 50% of profit
-  each local quarter), initial balances, the disconnection grace period.
+- **Decided (owner, 2026-10-13):** the founders own every home and business in the town, the
+  hospital and doctors, a bank and the power companies; profits are paid **monthly**, most of
+  each month's profit, with a reserve kept by each business; **Gem-D and Gem-K decide for
+  themselves** whether to offer homes and businesses for sale to villagers, and a villager who
+  can afford one decides whether to buy (upstream first: buying and selling in the human mind).
+  Wages come with benefits appropriate to the job and workplace, from a cited source.
+- **Owner decisions still open:** the ownership split per enterprise (default 50/50), the exact
+  payout share, initial balances, the disconnection grace period, and what the bank does
+  (deposits only, or loans too).
 - **Files:** create `regional/economy/{money.rs,enterprise.rs,market.rs}`; upstream first for
   `ActionKind::Buy` and money in human decisions.
 - **Tests:** `tests/island_economy.rs` (money conserved, bills from meters, payroll every 14
@@ -269,6 +279,13 @@ Add to `fixtures/reference/industry/` (new packs alongside `hydro.json`), each v
 
 ### 4f. Task 7b: food and timber chains
 
+- **The farms are on the founders' estate (owner, 2026-10-13):** beef, dairy, sheep and pigs,
+  and market gardens growing feed for the animals and vegetables for people. They **start small
+  and grow**: each herd starts at no less than a cited minimum breeding herd, so it can keep
+  breeding while animals are slaughtered, eaten or sold as meat across Maer-Ken, and grows as
+  profits allow. Each farm has the vehicles and equipment its work needs, from a cited list. The
+  estate's land is about the area of Pukekohe (cited), with room to expand for business and
+  leisure; `regional/estate_layout.rs` and the estate patch grow to match.
 - **Needs:** Task 2's catalogue (grain, flour, bread, milk, meat, logs, sawn timber and so on),
   Task 1b's species (the fishery fishes real populations), the crop and livestock tables above.
   The estate's timber work (§1) is the seed of the forestry chain: felling, hauling and drying
@@ -283,7 +300,14 @@ Add to `fixtures/reference/industry/` (new packs alongside `hydro.json`), each v
 - **Owner decision:** the founding town's size (the plan offers a smaller one if performance
   misses its targets).
 - **Residence (owner, 2026-10-13):** everyone who is not a founder, a founder's child or estate
-  staff lives in the town. Once it exists, the Creator should offer the town (and, for staff,
+  staff lives in the town. The town's homes and businesses, its doctors and hospital, its bank
+  and its power company all belong to Gem-D and Gem-K.
+- **A growing country, not built towns (owner, 2026-10-13):** the simulation founds no further
+  towns. People have free will: they may quit their jobs, leave their rented home, travel the
+  island and live where they choose -- in a stick hut they build themselves if that is what they
+  can manage (the materials model's shelter building is the start). Any new settlement grows
+  from the original one by people's own choices. Upstream first: quitting, leaving and settling
+  are decisions in the human mind. Once it exists, the Creator should offer the town (and, for staff,
   a cottage) as where a person lives, rather than only a spot on the estate.
 - **Files:** create `regional/town.rs`, `fixtures/island/workforce.json` (generated from the seed);
   generalise `regional/estate_layout.rs` to any high-detail site.
