@@ -1617,10 +1617,6 @@ impl IslandLife {
             .domain
             .cell_center_m(DomainLevel::Medium, source.0, source.1);
         let distance_m = (there.0 - here.0).hypot(there.1 - here.1);
-        let out_s = self
-            .labour
-            .walking_time_s(&body, distance_m, 0.0, 0.0)
-            .ok()?;
         let cans = self
             .placed
             .property
@@ -1648,6 +1644,11 @@ impl IslandLife {
                     .ok()?;
             }
         }
+        // The empty cans go out too, and a light body walks slower for them.
+        let out_s = self
+            .labour
+            .walking_time_s(&body, distance_m, 0.0, cans_kg)
+            .ok()?;
         self.water_trips.insert(
             id.to_string(),
             WaterTrip {
