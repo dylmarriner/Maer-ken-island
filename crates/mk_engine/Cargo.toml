@@ -2,6 +2,7 @@
 name = "mk_engine"
 version = "0.1.0"
 edition = "2021"
+license = "LicenseRef-All-Rights-Reserved"
 authors = ["Maer'Ken Execution Team"]
 description = "Phase 2+ physical world engine for Marr'Kena MK-I simulation"
 

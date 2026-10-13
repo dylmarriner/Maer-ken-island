@@ -2,6 +2,7 @@
 name = "mk_island"
 version = "0.1.0"
 edition = "2021"
+license = "LicenseRef-All-Rights-Reserved"
 description = "Regional island domain, profile and forcing data contracts (no engine code)"
 
 [dependencies]

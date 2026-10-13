@@ -2,6 +2,7 @@
 name = "island_preview"
 version = "0.1.0"
 edition = "2021"
+license = "LicenseRef-All-Rights-Reserved"
 description = "Headless previews of the island's geophysics and the seed gallery"
 
 [[bin]]

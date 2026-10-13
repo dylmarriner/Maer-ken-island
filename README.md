@@ -161,3 +161,11 @@ unreadable. Back it up with the data, or set `MK_STORAGE_KEY` yourself.
 ## Source authority
 
 The extraction is pinned by provenance to Maer-Ken commit `7c05f0dcf254387ffd7322dbb525fe4807228602`. See `UPSTREAM.md` before changing imported human behaviour.
+
+## Licence
+
+Proprietary. Copyright (c) 2026 Dylan Marriner, all rights reserved; see [`LICENSE`](LICENSE).
+No open-source licence is granted. Every crate declares
+`license = "LicenseRef-All-Rights-Reserved"` and the computer service `"license": "UNLICENSED"`.
+The assets under `assets/` carry the same licence; `assets/CREDITS.md` records where each came
+from and which need their provenance verified before any distribution outside this repository.
