@@ -286,6 +286,9 @@ fn create_and_follow(
     let client = island.client().clone();
     pending.store(true, std::sync::atomic::Ordering::Release);
     std::thread::spawn(move || {
+        // Lowered however this ends, a panic included, so a failed
+        // creation never leaves the Create button disabled for good.
+        let _done = ClearOnDrop(pending);
         let say = |said: Followed| {
             if let Ok(mut slot) = slot.lock() {
                 *slot = Some(said);
@@ -298,7 +301,6 @@ fn create_and_follow(
                     said: format!("Nobody was created: {e}"),
                     created: None,
                 });
-                pending.store(false, std::sync::atomic::Ordering::Release);
                 return;
             }
         };
@@ -352,7 +354,6 @@ fn create_and_follow(
             }
         };
         say(said);
-        pending.store(false, std::sync::atomic::Ordering::Release);
     });
 }
 
@@ -521,6 +522,17 @@ fn foundry_window(
                 }
             }
         });
+    // Closing the window after the options could not be read lets the
+    // next opening ask again, rather than show the old failure.
+    if !open
+        && foundry
+            .options
+            .lock()
+            .is_ok_and(|o| matches!(*o, Some(Err(_))))
+    {
+        foundry.asked_for_options = false;
+        *foundry.options.lock().unwrap_or_else(|p| p.into_inner()) = None;
+    }
     foundry.open = open;
     if let Some(agent_id) = chosen {
         panels.selected = Some(agent_id);

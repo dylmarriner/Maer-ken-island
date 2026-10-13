@@ -261,7 +261,10 @@ pub fn options() -> serde_json::Value {
             *mk_interventions::SPAWN_HEIGHT_RANGE_CM.end(),
         ),
     })
-    .unwrap_or_default()
+    // Strings and finite numbers, which always serialize; an empty `{}`
+    // in its place would be a form with nothing to choose from and no
+    // word of why.
+    .expect("the creator's options are plain strings and numbers")
 }
 
 /// The answer to a write this caller may not make.

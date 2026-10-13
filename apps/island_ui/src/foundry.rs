@@ -68,7 +68,8 @@ impl Form {
             return String::new();
         }
         let seconds = if local.len() == 16 { ":00" } else { "" };
-        format!("{local}{seconds}{}", self.birth_offset.trim())
+        let offset = self.birth_offset.trim();
+        format!("{local}{seconds}{offset}")
     }
 
     /// The request this form sends, or every reason it cannot be sent yet.
@@ -116,15 +117,17 @@ impl Form {
                 problems.push(format!("`{chosen}` is not a {what} the creator offers."));
             }
         }
-        if self.place.is_none() {
-            problems.push("They need somewhere to be: a room of the estate or a cell.".to_string());
-        }
-        if !problems.is_empty() {
+        let place = match self.place {
+            Some(Place::Space(id)) => Some((Some(id), None, None)),
+            Some(Place::Cell(row, col)) => Some((None, Some(row), Some(col))),
+            None => {
+                problems
+                    .push("They need somewhere to be: a room of the estate or a cell.".to_string());
+                None
+            }
+        };
+        let Some((space, row, col)) = place.filter(|_| problems.is_empty()) else {
             return Err(problems);
-        }
-        let (space, row, col) = match self.place.expect("checked above") {
-            Place::Space(id) => (Some(id), None, None),
-            Place::Cell(row, col) => (None, Some(row), Some(col)),
         };
         Ok(CreateHumanRequest {
             name: name.to_string(),
