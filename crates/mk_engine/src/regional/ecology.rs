@@ -26,9 +26,9 @@
 //!   [`RegionalEcologyState::renormalise_to_total`] rescales it so the
 //!   land total equals the producer species' carbon.
 //!
-//! Species populations are not seeded here: upstream's are planetary
-//! totals, and reseeding them at island scale is the next step of Task 1
-//! (see the plan's implementation notes).
+//! Species are not stored here: [`super::species`] places upstream's
+//! species on these fields as a view of them (Task 1b), so the plants'
+//! carbon is this grid's carbon however it changes.
 
 use mk_core::biomes::{classify_biome, BiomeType};
 use mk_core::grid::Grid2;

@@ -232,6 +232,15 @@ impl BiosphereSystem {
         Ok(())
     }
 
+    /// The founding species [`Self::initialize`] installs, generated from
+    /// this system's seed but neither installed nor logged: for a caller
+    /// that places them on ground of its own (the island, which scales
+    /// them to its habitats in `regional::species`). Island divergence;
+    /// see `UPSTREAM.md`.
+    pub fn founding_species(&self) -> Vec<Species> {
+        self.generate_founding_species()
+    }
+
     /// Load biodiversity catalogue from JSONL file
     pub fn load_biodiversity_catalogue(&mut self, path: &std::path::Path) -> Result<(), String> {
         let catalogue = BiodiversityCatalogue::load_from_jsonl(path)?;

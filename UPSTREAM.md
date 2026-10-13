@@ -412,3 +412,8 @@ have no upstream counterpart.
    feature are removed (2026-10-14). Nothing in the crate used them and nothing enabled the
    feature, but the lockfile still carried the whole Bevy 0.13 tree, including `ruzstd` 0.5
    (RUSTSEC-2026-0344). **No behaviour change.** Upstream would take the same removal.
+4. `mk_engine::biosphere::BiosphereSystem::founding_species` — a public wrapper around the
+   private `generate_founding_species`, so the island can place upstream's species on its own
+   ground (`regional::species`, Phase 3 Task 1b) without `initialize` installing them in a
+   planetary system or logging 4,096 creation events. **No behaviour change**: nothing upstream
+   calls it.
