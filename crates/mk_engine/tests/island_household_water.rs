@@ -44,6 +44,11 @@ fn the_house_draws_its_water_from_a_tank_on_its_own_roof() {
     );
 
     let drunk_before: f64 = life.water_drunk_kg.values().sum();
+    let gas = life
+        .household_gas
+        .clone()
+        .expect("the stove has its bottles");
+    assert_eq!(gas.stored_kg, 90.0, "two full 45 kg bottles");
     for _ in 0..(86_400 / 60) {
         // `advance` audits every household step, the tank's included: a
         // kilogram that moved without a ledger entry fails here.
@@ -89,6 +94,19 @@ fn the_house_draws_its_water_from_a_tank_on_its_own_roof() {
         after.rationed_s
     );
 
+    // The stove burned gas while anyone was home, no more than a whole
+    // day of the house's average cooking would, and every kilogram left the
+    // bottles (its carbon went to the air through the audit above).
+    let burned_gas = life.household_gas.as_ref().unwrap().burned_kg - gas.burned_kg;
+    let day_kg = gas.spec.burn_kg_per_s() * 86_400.0;
+    assert!(
+        burned_gas > 0.0 && burned_gas <= day_kg + 1e-9,
+        "the stove burned {burned_gas} kg of a day's {day_kg} kg"
+    );
+    assert!(
+        (gas.stored_kg - life.household_gas.as_ref().unwrap().stored_kg - burned_gas).abs() < 1e-9
+    );
+
     // The tank is part of the island: saved and restored with it, and in
     // its digest.
     let snapshot = life.snapshot();
@@ -99,6 +117,14 @@ fn the_house_draws_its_water_from_a_tank_on_its_own_roof() {
         life.state_digest(),
         digest,
         "the digest does not see the tank"
+    );
+    assert_eq!(snapshot.household_gas, life.household_gas);
+    let digest = life.state_digest();
+    life.household_gas.as_mut().unwrap().stored_kg -= 1.0;
+    assert_ne!(
+        life.state_digest(),
+        digest,
+        "the digest does not see the gas"
     );
 }
 
