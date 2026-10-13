@@ -37,7 +37,7 @@ this list holds the current state. The evidence for what is *done* is in
 | Area | Item | State | Blocked on |
 |---|---|---|---|
 | Timber | Splitting, crosscut, rigging, routes (D40); drying and seasoning done 2026-10-14 | Open | Splitting and sawing rates |
-| Living world | Phase 3 Task 1b: species at island scale | Open | Engineering only |
+| Living world | Phase 3 Task 1b: species at island scale | Done (D55 open: upstream densities) | — |
 | Living world | Phase 3 Task 2: every resource and material, placers, recipes | Open (partly started) | Cited placer decay, shaft size, abundances |
 | Living world | D9: actions take one tick | Open (felling, hauling done) | Cited durations per task |
 | Living world | D31: NPP ignores soil nutrients | Open | Regional soils model and data |
@@ -110,20 +110,11 @@ the log's last water is booked to the air at that moment rather than when the wo
 
 ### 2a. Phase 3 Task 1b: species at island scale
 
-- **Now:** `TreeInstance` carries `PlantKind` (tree, shrub, grass) and nothing else; fauna is
-  absent. Upstream's `BiosphereSystem` populations are planetary totals.
-- **Needs:** island-scaled initial populations for `BiosphereSystem`, and a producer-carbon total
-  for `renormalise_to_total` taken from `RegionalEcologyState::biomass_kgc_m2`. Species
-  abundances per biome need a cited basis or a recorded deviation (D7 already accepts Earth's
-  species).
-- **Files:** `regional/ecology.rs` (`RegionalEcologyState` gains the biosphere and organisms),
-  possibly `biosphere/mod.rs` (inputs passed explicitly rather than from `WorldState`; record in
-  `UPSTREAM.md`).
-- **Tests:** plan Task 1 Step 1 (species on eligible land, none in the sea, producer carbon equal
-  to `Σ biomass × area` after a step), then the regression run
-  `cargo test -p mk_engine --lib -- biosphere:: organisms::vegetation`.
-- **Unblocks:** Task 2's animal and fish nodes, Phase 4b's fishery, the interventions' animal
-  biomass types (now refused by name), and species on the map.
+Done 2026-10-14 (`regional/species.rs`, D55): upstream's founding species placed on the island's
+habitats, plants and grazers as shares of the island's carbon fields, other guilds at upstream's
+density times the island's habitat area. **Left:** Earth-calibrated densities and a carbon pool
+for each consumer guild (realism R8, R10); serving the species to the map and the cell inspector;
+animal and fish resource nodes (§2b), which can now read the habitats.
 
 ### 2b. Phase 3 Task 2: every resource and material
 

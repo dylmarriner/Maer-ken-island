@@ -32,6 +32,7 @@ document was wrong about whether rendering here was possible at all.
 | Climate, weather, storms, ocean, tides, hydrology, coupled tick (Phase 2) | Done; owner review pending | `crates/mk_engine/src/regional/`, `docs/previews/phase2/`, year-long reference test |
 | **Integrated island life**: physics + ecology + estate + 200,000 trees + founders + energy + materials, audited (Phase 3 Task 9) | Done; one week measured | `regional/life.rs`, `tests/island_life_acceptance.rs`, `benchmarks/island_week.md` |
 | Island ecology fields: biomes, NPP, producer biomass (Phase 3 Task 1a), plus a first grazer pool (D41, assumed parameters) | Done | `regional/ecology.rs`, `tests/regional_ecology.rs` |
+| Upstream's species at island scale (Phase 3 Task 1b): 4,096 founding species on the island's habitats; plants and grazers as shares of the carbon fields, other guilds at upstream's density (D55) | Done; derived, not stored (digest unchanged) | `regional/species.rs`, `tests/island_species.rs` |
 | Grid topology for human/organism movement, births and perception (Phase 3 Task 6) | Done; planetary results bit-identical | `topology.rs`, `tests/topology_hash_baseline.rs` |
 | Founders' estate laid out in metres (Phase 3 Task 5) | Done | `regional/estate_layout.rs`, `tests/island_estate_layout.rs` |
 | Canonical founders on the island: observation, bedrooms, computer rule (Phase 3 Task 8) | Done except Task-3-dependent hooks | `regional/humans.rs`, `humans/observation.rs`, `tests/island_human_runtime.rs` |

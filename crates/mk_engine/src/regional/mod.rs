@@ -37,6 +37,7 @@ pub mod scheduler;
 pub mod seismicity;
 pub mod shape;
 pub mod soil;
+pub mod species;
 pub mod synoptic;
 pub mod tectonics;
 pub mod terrain;
