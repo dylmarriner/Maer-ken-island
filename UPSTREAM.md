@@ -20,6 +20,45 @@ Intentional island divergence at extraction:
 2. `apps/island_humans` is new and owns island population bootstrapping.
 3. A small amount of rustfmt-only normalization occurred in copied source files.
 
+## Sync procedure (Phase 5 Task 7, 2026-10-14)
+
+`scripts/upstream_imports.json` is the import set, file by file: each group names the upstream
+commit it is pinned to, the directories imported whole (`crates/mk_core`, `crates/mk_engine`,
+`crates/mk_interventions`, pinned at `7c05f0d`) and single files with their upstream and local
+paths (the human fixtures, the canonical schema documents, the founders' GLBs and the Blender
+generator at `7c05f0d`; the Phase 5 assets, asset generators and computer service at
+`3508e61`). It was built by matching every local file's git blob against both upstream trees:
+143 of 147 matched byte for byte; `docs/canon/HUMAN_SYSTEM_STATUS.md` and the computer
+service's `package.json` and `package-lock.json` are mapped by path because the island has
+changed them, and `assets/CREDITS.md` is the island's own.
+
+```bash
+# What changed upstream in what we imported (never writes):
+python3 scripts/sync_maerken_upstream.py --check <Maer-Ken checkout> [--to <rev>]
+# Bring it across at an explicit commit, on a clean worktree:
+python3 scripts/sync_maerken_upstream.py --apply <Maer-Ken checkout> --commit <sha>
+git diff   # island divergences (this file) show as reverted lines; put them back by hand
+```
+
+`--apply` refuses a dirty worktree and a commit the checkout does not have, never touches files
+the island added inside an imported directory, and moves every pin to the new commit. Its tests
+(`scripts/tests/`, CI job `repository scripts`) run both modes on throwaway repositories.
+
+**Drift on 2026-10-14.** Upstream `master` is `3508e61`. Against it, the Phase 5 group is
+unchanged, and these imported runtime files have changed upstream since the `7c05f0d` pin (the
+divergences the owner kept the pin for are on this side, not those):
+
+- `crates/mk_core/src/flux/mod.rs`
+- `crates/mk_core/src/human/profile.rs`
+- `crates/mk_engine/src/biosphere/marine.rs`
+- `crates/mk_engine/src/biosphere/mod.rs`
+- `crates/mk_engine/src/conservation.rs`
+- `crates/mk_engine/src/humans/brain_regions.rs`
+- `crates/mk_engine/src/humans/mesoscale_brain.rs`
+- `crates/mk_engine/src/world_integration.rs`
+- `crates/mk_engine/tests/benchmark_verification.rs`
+- `crates/mk_engine/tests/conservation_audit.rs`
+
 ## Phase 0 divergences (2026-10-02)
 
 Each of these changes imported code. None has been proposed upstream yet; per the roadmap, human behaviour and biology changes should be made upstream first and synced, so items 4-7 need an upstream PR before the next resync.
