@@ -208,20 +208,46 @@ pub fn spin_up(
     })
 }
 
-/// The cache key: canon, scenario (which carries the seed and the profile)
-/// and spin-up settings, hashed together. Any change to any of them is a
-/// different island, so a different file.
+/// The source of every module whose code decides what a spin-up
+/// produces: this loop, the per-cell step it runs and the plant, grazer
+/// and soil models under it. Compiled in, so editing any of them is a new
+/// cache key and a cache made by older code is never loaded as if the new
+/// code had made it.
+const MODEL_SOURCES: [&[u8]; 4] = [
+    include_bytes!("deep_time.rs"),
+    include_bytes!("ecology.rs"),
+    include_bytes!("fauna.rs"),
+    include_bytes!("soil.rs"),
+];
+
+/// The cache key: canon, scenario (which carries the seed and the profile),
+/// spin-up settings, the ecology the spin-up starts from and the model's
+/// own source, hashed together. Any change to any of them is a different
+/// island, so a different file.
+///
+/// The starting ecology is in the key because everything upstream of the
+/// spin-up decides it -- the climate, the hydrology, the biome classifier,
+/// the RothC parameters read from the reference packs -- and a change to
+/// any of those must not load a world spun up from the old start. The
+/// model's source is in it because the start alone cannot see a change to
+/// the dynamics.
 pub fn cache_key(
     canon: &CanonLocked,
     scenario: &IslandScenario,
     settings: SpinUpSettings,
+    start: &RegionalEcologyState,
 ) -> String {
     let mut h = blake3::Hasher::new();
-    h.update(b"mk-island-spinup-v1");
+    h.update(b"mk-island-spinup-v2");
+    for source in MODEL_SOURCES {
+        h.update(&(source.len() as u64).to_le_bytes());
+        h.update(source);
+    }
     for part in [
         serde_json::to_vec(canon).expect("the canon serialises"),
         serde_json::to_vec(scenario).expect("the scenario serialises"),
         serde_json::to_vec(&settings).expect("settings serialise"),
+        bincode::serialize(start).expect("the ecology serialises"),
     ] {
         h.update(&(part.len() as u64).to_le_bytes());
         h.update(&part);
@@ -265,7 +291,15 @@ pub fn save_cached(
         .parent()
         .ok_or_else(|| DeepTimeError::Io(std::io::Error::other("cache path has no directory")))?;
     std::fs::create_dir_all(dir).map_err(DeepTimeError::Io)?;
-    let tmp = path.with_extension("snap.tmp");
+    // One temporary file per writer. Two processes starting the same
+    // scenario under one save root (`serve` and `run`, say) would otherwise
+    // interleave their writes in a shared one and rename a mixture into
+    // place. `load_cached` would reject it and spin up again, but that is
+    // a whole spin-up thrown away.
+    let unique = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos());
+    let tmp = path.with_extension(format!("snap.tmp.{}.{unique}", std::process::id()));
     {
         let mut f = std::fs::File::create(&tmp).map_err(DeepTimeError::Io)?;
         f.write_all(MAGIC).map_err(DeepTimeError::Io)?;

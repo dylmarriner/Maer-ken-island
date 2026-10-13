@@ -153,13 +153,19 @@ fn the_spin_up_leaves_the_physical_world_and_its_climatology_alone() {
     assert_ne!(before.state_digest(), after.state_digest());
 }
 
-/// Any change to canon, scenario, seed or settings is a different key.
+/// Any change to canon, scenario, seed, settings or the ecology the spin-up
+/// starts from is a different key.
 #[test]
 fn the_cache_key_follows_every_input() {
     let canon = canon();
     let base = small(1_000);
+    // The ecology a spin-up would start from: the island bootstrapped
+    // without one.
+    let start = IslandLife::bootstrap(small(0), canon.clone())
+        .unwrap()
+        .ecology;
     let key = |c: &CanonLocked, s: &IslandScenario, years: u32| {
-        deep_time::cache_key(c, s, SpinUpSettings::new(c, years))
+        deep_time::cache_key(c, s, SpinUpSettings::new(c, years), &start)
     };
     let k = key(&canon, &base, 1_000);
     assert_eq!(k, key(&canon, &base, 1_000));
@@ -173,6 +179,16 @@ fn the_cache_key_follows_every_input() {
     let mut other = (*canon).clone();
     other.orbital_period_s += 1.0;
     assert_ne!(k, key(&other, &base, 1_000));
+
+    // A change anywhere upstream of the spin-up -- climate, hydrology, a
+    // reference pack -- reaches it as a different starting ecology, and
+    // must not load a world spun up from the old one.
+    let mut moved = start.clone();
+    moved.npp_kgc_m2_yr.data_mut()[0] += 1e-9;
+    assert_ne!(
+        k,
+        deep_time::cache_key(&canon, &base, SpinUpSettings::new(&canon, 1_000), &moved)
+    );
 }
 
 /// A run that loads the cached spin-up is the island that spun it up, and

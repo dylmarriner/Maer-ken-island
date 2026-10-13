@@ -371,7 +371,7 @@ fn spin_up_cached(
 ) -> Result<super::deep_time::SpinUpReport, IslandLifeError> {
     use super::deep_time as dt;
     let settings = dt::SpinUpSettings::new(canon, scenario.spin_up_years);
-    let key = dt::cache_key(canon, scenario, settings);
+    let key = dt::cache_key(canon, scenario, settings, ecology);
     let path = save_root.map(|root| dt::cache_path(root, &key));
     if let Some(path) = &path {
         match dt::load_cached(path, &key) {
@@ -408,14 +408,29 @@ fn net(ledger: &Ledger, reservoir: Reservoir, kind: FluxKind) -> f64 {
         .sum()
 }
 
+/// An environment variable naming a directory where [`IslandLife::bootstrap`]
+/// keeps deep-time spin-ups, as [`IslandLife::bootstrap_cached`] does under
+/// a save root. The workspace's `.cargo/config.toml` points it into
+/// `target/` for everything cargo runs, so the many test binaries that
+/// bootstrap the default island pay for its thousand years once rather than
+/// each (CI's fast tier went from 24 to 40 minutes without it). Unset, as
+/// it is for an installed binary, nothing is cached. Safe to share because
+/// the cache key covers the model's source and the ecology it starts from
+/// (`deep_time::cache_key`).
+pub const SPIN_UP_CACHE_ENV: &str = "MK_SPINUP_CACHE";
+
 impl IslandLife {
     /// Bootstrap the whole island from a scenario: physics, ecology, the
-    /// estate and its trees, and the founders at home.
+    /// estate and its trees, and the founders at home. The spin-up is
+    /// cached under [`SPIN_UP_CACHE_ENV`] when that names a directory.
     pub fn bootstrap(
         scenario: IslandScenario,
         canon: Arc<CanonLocked>,
     ) -> Result<Self, IslandLifeError> {
-        Self::bootstrap_cached(scenario, canon, None)
+        let shared = std::env::var_os(SPIN_UP_CACHE_ENV)
+            .filter(|dir| !dir.is_empty())
+            .map(std::path::PathBuf::from);
+        Self::bootstrap_cached(scenario, canon, shared.as_deref())
     }
 
     /// [`Self::bootstrap`], keeping the deep-time spin-up under
