@@ -24,7 +24,6 @@ mk_island_client = { path = "../../crates/mk_island_client" }
 # does, on loopback, and then reads it through the same client it uses for
 # a remote one. One way in, so the local case is proven by the remote one.
 island = { path = "../island" }
-island_humans = { path = "../island_humans" }
 mk_engine = { path = "../../crates/mk_engine" }
 serde.workspace = true
 serde_json.workspace = true

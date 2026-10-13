@@ -2911,9 +2911,9 @@ name = "island"
 version = "0.1.0"
 dependencies = [
  "bytes",
+ "chrono",
  "flate2",
  "hex",
- "island_humans",
  "island_preview",
  "mk_core",
  "mk_engine",
@@ -2927,20 +2927,6 @@ dependencies = [
  "tempfile",
  "tokio",
  "warp",
-]
-
-[[package]]
-name = "island_humans"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "hex",
- "mk_core",
- "mk_engine",
- "mk_interventions",
- "serde",
- "serde_json",
- "tempfile",
 ]
 
 [[package]]
@@ -2964,7 +2950,6 @@ dependencies = [
  "bevy",
  "bevy_egui",
  "island",
- "island_humans",
  "mk_engine",
  "mk_island",
  "mk_island_api",

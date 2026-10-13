@@ -80,7 +80,7 @@ async fn get(port: u16, path: &str) -> (u16, String) {
 async fn the_server_serves_its_pages_and_its_api_on_a_real_port() {
     let data_dir = tempfile::tempdir().unwrap();
     let (population, warnings) =
-        island_humans::IslandHumanPopulation::open(data_dir.path(), [7u8; 32]).unwrap();
+        island::population::IslandHumanPopulation::open(data_dir.path(), [7u8; 32]).unwrap();
     assert!(warnings.is_empty(), "{warnings:?}");
     let population = Arc::new(Mutex::new(population));
 
@@ -133,7 +133,7 @@ async fn the_server_serves_its_pages_and_its_api_on_a_real_port() {
 async fn a_dashboard_without_a_world_says_there_is_no_world() {
     let data_dir = tempfile::tempdir().unwrap();
     let (population, _) =
-        island_humans::IslandHumanPopulation::open(data_dir.path(), [3u8; 32]).unwrap();
+        island::population::IslandHumanPopulation::open(data_dir.path(), [3u8; 32]).unwrap();
     let population = Arc::new(Mutex::new(population));
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -215,7 +215,7 @@ async fn a_dashboard_with_a_world_serves_the_island_as_it_steps() {
 
     let data_dir = tempfile::tempdir().unwrap();
     let (population, _) =
-        island_humans::IslandHumanPopulation::open(data_dir.path(), [5u8; 32]).unwrap();
+        island::population::IslandHumanPopulation::open(data_dir.path(), [5u8; 32]).unwrap();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let port = listener.local_addr().unwrap().port();
     let routes = server::routes_with_world(
@@ -423,7 +423,7 @@ async fn the_island_refuses_a_creation_it_cannot_honour_and_says_why() {
 async fn creating_in_a_world_that_is_not_running_is_refused() {
     let data_dir = tempfile::tempdir().unwrap();
     let (population, _) =
-        island_humans::IslandHumanPopulation::open(data_dir.path(), [9u8; 32]).unwrap();
+        island::population::IslandHumanPopulation::open(data_dir.path(), [9u8; 32]).unwrap();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let port = listener.local_addr().unwrap().port();
     let routes = server::routes(Arc::new(Mutex::new(population)), ControlAuth::LoopbackOnly);
@@ -687,11 +687,11 @@ async fn a_phase_0b_population_can_be_carried_into_the_world() {
     // A stored population, made the way the Phase-0b dashboard makes one.
     let data_dir = tempfile::tempdir().unwrap();
     let (mut stored, _) =
-        island_humans::IslandHumanPopulation::open(data_dir.path(), [13u8; 32]).unwrap();
+        island::population::IslandHumanPopulation::open(data_dir.path(), [13u8; 32]).unwrap();
     for name in ["Rawiri", "Ngaire"] {
         stored
             .create_human(
-                island_humans::CreateHumanRequest {
+                island::population::CreateHumanRequest {
                     name: name.to_string(),
                     biological_sex: "female".to_string(),
                     birth_timestamp: "1990-01-01T00:00:00Z".to_string(),
@@ -766,7 +766,7 @@ async fn a_phase_0b_population_can_be_carried_into_the_world() {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let port = listener.local_addr().unwrap().port();
     let (population, _) =
-        island_humans::IslandHumanPopulation::open(data_dir.path(), [13u8; 32]).unwrap();
+        island::population::IslandHumanPopulation::open(data_dir.path(), [13u8; 32]).unwrap();
     let routes = server::routes_with_world(
         Arc::new(Mutex::new(population)),
         ControlAuth::LoopbackOnly,
@@ -1668,7 +1668,7 @@ async fn properties_economy_and_timeline_serve_what_the_island_really_holds() {
 async fn the_three_views_need_an_island() {
     let data_dir = tempfile::tempdir().unwrap();
     let (population, _) =
-        island_humans::IslandHumanPopulation::open(data_dir.path(), [7u8; 32]).unwrap();
+        island::population::IslandHumanPopulation::open(data_dir.path(), [7u8; 32]).unwrap();
     let population = Arc::new(Mutex::new(population));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let port = listener.local_addr().unwrap().port();

@@ -153,7 +153,7 @@ pub fn commands_from_phase_0b(
     use mk_engine::regional::commands::IslandCommand;
     use mk_engine::regional::create_human::{CreateLocation, IslandCreateHuman};
 
-    let mut creations = island_humans::read_creations(data_dir)
+    let mut creations = crate::population::read_creations(data_dir)
         .map_err(|e| format!("cannot read {}: {e}", data_dir.display()))?;
     creations.sort_by_key(|record| record.counter);
 

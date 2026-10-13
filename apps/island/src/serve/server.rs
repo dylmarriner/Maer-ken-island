@@ -6,7 +6,7 @@ use super::pages;
 use super::read;
 use super::sim::{IslandCommand, SimHandle, SimSpeed};
 use super::view;
-use island_humans::{CreateHumanError, CreateHumanRequest, IslandHumanPopulation};
+use crate::population::{CreateHumanError, CreateHumanRequest, IslandHumanPopulation};
 use mk_engine::regional::commands::ControlCommand;
 use mk_engine::regional::create_human::{CreateLocation, IslandCreateHuman};
 use mk_engine::regional::estate_layout::SpaceId;
@@ -169,7 +169,7 @@ pub fn world_detail(
     human: &mk_engine::humans::HumanBeing,
     current: &super::projection::IslandProjection,
 ) -> serde_json::Value {
-    let summary = island_humans::HumanSummary {
+    let summary = crate::population::HumanSummary {
         agent_id: human.agent_id().to_string(),
         name: human.agent_id().to_string(),
         human_id: human.profile.human_id.to_string(),
@@ -211,7 +211,7 @@ pub fn activity(population: &IslandHumanPopulation, limit: usize) -> serde_json:
             "note": "This population is held in memory, so there is no creation log to read.",
         });
     };
-    match island_humans::read_creations(dir) {
+    match crate::population::read_creations(dir) {
         Ok(records) => {
             let total = records.len();
             let creations: Vec<serde_json::Value> = records

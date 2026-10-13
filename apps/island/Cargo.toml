@@ -9,12 +9,17 @@ description = "Maer-Ken Island: dashboard with the Human Creator"
 name = "island"
 path = "src/main.rs"
 
+# The population's own CLI (founders, create), from the retired
+# apps/island_humans crate (Phase 5 Task 7).
+[[bin]]
+name = "island_humans"
+path = "src/bin/island_humans.rs"
+
 [[bin]]
 name = "island_bench"
 path = "src/bin/island_bench.rs"
 
 [dependencies]
-island_humans = { path = "../island_humans" }
 # For the island's map. `island_preview` already renders this island's
 # elevation and coastline for the headless galleries; the dashboard draws
 # the same picture rather than growing a second renderer beside it.
@@ -38,6 +43,7 @@ serde_json.workspace = true
 # island_bench compares one thread against the pool.
 rayon.workspace = true
 hex.workspace = true
+chrono.workspace = true
 warp.workspace = true
 tokio.workspace = true
 

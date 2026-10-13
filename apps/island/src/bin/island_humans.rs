@@ -1,5 +1,7 @@
 use chrono::{DateTime, Utc};
-use island_humans::{CreateHumanError, CreateHumanRequest, IslandHumanPopulation, DEFAULT_SEED};
+use island::population::{
+    CreateHumanError, CreateHumanRequest, IslandHumanPopulation, DEFAULT_SEED,
+};
 use std::path::PathBuf;
 
 fn usage() -> ! {

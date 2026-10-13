@@ -1,7 +1,9 @@
 //! Phase 0b Task 2: a stored population where every human has their own
 //! folder, created through upstream's spawn path.
 
-use island_humans::{read_creations, CreateHumanError, CreateHumanRequest, IslandHumanPopulation};
+use island::population::{
+    read_creations, CreateHumanError, CreateHumanRequest, IslandHumanPopulation,
+};
 use std::path::Path;
 
 const SEED: [u8; 32] = [7u8; 32];

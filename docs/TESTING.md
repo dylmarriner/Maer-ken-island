@@ -104,7 +104,7 @@ the three things a browser decides rather than a test:
 | `insolation`, `tides` | 1 s |
 | `biodiversity_integration`, `orbit`, `phase6_verification`, `phase9_organisms_schemas`, `runtime_boundary` | under 1 s |
 | `mk_core` (all binaries) | under 1 s of test time |
-| `mk_interventions`, `island_humans` | under 1 s of test time |
+| `mk_interventions` | under 1 s of test time |
 
 Times exclude compilation; a cold `cargo test --workspace --no-run` took about 5.5 minutes. `debug_closure.rs` is a `fn main` with no tests.
 

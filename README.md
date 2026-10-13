@@ -43,7 +43,7 @@ there is exactly one way to read an island.
 - `crates/mk_island_api/` — every shape that crosses the network, defined once. Serde and nothing else, so a client can link it without building the island.
 - `crates/mk_island_client/` — a typed, blocking client for a backend. What the desktop application uses, and what anything else should.
 - `apps/island_ui/` — `island-ui`, the desktop application, on Bevy 0.19.
-- `apps/island_humans/` — the Phase-0b population bootstrap and CLI.
+- `apps/island/src/population.rs` — the Phase-0b population bootstrap (the `island_humans` CLI is a binary of `apps/island`).
 - `apps/island_preview/` — the headless renderer for the geophysics galleries.
 - `services/computer-service/` — the opt-in Node bridge that lets a founder reach the real internet. Off unless asked for.
 
@@ -64,7 +64,7 @@ New people are built through upstream's `SpawnHuman` path from the population's 
 ```bash
 cargo test --workspace --exclude island_ui    # fast tier
 cargo run -p island -- serve --scenario fixtures/island/default_scenario.json
-cargo run -p island_humans -- founders        # list everyone (CLI)
+cargo run -p island --bin island_humans -- founders   # list everyone (CLI)
 ```
 
 ### On one machine

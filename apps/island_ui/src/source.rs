@@ -303,9 +303,11 @@ impl LocalBackend {
         }
         let world = island::serve::sim::spawn(life, speed);
 
-        let (population, warnings) =
-            island_humans::IslandHumanPopulation::open(data_dir, island_humans::DEFAULT_SEED)
-                .map_err(|err| format!("could not open {}: {err}", data_dir.display()))?;
+        let (population, warnings) = island::population::IslandHumanPopulation::open(
+            data_dir,
+            island::population::DEFAULT_SEED,
+        )
+        .map_err(|err| format!("could not open {}: {err}", data_dir.display()))?;
         for warning in warnings {
             eprintln!("warning: {warning}");
         }
