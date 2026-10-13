@@ -222,33 +222,45 @@ fn the_application_reads_an_island_and_has_enough_to_draw_it() {
     let floors = island_ui::estate::rooms(layout);
     assert_eq!(floors.len(), layout.spaces.len(), "one floor per space");
     assert!(!layout.spaces.is_empty());
-    let inside = |r: &mk_island_api::Rect, x: f64, y: f64| {
-        x >= r.x0.min(r.x1) - 1e-6
-            && x <= r.x0.max(r.x1) + 1e-6
-            && y >= r.y0.min(r.y1) - 1e-6
-            && y <= r.y0.max(r.y1) + 1e-6
+    // Checked on what is drawn, in the estate frame, not on the layout's
+    // own rectangles: a mistake in turning the layout into the frame (the
+    // wrong origin, a flipped axis) is exactly what this has to catch.
+    let drawn_buildings = island_ui::estate::buildings(layout);
+    // Is the point (x, z) of the estate frame on this drawn box's
+    // footprint, the box turned about the vertical as it is drawn?
+    let on = |b: &island_ui::estate::Placed, x: f32, z: f32| {
+        let (sin, cos) = b.rotation_deg.to_radians().sin_cos();
+        let (dx, dz) = (x - b.at.x, z - b.at.z);
+        // Back into the box's own frame (the inverse of Bevy's turn).
+        let (lx, lz) = (dx * cos - dz * sin, dx * sin + dz * cos);
+        lx.abs() <= b.size_m.0 / 2.0 + 1e-3 && lz.abs() <= b.size_m.2 / 2.0 + 1e-3
     };
     for (space, floor) in layout.spaces.iter().zip(&floors) {
         assert_eq!((&floor.name, &floor.kind), (&space.label, &space.kind));
-        let (cx, cy) = (
-            (space.rect_m.x0 + space.rect_m.x1) / 2.0,
-            (space.rect_m.y0 + space.rect_m.y1) / 2.0,
-        );
         assert!(
-            layout.buildings.iter().any(|b| inside(&b.rect_m, cx, cy)),
-            "{} ({}) is in no building",
+            drawn_buildings
+                .iter()
+                .any(|b| on(b, floor.at.x, floor.at.z)),
+            "the floor of {} ({}) is drawn at {:?}, in no drawn building",
             space.label,
-            space.kind
+            space.kind,
+            floor.at
         );
     }
     let things = island_ui::estate::things(layout);
     assert_eq!(things.len(), layout.items.len(), "one drawn thing per item");
-    for item in &layout.items {
-        let (x, y) = item.position_m;
+    // The patch as drawn: its south-west corner is the frame's origin and
+    // north is -z.
+    let origin = (layout.patch.x0, layout.patch.y0);
+    let far = island_ui::scene::estate_of(origin, layout.patch.x1, layout.patch.y1, 0.0);
+    for thing in &things {
         assert!(
-            inside(&layout.patch, x, y),
-            "{} is off the estate",
-            item.name
+            (0.0..=far.x).contains(&thing.at.x) && (far.z..=0.0).contains(&thing.at.z),
+            "{} is drawn at {:?}, off the patch drawn from (0, 0) to ({}, {})",
+            thing.name,
+            thing.at,
+            far.x,
+            far.z
         );
     }
 }
