@@ -328,7 +328,7 @@ Add to `fixtures/reference/industry/` (new packs alongside `hydro.json`), each v
 | Item | What is needed |
 |---|---|
 | **D3 (rest)**: sea and land breezes, katabatic winds | A diurnal wind solver on the coarse grid (land-sea temperature contrast driving an onshore/offshore flow; cold-air drainage downslope at night). The coastal damping of the day-night range is still the observed coastal/inland ratio; the land's range itself is already physical (Panwar & Kleidon 2022). |
-| **D25**: the SST season lags 1-2 months too long | Turbulent air-sea heat exchange in the mixed layer would shorten it. The ocean physics is shared with the planetary run, whose topology digest is pinned (`766d5cd8…d497`). **Owner decision:** change it regionally only, or change it in the shared code and re-pin the planet. |
+| **D25**: the SST season lags 1-2 months too long | Turbulent air-sea heat exchange in the mixed layer would shorten it. The ocean physics is shared with the planetary run, whose topology digest is pinned (`e4ece246…73e2`). **Owner decision:** change it regionally only, or change it in the shared code and re-pin the planet. |
 | **D4**: weather systems are parametric | No occlusion, no warm-front structure. A structural change to `synoptic.rs`; large. |
 | **D38**: the driest tenth gets ~320 mm/yr against NZ's driest basin at ~360 | Diagnose first: the vapour budget, the rain-shadow strength or the evaporation. |
 | **D29**: energy is audited per module | An end-to-end energy ledger across the coupled tick. |
@@ -392,4 +392,4 @@ page does not yet use the map.
 - **Firecrawl credits ran out** on 2026-10-12. WebSearch and the TinyFish fetcher still work for
   sources; the container's own network blocks most hosts.
 - **Persist digests.** `WEEK_DIGEST` is `3d268e8b…4338`; the planetary topology pin is
-  `766d5cd8…d497`. Any change that moves either is a behaviour change and must say so.
+  `e4ece246…73e2`. Any change that moves either is a behaviour change and must say so.
