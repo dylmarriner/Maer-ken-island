@@ -168,9 +168,6 @@ pub fn spin_up(
                     *respired += r;
                 }
             }
-            if settings.years == checkpoint {
-                out[1] = sample(*b, *g, pools);
-            }
             out[2] = sample(*b, *g, pools);
             out
         })

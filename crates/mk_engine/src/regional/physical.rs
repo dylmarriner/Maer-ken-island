@@ -121,6 +121,13 @@ pub struct RegionalPhysicalState {
     /// plants run (set by whoever runs them before each step).
     #[serde(default)]
     pub diversions: Vec<Diversion>,
+    /// The fraction of its equilibrium vapour the air still carries in each
+    /// coarse cell after the slopes upwind wrung their rain out of it
+    /// (`weather::apply_orographic_precipitation`). Absent in a state saved
+    /// before it was kept, until the next weather step. Not in the digest:
+    /// it follows from the wind and terrain, which are.
+    #[serde(default)]
+    pub vapour_remaining: Option<Grid2<f64>>,
 }
 
 fn finite(grid: &Grid2<f64>, what: &'static str) -> Result<(), RegionalPhysicalError> {
@@ -215,6 +222,7 @@ impl RegionalPhysicalState {
             network,
             river_water_to_ocean_kg: 0.0,
             river_flows: RiverFlowRecord::default(),
+            vapour_remaining: None,
             diversions: Vec::new(),
         };
 
@@ -401,7 +409,11 @@ impl RegionalPhysicalState {
             &self.zonal_background,
             &self.boundaries.atmosphere,
         );
-        apply_orographic_precipitation(&mut self.weather, &self.elevation_coarse_m, domain);
+        self.vapour_remaining = Some(apply_orographic_precipitation(
+            &mut self.weather,
+            &self.elevation_coarse_m,
+            domain,
+        ));
         apply_synoptic(&mut self.weather, &mut self.synoptic, domain, canon, dt);
 
         // Diurnal departure from the daily mean: the day's range from the
