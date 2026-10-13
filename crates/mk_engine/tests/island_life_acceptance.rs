@@ -112,7 +112,18 @@ const DAY: u64 = 86_400;
 /// against 10.4, Gem-D asleep at home 41 of 57 hours and Gem-K 41 of 56,
 /// temperate-forest NPP 567 g C/m2/yr. Nothing physical moved that the
 /// test measures; the hash did.
-const WEEK_DIGEST: &str = "c46b2028b90b650611571510cf553da3c76acdec46f4edae3fb00dba110c9f16";
+///
+/// And for soil carbon by RothC (realism R0, D43) on top of the
+/// rainwater tank and fetching water by hand (R1, R1b): litter, grazer
+/// faeces and carcasses feed the soil instead of leaving the books.
+/// Audited 2026-10-14: 10,514 audits closed (the household water and meal
+/// audits run each substep), no food or water shortfalls, Gem-D 13.0 kg of
+/// body carbon against 13.0 and Gem-K 10.4 against 10.4, eating 47 and 43
+/// minutes a day, drinking 1.81 and 1.43 L a day, temperate-forest NPP
+/// 567 g C/m2/yr, intimacy 65 a year. (The pin first written for R0,
+/// `c46b2028...9f16`, was R0 on top of R1 alone; it went stale when R0 was
+/// rebased onto R1b and was never re-run.)
+const WEEK_DIGEST: &str = "fc62629c941aca1bd011e37a53f4d6c165f8a675273e0b287686032356d93da7";
 
 fn repo(path: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
