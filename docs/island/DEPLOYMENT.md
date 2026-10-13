@@ -136,7 +136,9 @@ The unit uses both (`--autosave 30 --resume`), so a reboot or a
 `systemctl stop` loses nothing. A save takes about half a minute on the full
 island and the clock stops while it is written. When a step fails (an audit
 that does not close) the island stops and is **not** saved on the way out:
-the last good save is kept rather than overwritten with a broken island.
+the last good save is kept rather than overwritten with a broken island. `/api/health` then answers **503** (`"status": "island stopped"`) while the
+server itself still answers, so a monitor or load balancer sees the failure and
+a restart carries on from that save.
 
 ## The web dashboard, somewhere else
 

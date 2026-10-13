@@ -120,6 +120,30 @@ pub fn health(population: &IslandHumanPopulation) -> serde_json::Value {
     })
 }
 
+/// [`health`], and whether the island is still stepping. A step that fails
+/// stops the simulation thread while this server goes on answering, so
+/// without this a monitor would call a frozen island healthy for ever:
+/// it answers 503 so whatever watches the process can restart it, which
+/// with `--resume` carries on from the last good save.
+pub(crate) fn health_reply(
+    population: &IslandHumanPopulation,
+    world: Option<&SimHandle>,
+) -> (StatusCode, serde_json::Value) {
+    let mut body = health(population);
+    match world {
+        Some(world) if !world.is_running() => {
+            body["status"] = "island stopped".into();
+            body["island"] = "stopped: a step failed; the reason is in the server log".into();
+            (StatusCode::SERVICE_UNAVAILABLE, body)
+        }
+        Some(_) => {
+            body["island"] = "running".into();
+            (StatusCode::OK, body)
+        }
+        None => (StatusCode::OK, body),
+    }
+}
+
 pub fn detail(population: &IslandHumanPopulation, agent_id: &str) -> Option<serde_json::Value> {
     let human = population.get(agent_id)?;
     let summary = population.summary(agent_id)?;
@@ -815,9 +839,11 @@ pub fn routes_with_config(
         .and(warp::path::end())
         .and(read())
         .and(with(population.clone()))
-        .map(|population: SharedPopulation| {
+        .and(with(world.clone()))
+        .map(|population: SharedPopulation, world: Option<SimHandle>| {
             let population = locked(&population);
-            json(StatusCode::OK, &health(&population))
+            let (status, body) = health_reply(&population, world.as_ref());
+            json(status, &body)
         });
 
     let list = warp::path!("api" / "humans")

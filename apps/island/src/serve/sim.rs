@@ -227,6 +227,15 @@ impl SimHandle {
         }
     }
 
+    /// Whether the island is still stepping (or paused): `false` once a
+    /// step has failed and the thread has stopped.
+    pub fn is_running(&self) -> bool {
+        match self.projection.read() {
+            Ok(current) => current.running,
+            Err(poisoned) => poisoned.into_inner().running,
+        }
+    }
+
     /// Ask the thread to finish its current step and stop.
     pub fn stop(&self) {
         self.stop.store(true, Ordering::Relaxed);
@@ -1166,6 +1175,32 @@ mod tests {
             .iter()
             .map(|b| format!("{b:02x}"))
             .collect()
+    }
+
+    /// A monitor is told when the island has stopped: health answers 503
+    /// once a step has failed, while the server itself still answers.
+    #[test]
+    fn health_says_when_the_island_has_stopped() {
+        use crate::serve::server::health_reply;
+        let dir = tempfile::tempdir().unwrap();
+        let (population, _) =
+            island_humans::IslandHumanPopulation::open(dir.path(), [3u8; 32]).unwrap();
+        let handle = spawn(island(), SimSpeed::Times(1));
+        let (status, body) = health_reply(&population, Some(&handle));
+        assert_eq!(status, warp::http::StatusCode::OK);
+        assert_eq!(body["island"], "running");
+        // What the loop does when `advance` fails.
+        handle.projection.write().unwrap().running = false;
+        let (status, body) = health_reply(&population, Some(&handle));
+        assert_eq!(status, warp::http::StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(body["status"], "island stopped");
+        handle.stop_and_wait();
+        let (status, _) = health_reply(&population, None);
+        assert_eq!(
+            status,
+            warp::http::StatusCode::OK,
+            "no island, nothing to fail"
+        );
     }
 
     /// Stopping a persisting island saves it, completely, and what was
