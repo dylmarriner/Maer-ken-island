@@ -359,3 +359,13 @@ have no upstream counterpart.
 10. `mk_core::flux` — unchanged in this round. The material ledger's logs
     (`regional/materials.rs`) and the hydrology `Diversion`s (`regional/hydrology.rs`) are island
     code and book through the reservoirs item 21 of the Phase 4 list added.
+
+## Production and realism divergences (2026-10-13)
+
+1. `mk_engine::validation::default_reference_dir` — reads `ISLAND_REFERENCE_DIR` first, then
+   the source tree it was built from, then `./fixtures/reference` (PR #8), so an installed
+   binary finds its packs. **No behaviour change** where the source tree is present.
+2. `mk_engine::organisms::property` — the founders' shed gains two 20 L water jerrycans
+   (`WATER_JERRYCAN`, IFRC's family size), what a founder carries water home in when the
+   rainwater tank is dry (realism programme R1b). **Changes upstream data**: two more items in
+   the estate's inventory and layout.

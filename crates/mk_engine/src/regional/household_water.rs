@@ -45,6 +45,11 @@ pub struct HouseholdWaterSpec {
     pub roof_loss_mm_day: f64,
     /// The largest common tank, the unit tanks are installed in (L).
     pub tank_unit_l: f64,
+    /// A family water jerrycan: what it holds (L) and weighs empty (kg).
+    #[serde(default)]
+    pub jerrycan_l: f64,
+    #[serde(default)]
+    pub jerrycan_empty_kg: f64,
 }
 
 impl HouseholdWaterSpec {
@@ -55,6 +60,13 @@ impl HouseholdWaterSpec {
                 .and_then(|i| i.table())
                 .and_then(|t| t.get(label, "litres"))
                 .ok_or_else(|| format!("{key}/{label}"))
+        };
+        let jerrycan = |label: &str| {
+            library
+                .item(ReferenceDomain::Hydrology, "water_jerrycan")
+                .and_then(|i| i.table())
+                .and_then(|t| t.get(label, "value"))
+                .ok_or_else(|| format!("water_jerrycan/{label}"))
         };
         let total = row("household_water_use_per_person", "total")?;
         let drinking = row("household_water_use_per_person", "drinking")?;
@@ -67,6 +79,8 @@ impl HouseholdWaterSpec {
             total_l_per_person_day: total,
             rationed_l_per_person_day: row("emergency_water_per_person", "rationed")?,
             roof_loss_mm_day: loss,
+            jerrycan_l: jerrycan("capacity_l")?,
+            jerrycan_empty_kg: jerrycan("empty_kg")?,
             tank_unit_l: library
                 .item(
                     ReferenceDomain::Hydrology,
@@ -126,6 +140,9 @@ pub struct HouseholdWater {
     pub used_kg: f64,
     /// Simulated seconds spent rationed.
     pub rationed_s: f64,
+    /// Water carried home by hand and poured into the tank (kg).
+    #[serde(default)]
+    pub fetched_kg: f64,
 }
 
 impl HouseholdWater {
@@ -142,6 +159,7 @@ impl HouseholdWater {
             overflowed_kg: 0.0,
             used_kg: 0.0,
             rationed_s: 0.0,
+            fetched_kg: 0.0,
         }
     }
 
@@ -209,6 +227,8 @@ mod tests {
             rationed_l_per_person_day: 20.0,
             roof_loss_mm_day: 1.0,
             tank_unit_l: 30_000.0,
+            jerrycan_l: 20.0,
+            jerrycan_empty_kg: 1.0,
         }
     }
 

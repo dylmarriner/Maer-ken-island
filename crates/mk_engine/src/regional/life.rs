@@ -153,6 +153,25 @@ pub struct Shortfalls {
     pub water: u64,
 }
 
+/// A walk to water (realism programme R1b): out to `source` at the packs'
+/// pace, a drink there, and, from home with the house's jerrycans, back
+/// carrying `carry_kg` for the tank. Someone who sets out for water keeps
+/// going until they get there and back: the upstream needs model counts a
+/// person hydrated as soon as they choose to drink, so waiting for that
+/// choice to persist would strand them halfway (D42).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WaterTrip {
+    pub source: (usize, usize),
+    /// Seconds out to the source, and back home (0 for a trip that ends
+    /// at the water).
+    pub out_s: f64,
+    pub back_s: f64,
+    pub worked_s: f64,
+    /// Water to bring home for the tank (kg); 0 when not going home.
+    pub carry_kg: f64,
+    pub reached: bool,
+}
+
 /// A tree a founder is felling: which, and the seconds of work put in.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct FellingJob {
@@ -212,6 +231,8 @@ pub struct IslandLifeSnapshot {
     /// before the house had one; restoring installs it.
     #[serde(default)]
     pub household_water: Option<HouseholdWater>,
+    #[serde(default)]
+    pub water_trips: BTreeMap<String, WaterTrip>,
 }
 
 pub struct IslandLife {
@@ -294,6 +315,8 @@ pub struct IslandLife {
     pub water_cell: Option<(usize, usize)>,
     /// The house's roof and rainwater tank (realism programme R1).
     pub household_water: Option<HouseholdWater>,
+    /// Who is walking to water, or home with it (realism programme R1b).
+    pub water_trips: BTreeMap<String, WaterTrip>,
     topology: GridTopology,
 }
 
@@ -422,6 +445,7 @@ impl IslandLife {
             food_cell,
             water_cell,
             household_water: None,
+            water_trips: BTreeMap::new(),
             topology,
         };
         // A log says which scenario it belongs to, so replaying it against
@@ -496,6 +520,7 @@ impl IslandLife {
             food_cell: self.food_cell,
             water_cell: self.water_cell,
             household_water: self.household_water.clone(),
+            water_trips: self.water_trips.clone(),
         }
     }
 
@@ -560,6 +585,7 @@ impl IslandLife {
             food_cell: snapshot.food_cell,
             water_cell: snapshot.water_cell,
             household_water: snapshot.household_water,
+            water_trips: snapshot.water_trips,
             topology,
         };
         if life.household_water.is_none() {
@@ -723,6 +749,7 @@ impl IslandLife {
         self.lost_since_drink.remove(id);
         self.felling.remove(id);
         self.hauling.remove(id);
+        self.water_trips.remove(id);
         self.labour_kcal.remove(id);
         self.water_drunk_kg.remove(id);
         self.sleep_seconds.remove(id);
@@ -1351,29 +1378,31 @@ impl IslandLife {
                         }
                     }
                 }
-                // Away from home, or the tank is dry: the nearest wet cell
-                // within reach; near home, also the household's stream (or
-                // the wet cell beside it). Instantaneous, which is D9's
-                // still-open part for water: fetching by hand is R1b.
+                // Away from home, or the tank is dry. Water where they stand
+                // is drunk there; water within reach has to be walked to
+                // (realism R1b): a trip that takes the packs' walking time and
+                // ends in a drink at the source, so nothing is drunk here.
                 let owed_kg = &(*owed_kg - from_tank);
-                let mut candidates = cells_around(stands, WATER_RADIUS_CELLS, rows, cols);
-                if let Some(home) = life.water_cell {
-                    if stands.0.abs_diff(home.0).max(stands.1.abs_diff(home.1)) <= HOME_RANGE_CELLS
-                    {
-                        candidates.extend(water_search_cells(home, rows, cols));
-                    }
-                }
-                let mut drawn = Err(MaterialError::DryCell);
-                for cell in candidates {
-                    drawn = life.materials.gather_water(
+                // At home the estate's own cell is not the tap: its water is
+                // still a walk from the house.
+                let mut drawn = if life.at_home(stands) {
+                    Err(MaterialError::DryCell)
+                } else {
+                    life.materials.gather_water(
                         *owed_kg,
                         &mut life.physical.hydrology,
-                        cell,
+                        stands,
                         area,
                         ledger,
-                    );
-                    if drawn.is_ok() {
-                        break;
+                    )
+                };
+                if drawn.is_ok() {
+                    life.water_trips.remove(id);
+                } else if life.water_trips.contains_key(id) {
+                    continue;
+                } else if let Some(source) = life.water_source_near(stands, rows, cols, area) {
+                    if life.plan_water_trip(id, stands, source).is_some() {
+                        continue;
                     }
                 }
                 // Nothing wet in reach: dig for water where they stand (the
@@ -1405,6 +1434,226 @@ impl IslandLife {
                 }
             }
         })
+    }
+
+    /// The nearest cell with liquid water within reach of `stands` (and,
+    /// near home, the household's stream and the cells beside it), by the
+    /// distance between cell centres.
+    fn water_source_near(
+        &self,
+        stands: (usize, usize),
+        rows: usize,
+        cols: usize,
+        area: f64,
+    ) -> Option<(usize, usize)> {
+        let mut candidates = cells_around(stands, WATER_RADIUS_CELLS, rows, cols);
+        if let Some(home) = self.water_cell {
+            if stands.0.abs_diff(home.0).max(stands.1.abs_diff(home.1)) <= HOME_RANGE_CELLS {
+                candidates.extend(water_search_cells(home, rows, cols));
+            }
+        }
+        let here = self.place_m(stands);
+        candidates
+            .into_iter()
+            .filter(|&cell| {
+                super::materials::water_available_kg(&self.physical.hydrology, cell, area) > 0.0
+            })
+            .min_by(|a, b| {
+                let d = |c: &(usize, usize)| {
+                    let at = self.domain.cell_center_m(DomainLevel::Medium, c.0, c.1);
+                    (at.0 - here.0).hypot(at.1 - here.1)
+                };
+                d(a).total_cmp(&d(b)).then(a.cmp(b))
+            })
+    }
+
+    /// Plan `id`'s walk from `stands` to `source`. From home with the
+    /// house's jerrycans and room in the tank, they bring back as much as
+    /// the cans hold, the tank takes and their body can carry.
+    fn plan_water_trip(
+        &mut self,
+        id: &str,
+        stands: (usize, usize),
+        source: (usize, usize),
+    ) -> Option<()> {
+        let human = self.humans.registry.get_human(id)?;
+        let body = LabourBody::from_human(human);
+        let here = self.place_m(stands);
+        let there = self
+            .domain
+            .cell_center_m(DomainLevel::Medium, source.0, source.1);
+        let distance_m = (there.0 - here.0).hypot(there.1 - here.1);
+        let out_s = self
+            .labour
+            .walking_time_s(&body, distance_m, 0.0, 0.0)
+            .ok()?;
+        let cans = self
+            .placed
+            .property
+            .properties
+            .iter()
+            .filter(|p| p.owner_agent_ids.iter().any(|i| i == "Gem-D"))
+            .flat_map(|p| p.items.iter())
+            .filter(|item| item.name == crate::organisms::property::WATER_JERRYCAN)
+            .count() as f64;
+        let mut carry_kg = 0.0;
+        let mut back_s = 0.0;
+        if let (true, Some(tank)) = (self.at_home(stands), self.household_water.as_ref()) {
+            let can = tank.spec.jerrycan_l;
+            let empty_kg = cans * tank.spec.jerrycan_empty_kg;
+            let max_kg = self.labour.max_load_kg(&body).ok()?;
+            carry_kg = (cans * can)
+                .min(tank.room_kg())
+                .min((max_kg - empty_kg).max(0.0));
+            if carry_kg > 0.0 {
+                back_s = self
+                    .labour
+                    .walking_time_s(&body, distance_m, 0.0, carry_kg + empty_kg)
+                    .ok()?;
+            }
+        }
+        self.water_trips.insert(
+            id.to_string(),
+            WaterTrip {
+                source,
+                out_s,
+                back_s,
+                worked_s: 0.0,
+                carry_kg,
+                reached: false,
+            },
+        );
+        Some(())
+    }
+
+    /// Move everyone on a water trip along by `dt_s`: out to the source, a
+    /// drink there (and the jerrycans filled), then home. Someone not going home stays at the water. Walking costs
+    /// the walking MET above sitting at home, as felling's walk does.
+    fn water_trips_step(&mut self, dt_s: f64) -> Result<(), IslandLifeError> {
+        if self.water_trips.is_empty() {
+            return Ok(());
+        }
+        let awake_met = self
+            .labour
+            .met(AWAKE_AT_HOME_ACTIVITY)
+            .map_err(IslandLifeError::Labour)?;
+        let area = self.domain.cell_area_m2(DomainLevel::Medium);
+        let estate = self.placed.location;
+        let ids: Vec<String> = self.water_trips.keys().cloned().collect();
+        let mut walked: Vec<(String, f64)> = Vec::new();
+        self.audited(|life, ledger| {
+            for id in ids {
+                let Some(human) = life.humans.registry.get_human(&id) else {
+                    life.water_trips.remove(&id);
+                    continue;
+                };
+                if !matches!(human.profile.status, mk_core::human::HumanStatus::Alive) {
+                    life.water_trips.remove(&id);
+                    continue;
+                }
+                let trip = life.water_trips.get_mut(&id).expect("listed");
+                trip.worked_s += dt_s;
+                walked.push((id.clone(), dt_s));
+                if !trip.reached && trip.worked_s >= trip.out_s {
+                    trip.reached = true;
+                    let (source, carry) = (trip.source, trip.carry_kg);
+                    let owed = life.lost_since_drink.get(&id).copied().unwrap_or(0.0);
+                    match life.materials.gather_water(
+                        owed,
+                        &mut life.physical.hydrology,
+                        source,
+                        area,
+                        ledger,
+                    ) {
+                        Ok(kg) if life.materials.drink(&id, kg).is_ok() => {
+                            let _ = life.materials.lose_water(
+                                &id,
+                                kg,
+                                EXCRETION_TO_SOIL_FRACTION,
+                                ledger,
+                            );
+                            *life.water_drunk_kg.entry(id.clone()).or_insert(0.0) += kg;
+                            life.lost_since_drink
+                                .insert(id.clone(), (owed - kg).max(0.0));
+                        }
+                        _ => life.shortfalls.water += 1,
+                    }
+                    let filled = if carry > 0.0 {
+                        life.materials
+                            .gather_water(carry, &mut life.physical.hydrology, source, area, ledger)
+                            .unwrap_or(0.0)
+                    } else {
+                        0.0
+                    };
+                    let trip = life.water_trips.get_mut(&id).expect("listed");
+                    trip.carry_kg = filled;
+                    if filled <= 0.0 {
+                        // Not going home with water: they stay at the source.
+                        life.water_trips.remove(&id);
+                        if let Some(h) = life.humans.registry.get_human_mut(&id) {
+                            h.position.row = source.0 as i32;
+                            h.position.col = source.1 as i32;
+                        }
+                    }
+                    continue;
+                }
+                if trip.reached && trip.worked_s >= trip.out_s + trip.back_s {
+                    let carried = trip.carry_kg;
+                    life.water_trips.remove(&id);
+                    if let Some(tank) = life.household_water.as_mut() {
+                        let poured = carried.min(tank.room_kg());
+                        tank.stored_kg += poured;
+                        tank.fetched_kg += poured;
+                        let spilled = carried - poured;
+                        if spilled > 0.0 {
+                            let _ = life.materials.discharge_water(
+                                spilled,
+                                &mut life.physical.hydrology,
+                                estate,
+                                area,
+                                ledger,
+                            );
+                        }
+                    }
+                }
+            }
+        })?;
+        for (id, s) in walked {
+            let Some(human) = self.humans.registry.get_human(&id) else {
+                continue;
+            };
+            let body = LabourBody::from_human(human);
+            let extra = self
+                .labour
+                .energy_kcal(&body, WALKING_MET, s)
+                .map_err(IslandLifeError::Labour)?
+                - self
+                    .labour
+                    .energy_kcal(&body, awake_met, s)
+                    .map_err(IslandLifeError::Labour)?;
+            *self.labour_kcal.entry(id).or_insert(0.0) += extra.max(0.0);
+        }
+        Ok(())
+    }
+
+    /// Where a walk from `stands` starts (island metres): the house, for
+    /// someone at home; otherwise the cell's centre.
+    fn place_m(&self, stands: (usize, usize)) -> (f64, f64) {
+        let house = self
+            .placed
+            .layout
+            .buildings
+            .iter()
+            .find(|b| b.kind == crate::organisms::property::PropertyBuildingKind::House);
+        match house {
+            Some(h) if self.at_home(stands) => (
+                0.5 * (h.rect_m.x0 + h.rect_m.x1),
+                0.5 * (h.rect_m.y0 + h.rect_m.y1),
+            ),
+            _ => self
+                .domain
+                .cell_center_m(DomainLevel::Medium, stands.0, stands.1),
+        }
     }
 
     /// Whether a medium cell is home: one of the four cells the estate's
@@ -1738,11 +1987,13 @@ impl IslandLife {
                 self.lost_since_drink.remove(&id);
                 self.felling.remove(&id);
                 self.hauling.remove(&id);
+                self.water_trips.remove(&id);
                 self.labour_kcal.remove(&id);
             }
             self.work(human_s as f64)?;
             self.household_water_step(human_s as f64)?;
             self.meals()?;
+            self.water_trips_step(human_s as f64)?;
             // A death is written at once: every other record can lag a
             // cadence and catch up, but a dead person's folder never will.
             for id in died {
@@ -1834,6 +2085,7 @@ impl IslandLife {
         h.update(canonical(&self.labour_kcal).as_bytes());
         h.update(canonical(&self.water_drunk_kg).as_bytes());
         h.update(canonical(&self.household_water).as_bytes());
+        h.update(canonical(&self.water_trips).as_bytes());
         h.update(canonical(&self.sleep_seconds).as_bytes());
         h.update(&self.sim_time_s.to_le_bytes());
         // Deliberately absent, and each for a reason that must stay true:

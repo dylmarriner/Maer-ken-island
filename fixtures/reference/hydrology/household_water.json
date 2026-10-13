@@ -24,6 +24,11 @@
       "key": "meola2020",
       "citation": "Meola Creek community group (2020). Is it time for a water tank? (flyer). https://www.meolacreek.org.nz/wp-content/uploads/2020/07/Is-it-time-for-a-water-tank-flyer-FINAL.pdf",
       "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "ifrc_jerrycan",
+      "citation": "International Federation of Red Cross and Red Crescent Societies, Emergency Items Catalogue. Jerrycan, plastic, rigid (item HCONJCANP20): 'The recommended size for family use is 20L'; 'Weight 1kg +/-5% per piece'. https://itemscatalogue.redcross.int/relief--4/household--8/household-equipment-kits-and-sets--53/jerrycan-plastic-rigid--HCONJCAN01.aspx (retrieved 2026-10-13).",
+      "licence": "Facts cited with attribution"
     }
   ],
   "items": [
@@ -149,6 +154,36 @@
         "point": 25000.0
       },
       "note": "A community flyer, used only as a cross-check on the installed size, never as an input. The same flyer recommends 30,000-50,000 L for homes of three or more bedrooms."
+    },
+    {
+      "key": "water_jerrycan",
+      "description": "A rigid plastic water jerrycan of the size recommended for family use: its capacity and its empty weight",
+      "unit": "L, kg",
+      "source": "ifrc_jerrycan",
+      "confidence": "high",
+      "value": {
+        "table": {
+          "row_label": "property",
+          "columns": [
+            "value"
+          ],
+          "rows": [
+            {
+              "label": "capacity_l",
+              "values": [
+                20.0
+              ]
+            },
+            {
+              "label": "empty_kg",
+              "values": [
+                1.0
+              ]
+            }
+          ]
+        }
+      },
+      "note": "What a founder fetches water in when the tank is dry."
     }
   ]
 }
