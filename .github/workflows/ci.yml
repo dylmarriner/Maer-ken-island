@@ -235,6 +235,18 @@ jobs:
   # Unmaintained-crate warnings (bincode 1, and paste and ttf-parser
   # through Bevy) are reported but do not fail the job; a vulnerability
   # does.
+  scripts:
+    name: repository scripts
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      # The upstream sync (Phase 5 Task 7): check and apply against
+      # throwaway repositories, and the import manifest against this tree.
+      - name: Upstream sync script
+        run: python3 -m unittest discover -s scripts/tests -v
+
   audit:
     name: dependency audit
     runs-on: ubuntu-latest
