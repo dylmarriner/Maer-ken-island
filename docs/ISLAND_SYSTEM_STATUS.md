@@ -28,7 +28,7 @@ document was wrong about whether rendering here was possible at all.
 | System | State | Evidence |
 |---|---|---|
 | Baseline, human creator, canon and realism suite (Phases 0, 0b, 0c) | Done | `crates/mk_engine/tests/human_realism.rs`, `fixtures/reference/` |
-| Island domain and geophysics (Phase 1) | Done; owner's island provisional | `fixtures/island/default_profile.json`, `docs/previews/phase1/` |
+| Island domain and geophysics (Phase 1) | Done; owner's island accepted (Gate 1 closed 2026-10-13) | `fixtures/island/default_profile.json`, `docs/previews/phase1/` |
 | Climate, weather, storms, ocean, tides, hydrology, coupled tick (Phase 2) | Done; owner review pending | `crates/mk_engine/src/regional/`, `docs/previews/phase2/`, year-long reference test |
 | **Integrated island life**: physics + ecology + estate + 200,000 trees + founders + energy + materials, audited (Phase 3 Task 9) | Done; one week measured | `regional/life.rs`, `tests/island_life_acceptance.rs`, `benchmarks/island_week.md` |
 | Island ecology fields: biomes, NPP, producer biomass (Phase 3 Task 1a), plus a first grazer pool (D41, assumed parameters) | Done | `regional/ecology.rs`, `tests/regional_ecology.rs` |
@@ -258,7 +258,7 @@ cost the resting baseline (D22).
 - Phase 3: Task 1b (island-scale species; fauna is one placeholder grazer pool, below), Task 2 (every resource and material:
   the catalogue, placers and ironsand, the new tools and recipes, `regional/resources.rs`; only
   the exhaustive `node_kind_for_resource` and the estate's axe, crosscut saw and gold pan exist),
-  Task 9 Step 6 (Gate 3). Durations: felling and hauling are timed; every other action still
+  Task 9 Step 6 (Gate 3, closed 2026-10-13). Durations: felling and hauling are timed; every other action still
   takes one tick (D9).
 - Felled timber does not dry yet, so it never becomes usable building or fuel wood (D40).
 - **Phase 4 Task 2b, the deep-time spin-up, is not started**: no `regional/deep_time.rs`, no
@@ -355,7 +355,7 @@ cost the resting baseline (D22).
   `docs/island/PRUNING_INVENTORY.md` shows 9 of 35 modules (8.5% of lines, all tooling) are
   unreachable from the apps, with no runtime or memory benefit, and recommends not pruning (an
   owner decision).
-- Owner reviews: Gate 1 (island), Gate 2 (weather previews) and Gate 3 (estate plan and trees).
+- Owner reviews: Gates 1, 2 and 3 closed by the owner on 2026-10-13.
 - **Fauna is a first grazer layer only** (`regional/fauna.rs`, deviation D41): one herbivore carbon pool per land cell that eats a capped 5% of the cell's plant production, with every kilogram of carbon it moves accounted for (tested on the real island: about 402,000 t C, stable over a year, plants 0.5% below a no-grazer run). **Every parameter is an assumption, not a sourced value.** There are no predators, fish or birds, no dispersal (a cell emptied of grazers stays empty), nobody hunts them, and they are not in the ledger audit. Hunting and meat (`MaterialLedger::hunt`) remain a tested model nothing uses.
 - **Water books and needs model, once people disperse:** in the 26-person stress run (first half simulated year, before the fix below) about a quarter of drink attempts failed from day 80 (about 3,500 water shortfalls by day 274; food shortfalls stayed at zero), because settlers who wandered more than two cells from any stream or lake could not draw liquid water, while the needs model counted them hydrated from rain and soil moisture at their own cell. The ledger now also lets a person dig for water in damp soil (at least 20% of field capacity, an assumption) at their own cell when nothing wet is in reach (`MaterialLedger::gather_soil_water`, booked from the `SoilWater` reservoir), so the books and the needs model agree on what counts as water. Verified on a second 26-person run from a freshly built binary: zero water shortfalls through day 120, where the unfixed run had 826 to 1,297 (`target/longrun/stress3.log`; an earlier "verification" run had used a stale binary and showed nothing, so it was discarded).
 - The five-year run was made before meals and drinks were booked where people stand; it has not been repeated on the new bookkeeping, so its end state describes the earlier one. It also predates the merge with `main`.
