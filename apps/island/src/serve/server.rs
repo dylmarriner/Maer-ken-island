@@ -1670,12 +1670,36 @@ pub async fn run_frontend(bind: std::net::SocketAddr, config: ServeConfig) -> st
         .with(access_log(config.access_log));
     warp::serve(routes)
         .incoming(listener)
-        .graceful(async {
-            let _ = tokio::signal::ctrl_c().await;
-        })
+        .graceful(shutdown_requested())
         .run()
         .await;
     Ok(())
+}
+
+/// Ctrl-C at a terminal, or SIGTERM from a service manager: systemd stops
+/// a unit with SIGTERM, and before this the backend only listened for
+/// Ctrl-C, so a `systemctl stop` killed it outright instead of letting it
+/// finish its step and save.
+async fn shutdown_requested() {
+    #[cfg(unix)]
+    {
+        use tokio::signal::unix::{signal, SignalKind};
+        match signal(SignalKind::terminate()) {
+            Ok(mut term) => {
+                tokio::select! {
+                    _ = tokio::signal::ctrl_c() => {}
+                    _ = term.recv() => {}
+                }
+            }
+            Err(_) => {
+                let _ = tokio::signal::ctrl_c().await;
+            }
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = tokio::signal::ctrl_c().await;
+    }
 }
 
 /// Serve as an operator configured it: the backend a frontend on another
@@ -1689,9 +1713,7 @@ pub async fn run_with_config(
     let listener = tokio::net::TcpListener::bind(bind).await?;
     warp::serve(routes_with_config(population, world, config))
         .incoming(listener)
-        .graceful(async {
-            let _ = tokio::signal::ctrl_c().await;
-        })
+        .graceful(shutdown_requested())
         .run()
         .await;
     Ok(())

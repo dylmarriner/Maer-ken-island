@@ -276,6 +276,17 @@ pub fn open_world(scenario: Option<&Path>, snapshot: Option<&Path>) -> Result<Is
     }
 }
 
+/// Carry on from `snapshot` under the canon `scenario` names: what
+/// `island serve --resume` opens when a saved island is there. The canon is
+/// not in the file, so it is found the way a fresh start from the same
+/// scenario would find it, and the load refuses one that disagrees.
+pub fn resume_world(scenario: &Path, snapshot: &Path) -> Result<IslandLife, String> {
+    let named = IslandScenario::load(scenario).map_err(|e| e.to_string())?;
+    let canon = canon_for(scenario, &named)?;
+    load_island_snapshot(Arc::new(canon), snapshot)
+        .map_err(|e| format!("cannot read {}: {e}", snapshot.display()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

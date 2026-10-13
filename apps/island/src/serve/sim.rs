@@ -199,6 +199,18 @@ pub struct SimHandle {
     /// server process is nowhere. A full disk is not hypothetical: it
     /// happened twice while this branch was being written.
     log_error: Arc<Mutex<Option<String>>>,
+    /// The simulation thread, taken by [`SimHandle::stop_and_wait`] so a
+    /// shutdown can wait for the step in hand and the last save.
+    thread: Arc<Mutex<Option<std::thread::JoinHandle<()>>>>,
+}
+
+/// Where the island keeps itself between runs: `path` is rewritten every
+/// `every` of real time and once more when the thread stops, so a restart
+/// can carry on from it (`island serve --resume`).
+#[derive(Debug, Clone)]
+pub struct Persist {
+    pub path: PathBuf,
+    pub every: Duration,
 }
 
 impl SimHandle {
@@ -218,6 +230,20 @@ impl SimHandle {
     /// Ask the thread to finish its current step and stop.
     pub fn stop(&self) {
         self.stop.store(true, Ordering::Relaxed);
+    }
+
+    /// Stop, and wait for the thread to finish its step and, when the
+    /// island persists, to write it. A process that exited without waiting
+    /// would kill the thread mid-write.
+    pub fn stop_and_wait(&self) {
+        self.stop();
+        let thread = match self.thread.lock() {
+            Ok(mut slot) => slot.take(),
+            Err(poisoned) => poisoned.into_inner().take(),
+        };
+        if let Some(thread) = thread {
+            let _ = thread.join();
+        }
     }
 
     /// What is at one medium-grid cell, or `None` off the island.
@@ -484,6 +510,17 @@ pub fn spawn_with(
     log: Option<PathBuf>,
     snapshots: Option<PathBuf>,
 ) -> SimHandle {
+    spawn_persisting(life, speed, log, snapshots, None)
+}
+
+/// As [`spawn_with`], and the island saves itself as `persist` says.
+pub fn spawn_persisting(
+    life: IslandLife,
+    speed: SimSpeed,
+    log: Option<PathBuf>,
+    snapshots: Option<PathBuf>,
+    persist: Option<Persist>,
+) -> SimHandle {
     let step_seconds = life.scenario.cadences.human_seconds;
     // The starting island is hashed once — and only once: hashing costs
     // about 800 ms against a 4.3 ms step on the real island
@@ -535,6 +572,7 @@ pub fn spawn_with(
         outcomes: Arc::new(Mutex::new(BTreeMap::new())),
         next_id: Arc::new(AtomicU64::new(1)),
         log_error: Arc::new(Mutex::new(None)),
+        thread: Arc::new(Mutex::new(None)),
         map_png,
         terrain,
         elevation_bin,
@@ -552,7 +590,7 @@ pub fn spawn_with(
     let vegetation_png = Arc::clone(&handle.vegetation_png);
     let patch_png = Arc::clone(&handle.patch_png);
 
-    std::thread::Builder::new()
+    let thread = std::thread::Builder::new()
         .name("island-sim".into())
         .spawn(move || {
             run(Loop {
@@ -570,9 +608,14 @@ pub fn spawn_with(
                 snapshots,
                 vegetation_png,
                 patch_png,
+                persist,
+                last_saved: Instant::now(),
             })
         })
         .expect("the simulation thread starts");
+    if let Ok(mut slot) = handle.thread.lock() {
+        *slot = Some(thread);
+    }
 
     handle
 }
@@ -599,6 +642,44 @@ struct Loop {
     /// *refused*, because the alternative is what this used to do: record
     /// "wrote a snapshot" in the timeline and write nothing.
     snapshots: Option<PathBuf>,
+    persist: Option<Persist>,
+    last_saved: Instant,
+}
+
+/// Write the island to `path` without ever leaving a partial file there:
+/// it is written beside it and renamed over it, so a crash mid-write keeps
+/// the previous save.
+pub fn save_atomically(life: &mut IslandLife, path: &std::path::Path) -> Result<(), String> {
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir)
+            .map_err(|e| format!("{} could not be made: {e}", dir.display()))?;
+    }
+    let partial = path.with_extension("partial");
+    mk_engine::io::island_snapshot::save_island_snapshot(life, &partial)
+        .map_err(|e| format!("{} was not written: {e}", partial.display()))?;
+    std::fs::rename(&partial, path).map_err(|e| {
+        format!(
+            "{} could not replace {}: {e}",
+            partial.display(),
+            path.display()
+        )
+    })
+}
+
+/// Save for [`Persist`], saying on the console what happened: an island
+/// that silently stopped saving is one that loses years on its next
+/// restart.
+fn persist_now(life: &mut IslandLife, persist: &Persist) {
+    let started = Instant::now();
+    match save_atomically(life, &persist.path) {
+        Ok(()) => println!(
+            "Saved the island at tick {} to {} ({:.1} s).",
+            life.tick,
+            persist.path.display(),
+            started.elapsed().as_secs_f64()
+        ),
+        Err(e) => eprintln!("the island could not be saved: {e}"),
+    }
 }
 
 /// The loop itself: apply what was asked, step, publish, wait if there is
@@ -607,8 +688,18 @@ fn run(mut it: Loop) {
     // (when, simulated time then), oldest first. Speed is the simulated
     // time between the ends of the window over the real time between them.
     let mut recent: std::collections::VecDeque<(Instant, u64)> = std::collections::VecDeque::new();
+    // Set when a step fails. The island is then not saved on the way out:
+    // the last good save is worth more than a copy of a broken one.
+    let mut failed = false;
 
     while !it.stop.load(Ordering::Relaxed) {
+        if let Some(persist) = &it.persist {
+            if it.last_saved.elapsed() >= persist.every {
+                persist_now(&mut it.life, persist);
+                it.last_saved = Instant::now();
+            }
+        }
+
         // Timed around the whole iteration, not just the step. Publishing
         // and applying commands are real work the island has to do before
         // it can step again, and a readout that left them out would have
@@ -719,6 +810,7 @@ fn run(mut it: Loop) {
             if let Ok(mut slot) = it.projection.write() {
                 slot.running = false;
             }
+            failed = true;
             break;
         }
 
@@ -833,6 +925,10 @@ fn run(mut it: Loop) {
                 }
             }
         }
+    }
+
+    if let (Some(persist), false) = (&it.persist, failed) {
+        persist_now(&mut it.life, persist);
     }
 }
 
@@ -1070,6 +1166,49 @@ mod tests {
             .iter()
             .map(|b| format!("{b:02x}"))
             .collect()
+    }
+
+    /// Stopping a persisting island saves it, completely, and what was
+    /// saved is the island a plain run reaches at that tick: a restart
+    /// with `--resume` carries on from exactly where it stopped.
+    #[test]
+    fn a_stopped_island_is_saved_and_carries_on_from_where_it_stopped() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("latest.mks");
+        let handle = spawn_persisting(
+            island(),
+            SimSpeed::AsFastAsPossible,
+            None,
+            None,
+            Some(Persist {
+                path: path.clone(),
+                // Never due while the test runs: the save checked here is
+                // the one made on stopping.
+                every: Duration::from_secs(3_600),
+            }),
+        );
+        wait_for_tick(&handle, 3);
+        handle.stop_and_wait();
+        assert!(path.is_file(), "stopping did not save the island");
+        assert!(
+            !path.with_extension("partial").exists(),
+            "a partial save was left behind"
+        );
+        let resumed =
+            crate::run::resume_world(&repo("fixtures/island/default_scenario.json"), &path)
+                .expect("the saved island loads");
+        assert!(resumed.tick >= 3, "saved at tick {}", resumed.tick);
+        let digest: String = resumed
+            .state_digest()
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect();
+        assert_eq!(
+            digest,
+            direct_digest(resumed.tick),
+            "the saved island is not the one a plain run reaches at tick {}",
+            resumed.tick
+        );
     }
 
     #[test]

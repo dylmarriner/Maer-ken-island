@@ -31,15 +31,17 @@ ExecStart=/usr/local/bin/island serve \
     --bind ${ISLAND_BIND} \
     --data-dir /var/lib/island/people \
     --snapshot-dir /var/lib/island/snapshots \
+    --autosave 30 --resume \
     --log /var/lib/island/commands.jsonl
 
-# Ctrl-C is what `island serve` waits for, and systemd's default TERM is
-# the same signal: it finishes the step it is on and stops. The timeout is
-# generous because a snapshot save holds the simulation thread for about
-# half a minute on the full island, and killing it mid-write would leave a
-# partial file.
+# `island serve` stops on Ctrl-C or on systemd's SIGTERM alike: it
+# finishes the step it is on, saves the island to latest.mks (--autosave)
+# and exits; the next start carries on from that save (--resume). The
+# timeout is generous because a save takes half a minute to well over a
+# minute on the full island (74.6 s measured on a busy 4-core machine). Killing it mid-write cannot corrupt latest.mks (it is written
+# beside it and renamed), but it loses everything since the previous save.
 KillSignal=SIGTERM
-TimeoutStopSec=120
+TimeoutStopSec=300
 Restart=on-failure
 RestartSec=5
 
