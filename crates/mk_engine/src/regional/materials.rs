@@ -426,6 +426,55 @@ impl MaterialLedger {
         Ok(kg)
     }
 
+    /// Gather plant food a person can eat: only the cell's edible fruit and
+    /// seed (`ecology.edible`, R3), which is part of its biomass, so the same
+    /// carbon leaves both. An ecology with no edible layer -- one built
+    /// outside the island -- is foraged as before, from its whole biomass.
+    pub fn gather_edible(
+        &mut self,
+        kg_wanted: f64,
+        ecology: &mut RegionalEcologyState,
+        cell: (usize, usize),
+        cell_area_m2: f64,
+        ledger: &mut Ledger,
+    ) -> Result<f64, MaterialError> {
+        if ecology.edible.is_none() {
+            return self.gather_biotic(
+                Material::PlantFood,
+                kg_wanted,
+                ecology,
+                cell,
+                cell_area_m2,
+                ledger,
+            );
+        }
+        let c = composition(Material::PlantFood);
+        let i = ecology.biomass_kgc_m2.grid_to_linear_index(cell.0, cell.1);
+        let edible = ecology.edible.as_mut().expect("checked above");
+        let held_kgc_m2 = edible
+            .at(i)
+            .min(*ecology.biomass_kgc_m2.get(cell.0, cell.1));
+        let kg = kg_wanted
+            .max(0.0)
+            .min(held_kgc_m2 * cell_area_m2 / c.carbon_per_kg);
+        if kg <= 0.0 {
+            return Err(MaterialError::NothingToHarvest);
+        }
+        let kgc = kg * c.carbon_per_kg;
+        edible.take(i, kgc / cell_area_m2);
+        let biomass = ecology.biomass_kgc_m2.get_mut(cell.0, cell.1);
+        *biomass = (*biomass - kgc / cell_area_m2).max(0.0);
+        self.add(Material::PlantFood, kg);
+        flow(
+            ledger,
+            FluxKind::Carbon,
+            Reservoir::BiomassCarbon,
+            Reservoir::MaterialCarbon,
+            kgc,
+        );
+        Ok(kg)
+    }
+
     /// Dig water out of the soil under a cell: the last resort when no
     /// surface water or river is in reach. Only damp soil (at least
     /// [`SOIL_DRINKABLE_FRACTION`] of field capacity) yields; the water leaves
