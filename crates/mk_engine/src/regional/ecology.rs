@@ -430,6 +430,75 @@ pub(crate) fn cell_year(
     year
 }
 
+/// One cell's plants over `dt_years` (the body of
+/// [`RegionalEcologyState::step`]): returns the new biomass and what the
+/// plants shed to the ground (kg C m⁻²). `harvest` is a rate (kg C m⁻²
+/// yr⁻¹) and `disturbance` a loss fraction per year.
+pub(crate) fn plant_cell_step(
+    biome: BiomeType,
+    npp: f64,
+    b: f64,
+    harvest: Option<f64>,
+    disturbance: Option<f64>,
+    dt_years: f64,
+) -> (f64, f64) {
+    let residence = residence_years(biome);
+    if residence <= 0.0 || npp <= 0.0 {
+        return (0.0, b.max(0.0));
+    }
+    // Exact solution of dB/dt = NPP - B/res over the step: what it
+    // grew less what it kept is what it shed.
+    let keep = (-dt_years / residence).exp();
+    let grown = b * keep + npp * residence * (1.0 - keep);
+    let mut shed = (b + npp * dt_years - grown).max(0.0);
+    let mut next = grown;
+    if let Some(h) = harvest {
+        next -= h.max(0.0) * dt_years;
+    }
+    if let Some(d) = disturbance {
+        let survived = next * (-d.max(0.0) * dt_years).exp();
+        shed += (next - survived).max(0.0);
+        next = survived;
+    }
+    (next.max(0.0), shed)
+}
+
+/// One cell's plants, grazers and soil over `dt_years`, in the order
+/// [`RegionalEcologyState::step_with_grazers`] takes them: the grazers'
+/// intake is taken from the plants as harvest, the grazers advance, and
+/// litter, faeces and carcasses reach the soil, which then decomposes.
+/// Returns the grazer flows and the soil's respiration (kg C m⁻²).
+pub(crate) fn grazed_cell_step(
+    biome: BiomeType,
+    npp: f64,
+    biomass: &mut f64,
+    herbivore: &mut f64,
+    soil: Option<(&RothC, &mut [f64; 4], f64)>,
+    dt_years: f64,
+) -> (super::fauna::CellFlows, f64) {
+    let harvest = super::fauna::intake_kgc_m2_yr(*herbivore, npp);
+    let (next, litter) = plant_cell_step(biome, npp, *biomass, Some(harvest), None, dt_years);
+    *biomass = next;
+    let (g, f) = super::fauna::step_cell(*herbivore, npp, dt_years);
+    *herbivore = g;
+    let respired = match soil {
+        Some((params, pools, a)) => params.step_cell(
+            pools,
+            biome,
+            SoilInputs {
+                litter,
+                faeces: f.faeces,
+                carcasses: f.deaths,
+            },
+            a,
+            next > 0.0,
+            dt_years,
+        ),
+        None => 0.0,
+    };
+    (f, respired)
+}
+
 impl RegionalEcologyState {
     /// Classify the island's biomes and set NPP and an equilibrium biomass.
     pub fn bootstrap(
@@ -550,29 +619,16 @@ impl RegionalEcologyState {
         }
         let dt_years = dt_seconds / SECONDS_PER_YEAR;
         for (i, shed) in shed.iter_mut().enumerate() {
-            let residence = residence_years(self.biome_grid.data()[i]);
-            let npp = self.npp_kgc_m2_yr.data()[i];
-            let b = self.biomass_kgc_m2.data()[i];
-            if residence <= 0.0 || npp <= 0.0 {
-                *shed = b.max(0.0);
-                self.biomass_kgc_m2.data_mut()[i] = 0.0;
-                continue;
-            }
-            // Exact solution of dB/dt = NPP - B/res over the step: what it
-            // grew less what it kept is what it shed.
-            let keep = (-dt_years / residence).exp();
-            let grown = b * keep + npp * residence * (1.0 - keep);
-            *shed = (b + npp * dt_years - grown).max(0.0);
-            let mut next = grown;
-            if let Some(h) = harvest_kgc_m2_yr {
-                next -= h.data()[i].max(0.0) * dt_years;
-            }
-            if let Some(d) = disturbance_per_yr {
-                let survived = next * (-d.data()[i].max(0.0) * dt_years).exp();
-                *shed += (next - survived).max(0.0);
-                next = survived;
-            }
-            self.biomass_kgc_m2.data_mut()[i] = next.max(0.0);
+            let (next, lost) = plant_cell_step(
+                self.biome_grid.data()[i],
+                self.npp_kgc_m2_yr.data()[i],
+                self.biomass_kgc_m2.data()[i],
+                harvest_kgc_m2_yr.map(|h| h.data()[i]),
+                disturbance_per_yr.map(|d| d.data()[i]),
+                dt_years,
+            );
+            *shed = lost;
+            self.biomass_kgc_m2.data_mut()[i] = next;
         }
         shed
     }

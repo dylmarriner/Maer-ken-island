@@ -11,17 +11,20 @@ use std::sync::Arc;
 use mk_core::canon::CanonLocked;
 use mk_island::IslandScenario;
 
+use super::deep_time::{self, DeepTimeError, SpinUpReport, SpinUpSettings};
 use super::life::{IslandLife, IslandLifeError};
 
 #[derive(Debug)]
 pub enum IslandWorldError {
     Bootstrap(IslandLifeError),
+    DeepTime(DeepTimeError),
 }
 
 impl std::fmt::Display for IslandWorldError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Bootstrap(e) => write!(f, "bootstrap failed: {e}"),
+            Self::DeepTime(e) => write!(f, "deep-time spin-up failed: {e}"),
         }
     }
 }
@@ -42,6 +45,31 @@ impl IslandWorldState {
         Ok(Self {
             life: IslandLife::bootstrap(scenario, canon).map_err(IslandWorldError::Bootstrap)?,
         })
+    }
+
+    /// Run the living world for `years` more local years of deep time.
+    ///
+    /// Only an island nobody lives on can be fast-forwarded: humans always
+    /// run at full detail, so once the registry holds anyone (alive or
+    /// dead) this refuses and changes nothing. A scenario's own spin-up runs
+    /// inside [`Self::new`], before the founders arrive.
+    pub fn spin_up(&mut self, years: u32) -> Result<SpinUpReport, IslandWorldError> {
+        let people = self.life.humans.registry.iter().count();
+        if people > 0 {
+            return Err(IslandWorldError::DeepTime(DeepTimeError::HumansExist(
+                people,
+            )));
+        }
+        let area = self
+            .life
+            .domain
+            .cell_area_m2(mk_island::DomainLevel::Medium);
+        deep_time::spin_up(
+            &mut self.life.ecology,
+            area,
+            SpinUpSettings::new(&self.life.canon, years),
+        )
+        .map_err(IslandWorldError::DeepTime)
     }
 
     pub fn tick(&self) -> u64 {

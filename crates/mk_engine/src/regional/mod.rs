@@ -6,6 +6,7 @@ pub mod boundary;
 pub mod climate;
 pub mod commands;
 pub mod create_human;
+pub mod deep_time;
 pub mod deposits;
 pub mod ecology;
 pub mod edge;

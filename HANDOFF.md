@@ -27,7 +27,7 @@ estate move is booked in a flux ledger that is audited at every step.
 | 1 | Island domain and geophysics | Done; the owner's island is accepted (Gate 1 closed 2026-10-13) |
 | 2 | Climate, weather, ocean, tides, hydrology, the coupled tick | Done (Gate 2 closed 2026-10-13) |
 | 3 | Ecology, estate, 200,000 trees, founders, materials, labour, energy, timber | Mostly done. Open: species (Task 1b), every resource and material (Task 2). Gate 3 closed 2026-10-13 |
-| 4 | World, scheduler, snapshot, per-human folders, commands, replay, interventions, runner, live dashboard | Done **except Task 2b, the deep-time spin-up** (not started) |
+| 4 | World, scheduler, snapshot, per-human folders, commands, replay, interventions, runner, live dashboard | Done, including Task 2b, the deep-time spin-up (2026-10-14) |
 | 4b | Energy, industry, town, economy | Hydro done (Tasks 1-3). Oil and gas, refinery, trades, money, food and timber chains, the town: not started |
 | 5 | The application and performance | The web dashboard and the desktop app run and draw the island and estate; inspectors, benchmarks, upstream sync and pruning remain |
 
@@ -86,7 +86,7 @@ cargo run -p island -- serve --scenario fixtures/island/default_scenario.json   
 ## Things that will bite you
 
 - **The week digest.** `WEEK_DIGEST` in `crates/mk_engine/tests/island_life_acceptance.rs`
-  (`fc62629c…3da7`) pins one simulated week. Any change to what the founders or their world do
+  (`54b48e5b…bb18`) pins one simulated week. Any change to what the founders or their world do
   moves it. Re-pin only after the audit and the reference-pack checks pass, and say in the
   commit that behaviour changed.
 - **The planetary topology pin** (`e4ece246…73e2`, `tests/topology_hash_baseline.rs`) must not move

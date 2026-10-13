@@ -126,3 +126,31 @@ fn bad_scenarios_are_rejected() {
         Err(IslandScenarioError::Io(..))
     ));
 }
+
+/// Phase 4 Task 2b: a new scenario spins up 1,000 years of deep time; a
+/// file written before the field existed spins up none and so reproduces
+/// the island it always did; and a typo cannot ask for days of it.
+#[test]
+fn deep_time_defaults_and_bounds() {
+    let good = IslandScenario::load(&fixture("default_scenario.json")).unwrap();
+    assert_eq!(good.spin_up_years, mk_island::DEFAULT_SPIN_UP_YEARS);
+    assert_eq!(
+        IslandScenario::new(IslandProfile::test_small(), [0; 32]).spin_up_years,
+        1_000
+    );
+    let mut json: serde_json::Value = serde_json::to_value(&good).unwrap();
+    json.as_object_mut().unwrap().remove("spin_up_years");
+    let old: IslandScenario = serde_json::from_value(json).unwrap();
+    assert_eq!(old.spin_up_years, 0);
+    // And none is written back out, so an old file round-trips unchanged.
+    assert!(serde_json::to_value(&old)
+        .unwrap()
+        .get("spin_up_years")
+        .is_none());
+    let mut long = good.clone();
+    long.spin_up_years = mk_island::MAX_SPIN_UP_YEARS + 1;
+    assert!(matches!(
+        long.validate(),
+        Err(IslandScenarioError::InvalidSpinUp(_))
+    ));
+}

@@ -49,5 +49,6 @@
     "battery_kwh": 10.0
   },
   "founders_enabled": true,
-  "estate_enabled": true
+  "estate_enabled": true,
+  "spin_up_years": 1000
 }

@@ -123,7 +123,16 @@ const DAY: u64 = 86_400;
 /// 567 g C/m2/yr, intimacy 65 a year. (The pin first written for R0,
 /// `c46b2028...9f16`, was R0 on top of R1 alone; it went stale when R0 was
 /// rebased onto R1b and was never re-run.)
-const WEEK_DIGEST: &str = "fc62629c941aca1bd011e37a53f4d6c165f8a675273e0b287686032356d93da7";
+///
+/// And for the deep-time spin-up (Phase 4 Task 2b, 2026-10-14): the
+/// scenario now runs 1,000 local years of plants, grazers and soil before
+/// the founders arrive, so the island's plants stand 5% lower (grazed),
+/// its soil 2.3% lower, and the estate's 200,000 stems are seeded from that
+/// biomass. Audited the same way: 10,514 audits closed, no food or water
+/// shortfalls, Gem-D 13.0 kg of body carbon against 13.0 and Gem-K 10.4
+/// against 10.4, eating 47 and 43 minutes a day, drinking 1.81 and 1.43 L
+/// a day, temperate-forest NPP 567 g C/m2/yr, intimacy 65 a year.
+const WEEK_DIGEST: &str = "54b48e5bef3d049f3376e015c4d2db549c9a4eb34f954d6ab20b2a4ad243bb18";
 
 fn repo(path: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
