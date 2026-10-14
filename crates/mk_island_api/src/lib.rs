@@ -23,8 +23,8 @@ pub mod version;
 pub mod wire;
 
 pub use request::{
-    Accepted, ControlRequest, CreateHumanRequest, InterventionRequest, InterventionTarget, Outcome,
-    Refusal,
+    Accepted, ControlRequest, CreateHumanRequest, CreatorOptions, InterventionRequest,
+    InterventionTarget, Outcome, Refusal,
 };
 pub use terrain::{Terrain, TerrainError};
 pub use version::{Capabilities, ServerVersion, API_VERSION};
