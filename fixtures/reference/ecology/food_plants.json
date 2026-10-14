@@ -9,6 +9,11 @@
       "key": "ward2025",
       "citation": "Ward, R. E., Zhang-Zheng, H., Abernethy, K., et al. and Kueppers, L. M. (2025). Forest Age Rivals Climate to Explain Reproductive Allocation Patterns in Forest Ecosystems Globally. Ecology Letters 28(8): e70191. doi:10.1111/ele.70191. Open-access full text read from https://www.stir.ac.uk/research/hub/file/2151418 (p.3 for the proxy, p.5 for the biome means).",
       "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "kelly2013",
+      "citation": "Kelly, R. L. (2013). The Lifeways of Hunter-Gatherers: The Foraging Spectrum. Cambridge University Press. Table 3-4, Postencounter Return Rates of Various Food Resources, pp.54-58 (acorn rows p.58), read from the archive.org full text.",
+      "licence": "Facts cited with attribution"
     }
   ],
   "items": [
@@ -30,6 +35,15 @@
         }
       },
       "note": "p.5: 'RA exhibited a ~60% increase from boreal forests (mean = 0.082) to tropical forests (mean = 0.129), with intermediate values observed in temperate forests (mean = 0.116)'; 'standard deviations were high across all biomes (SD = 0.070, 0.084, and 0.087 for boreal, temperate, and tropical forests, respectively)'. p.3: the proxy R/(R + L) is built from litterfall and correlates with R/NPP (R2 = 0.85). R counts everything reproductive, so as the human-edible share of production it is an upper bound (D57)."
+    },
+    {
+      "key": "forage_return_rate_acorns",
+      "description": "Food energy a forager gets per hour of collecting and processing acorns, the nearest temperate tree-seed analogue for the island forest's fruit and seed",
+      "unit": "kcal / h",
+      "source": "kelly2013",
+      "confidence": "low",
+      "value": { "range": { "min": 477, "max": 1194, "typical": 821 } },
+      "note": "Table 3-4, p.58, as printed: 'Quercus virginiana (collecting, shelling, leaching) Live oak acorns 477'; 'Quercus kelloggi (collecting, shelling, leaching) Black oak acorns 1,091-1,194'; 'Quercus sp. (collecting, shelling, boiling) Acorns 821' (footnotes Thomas 2008; Barlow and Heck 2002; Gremillion 2002). These are postencounter rates: handling time only, with no time spent searching, so an hour of foraging at them is a lower bound. No New Zealand fruit or seed has a measured rate."
     }
   ]
 }

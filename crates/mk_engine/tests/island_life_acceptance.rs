@@ -172,7 +172,16 @@ const DAY: u64 = 86_400;
 /// wood fire: unchanged otherwise, 20,594 audits closed, no shortfalls,
 /// body carbon 13.0 of 13.0 and 10.4 of 10.4 kg, eating 47 and 43 minutes
 /// a day, drinking 1.81 and 1.43 L a day, NPP 471 g C/m2/yr.
-const WEEK_DIGEST: &str = "cc90144d45521376897a594226bf8d95875820e7c37a2c057fce488ad08a2b5d";
+///
+/// And for R3's foraging time (2026-10-14): a meal is gathered before it is
+/// eaten, at Kelly's (2013) acorn return rate and the Compendium's foraging
+/// MET, and eaten when the trip ends. Read from CI's slow tier (run
+/// 38559521692) on top of the firewood shed: 20,580 audits closed (meals
+/// now land when the gathering ends), no food or water shortfalls, body
+/// carbon 13.0 of 13.0 and 10.4 of 10.4 kg, eating 48 and 43 minutes a
+/// day, drinking 2.37 and 1.75 L a day (gathering costs water),
+/// temperate-forest NPP 471 g C/m2/yr (reference 400-900).
+const WEEK_DIGEST: &str = "844ccde7d7ef6c6a8d3aa5036238958cc3d6706bf7c7e8b6f71589abc81006a0";
 
 fn repo(path: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
