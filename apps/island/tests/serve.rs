@@ -507,8 +507,15 @@ async fn the_world_has_its_own_roster_and_its_own_person_pages() {
     let sections = person["sections"].as_array().expect("sections");
     assert_eq!(
         sections.len(),
-        10,
-        "the ten per-person sections are not there"
+        12,
+        "the twelve per-person sections are not there"
+    );
+    // What they are doing and thinking, and their family: the two the
+    // person inspector added (Phase 5 Task 4).
+    let ids: Vec<&str> = sections.iter().filter_map(|s| s["id"].as_str()).collect();
+    assert!(
+        ids.contains(&"choosing") && ids.contains(&"family"),
+        "{ids:?}"
     );
     assert!(person["where"]["space"].is_string(), "{person}");
     assert!(person["where"]["body_carbon_kg"].is_number(), "{person}");

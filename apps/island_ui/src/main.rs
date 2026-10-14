@@ -240,6 +240,8 @@ struct Panels {
     under_view: UnderView,
     /// What a click on the estate last picked, if anything.
     picked: Option<estate::Picked>,
+    /// The chosen person, as the backend last described them.
+    person: PersonReading,
 }
 
 /// Where the left button went down, so its release can tell a click from
@@ -248,6 +250,80 @@ struct Panels {
 struct Press {
     at: Option<Vec2>,
     travelled: f32,
+}
+
+/// The person inspector's state: who was asked about, when, and what came
+/// back. Asked off the frame thread like the cell, and asked again every
+/// [`PersonReading::EVERY`] while they stay chosen, because a person's
+/// needs and feelings move while they are watched.
+#[derive(Default)]
+struct PersonReading {
+    asked: Option<String>,
+    asked_at: Option<std::time::Instant>,
+    /// A request for this person is still out. A remote backend can take
+    /// longer than [`Self::EVERY`] to answer, and two requests sharing one
+    /// slot could land out of order, an older reading over a newer one;
+    /// so a re-read waits for the last to finish.
+    busy: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    answer: std::sync::Arc<
+        std::sync::Mutex<Option<Result<island_ui::human_inspector::Person, String>>>,
+    >,
+}
+
+/// Lowers a flag when dropped: at the end of a worker thread, whether it
+/// returned or panicked.
+struct ClearOnDrop(std::sync::Arc<std::sync::atomic::AtomicBool>);
+
+impl Drop for ClearOnDrop {
+    fn drop(&mut self) {
+        self.0.store(false, std::sync::atomic::Ordering::Release);
+    }
+}
+
+impl PersonReading {
+    const EVERY: std::time::Duration = std::time::Duration::from_secs(10);
+
+    fn follow(&mut self, island: &Island, agent_id: Option<&str>) {
+        let changed = agent_id != self.asked.as_deref();
+        let stale = self.asked_at.is_none_or(|at| at.elapsed() >= Self::EVERY);
+        if !changed && (!stale || self.busy.load(std::sync::atomic::Ordering::Acquire)) {
+            return;
+        }
+        if changed {
+            // A fresh slot and a fresh flag, so an answer about somebody no
+            // longer chosen cannot land after the one about whoever is, and
+            // a request still out for them does not hold up this one.
+            self.answer = Default::default();
+            self.busy = Default::default();
+        }
+        self.asked = agent_id.map(str::to_string);
+        self.asked_at = Some(std::time::Instant::now());
+        let Some(agent_id) = self.asked.clone() else {
+            return;
+        };
+        let (client, slot, busy) = (
+            island.client().clone(),
+            self.answer.clone(),
+            self.busy.clone(),
+        );
+        busy.store(true, std::sync::atomic::Ordering::Release);
+        std::thread::spawn(move || {
+            // Cleared however the thread ends, a panic included, so one
+            // failed read cannot stop every later one.
+            let _done = ClearOnDrop(busy);
+            let got = client
+                .human(&agent_id)
+                .map_err(|e| e.to_string())
+                .and_then(|reply| island_ui::human_inspector::read(&reply));
+            if let Ok(mut slot) = slot.lock() {
+                *slot = Some(got);
+            }
+        });
+    }
+
+    fn answer(&self) -> Option<Result<island_ui::human_inspector::Person, String>> {
+        self.answer.lock().ok().and_then(|a| a.clone())
+    }
 }
 
 /// The cell inspector's state: which cell was asked about, and what came
@@ -579,6 +655,7 @@ fn main() {
             pick_on_the_estate,
             place_islanders,
             show_what_was_chosen,
+            outline_the_interiors,
         )
             .chain(),
     )
@@ -1081,6 +1158,30 @@ fn grow_the_stems(
         trees.in_box,
         trees.total
     );
+}
+
+/// The rooms' walls as outlines on their floors, and each door as an
+/// upright line from the floor to its building's eaves, every frame the
+/// estate is shown (gizmos are drawn afresh each frame). Lines, not
+/// solids: the island says where a wall and a door are and nothing about
+/// how thick or tall they are.
+fn outline_the_interiors(mut gizmos: Gizmos, showing: Res<Showing>, island: Res<TheIsland>) {
+    if *showing != Showing::Estate {
+        return;
+    }
+    let Some(layout) = island.0.estate() else {
+        return;
+    };
+    let wall = Color::srgb(0.85, 0.82, 0.74);
+    let door = Color::srgb(0.95, 0.62, 0.25);
+    let at = |p: Point| Vec3::new(p.x, p.y, p.z);
+    for (_, corners) in estate::room_outlines(layout) {
+        gizmos.linestrip(corners.iter().chain(corners.first()).map(|&p| at(p)), wall);
+    }
+    for (foot, eaves) in estate::door_marks(layout) {
+        let foot = at(foot);
+        gizmos.line(foot, foot + Vec3::Y * eaves, door);
+    }
 }
 
 /// Show one frame and hide the other, and move the camera with it.
@@ -1596,7 +1697,8 @@ fn panels(
     egui::Panel::right("detail")
         .default_size(340.0)
         .show(&mut viewport, |ui| {
-            match panels.selected.as_ref().and_then(|id| {
+            let selected = panels.selected.clone();
+            match selected.as_ref().and_then(|id| {
                 snapshot
                     .world
                     .people
@@ -1604,6 +1706,7 @@ fn panels(
                     .find(|person| &person.agent_id == id)
             }) {
                 None => {
+                    panels.person.follow(&island.0, None);
                     ui.heading("Nobody chosen");
                     ui.label("Pick somebody on the left to read them.");
                 }
@@ -1628,6 +1731,53 @@ fn panels(
                         ui.label(
                         "Drawn with a founder's model: nobody created later has one of their own.",
                     );
+                    }
+                    panels.person.follow(&island.0, Some(&person.agent_id));
+                    match panels.person.answer() {
+                        None => {
+                            ui.label("Reading them…");
+                        }
+                        Some(Err(e)) => {
+                            ui.colored_label(egui::Color32::from_rgb(220, 120, 120), e);
+                        }
+                        Some(Ok(read)) => {
+                            if let Some(said) = island_ui::human_inspector::freshness(&read) {
+                                ui.small(said);
+                            }
+                            // Most of the panel, leaving the two checkboxes
+                            // below it in view, and on the estate what a
+                            // click picked as well.
+                            let below = if *showing == Showing::Estate {
+                                220.0
+                            } else {
+                                90.0
+                            };
+                            let room = (ui.available_height() - below).max(160.0);
+                            egui::ScrollArea::vertical()
+                                .id_salt("person")
+                                .max_height(room)
+                                .show(ui, |ui| {
+                                    for section in &read.sections {
+                                        egui::CollapsingHeader::new(&section.title)
+                                            .id_salt(&section.id)
+                                            .default_open(matches!(
+                                                section.id.as_str(),
+                                                "needs" | "feeling" | "choosing"
+                                            ))
+                                            .show(ui, |ui| {
+                                                if !section.blurb.is_empty() {
+                                                    ui.small(&section.blurb);
+                                                }
+                                                for reading in &section.readings {
+                                                    let line = reading_line(ui, reading);
+                                                    if let Some(detail) = &reading.detail {
+                                                        line.on_hover_text(detail);
+                                                    }
+                                                }
+                                            });
+                                    }
+                                });
+                        }
                     }
                 }
             }
@@ -1719,6 +1869,41 @@ fn panels(
                 });
             }
         });
+}
+
+/// One reading in the person inspector: a meter where it is a proportion,
+/// the value beside its label where it is short, and the value under its
+/// label, wrapped, where it is a sentence -- a thought on one line would
+/// push the panel off the screen.
+fn reading_line(ui: &mut Ui, reading: &island_ui::human_inspector::Reading) -> egui::Response {
+    const ONE_LINE: usize = 28;
+    match reading.meter {
+        Some(meter) => {
+            ui.horizontal(|ui| {
+                ui.label(&reading.label);
+                ui.add(
+                    egui::ProgressBar::new(meter as f32)
+                        .text(&reading.value)
+                        .desired_width(140.0),
+                );
+            })
+            .response
+        }
+        None if reading.value.chars().count() <= ONE_LINE => {
+            ui.horizontal(|ui| {
+                ui.label(&reading.label);
+                ui.strong(&reading.value);
+            })
+            .response
+        }
+        None => {
+            ui.vertical(|ui| {
+                ui.label(&reading.label);
+                ui.add(egui::Label::new(egui::RichText::new(&reading.value).strong()).wrap());
+            })
+            .response
+        }
+    }
 }
 
 /// Send a control command and give back a sentence about what happened.

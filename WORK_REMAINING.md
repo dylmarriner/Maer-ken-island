@@ -38,7 +38,7 @@ this list holds the current state. The evidence for what is *done* is in
 |---|---|---|---|
 | Timber | Splitting, crosscut, rigging, routes (D40); drying and seasoning done 2026-10-14 | Open | Splitting and sawing rates |
 | Living world | Phase 3 Task 1b: species at island scale | Done (D55 open: upstream densities) | — |
-| Living world | Phase 3 Task 2: every resource and material, placers, recipes | Open (partly started) | Cited placer decay, shaft size, abundances |
+| Living world | Phase 3 Task 2: every resource and material, placers, recipes | Catalogue, mineral sites, gold placers, ironsand done (2026-10-14); biotic and animal nodes, gem placers, tools, recipes open | Cited diamond-placer grade, shaft depth and rate |
 | Living world | D9: actions take one tick | Open (felling, hauling done) | Cited durations per task |
 | Living world | D31: NPP ignores soil nutrients | Open | Regional soils model and data |
 | Runtime | Phase 4 Task 2b: deep-time spin-up | **Done** (2026-10-14) | — |
@@ -51,9 +51,9 @@ this list holds the current state. The evidence for what is *done* is in
 | Industry | Phase 4b Task 8: town and workforce | Open | Demographic tables; owner: town size |
 | Industry | Phase 4b Task 9: dashboard pages, year acceptance | Open | Tasks 4-8 |
 | Climate | D3 rest: sea/land breezes, katabatic winds | Open | A diurnal wind solver |
-| Climate | D25: SST season lags too long | Open | Owner: change regionally or re-pin planet |
+| Climate | D25: SST season lags too long | Diagnosed 2026-10-14: 0.281 of the year against 0.18-0.21 observed | A prognostic marine boundary layer (with D29) |
 | Climate | D4: parametric weather systems | Open | Structural; large |
-| Climate | D38: driest tenth too dry | Open | Diagnosis |
+| Climate | D38: a quarter of the land too dry | Diagnosed; specific humidity carried (2026-10-14) | A flux-driven rain-out (with D4) |
 | Climate | D29: energy audited per module | Open | End-to-end energy ledger |
 | App | Phase 5 Tasks 3-8 | Partly done | See below; one owner pick (portraits) |
 | Gates | Gate 1, 2, 3 owner reviews | **Closed** (owner, 2026-10-13) | — |
@@ -118,24 +118,24 @@ animal and fish resource nodes (§2b), which can now read the habitats.
 
 ### 2b. Phase 3 Task 2: every resource and material
 
-- **Now:** upstream's nine node kinds; `node_kind_for_resource` names every resource kind that has
-  no node yet (an exhaustive match was started); the estate's shed has an axe, a crosscut saw and
-  a gold pan. Nothing else from the task exists: no `materials/catalogue.rs`, no
-  `regional/resources.rs`, no placers.
-- **Needs (sources):** a cited downstream decay of placer-gold grade along a river; a cited
-  artisanal shaft size for hand mining; for every deposit, an abundance and grade source (the
-  Phase 1 deposits already carry their own). Densities and Mohs hardness per catalogue item
-  from a cited table.
-- **Files:** create `crates/mk_engine/src/materials/{mod.rs,catalogue.rs}`,
-  `crates/mk_engine/src/regional/resources.rs`
-  (`bootstrap_regional_resources(geophysics, ecology, physical, domain)`); modify
-  `resource_economy.rs` (`ResourceNodeKind`, `ToolKind` gaining `GoldPan`, `Sluice`, `Chisel`,
-  `LapidaryWheel`, `HuntingWeapon`, `FishingGear`, `Kiln`, `Crucible`, `Anvil`, `Drill`, recipes),
-  `agents/mod.rs` (`ItemKind`). Add, never rename, upstream variants.
-- **Tests:** `crates/mk_engine/tests/regional_resources.rs` and catalogue unit tests, as listed in
-  the plan's Task 2 Steps 1-2 (placers only downstream of a source, ironsand only on suitable
-  coasts, deposits never regenerate, a pan is needed to pan, smelting yields gold in proportion
-  to grade, deterministic ids).
+- **Done (2026-10-14):** the material catalogue (`materials/catalogue.rs`, densities and hardness
+  cited) and `regional/resources.rs`: every primary deposit as a site; placer gold below each
+  gold-bearing deposit where the river's gradient flattens (Orris & Bliss 1986, USGS model 39a,
+  read from the bulletin); ironsand at the mouths of rivers draining arc andesite (Christie et al.
+  2024, GNS 2024/62A); sites deplete and never refill; panning with a pan or sluice through the
+  labour model. The deposit models' medians and spreads now match the bulletin's figures (Fe skarn
+  50% Fe, phosphorite 330 Mt at 25% P2O5, placer gold 0.2 g/t were corrected), and a unit test
+  holds them to the pack. D56 records what the sites leave out.
+- **Left:**
+  - Diamond and gem placers below kimberlite and gem deposits: the bulletin's model 39d is
+    descriptive only (no grade-tonnage), so a cited diamond-placer grade is needed.
+  - Hand mining of primary ore: a cited artisanal shaft or adit depth and rate (refused by name
+    until then).
+  - Biotic nodes as views of cell biomass, animal and fish nodes from `regional/species.rs`
+    populations, salt pans and water sources.
+  - The new tools in `resource_economy.rs`, smelting and the other recipes, mass-balanced through
+    the material ledger.
+  - Serving the sites to the map and the founders' choices.
 - **Then:** record the enums, tool map and every abundance source in `UPSTREAM.md`; re-render
   `island_preview life` so `resources.png` shows the nodes.
 
@@ -297,10 +297,10 @@ Add to `fixtures/reference/industry/` (new packs alongside `hydro.json`), each v
 
 | Item | What is needed |
 |---|---|
-| **D3 (rest)**: sea and land breezes, katabatic winds | A diurnal wind solver on the coarse grid (land-sea temperature contrast driving an onshore/offshore flow; cold-air drainage downslope at night). The coastal damping of the day-night range is still the observed coastal/inland ratio; the land's range itself is already physical (Panwar & Kleidon 2022). |
-| **D25**: the SST season lags 1-2 months too long | Turbulent air-sea heat exchange in the mixed layer would shorten it. The ocean physics is shared with the planetary run, whose topology digest is pinned (`e4ece246…73e2`). **Owner decision:** change it regionally only, or change it in the shared code and re-pin the planet. |
+| **D3 (rest)**: sea and land breezes, katabatic winds | A diurnal wind solver on the coarse grid (land-sea temperature contrast driving an onshore/offshore flow; cold-air drainage downslope at night), which would also let the coastal damping of the day-night range come from air carried off the sea instead of the observed coastal/inland ratio. The land's range itself is already physical (Panwar & Kleidon 2022). **Sources gathered 2026-10-14** (to be transcribed into the climate pack when used): poleward of 30° the linear response is coast-trapped with scale `l = N h / sqrt(f^2 - omega^2)` (Rotunno 1983, as printed in Crosman & Horel 2010, BLM 137, eq. 2b, p. 12); typical sea-breeze surface winds 6-7 m/s (Simpson 1994 via Miller et al. 2003, Rev. Geophys. 41, para 20); inflow depth 300-2500 m, ~700 m in Britain (Miller et al. 2003, para 44); New Zealand sea breezes "usually extend from the coast inland for 20 miles or more" in settled summer weather (Te Ara 1966, Winds); a land breeze "rarely achieves half of sea breeze wind speed" (Thompson 1998 via Khan 2010). **The difficulty:** with the island's own N (7 K/km) and a 0.5-1 km layer, `l` is 190-370 km, five to ten times the observed reach, because friction limits real breezes; and no amplitude scaling that includes rotation was verified. A solver needs a sourced friction or a calibration against the 6-7 m/s and ~30 km observations, stated as such. |
+| **D25**: the SST season peaks 0.281 of the year after the solstice against 0.179-0.205 observed (ERSSTv5, derived 2026-10-14) | Diagnosed 2026-10-14: coupling the mixed layer to the air by bulk sensible and latent conductance shortens the lag to 0.145 but swells the annual range from 4.8 to 42.8 K, because it pulls the sea toward the energy balance's radiative equilibrium, which swings tens of kelvin. The owner question (regional or shared) does not decide it: either way the fix is a prognostic marine boundary layer whose air has its own heat capacity and is carried from upwind, which belongs with D29. The year test now measures the lag and holds it within 0.08 of the observed range. |
 | **D4**: weather systems are parametric | No occlusion, no warm-front structure. A structural change to `synoptic.rs`; large. |
-| **D38**: the driest tenth gets ~320 mm/yr against NZ's driest basin at ~360 | Diagnose first: the vapour budget, the rain-shadow strength or the evaporation. |
+| **D38**: a quarter of the land gets under 460 mm/yr where most of NZ gets 600-1600 (NIWA) | Diagnosed 2026-10-14 (`tests/regional_rain_budget.rs`): before orography land gets 58% of the sea's rain, because upstream's rain-out weight follows the local column's vapour and relative humidity. The wind now carries specific humidity (median 533 → 657 mm, highlands 340 → 668). What is left needs rain driven by the vapour flux of the systems crossing the land, which belongs with D4. |
 | **D29**: energy is audited per module | An end-to-end energy ledger across the coupled tick. |
 
 ---
@@ -316,15 +316,14 @@ dashboard; the desktop panels).
 | Task | Remaining | Needs |
 |---|---|---|
 | 3 | Individual stems in 3D around the yard are drawn (2026-10-14, `stems.rs`: up to 3,000 trunks within 250 m, at their own height and diameter); left of 2a: stand cover and instanced trees beyond the patch from biomass. Interiors (2b), industry and town (2d, after Phase 4b), resource visuals and inventory icons (2c, after Phase 3 Task 2), tests for every building kind and vehicle | Engineering |
-| 4 | Human detail view, inspector, foundry panel; portraits | **Owner picks the two portraits** from upstream `apps/mk_ui/assets/portraits/`, and confirms their provenance before any distribution |
+| 4 | Person inspector done 2026-10-14 (the backend's sections, now with what they are doing and thinking, and family). Left: the foundry panel; portraits | **Owner picks the two portraits** from upstream `apps/mk_ui/assets/portraits/`, and confirms their provenance before any distribution |
 | 5 | Done 2026-10-14 for the clock, controls and terrain cell (`apps/island_ui/src/inspectors.rs`): six speeds with requested and achieved, Save, the local date (year, day of 288, time of a 36-hour day) with Earth time elapsed, and the cell under the view with its biome, climate and production. A click on the estate picks a building, room, item or tree and the right panel describes it (`estate.rs` `pick`, `stems.rs` `describe`). Nothing left | — |
-| 6 | `island_bench`, the allocation-bound test (`construction-counters` feature), the resolution gate | **Owner confirms targets** (default: headless one simulated day per real minute; real time with the UI open) and **decides on formal predictive processing** (wire it into decisions upstream, or stop running it) |
+| 6 | Done except the owner's word on the targets: `island_bench` and `benchmarks/2026-10-08-regional-baseline.json` (12.9 simulated days per real minute headless against a default target of one, so no fallback profile), the allocation-bound test (`tests/island_allocation_bounds.rs`, `construction-counters`), and formal predictive processing measured at 0.9% of the human step (`tests/island_dead_compute.rs`), so keeping it running costs little. The plan's Task 6 status has the detail | **Owner confirms the targets** (default: headless one simulated day per real minute; real time with the UI open) and **decides on formal predictive processing**: its `selected_action` is read by nothing, so wire it into decisions upstream or stop running it (the measurement prices the choice, it does not make it) |
 | 7 | The sync script is done (2026-10-14, `scripts/sync_maerken_upstream.py`, `UPSTREAM.md` § Sync procedure). The creator moved into `apps/island` (`island::population`) and `apps/island_humans` is retired. Pruning is the owner's call (the inventory recommends not to) | Engineering |
 | 8 | Final acceptance: every design criterion run and recorded | All of the above |
 
 Also: **a GPU frame-rate figure** for `island-ui` (every frame so far was rasterised on the CPU,
-0.6 frames/s for the island view and 10.8 for the estate), and other window sizes. The Creator
-page does not yet use the map.
+0.6 frames/s for the island view and 10.8 for the estate), and other window sizes.
 
 ---
 

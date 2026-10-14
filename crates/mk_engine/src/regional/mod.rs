@@ -33,6 +33,7 @@ pub mod par;
 pub mod physical;
 pub mod property;
 pub mod replay;
+pub mod resources;
 pub mod scheduler;
 pub mod seismicity;
 pub mod shape;
