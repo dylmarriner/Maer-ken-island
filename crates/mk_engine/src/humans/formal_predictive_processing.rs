@@ -70,6 +70,7 @@
 //!   `h(prev) += α·δ` (Kakade 2001). Without canon the method is
 //!   `actor_critic`.
 
+use crate::agents::ActionKind;
 use crate::humans::needs::NeedsSnapshot;
 use crate::humans::rates;
 use crate::humans::AgentWorldObservation;
@@ -102,6 +103,20 @@ pub enum FormalAction {
 }
 
 impl FormalAction {
+    /// The repertoire action an executed [`ActionKind`] is, if it is one.
+    /// `SocialApproach` is socialising; working, gathering, exploring and
+    /// the rest are outside this repertoire.
+    pub fn from_action_kind(kind: ActionKind) -> Option<Self> {
+        match kind {
+            ActionKind::SeekFood => Some(Self::SeekFood),
+            ActionKind::SeekWater => Some(Self::SeekWater),
+            ActionKind::SeekShelter => Some(Self::SeekShelter),
+            ActionKind::SocialApproach => Some(Self::Socialize),
+            ActionKind::Rest => Some(Self::Rest),
+            _ => None,
+        }
+    }
+
     const ALL: [FormalAction; 5] = [
         FormalAction::SeekFood,
         FormalAction::SeekWater,
@@ -447,6 +462,18 @@ pub struct ActiveInferenceParams {
     /// Canon `policy_gradient_method` for the actor preferences.
     #[serde(default)]
     pub policy_gradient: PolicyGradient,
+    /// How strongly this policy's distribution steers the action a person
+    /// actually takes ([`FormalPredictiveProcessingSnapshot::decision_bias`]).
+    /// Not from canon and not from any source: an engine assumption, sized
+    /// against the drives it is added to (each 0–1, with ±0.075 of
+    /// exploration noise), so a confident policy can tip a close choice but
+    /// cannot outvote a pressing need.
+    #[serde(default = "default_decision_weight")]
+    pub decision_weight: f64,
+}
+
+fn default_decision_weight() -> f64 {
+    0.5
 }
 
 /// Canon `active_inference.policy_update.policy_gradient_method`.
@@ -483,6 +510,7 @@ impl Default for ActiveInferenceParams {
             policy_learning_rate: 0.2,
             trace_decay: DISCOUNT_GAMMA * TRACE_LAMBDA,
             policy_gradient: PolicyGradient::ActorCritic,
+            decision_weight: default_decision_weight(),
         }
     }
 }
@@ -533,6 +561,7 @@ impl ActiveInferenceParams {
                 }
                 Some(PolicyGradientMethodSchema::ActorCritic) | None => PolicyGradient::ActorCritic,
             },
+            decision_weight: defaults.decision_weight,
         }
     }
 }
@@ -590,8 +619,16 @@ pub struct FormalPredictiveProcessingSnapshot {
 
     // --- active_inference (state, stepped) ---
     pub action_values: [ActionValue; 5],
-    /// The action sampled from this tick's softmax distribution.
+    /// The action sampled from this tick's softmax distribution. A
+    /// counterfactual only: what a person does is chosen by
+    /// [`super::autonomy::AutonomousMind`], which this policy steers through
+    /// its probabilities ([`Self::decision_bias`]), and the critic learns
+    /// from [`Self::executed_action`].
     pub selected_action: FormalAction,
+    /// The action this person actually took on the tick the critic last
+    /// credited, if it was one of the repertoire's.
+    #[serde(default)]
+    pub executed_action: Option<FormalAction>,
     /// Extra sharpening of the action-selection distribution on top of the
     /// canon temperature (higher = more decisive/exploitive), driven by
     /// level-2 precision and a cleared willpower gate.
@@ -629,6 +666,23 @@ fn default_subjective_confidence() -> f64 {
 }
 
 impl FormalPredictiveProcessingSnapshot {
+    /// What this policy adds to an action's score in
+    /// [`super::autonomy::AutonomousMind::choose_action`]: its probability
+    /// of the action less an even share, times
+    /// [`ActiveInferenceParams::decision_weight`]. Zero for an action
+    /// outside the repertoire, and zero for every action while the policy
+    /// is undecided. The probabilities are last step's, the same lag the
+    /// mind already takes from neurochemistry, and they are the π the
+    /// actor's next update treats the executed action as drawn from.
+    pub fn decision_bias(&self, kind: ActionKind) -> f64 {
+        let Some(action) = FormalAction::from_action_kind(kind) else {
+            return 0.0;
+        };
+        let even = 1.0 / FormalAction::ALL.len() as f64;
+        self.params.decision_weight
+            * (self.action_values[action.index()].selection_probability - even)
+    }
+
     pub fn from_profile(profile: &mk_core::human::HumanProfile) -> Self {
         // Zero-valued canon fields (an unfilled template) fall back to the
         // engine defaults.
@@ -757,6 +811,7 @@ impl FormalPredictiveProcessingSnapshot {
             hierarchical_error_propagation_magnitude: 0.0,
             action_values,
             selected_action: FormalAction::Rest,
+            executed_action: None,
             decisiveness: 0.5,
             subjective_confidence: confidence.clamp(0.05, 0.95),
             belief_revision,
@@ -786,6 +841,13 @@ impl FormalPredictiveProcessingSnapshot {
     /// `Survival` alone can't distinguish "needs food" from "needs water"),
     /// and forcing a mapping would be an invented correspondence, not a
     /// real one. Amplifying decisiveness is the honest coupling available.
+    ///
+    /// `executed` is the action the person really took this tick (decided
+    /// before their needs were stepped, so the drop in goal deficit since
+    /// the last step is its outcome). The critic and the actor are credited
+    /// with that action, not with the last sample, which nobody acted on.
+    /// An action outside the repertoire (work, gathering, exploring) has no
+    /// value here to credit: the traces still decay.
     #[allow(clippy::too_many_arguments)]
     pub fn step(
         &self,
@@ -794,6 +856,7 @@ impl FormalPredictiveProcessingSnapshot {
         observation: &AgentWorldObservation,
         needs: &NeedsSnapshot,
         core_systems: &super::core_systems::CoreSystemsSnapshot,
+        executed: Option<FormalAction>,
         rng: &RngRegistry,
         dt_years: f64,
     ) -> Self {
@@ -918,9 +981,9 @@ impl FormalPredictiveProcessingSnapshot {
         let params = self.params;
         let mut action_values = self.action_values;
         let mut last_td_error = 0.0;
-        if self.has_acted {
+        if let (true, Some(executed)) = (self.has_acted, executed) {
             let reward = self.last_survival_pressure - goal_deficit;
-            let previous = self.selected_action.index();
+            let previous = executed.index();
             let best_next = action_values
                 .iter()
                 .map(|v| v.learned_value)
@@ -949,6 +1012,10 @@ impl FormalPredictiveProcessingSnapshot {
                 );
                 value.preference = (value.preference + gain * step).clamp(-1.0, 1.0);
             }
+        } else if self.has_acted {
+            for value in action_values.iter_mut() {
+                value.eligibility *= params.trace_decay;
+            }
         }
         for (value, utility) in action_values.iter_mut().zip(immediate_utility) {
             value.expected_utility = utility;
@@ -969,7 +1036,7 @@ impl FormalPredictiveProcessingSnapshot {
         // last action. Exploitation and decisiveness both lower the
         // effective temperature.
         let scores: [f64; 5] = std::array::from_fn(|i| {
-            let habit = if self.has_acted && i == self.selected_action.index() {
+            let habit = if executed.map(FormalAction::index) == Some(i) {
                 params.habit_bias
             } else {
                 0.0
@@ -1021,6 +1088,7 @@ impl FormalPredictiveProcessingSnapshot {
             hierarchical_error_propagation_magnitude: level_0_mean_error,
             action_values,
             selected_action,
+            executed_action: executed,
             decisiveness,
             subjective_confidence,
             belief_revision: traits,
@@ -1062,6 +1130,9 @@ mod tests {
             observation,
             needs,
             &core_systems(),
+            // As if the person did what the policy last chose; the tests
+            // of crediting what was really done pass their own.
+            Some(snapshot.selected_action),
             &rng(),
             // One hour: the belief and critic rates are per hour.
             rates::HOUR_YEARS,
@@ -1429,7 +1500,16 @@ mod tests {
         ungated_core.willpower_available = false;
 
         let run = |core: &super::super::core_systems::CoreSystemsSnapshot| {
-            snapshot.step(HumanId::new(1), 1, &observation, &needs, core, &rng(), 1.0)
+            snapshot.step(
+                HumanId::new(1),
+                1,
+                &observation,
+                &needs,
+                core,
+                None,
+                &rng(),
+                1.0,
+            )
         };
         let gated = run(&gated_core);
         let ungated = run(&ungated_core);
@@ -1462,6 +1542,71 @@ mod tests {
         assert_eq!(
             stepped.action_values[FormalAction::Rest.index()].learned_value,
             0.0
+        );
+    }
+
+    #[test]
+    fn the_critic_credits_what_was_done_not_what_the_policy_sampled() {
+        // The policy sampled rest, but the person went for food and the
+        // pressure fell: food earns the credit. Before this was wired in,
+        // the sample was credited and nobody had acted on it.
+        let mut snapshot = FormalPredictiveProcessingSnapshot::from_profile(&profile());
+        snapshot.has_acted = true;
+        snapshot.selected_action = FormalAction::Rest;
+        snapshot.last_survival_pressure = 0.9;
+        let observation = AgentWorldObservation {
+            shelter_quality: 1.0,
+            ..Default::default()
+        };
+        let mut needs = NeedsSnapshot::from_profile(&profile());
+        needs.hunger = 0.0;
+        needs.thirst = 0.0;
+        let run = |executed| {
+            snapshot.step(
+                HumanId::new(1),
+                1,
+                &observation,
+                &needs,
+                &core_systems(),
+                executed,
+                &rng(),
+                rates::HOUR_YEARS,
+            )
+        };
+
+        let fed = run(Some(FormalAction::SeekFood));
+        assert!(fed.action_values[FormalAction::SeekFood.index()].learned_value > 0.0);
+        assert_eq!(
+            fed.action_values[FormalAction::Rest.index()].learned_value,
+            0.0
+        );
+        assert_eq!(fed.executed_action, Some(FormalAction::SeekFood));
+
+        // Work, gathering and the like are outside the repertoire: nothing
+        // in it is credited.
+        let worked = run(None);
+        assert!(worked.action_values.iter().all(|v| v.learned_value == 0.0));
+        assert_eq!(worked.last_td_error, 0.0);
+    }
+
+    #[test]
+    fn the_policy_biases_only_its_own_actions_and_only_when_it_leans() {
+        let mut snapshot = FormalPredictiveProcessingSnapshot::from_profile(&profile());
+        // Undecided: no bias anywhere.
+        for kind in [ActionKind::SeekWater, ActionKind::Rest, ActionKind::Gather] {
+            assert_eq!(snapshot.decision_bias(kind), 0.0);
+        }
+        for value in snapshot.action_values.iter_mut() {
+            value.selection_probability = 0.0;
+        }
+        snapshot.action_values[FormalAction::SeekWater.index()].selection_probability = 1.0;
+        let w = snapshot.params.decision_weight;
+        assert!((snapshot.decision_bias(ActionKind::SeekWater) - w * 0.8).abs() < 1e-12);
+        assert!((snapshot.decision_bias(ActionKind::Rest) + w * 0.2).abs() < 1e-12);
+        assert_eq!(snapshot.decision_bias(ActionKind::Gather), 0.0);
+        assert_eq!(
+            FormalAction::from_action_kind(ActionKind::SocialApproach),
+            Some(FormalAction::Socialize)
         );
     }
 

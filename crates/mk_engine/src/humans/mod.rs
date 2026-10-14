@@ -1752,6 +1752,7 @@ impl HumanBeing {
             &self.core_systems,
             &self.reproduction,
             &self.neurochemistry,
+            Some(&self.formal_predictive_processing),
             self.profile.human_id.0,
             tick,
             rng_registry,

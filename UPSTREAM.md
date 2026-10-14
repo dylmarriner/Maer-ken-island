@@ -422,3 +422,14 @@ have no upstream counterpart.
    `reservoir_all` test now covers 36, and it is an interior reservoir. The island's oil and gas
    fields (`regional::industry::petroleum`, Phase 4b Task 4) book leaked methane into it.
    **No behaviour change** upstream: nothing upstream writes to it.
+6. `mk_engine::humans::autonomy::AutonomousMind::choose_action` and
+   `mk_engine::humans::formal_predictive_processing` — formal predictive processing now steers
+   decisions (the owner's call, 2026-10-14; before this its `selected_action` was read by
+   nothing). `choose_action` takes the human's `FormalPredictiveProcessingSnapshot` and adds
+   `decision_bias` to each of the five repertoire actions' scores: `decision_weight` times the
+   policy's last probability of the action less an even fifth. `step` takes the action really
+   executed (`FormalAction::from_action_kind(economy_action.kind)`, at
+   `humans::lifecycle`'s call) and credits the critic and actor with it instead of with the last
+   sample; an action outside the repertoire credits nothing and decays the traces.
+   `decision_weight` (0.5) is an engine assumption, not canon or a source. **Changes upstream
+   behaviour** (every human's choices, so the island's week digest moves); needs an upstream PR.

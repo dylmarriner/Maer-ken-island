@@ -245,6 +245,7 @@ fn slow_formal_predictive_processing_costs_this_share_of_a_human_step() {
                 &observation,
                 &human.needs,
                 &human.core_systems,
+                None,
                 &rng,
                 DT_YEARS,
             );

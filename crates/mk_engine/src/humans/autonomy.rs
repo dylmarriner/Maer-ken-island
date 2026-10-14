@@ -8,6 +8,7 @@
 use crate::agents::{ActionKind, AgentAction, AgentWorldObservation, CarryingState, ItemKind};
 use crate::humans::core_systems::CoreSystemsSnapshot;
 use crate::humans::dark_triad::DarkTriadSnapshot;
+use crate::humans::formal_predictive_processing::FormalPredictiveProcessingSnapshot;
 use crate::humans::genetics::GeneticsSnapshot;
 use crate::humans::needs::NeedsSnapshot;
 use crate::humans::neurochemistry::{BrainState, NeurochemistrySnapshot};
@@ -163,6 +164,7 @@ impl AutonomousMind {
         core_systems: &CoreSystemsSnapshot,
         reproduction: &ReproductiveSystemSnapshot,
         neurochemistry: &NeurochemistrySnapshot,
+        policy: Option<&FormalPredictiveProcessingSnapshot>,
         human_id: u64,
         tick: u64,
         rng_registry: &RngRegistry,
@@ -222,7 +224,11 @@ impl AutonomousMind {
                     core_systems,
                     reproduction,
                 )
-                + (rng.gen_f64_01() - 0.5) * self.exploration_rate;
+                + (rng.gen_f64_01() - 0.5) * self.exploration_rate
+                // Formal predictive processing's policy, a prior over the
+                // need-serving actions: what its hierarchy expects to relieve
+                // the goal deficit, and what its critic has learned did.
+                + policy.map_or(0.0, |p| p.decision_bias(action));
             if score > best_score {
                 best_score = score;
                 selected = action;
@@ -767,6 +773,7 @@ mod tests {
                     &core_systems,
                     &reproduction,
                     &neurochemistry,
+                    None,
                     1,
                     tick,
                     &registry,
@@ -807,6 +814,7 @@ mod tests {
             &core_systems,
             &reproduction,
             &neurochemistry,
+            None,
             1,
             1,
             &registry,
@@ -911,12 +919,78 @@ mod tests {
             &core_systems,
             &reproduction,
             &neurochemistry,
+            None,
             1,
             1,
             &registry,
         );
 
         assert_eq!(action.kind, ActionKind::Rest);
+    }
+
+    #[test]
+    fn formal_predictive_processing_steers_the_choice() {
+        let profile = HumanProfile::from_canonical_schema(
+            HumanId::new(1),
+            HumanSchema::canonical_minimal("policy_prior_test"),
+        );
+        let needs = NeedsSnapshot::from_profile(&profile);
+        let observation = AgentWorldObservation::default();
+        let genetics = GeneticsSnapshot::from_profile(&profile);
+        let carrying = CarryingState::new();
+        let dark_triad = DarkTriadSnapshot::from_profile(&profile);
+        let core_systems = CoreSystemsSnapshot::from_profile(&profile);
+        let reproduction = ReproductiveSystemSnapshot::from_profile(&profile);
+        let neurochemistry = NeurochemistrySnapshot::from_profile(&profile);
+        let registry = RngRegistry::new([1; 32]);
+        let choose = |policy: Option<&FormalPredictiveProcessingSnapshot>| {
+            AutonomousMind::default()
+                .choose_action(
+                    &needs,
+                    &observation,
+                    &genetics,
+                    &carrying,
+                    &dark_triad,
+                    &core_systems,
+                    &reproduction,
+                    &neurochemistry,
+                    policy,
+                    1,
+                    1,
+                    &registry,
+                )
+                .kind
+        };
+        let without = choose(None);
+
+        // An undecided policy changes nothing.
+        let mut policy = FormalPredictiveProcessingSnapshot::from_profile(&profile);
+        assert_eq!(choose(Some(&policy)), without);
+
+        // A policy sure of an action the mind would not have taken, and
+        // weighted to count, turns the choice.
+        let wanted = if without == ActionKind::SeekWater {
+            ActionKind::Rest
+        } else {
+            ActionKind::SeekWater
+        };
+        let index = |kind| {
+            crate::humans::formal_predictive_processing::FormalAction::from_action_kind(kind)
+                .map(|a| {
+                    policy
+                        .action_values
+                        .iter()
+                        .position(|v| v.action == a)
+                        .unwrap()
+                })
+                .unwrap()
+        };
+        let at = index(wanted);
+        for (i, value) in policy.action_values.iter_mut().enumerate() {
+            value.selection_probability = if i == at { 1.0 } else { 0.0 };
+        }
+        policy.params.decision_weight = 10.0;
+        assert_eq!(choose(Some(&policy)), wanted);
     }
 
     #[test]

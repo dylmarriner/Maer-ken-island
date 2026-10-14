@@ -1,5 +1,7 @@
-//! How much of the human step is `formal_predictive_processing::step()`, whose
-//! sampled action upstream documents as read nowhere but its own tests.
+//! How much of the human step is `formal_predictive_processing::step()`. When
+//! this was written its sampled action was read nowhere but its own tests;
+//! since 2026-10-14 its policy steers `AutonomousMind::choose_action`
+//! (`UPSTREAM.md`), so it is no longer dead, and this prices it.
 //! Run: `cargo test --release -p mk_engine --features construction-counters
 //! --test island_dead_compute -- --ignored --nocapture`.
 #![cfg(feature = "construction-counters")]
