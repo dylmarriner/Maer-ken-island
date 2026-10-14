@@ -196,6 +196,33 @@ pub struct MiningJob {
 /// The shed tool a founder pans with.
 pub const PANNING_TOOL: &str = "Gold Pan";
 
+/// The firewood shed the founders build beside the house (D9 and R5; the
+/// owner's choice of first building, 2026-10-14). The estate itself stood
+/// before the scenario began (D60); this is the first thing built in it.
+/// Its timber leaves the store when work begins and stands as a structure;
+/// the job is done when the builders' hours reach the packs' labour for its
+/// floor.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct ShedBuild {
+    pub structure_id: u64,
+    pub floor_m2: f64,
+    /// Air-dry wood in its frame (kg).
+    pub wood_kg: f64,
+    /// Person-seconds the frame takes, and those worked so far.
+    pub labour_s: f64,
+    pub worked_s: f64,
+}
+
+impl ShedBuild {
+    pub fn is_finished(&self) -> bool {
+        self.worked_s >= self.labour_s
+    }
+}
+
+/// The power tool the shed is framed with: the estate's circular saw,
+/// which draws on the estate's electricity (D13) while anyone builds.
+pub const BUILDING_SAW: &str = "Circular Saw";
+
 /// The shed tool a founder fells with: the estate's axe, at the felling
 /// pack's steel-axe times. The two-person crosscut saw needs a second
 /// person on the other end, which nothing here arranges yet.
@@ -239,6 +266,8 @@ pub struct IslandLifeSnapshot {
     pub resources: Option<super::resources::IslandResources>,
     #[serde(default)]
     pub mining: BTreeMap<String, MiningJob>,
+    #[serde(default)]
+    pub firewood_shed: Option<ShedBuild>,
     #[serde(default)]
     pub hauling: BTreeMap<String, HaulJob>,
     #[serde(default)]
@@ -292,6 +321,8 @@ pub struct IslandLife {
     /// The placer each founder is panning and how long they have been at
     /// it, walks included (D9).
     mining: BTreeMap<String, MiningJob>,
+    /// The firewood shed, once its building has begun (D9, R5).
+    pub firewood_shed: Option<ShedBuild>,
     /// The log each founder is moving to the store and the tasks they
     /// still have to do (`regional::timber`).
     hauling: BTreeMap<String, HaulJob>,
@@ -586,6 +617,7 @@ impl IslandLife {
             felling: BTreeMap::new(),
             resources: None,
             mining: BTreeMap::new(),
+            firewood_shed: None,
             hauling: BTreeMap::new(),
             labour_kcal: BTreeMap::new(),
             water_drunk_kg: BTreeMap::new(),
@@ -687,6 +719,7 @@ impl IslandLife {
             felling: self.felling.clone(),
             resources: self.resources.clone(),
             mining: self.mining.clone(),
+            firewood_shed: self.firewood_shed,
             hauling: self.hauling.clone(),
             labour_kcal: self.labour_kcal.clone(),
             water_drunk_kg: self.water_drunk_kg.clone(),
@@ -744,6 +777,7 @@ impl IslandLife {
             felling: snapshot.felling,
             resources: snapshot.resources,
             mining: snapshot.mining,
+            firewood_shed: snapshot.firewood_shed,
             hauling: snapshot.hauling,
             labour_kcal: snapshot.labour_kcal,
             water_drunk_kg: snapshot.water_drunk_kg,
@@ -2054,6 +2088,126 @@ impl IslandLife {
         Ok(())
     }
 
+    /// Everyone whose choice is to build, outdoors at the estate, frames the
+    /// firewood shed beside the house (D9, R5). Its size is the largest
+    /// detached building New Zealand lets go up without a consent; its
+    /// timber is the structural timber New Zealand's new houses take per
+    /// m² of floor, in the store's air-dry wood, and leaves the store when
+    /// work begins: without that much seasoned wood nobody can start. The
+    /// labour is the packs' timber-frame hours for the floor, with the
+    /// estate's circular saw, which only cuts while it has power; each
+    /// builder's second counts once, at the carpentry MET.
+    fn build(&mut self, dt_s: f64) -> Result<(), IslandLifeError> {
+        let Some(saw) = self
+            .energy
+            .loads
+            .iter()
+            .find(|l| l.name == BUILDING_SAW)
+            .map(|l| l.item_id)
+        else {
+            return Ok(());
+        };
+        if self.firewood_shed.is_some_and(|b| b.is_finished()) {
+            self.energy.set_in_use(saw, false);
+            return Ok(());
+        }
+        let (rows, cols) = (
+            self.domain.rows(DomainLevel::Medium),
+            self.domain.cols(DomainLevel::Medium),
+        );
+        let builders: Vec<(String, LabourBody)> = self
+            .humans
+            .registry
+            .iter()
+            .filter(|h| matches!(h.profile.status, mk_core::human::HumanStatus::Alive))
+            .filter(|h| h.economy_action.kind == crate::humans::ActionKind::Build)
+            .filter(|h| {
+                matches!(
+                    self.positions.0.get(h.agent_id()).map(|p| p.space),
+                    Some(Space::Outdoors)
+                ) && self.at_home(self.standing_cell(h.agent_id(), rows, cols))
+            })
+            .map(|h| (h.agent_id().to_string(), LabourBody::from_human(h)))
+            .collect();
+        self.energy.set_in_use(saw, !builders.is_empty());
+        if builders.is_empty() {
+            return Ok(());
+        }
+        if self.firewood_shed.is_none() {
+            let missing =
+                |key: &str| IslandLifeError::Labour(LabourError::MissingReference(key.to_string()));
+            let library = self.labour.library();
+            let point = |key: &str| {
+                library
+                    .item(crate::validation::ReferenceDomain::Labour, key)
+                    .and_then(|i| i.central())
+                    .ok_or_else(|| missing(key))
+            };
+            let floor_m2 = point("exempt_detached_building_floor_area")?;
+            let timber_m3 = floor_m2 * point("structural_timber_per_floor_area")?;
+            let density = library
+                .item(
+                    crate::validation::ReferenceDomain::Geology,
+                    "material_density_intrinsic",
+                )
+                .and_then(|i| i.table())
+                .and_then(|t| t.get("wood", "density_kg_m3"))
+                .ok_or_else(|| missing("material_density_intrinsic/wood"))?;
+            let wood_kg = timber_m3 * density;
+            if self.materials.stock_kg(Material::Wood) < wood_kg {
+                return Ok(());
+            }
+            let labour_s = self
+                .labour
+                .build_timber_frame(floor_m2, true)
+                .map_err(IslandLifeError::Labour)?
+                .duration_s;
+            let mut built = None;
+            self.audited(|life, _| {
+                built = life.materials.build(Material::Wood, wood_kg).ok();
+            })?;
+            let Some(structure_id) = built else {
+                return Ok(());
+            };
+            self.firewood_shed = Some(ShedBuild {
+                structure_id,
+                floor_m2,
+                wood_kg,
+                labour_s,
+                worked_s: 0.0,
+            });
+        }
+        if !self.energy.has_power(saw) {
+            return Ok(());
+        }
+        let awake_met = self
+            .labour
+            .met(AWAKE_AT_HOME_ACTIVITY)
+            .map_err(IslandLifeError::Labour)?;
+        let met = self
+            .labour
+            .met("carpentry_general")
+            .map_err(IslandLifeError::Labour)?;
+        for (id, body) in builders {
+            if let Some(shed) = self.firewood_shed.as_mut() {
+                shed.worked_s += dt_s;
+            }
+            let extra = self
+                .labour
+                .energy_kcal(&body, met, dt_s)
+                .map_err(IslandLifeError::Labour)?
+                - self
+                    .labour
+                    .energy_kcal(&body, awake_met, dt_s)
+                    .map_err(IslandLifeError::Labour)?;
+            *self.labour_kcal.entry(id.clone()).or_insert(0.0) += extra.max(0.0);
+            if let Some(h) = self.humans.registry.get_human_mut(&id) {
+                h.labour_met = Some(met);
+            }
+        }
+        Ok(())
+    }
+
     /// The placer gold site nearest `at` (domain metres) that still holds
     /// gravel, and where it is.
     fn nearest_placer(&self, at: (f64, f64)) -> Option<(u32, (f64, f64))> {
@@ -2427,6 +2581,7 @@ impl IslandLife {
             }
             self.work(human_s as f64)?;
             self.mine(human_s as f64)?;
+            self.build(human_s as f64)?;
             self.household_water_step(human_s as f64)?;
             self.household_gas_step(human_s as f64)?;
             self.meals()?;
@@ -2525,6 +2680,7 @@ impl IslandLife {
         h.update(canonical(&self.felling).as_bytes());
         h.update(canonical(&self.resources).as_bytes());
         h.update(canonical(&self.mining).as_bytes());
+        h.update(canonical(&self.firewood_shed).as_bytes());
         h.update(canonical(&self.hauling).as_bytes());
         h.update(canonical(&self.labour_kcal).as_bytes());
         h.update(canonical(&self.water_drunk_kg).as_bytes());
@@ -2874,6 +3030,98 @@ mod tests {
         life.household_gas_step(3_600.0).unwrap();
         let gas = life.household_gas.clone().unwrap();
         assert!((gas.without_fuel_s - 3_600.0).abs() < 1e-9);
+    }
+
+    /// A founder who chooses to build, outdoors at the estate, frames the
+    /// firewood shed (D9, R5): nobody starts without its seasoned timber in
+    /// the store, the timber leaves the store as the shed's structure, the
+    /// saw only cuts with power, and the shed is done after the packs'
+    /// timber-frame hours for its 10 m² floor.
+    #[test]
+    fn the_firewood_shed_takes_its_timber_and_the_packs_hours_to_build() {
+        let mut scenario =
+            IslandScenario::load(&repo("fixtures/island/default_scenario.json")).unwrap();
+        scenario.estate_patch.tree_cap = 200;
+        let canon = Arc::new(CanonLocked::load(&repo("fixtures/island/canon.json")).unwrap());
+        let mut life = IslandLife::bootstrap(scenario, canon).expect("the island bootstraps");
+        let at = life.vegetation.centre_m();
+        life.positions.0.insert(
+            "Gem-D".into(),
+            super::super::humans::EstatePosition {
+                space: Space::Outdoors,
+                position_m: at,
+            },
+        );
+        life.humans
+            .registry
+            .get_human_mut("Gem-D")
+            .unwrap()
+            .economy_action
+            .kind = crate::humans::ActionKind::Build;
+        let (rows, cols) = (
+            life.domain.rows(DomainLevel::Medium),
+            life.domain.cols(DomainLevel::Medium),
+        );
+        assert!(life.at_home(life.standing_cell("Gem-D", rows, cols)));
+
+        // No seasoned wood: nothing can start.
+        life.build(60.0).unwrap();
+        assert!(life.firewood_shed.is_none(), "built from nothing");
+
+        let (cell, area) = (
+            life.placed.location,
+            life.domain.cell_area_m2(DomainLevel::Medium),
+        );
+        life.audited(|life, ledger| {
+            life.materials
+                .gather_biotic(Material::Wood, 600.0, &mut life.ecology, cell, area, ledger)
+                .unwrap();
+        })
+        .unwrap();
+        let wood = life.materials.stock_kg(Material::Wood);
+        life.build(60.0).unwrap();
+        let shed = life
+            .firewood_shed
+            .expect("work begins once the timber is there");
+        // 10 m² × 14/160 m³ per m² × 500 kg/m³ of air-dry softwood.
+        assert!((shed.wood_kg - 437.5).abs() < 1e-9, "{} kg", shed.wood_kg);
+        assert!((wood - life.materials.stock_kg(Material::Wood) - shed.wood_kg).abs() < 1e-9);
+        assert!((shed.labour_s - 10.0 * 22.0 * 3_600.0).abs() < 1e-6);
+        assert_eq!(shed.worked_s, 0.0, "the saw has had no power yet");
+
+        // The estate's next energy step powers the saw.
+        life.audited(|life, ledger| {
+            life.energy.step(3_600.0, 0.0, ledger);
+        })
+        .unwrap();
+        let mut hours = 0;
+        while !life.firewood_shed.unwrap().is_finished() {
+            assert!(hours < 221, "still building after {hours} h");
+            life.build(3_600.0).unwrap();
+            hours += 1;
+            assert_eq!(
+                life.humans.registry.get_human("Gem-D").unwrap().labour_met,
+                Some(life.labour.met("carpentry_general").unwrap())
+            );
+        }
+        assert_eq!(hours, 220, "one builder, 220 person-hours");
+        assert!(*life.labour_kcal.get("Gem-D").unwrap() > 0.0);
+        // Done: the saw is put away and no more wood is taken.
+        let left = life.materials.stock_kg(Material::Wood);
+        life.build(3_600.0).unwrap();
+        assert_eq!(life.materials.stock_kg(Material::Wood), left);
+        let saw = life
+            .energy
+            .loads
+            .iter()
+            .find(|l| l.name == BUILDING_SAW)
+            .unwrap();
+        assert!(!saw.in_use);
+        // Kept and hashed.
+        assert_eq!(life.snapshot().firewood_shed, life.firewood_shed);
+        let digest = life.state_digest();
+        life.firewood_shed.as_mut().unwrap().worked_s += 1.0;
+        assert_ne!(life.state_digest(), digest);
     }
 
     /// A dead founder's unspent hour and unpaid meal are dropped rather than
