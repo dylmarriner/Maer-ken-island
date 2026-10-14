@@ -49,7 +49,7 @@ Current members (find them with `grep -rn 'fn slow_\|fn deep_' --include=*.rs cr
 
 | Pin | Test | Moves when |
 |---|---|---|
-| `WEEK_DIGEST` (`cc90144d…2b5d`) | `island_life_acceptance` (slow) | anything the founders or their world do changes. Re-pin only after the week's audit and reference-pack checks pass (`docs/handoff/WORKING_PRACTICES.md`). |
+| `WEEK_DIGEST` (`844ccde7…06a0`) | `island_life_acceptance` (slow) | anything the founders or their world do changes. Re-pin only after the week's audit and reference-pack checks pass (`docs/handoff/WORKING_PRACTICES.md`). |
 | Planetary topology (`e4ece246…73e2`) | `topology_hash_baseline` (fast) | only by a recorded upstream divergence (UPSTREAM.md), never by island stepping. Last moved by R1b's jerrycans. |
 
 ## Checking the dashboard by hand
