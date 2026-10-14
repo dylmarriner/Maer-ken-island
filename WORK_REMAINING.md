@@ -51,9 +51,9 @@ this list holds the current state. The evidence for what is *done* is in
 | Industry | Phase 4b Task 8: town and workforce | Open | Demographic tables; owner: town size |
 | Industry | Phase 4b Task 9: dashboard pages, year acceptance | Open | Tasks 4-8 |
 | Climate | D3 rest: sea/land breezes, katabatic winds | Open | A diurnal wind solver |
-| Climate | D25: SST season lags too long | Open | Owner: change regionally or re-pin planet |
+| Climate | D25: SST season lags too long | Diagnosed 2026-10-14: 0.281 of the year against 0.18-0.21 observed | A prognostic marine boundary layer (with D29) |
 | Climate | D4: parametric weather systems | Open | Structural; large |
-| Climate | D38: driest tenth too dry | Open | Diagnosis |
+| Climate | D38: a quarter of the land too dry | Diagnosed; specific humidity carried (2026-10-14) | A flux-driven rain-out (with D4) |
 | Climate | D29: energy audited per module | Open | End-to-end energy ledger |
 | App | Phase 5 Tasks 3-8 | Partly done | See below; one owner pick (portraits) |
 | Gates | Gate 1, 2, 3 owner reviews | **Closed** (owner, 2026-10-13) | — |
@@ -323,10 +323,10 @@ trade, a 2-3 bedroom cottage's floor area (Task 6 and 7b); the Pukekohe growing 
 
 | Item | What is needed |
 |---|---|
-| **D3 (rest)**: sea and land breezes, katabatic winds | A diurnal wind solver on the coarse grid (land-sea temperature contrast driving an onshore/offshore flow; cold-air drainage downslope at night). The coastal damping of the day-night range is still the observed coastal/inland ratio; the land's range itself is already physical (Panwar & Kleidon 2022). |
-| **D25**: the SST season lags 1-2 months too long | Turbulent air-sea heat exchange in the mixed layer would shorten it. The ocean physics is shared with the planetary run, whose topology digest is pinned (`e4ece246…73e2`). **Owner decision:** change it regionally only, or change it in the shared code and re-pin the planet. |
+| **D3 (rest)**: sea and land breezes, katabatic winds | A diurnal wind solver on the coarse grid (land-sea temperature contrast driving an onshore/offshore flow; cold-air drainage downslope at night), which would also let the coastal damping of the day-night range come from air carried off the sea instead of the observed coastal/inland ratio. The land's range itself is already physical (Panwar & Kleidon 2022). **Sources gathered 2026-10-14** (to be transcribed into the climate pack when used): poleward of 30° the linear response is coast-trapped with scale `l = N h / sqrt(f^2 - omega^2)` (Rotunno 1983, as printed in Crosman & Horel 2010, BLM 137, eq. 2b, p. 12); typical sea-breeze surface winds 6-7 m/s (Simpson 1994 via Miller et al. 2003, Rev. Geophys. 41, para 20); inflow depth 300-2500 m, ~700 m in Britain (Miller et al. 2003, para 44); New Zealand sea breezes "usually extend from the coast inland for 20 miles or more" in settled summer weather (Te Ara 1966, Winds); a land breeze "rarely achieves half of sea breeze wind speed" (Thompson 1998 via Khan 2010). **The difficulty:** with the island's own N (7 K/km) and a 0.5-1 km layer, `l` is 190-370 km, five to ten times the observed reach, because friction limits real breezes; and no amplitude scaling that includes rotation was verified. A solver needs a sourced friction or a calibration against the 6-7 m/s and ~30 km observations, stated as such. |
+| **D25**: the SST season peaks 0.281 of the year after the solstice against 0.179-0.205 observed (ERSSTv5, derived 2026-10-14) | Diagnosed 2026-10-14: coupling the mixed layer to the air by bulk sensible and latent conductance shortens the lag to 0.145 but swells the annual range from 4.8 to 42.8 K, because it pulls the sea toward the energy balance's radiative equilibrium, which swings tens of kelvin. The owner question (regional or shared) does not decide it: either way the fix is a prognostic marine boundary layer whose air has its own heat capacity and is carried from upwind, which belongs with D29. The year test now measures the lag and holds it within 0.08 of the observed range. |
 | **D4**: weather systems are parametric | No occlusion, no warm-front structure. A structural change to `synoptic.rs`; large. |
-| **D38**: the driest tenth gets ~320 mm/yr against NZ's driest basin at ~360 | Diagnose first: the vapour budget, the rain-shadow strength or the evaporation. |
+| **D38**: a quarter of the land gets under 460 mm/yr where most of NZ gets 600-1600 (NIWA) | Diagnosed 2026-10-14 (`tests/regional_rain_budget.rs`): before orography land gets 58% of the sea's rain, because upstream's rain-out weight follows the local column's vapour and relative humidity. The wind now carries specific humidity (median 533 → 657 mm, highlands 340 → 668). What is left needs rain driven by the vapour flux of the systems crossing the land, which belongs with D4. |
 | **D29**: energy is audited per module | An end-to-end energy ledger across the coupled tick. |
 
 ---
