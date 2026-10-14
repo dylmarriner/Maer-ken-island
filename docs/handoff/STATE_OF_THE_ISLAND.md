@@ -101,7 +101,7 @@ Every number the model uses that describes the real world lives in a cited pack,
 
 | Pin | Where | Current value |
 |---|---|---|
-| The founders' week | `crates/mk_engine/tests/island_life_acceptance.rs` `WEEK_DIGEST` | `844ccde7…06a0` (re-pinned with R3's foraging time on top of the firewood shed, `cc90144d…2b5d`) |
+| The founders' week | `crates/mk_engine/tests/island_life_acceptance.rs` `WEEK_DIGEST` | `f6699166…9c81` (re-pinned with formal predictive processing in decisions on top of R3's foraging time, `844ccde7…06a0`) |
 | The planetary topology | `crates/mk_engine/tests/topology_hash_baseline.rs` | `e4ece246…73e2` (moved only by starter-shed data: the R1b jerrycans) |
 
 `WORKING_PRACTICES.md` says how and when to re-pin.

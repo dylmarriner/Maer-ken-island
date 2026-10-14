@@ -462,12 +462,12 @@ pub struct ActiveInferenceParams {
     /// Canon `policy_gradient_method` for the actor preferences.
     #[serde(default)]
     pub policy_gradient: PolicyGradient,
-    /// How strongly this policy's distribution steers the action a person
+    /// How strongly what this policy has learned steers the action a person
     /// actually takes ([`FormalPredictiveProcessingSnapshot::decision_bias`]).
     /// Not from canon and not from any source: an engine assumption, sized
     /// against the drives it is added to (each 0–1, with ±0.075 of
-    /// exploration noise), so a confident policy can tip a close choice but
-    /// cannot outvote a pressing need.
+    /// exploration noise), so a well-learned action can tip a close choice
+    /// but cannot outvote a pressing need.
     #[serde(default = "default_decision_weight")]
     pub decision_weight: f64,
 }
@@ -622,7 +622,7 @@ pub struct FormalPredictiveProcessingSnapshot {
     /// The action sampled from this tick's softmax distribution. A
     /// counterfactual only: what a person does is chosen by
     /// [`super::autonomy::AutonomousMind`], which this policy steers through
-    /// its probabilities ([`Self::decision_bias`]), and the critic learns
+    /// what it has learned ([`Self::decision_bias`]), and the critic learns
     /// from [`Self::executed_action`].
     pub selected_action: FormalAction,
     /// The action this person actually took on the tick the critic last

@@ -426,10 +426,14 @@ have no upstream counterpart.
    `mk_engine::humans::formal_predictive_processing` — formal predictive processing now steers
    decisions (the owner's call, 2026-10-14; before this its `selected_action` was read by
    nothing). `choose_action` takes the human's `FormalPredictiveProcessingSnapshot` and adds
-   `decision_bias` to each of the five repertoire actions' scores: `decision_weight` times the
-   policy's last probability of the action less an even fifth. `step` takes the action really
-   executed (`FormalAction::from_action_kind(economy_action.kind)`, at
-   `humans::lifecycle`'s call) and credits the critic and actor with it instead of with the last
-   sample; an action outside the repertoire credits nothing and decays the traces.
-   `decision_weight` (0.5) is an engine assumption, not canon or a source. **Changes upstream
-   behaviour** (every human's choices, so the island's week digest moves); needs an upstream PR.
+   `decision_bias` to each of the five repertoire actions' scores: `decision_weight` times what
+   the critic and actor have learned the action is worth (`learned_value + preference`) less the
+   mean over the five. Not the selection probabilities, which are mostly immediate utility built
+   from the needs the drives already score, so counted every need twice (tried first: the
+   founders slept 7 hours a night, half away from home). `HumanBeing::decide` passes no policy
+   while the human is asleep or at bedtime. `step` takes the action really executed
+   (`FormalAction::from_action_kind(economy_action.kind)`, at `humans::lifecycle`'s call) and
+   credits the critic and actor with it instead of with the last sample; an action outside the
+   repertoire credits nothing and decays the traces. `decision_weight` (0.5) is an engine
+   assumption, not canon or a source. **Changes upstream behaviour** (every human's choices, so
+   the island's week digest moves); needs an upstream PR.
