@@ -224,10 +224,10 @@ A mouse and a keyboard are answered: five gestures are driven against the
 running application and measured, from a held drag that moves 39.8% of the
 pixels to a panel click that moves 59.5%.
 
-What has **not** been established is what it costs on a GPU: every frame so
-far was rasterised by lavapipe on the CPU, and no frame-rate figure from
-real hardware is claimed. `docs/island/RENDER_STACK.md` is the full
-account.
+On a GPU it has now been measured once (2026-10-15, AMD Radeon RX 470 on
+RADV, release build, 1600×1000): **255.6 fps** on the island view and
+**508.9** on the estate without vsync, and the monitor's 60 with it.
+`docs/island/RENDER_STACK.md` is the full account.
 
 ### The two claims this repository cannot check itself
 
