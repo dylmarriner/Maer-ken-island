@@ -2205,9 +2205,31 @@ fn panels(
                         for line in lines {
                             ui.label(line);
                         }
-                        if ui.button("Clear").clicked() {
-                            panels.picked = None;
-                        }
+                        ui.horizontal(|ui| {
+                            // Up close: for a room or a building, the
+                            // interior view, its contents seen through the
+                            // translucent walls.
+                            if ui.button("Look at it").clicked() {
+                                let trunks = (*snapshot.trees)
+                                    .as_ref()
+                                    .zip(island.0.estate())
+                                    .map_or_else(Vec::new, |(trees, layout)| {
+                                        stems::stems(trees, (layout.patch.x0, layout.patch.y0))
+                                    });
+                                if let Some((focus, distance)) = panels
+                                    .picked
+                                    .zip(island.0.estate())
+                                    .and_then(|(picked, layout)| {
+                                        estate::framing_of(layout, &trunks, picked)
+                                    })
+                                {
+                                    view.0.look_at(focus, distance);
+                                }
+                            }
+                            if ui.button("Clear").clicked() {
+                                panels.picked = None;
+                            }
+                        });
                     }
                 }
             }

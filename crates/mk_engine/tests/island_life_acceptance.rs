@@ -142,7 +142,7 @@ const DAY: u64 = 86_400;
 /// 43 minutes a day, drinking 1.81 and 1.43 L a day, temperate-forest NPP
 /// 471 g C/m2/yr (reference 400-900), intimacy 39 a year.
 ///
-/// And for the kitchen's gas stove (R4 in part, D58, 2026-10-14): the house
+/// And for the kitchen's gas stove (R4 in part, D59, 2026-10-14): the house
 /// burns HEEP's cooking energy from its two LPG bottles while anyone is
 /// home, booking the carbon from the crust to the air in an audit of its
 /// own each substep. Read from CI's slow tier (run 38500528556) on top of
