@@ -21,6 +21,9 @@
 //! US supply chain), leaks as methane to [`Reservoir::AtmosCH4`]; the rest
 //! goes into the field's tanks.
 //!
+//! Leaked methane oxidises to CO₂ in the air with its perturbation lifetime,
+//! 11.8 years (IPCC AR6 WG1, Table 7.15; [`super::chain`]).
+//!
 //! Not modelled (D57): water cut, reservoir pressure, wells and their
 //! blowouts (there is no per-well rate to count wells by), and the leaked
 //! methane's warming (the planet's air carries no methane to add it to,
@@ -63,6 +66,9 @@ pub struct PetroleumModel {
     pub gas_carbon_kg_per_gj: f64,
     /// Share of gross gas production lost as methane.
     pub methane_loss_fraction: f64,
+    /// Methane's perturbation lifetime in the air (years): the e-folding
+    /// time of an emitted pulse (IPCC AR6 WG1, Table 7.15).
+    pub methane_lifetime_years: f64,
 }
 
 /// Why the model could not be read.
@@ -132,6 +138,7 @@ impl PetroleumModel {
             crude_carbon_per_kg,
             gas_carbon_kg_per_gj: ipcc_cell("Natural Gas", "carbon_kg_per_gj")?,
             methane_loss_fraction: point("methane_loss_us_supply_chain")? / 100.0,
+            methane_lifetime_years: point("methane_perturbation_lifetime_yr")?,
         })
     }
 
@@ -261,10 +268,28 @@ impl PetroleumField {
         model: &PetroleumModel,
         ledger: &mut Ledger,
     ) -> Production {
+        self.produce_up_to(dt_years, f64::INFINITY, model, ledger)
+    }
+
+    /// Produce for `dt_years`, but no more than `max_oil_m3` of oil: a
+    /// field is choked back to what its offtake can take. Gas comes with
+    /// the oil in the same share of what remains; a field with no oil is
+    /// not choked.
+    pub fn produce_up_to(
+        &mut self,
+        dt_years: f64,
+        max_oil_m3: f64,
+        model: &PetroleumModel,
+        ledger: &mut Ledger,
+    ) -> Production {
         if dt_years.is_nan() || dt_years <= 0.0 {
             return Production::default();
         }
-        let share = 1.0 - (-model.decline_per_year * dt_years).exp();
+        let mut share = 1.0 - (-model.decline_per_year * dt_years).exp();
+        let potential = self.remaining_oil_m3() * share;
+        if potential > max_oil_m3.max(0.0) && potential > 0.0 {
+            share *= max_oil_m3.max(0.0) / potential;
+        }
         let oil_m3 = self.remaining_oil_m3() * share;
         let gas_gj = self.remaining_gas_gj() * share;
         let leaked_gj = gas_gj * model.methane_loss_fraction;

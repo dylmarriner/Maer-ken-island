@@ -210,9 +210,16 @@ trade, a 2-3 bedroom cottage's floor area (Task 6 and 7b); the Pukekohe growing 
   like Kapuni, McKee and Maari), declining exponentially at 4.4% a year, exact for any step length;
   its carbon comes out of the crust into the field's tanks, and 2.3% of its gas leaks as methane into
   the new `AtmosCH4` reservoir (`UPSTREAM.md`).
+- **Also done:** `regional/industry/chain.rs` runs the fields and the refinery as one plant, choked to
+  the plan's default 500 bbl/day nameplate, its material carbon auditable step by step; leaked
+  methane oxidises with its 11.8-year lifetime (IPCC AR6). Packs gained reformate yields (Speight),
+  gas-plant fuel and shrinkage (EIA), methane lifetimes, alluvial diamond grades (low), Lake
+  Grassmere solar salt and hand-dug shaft depth and sinking rate (a well analogue, low).
+- **Next:** carry `IndustryChain` in `IslandLife` (state, snapshot, the audited material stock) and
+  let a depot top the estate's diesel up from the store, burning island diesel as material carbon.
 - **Left (D57):** a plateau, reservoir pressure and water cut; wells, workover crews and blowouts
   (the frequencies are in the pack, but there is no per-well rate to count wells by); spills and their
-  harm to shellfish; methane oxidation and warming (negligible at island scale, Etminan et al. 2016);
+  harm to shellfish; methane warming (negligible at island scale, Etminan et al. 2016);
   who runs the field (Task 6). D19 (drill rigs cannot be made on the island) stays the owner's call;
   the default is imported equipment, as D15 accepts imported plant.
 

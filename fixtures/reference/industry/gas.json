@@ -34,6 +34,11 @@
       "key": "eia_ng_prod",
       "citation": "US Energy Information Administration. Natural Gas Gross Withdrawals and Production, annual, U.S. (eia.gov/dnav/ng/ng_prod_sum_dc_NUS_mmcf_a.htm), release 9/30/2026, rows Marketed Production, NGPL Production Gaseous Equivalent, Dry Production.",
       "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "eia_nga_2024",
+      "citation": "US Energy Information Administration, Natural Gas Annual 2024, Table 1 'Summary statistics for natural gas in the United States, 2020-2024' (eia.gov/naturalgas/Annual/pdf/table_001.pdf) and Table 14 'Consumption of natural gas by state, 2020-2024' (eia.gov/naturalgas/annual/pdf/table_014.pdf); retrieved 2026-10-14. Percentages in this pack are my arithmetic on EIA volumes.",
+      "licence": "Facts cited with attribution"
     }
   ],
   "items": [
@@ -320,6 +325,28 @@
         }
       },
       "note": "EIA table rows 'Marketed Production', 'NGPL Production, Gaseous Equivalent', 'Dry Production': 2025: 43,229,110 / 3,941,527 / 39,287,583 (dry = marketed minus NGPL). Shrinkage fraction derived by division."
+    },
+    {
+      "key": "us_gas_plant_fuel_share_of_marketed",
+      "description": "US natural gas plant fuel as a share of marketed production, 2024 (arithmetic on EIA volumes; denominator is all marketed gas, not only gas processed)",
+      "unit": "% of marketed production",
+      "source": "eia_nga_2024",
+      "confidence": "low",
+      "value": {
+        "point": 1.17
+      },
+      "note": "Derived by me. Table 1 (2024): 'Plant fuel 484,359' MMcf; 'Marketed production 41,383,893'; 'Total gross withdrawals 45,867,761'. 484,359 / 41,383,893 = 1.17%; versus gross withdrawals 1.06%. Table 14: '2024 Total ... Plant fuel 484,359'; the 2020-2023 plant fuel (518,913; 480,658; 467,511; 474,788 MMcf) is of the same order. Gas actually processed is not reported in these tables, so the share of processed gas would differ."
+    },
+    {
+      "key": "us_gas_plant_extraction_shrinkage_share_of_marketed",
+      "description": "US natural gas plant liquids extraction shrinkage (NGPL gaseous equivalent) as a share of marketed production, 2024; combined with plant fuel about 10 %",
+      "unit": "% of marketed production",
+      "source": "eia_nga_2024",
+      "confidence": "low",
+      "value": {
+        "point": 8.84
+      },
+      "note": "Derived by me. Table 1 (2024): 'NGPL production, gaseous equivalent 3,658,962' MMcf; 'Marketed production 41,383,893'; note: 'Total dry production volumes are equal to marketed production minus NGPL production.' 3,658,962 / 41,383,893 = 8.84%; plus plant fuel 1.17% = 10.0% total plant fuel and shrinkage against marketed gas. Includes liquids from rich gas and gas not run through plants in the denominator; no GPSA or per-plant percentage found."
     }
   ]
 }

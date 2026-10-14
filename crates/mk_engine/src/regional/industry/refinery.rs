@@ -167,6 +167,11 @@ impl RefineryModel {
         Self::from_reference(&library)
     }
 
+    /// IPCC's carbon (kg C per kg) for a product, before a run's scale.
+    pub fn carbon_per_kg(&self, product: Product) -> f64 {
+        self.carbon_per_kg[PRODUCTS.iter().position(|p| *p == product).unwrap()]
+    }
+
     /// The product a cut is.
     pub fn product_of(&self, cut: &Cut) -> Product {
         match cut.end_c {

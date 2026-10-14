@@ -59,6 +59,16 @@
       "key": "wiki_nzfields",
       "citation": "Wikipedia, 'Oil and gas industry in New Zealand', field reserves table captioned 'Proven and probable (2P or P50) reserves, ultimate and remaining, as at 1 January 2019', which cites MBIE 'Energy in New Zealand 2019' (October 2019); read via the Wikipedia page, the MBIE original was not accessible (retrieved 2026-10-14).",
       "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "ipcc_ar6_wg1_ch6",
+      "citation": "IPCC (2021). Climate Change 2021: The Physical Science Basis. WG1, Chapter 6 'Short-lived Climate Forcers', Table 6.2 (PDF p. 20 of the chapter file, printed p. 836) and Section 6.3.1 (ipcc.ch/report/ar6/wg1/downloads/report/IPCC_AR6_WGI_Chapter06.pdf); retrieved 2026-10-14.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "ipcc_ar6_wg1_ch7",
+      "citation": "IPCC (2021). Climate Change 2021: The Physical Science Basis. WG1, Chapter 7 'The Earth's Energy Budget, Climate Feedbacks and Climate Sensitivity', Section 7.6 and Table 7.15 (printed p. 1017) (ipcc.ch/report/ar6/wg1/downloads/report/IPCC_AR6_WGI_Chapter07.pdf); retrieved 2026-10-14.",
+      "licence": "Facts cited with attribution"
     }
   ],
   "items": [
@@ -746,6 +756,28 @@
         }
       },
       "note": "Same table, columns 'Ultimate oil recoverable (million bbl)' / 'Remaining oil reserves': Maui 227/5; Kapuni 70/4; Pohokura 62/15; McKee 47/0; Tui 47/6; Maari 44/6; Kupe 21/7; Mangahewa 16/10; Turangi 10/6; Total 600/71."
+    },
+    {
+      "key": "methane_perturbation_lifetime_yr",
+      "description": "Methane perturbation lifetime (e-folding time of a pulse including the feedback of methane on its own lifetime); used for emissions metrics",
+      "unit": "years",
+      "source": "ipcc_ar6_wg1_ch7",
+      "confidence": "high",
+      "value": {
+        "point": 11.8
+      },
+      "note": "Table 7.15 (p. 1017): 'CH4-fossil 11.8 ± 1.8' and 'CH4-non fossil 11.8 ± 1.8' (Lifetime, Years; ±1.8 is the assessed uncertainty). Sec. 7.6.1: 'The perturbation lifetimes of CH4 (Section 6.3.1). and N2O (Section 5.2.3.1) have been slightly revised since AR5 to be 11.8 ± 1.8 years'. Ch. 6 sec. 6.3.1 (ipcc_ar6_wg1_ch6): 'This results in an overall perturbation methane lifetime of 11.8 ± 1.8 years, within the range of the AR5 value of 12.4 ± 1.4 years.'"
+    },
+    {
+      "key": "methane_total_atmospheric_lifetime_yr",
+      "description": "Methane total atmospheric lifetime (burden over total sinks), AR6 assessed value",
+      "unit": "years",
+      "source": "ipcc_ar6_wg1_ch6",
+      "confidence": "high",
+      "value": {
+        "point": 9.1
+      },
+      "note": "Table 6.2 (printed p. 836), row 'AR6 assessed value': Total Chemical Lifetime '9.7 ± 1.1', Soil Lifetime '135 ± 44', Total Atmospheric Lifetime '9.1 ± 0.9' years ('Based on top-down with uncertainty estimate from AR5'; footnote: 'Uncertainties indicate ± 1 standard deviation'). CMIP6 (Stevenson et al.) total 8.0 (7.7-8.2); bottom-up 8.0 (6.3-10.0)."
     }
   ]
 }

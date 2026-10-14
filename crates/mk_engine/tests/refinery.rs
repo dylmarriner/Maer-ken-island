@@ -145,3 +145,73 @@ fn crude_from_a_field_is_refined_with_its_carbon_accounted() {
     .sum();
     assert!(total.abs() < 1e-3);
 }
+
+#[test]
+fn the_chain_s_carbon_changes_by_what_the_ledger_says() {
+    use mk_engine::regional::industry::chain::{ChainModels, IndustryChain};
+    let models = ChainModels::load_default().unwrap();
+    let kapuni = models
+        .petroleum
+        .analogues
+        .iter()
+        .find(|a| a.name == "Kapuni")
+        .unwrap()
+        .clone();
+    let mut chain = IndustryChain::default();
+    chain.fields.push(PetroleumField {
+        deposit_id: 0,
+        cell: (0, 0),
+        analogue: kapuni.name.clone(),
+        ultimate_oil_m3: kapuni.ultimate_oil_m3,
+        ultimate_gas_gj: kapuni.ultimate_gas_gj,
+        produced_oil_m3: 0.0,
+        produced_gas_gj: 0.0,
+        tank_oil_m3: 0.0,
+        tank_gas_gj: 0.0,
+        leaked_kgc: 0.0,
+    });
+    let day = 86_400.0;
+    for _ in 0..30 {
+        let before = chain.material_kgc(&models);
+        let mut ledger = Ledger::new();
+        let step = chain.step(day, &models, &mut ledger);
+        let delta = chain.material_kgc(&models) - before;
+        let flow = net(&ledger, Reservoir::MaterialCarbon, FluxKind::Carbon);
+        assert!(
+            (delta - flow).abs() <= 1e-9 * flow.abs().max(1.0),
+            "{delta} vs {flow}"
+        );
+        assert!(step.refined_m3 > 0.0);
+    }
+    // Diesel out of the store takes its own carbon with it.
+    let held = chain.store_t[2];
+    let (t, kgc) = chain.take(Product::Distillate, held / 2.0);
+    assert!((t - held / 2.0).abs() < 1e-9);
+    assert!(kgc > 0.0 && (kgc / (t * 1_000.0) - 0.85).abs() < 0.05);
+    // Choked to the refinery's nameplate.
+    let a_day = chain.refined_m3 / BARREL_M3 / 30.0;
+    println!("a Kapuni-sized field refines {a_day:.1} barrels a day");
+    assert!((a_day - models.refinery_bbl_per_day).abs() < 1e-6 * models.refinery_bbl_per_day);
+}
+
+#[test]
+fn leaked_methane_oxidises_with_its_lifetime() {
+    use mk_engine::regional::industry::chain::{ChainModels, IndustryChain};
+    let models = ChainModels::load_default().unwrap();
+    assert_eq!(models.petroleum.methane_lifetime_years, 11.8);
+    let mut chain = IndustryChain {
+        atmos_ch4_kgc: 1_000.0,
+        ..IndustryChain::default()
+    };
+    let year = 365.25 * 86_400.0;
+    let mut ledger = Ledger::new();
+    let mut oxidised = 0.0;
+    for _ in 0..12 {
+        oxidised += chain.step(year, &models, &mut ledger).oxidised_kgc;
+    }
+    let expected_left = 1_000.0 * (-12.0_f64 / 11.8).exp();
+    assert!((chain.atmos_ch4_kgc - expected_left).abs() < 1e-9);
+    assert!((oxidised + chain.atmos_ch4_kgc - 1_000.0).abs() < 1e-9);
+    assert!((net(&ledger, Reservoir::AtmosCH4, FluxKind::Carbon) + oxidised).abs() < 1e-9);
+    assert!((net(&ledger, Reservoir::AtmosCO2, FluxKind::Carbon) - oxidised).abs() < 1e-9);
+}
