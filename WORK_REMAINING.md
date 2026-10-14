@@ -42,8 +42,8 @@ this list holds the current state. The evidence for what is *done* is in
 | Living world | D9: actions take one tick | Open (felling, hauling done) | Cited durations per task |
 | Living world | D31: NPP ignores soil nutrients | Open | Regional soils model and data |
 | Runtime | Phase 4 Task 2b: deep-time spin-up | **Done** (2026-10-14) | — |
-| Industry | Phase 4b Task 1 remainder: reference tables | Open | Sources (petroleum, refinery, staffing, wages, demand) |
-| Industry | Phase 4b Task 4: oil and gas field (D14, D19) | Open | Task 1 tables; a petroleum deposit |
+| Industry | Phase 4b Task 1 remainder: reference tables | Done 2026-10-14 (nine packs); gaps listed in §4a | A few items (see §4a) |
+| Industry | Phase 4b Task 4: oil and gas field (D14, D19) | Fields, decline and carbon done 2026-10-14 (D57); wells, water cut, spills open | Per-well rate, water-cut series |
 | Industry | Phase 4b Task 5: refinery, gas plant, fuel depot (D16) | Open | Task 1 tables |
 | Industry | Phase 4b Task 6: jobs, trades, maintenance (D39) | Open | Upstream human-runtime change first |
 | Industry | Phase 4b Task 7: money, enterprises, payroll | Open | Owner: ownership split, policies |
@@ -175,33 +175,46 @@ reference tables, which were not fetched.
 
 ### 4a. Task 1 remainder: the reference tables
 
-Add to `fixtures/reference/industry/` (new packs alongside `hydro.json`), each value cited:
+**Done 2026-10-14:** nine cited packs, every value read at its source with a quote or table
+reference in its note:
 
-| Table | For | Notes |
-|---|---|---|
-| Reservoir recovery factors, gas-oil ratios, water cut, Arps decline parameters | Task 4 | Published field studies or textbooks |
-| Methane leak fraction from production | Task 4, D14 | An inventory figure (e.g. a national GHG inventory) |
-| Spill and blowout frequencies | Task 4 | An offshore/onshore incident database |
-| Crude assays and product yields; refinery energy and CO₂ per barrel | Task 5 | A published assay for a light crude; refinery benchmarks |
-| Gas composition and processing yields | Task 5 | |
-| Staffing per plant type and size | Task 6 | |
-| Occupational wage ratios | Task 7 | e.g. a national statistics office's wage tables |
-| Household electricity, cooking and transport-fuel demand | Task 8 | e.g. a national energy-use survey |
-| Crop growth (growing degree days, water stress), yields per hectare, livestock feed and growth | Task 7b | FAO tables are the natural source |
-| Sawmill recovery rates; house bill of materials and labour hours by trade | Task 7b | |
-| Demographic structure for the founding town | Task 8 | A national census age/sex table |
+- `industry/petroleum.json`: recovery factors by drive, gas-oil ratios, the world water-oil ratio,
+  decline rates (Höök et al. 2009; IEA WEO 2008 via UKERC), Arps b (low), methane loss (Alvarez et al.
+  2018), blowout frequencies per well and well-year (BOEM 2014 from SINTEF), well spacing, and New
+  Zealand's field sizes (MBIE 2019 via Wikipedia).
+- `industry/refinery.json`: the Equinor Troll Blend assay (cuts, densities, sulphur),
+  hydroskimming against cracking yields (low), refinery energy and CO2 (Jing et al. 2020;
+  Concawe 2018), NZ diesel density, IPCC 2006 calorific values and carbon contents.
+- `industry/gas.json`: Kapuni raw gas, NZ sales-gas ranges, Kupe's products, IPCC calorific values,
+  US NGL shrinkage.
+- `industry/staffing.json`, `industry/wages.json`, `industry/demand.json`: dairy and sheep-and-beef
+  labour, GP list size, Marsden Point's staff and throughput, supermarket staff; Stats NZ wages by
+  occupation and industry, the 2026 minimum wage, leave and KiwiSaver; household electricity, the
+  HEEP end-use and fuel split, driving per year and vehicles per person.
+- `industry/agriculture.json`, `industry/construction.json`, `humans/demography.json`: NZ dairy,
+  sheep, beef and pig production, pasture growth, crop yields, maize thermal time, Pukekohe's
+  urban area; sawmill recovery (low), a reference house's areas, framing labour rates, new-house
+  floor areas; NZ age-sex structure, household sizes and labour-force participation.
+
+**Not found, still needed:** a per-well production rate and water-cut history (Task 4); a primary
+refinery energy figure per tonne and gas-plant own use (Task 5); staffing for hospitals, sawmills,
+gas plants and hydro stations, Marsden Point's nameplate capacity (Task 6); transport fuel per
+vehicle in litres (Task 8); a minimum breeding herd, lamb slaughter age, NZ pig carcass and intake,
+beef intake, wheat and pasture degree days (Task 7b); framing m³ per m² and whole-house labour by
+trade, a 2-3 bedroom cottage's floor area (Task 6 and 7b); the Pukekohe growing district's area.
 
 ### 4b. Task 4: oil and gas field (D14, D19)
 
-- **Requires** a Phase 1 petroleum deposit on the chosen island; if there is none, the
-  enterprises are not created and the dashboard says why.
-- **Files:** create `regional/industry/petroleum.rs` (`PetroleumReservoir`, `Well`,
-  `ArpsDecline`); modify `crates/mk_core/src/flux/mod.rs` (an `AtmosCH4` reservoir, appended last
-  so earlier indices are unchanged; record in `UPSTREAM.md`) and `regional/climate.rs` (methane
-  forcing per Myhre et al. 1998 as the plan states; transcribe the formula from the paper).
-- **Tests:** `tests/petroleum_field.rs` (the plan's Step 1 list).
-- **Decision:** D19 (no drilling rigs can be made on the island) stays open or is accepted by the
-  owner as imported equipment (D15 already accepts imported plant).
+- **Done 2026-10-14** (`regional/industry/petroleum.rs`, `tests/petroleum_field.rs`): every
+  petroleum deposit is a field the size of one of New Zealand's nine (the owner's island has three,
+  like Kapuni, McKee and Maari), declining exponentially at 4.4% a year, exact for any step length;
+  its carbon comes out of the crust into the field's tanks, and 2.3% of its gas leaks as methane into
+  the new `AtmosCH4` reservoir (`UPSTREAM.md`).
+- **Left (D57):** a plateau, reservoir pressure and water cut; wells, workover crews and blowouts
+  (the frequencies are in the pack, but there is no per-well rate to count wells by); spills and their
+  harm to shellfish; methane oxidation and warming (negligible at island scale, Etminan et al. 2016);
+  who runs the field (Task 6). D19 (drill rigs cannot be made on the island) stays the owner's call;
+  the default is imported equipment, as D15 accepts imported plant.
 
 ### 4c. Task 5: refinery, gas plant, fuel depot (D16)
 

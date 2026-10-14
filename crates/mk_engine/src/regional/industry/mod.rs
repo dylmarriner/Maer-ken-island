@@ -7,8 +7,11 @@
 //!   a simulated year.
 //! - [`hydro_sites`]: run-of-river sites that support a plant.
 //! - [`grid`]: overhead lines, their losses and a radial grid's dispatch.
+//! - [`petroleum`]: oil and gas fields sized from New Zealand's own, in
+//!   exponential decline, their carbon out of the crust.
 
 pub mod flow_duration;
 pub mod grid;
 pub mod hydro;
 pub mod hydro_sites;
+pub mod petroleum;

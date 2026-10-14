@@ -1,0 +1,751 @@
+{
+  "id": "petroleum",
+  "domain": "industry",
+  "title": "Oil and gas fields: recovery, gas-oil ratio, water cut, decline, emissions, blowouts, spacing and NZ field sizes",
+  "retrieved": "2026-10-14",
+  "licence": "Numerical values cited as facts with attribution; no text, figures or datasets reproduced.",
+  "sources": [
+    {
+      "key": "aapg_hartmann",
+      "citation": "Hartmann, D. J. and Beaumont, E. A., Predicting hydrocarbon recovery, in Exploring for Oil and Gas Traps (Treatise of Petroleum Geology Handbook 3), AAPG Wiki (wiki.aapg.org/Predicting_hydrocarbon_recovery), section 'Recovery factors for different drive types', retrieved 2026-10-14.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "nysdec_ch12",
+      "citation": "New York State DEC, Draft GEIS on the Oil, Gas and Solution Mining Regulatory Programs, Vol. 2, Chapter 12 'Old Oil Field Waterflood Operations and Enhanced Oil Recovery Potential' (extapps.dec.ny.gov/docs/materials_minerals_pdf/dgeisv2ch12.pdf), section A Introduction, retrieved 2026-10-14.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "nysdec_ch8",
+      "citation": "New York State DEC, Draft GEIS on the Oil, Gas, and Solution Mining Regulatory Program, Vol. 1, Chapter 8 (extapps.dec.ny.gov/docs/materials_minerals_pdf/dgeisv1ch8.pdf), section on well spacing, 'Statewide Spacing', retrieved 2026-10-14.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "ihs_fluids",
+      "citation": "IHS Harmony documentation, 'Reservoir Fluid Types' (ihsenergy.ca/support/documentation_ca/Harmony/content/html_files/reference_material/general_concepts/reservoir_fluid_types.htm), Black Oils and Volatile Oils sections, retrieved 2026-10-14.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "bailey2000",
+      "citation": "Bailey, B., Crabtree, M., Tyrie, J., Elphick, J., Kuchuk, F., et al. (2000). Water Control. Oilfield Review, Spring 2000, pp. 30-51 (opening summary and p. 31).",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "hook2009",
+      "citation": "Hook, M., Hirsch, R. and Aleklett, K. (2009). Giant oil field decline rates and their influence on world oil production. Energy Policy 37(6), 2262-2272. Tables 1 and 2.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "ukerc2009",
+      "citation": "Miller, R., Sorrell, S. and Speirs, J. (2009). UKERC Review of Evidence for Global Oil Depletion, Technical Report 4: Decline rates and depletion rates. UKERC/WP/TPA/2009/019, July 2009. Section 4 and Table 4.4 (reporting IEA World Energy Outlook 2008 results).",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "ressmith",
+      "citation": "ResSmith documentation, 'Model Selection Guide for Reservoir Engineers' (ressmith.readthedocs.io/en/stable/model_selection_guide.html), ARPS hyperbolic section, retrieved 2026-10-14.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "alvarez2018",
+      "citation": "Alvarez, R. A. et al. (2018). Assessment of methane emissions from the U.S. oil and gas supply chain. Science 361(6398), 186-188. DOI 10.1126/science.aar7204 (abstract).",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "boem2014",
+      "citation": "Bercha International Inc. (2014). Loss of Well Control Occurrence and Size Estimators for Alaska OCS. OCS Study BOEM 2014-772 (BOEM contract M12PC00004), Tables 3.1 (U.S. GOM 1980-2011) and 4.1 (North Sea 1980-2011); frequencies derived from the SINTEF offshore blowout database.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "wiki_nzfields",
+      "citation": "Wikipedia, 'Oil and gas industry in New Zealand', field reserves table captioned 'Proven and probable (2P or P50) reserves, ultimate and remaining, as at 1 January 2019', which cites MBIE 'Energy in New Zealand 2019' (October 2019); read via the Wikipedia page, the MBIE original was not accessible (retrieved 2026-10-14).",
+      "licence": "Facts cited with attribution"
+    }
+  ],
+  "items": [
+    {
+      "key": "oil_recovery_by_drive",
+      "description": "Ultimate oil recovery factor by reservoir drive mechanism (conventional reservoirs); columns are the low and high ends of the range",
+      "unit": "% of original oil in place",
+      "source": "aapg_hartmann",
+      "confidence": "high",
+      "value": {
+        "table": {
+          "row_label": "drive_mechanism",
+          "columns": [
+            "min_pct",
+            "max_pct"
+          ],
+          "rows": [
+            {
+              "label": "strong_water",
+              "values": [
+                45,
+                60
+              ]
+            },
+            {
+              "label": "partial_water",
+              "values": [
+                30,
+                45
+              ]
+            },
+            {
+              "label": "gas_expansion",
+              "values": [
+                20,
+                30
+              ]
+            },
+            {
+              "label": "solution_gas",
+              "values": [
+                15,
+                25
+              ]
+            },
+            {
+              "label": "rock_compaction",
+              "values": [
+                10,
+                60
+              ]
+            },
+            {
+              "label": "gravity_drainage",
+              "values": [
+                50,
+                70
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Table 'Recovery factors for different drive types', column 'Percent ultimate recovery - Oil': Strong water 45-60; Partial water 30-45; Gas expansion 20-30; Solution gas 15-25; Rock 10-60; Gravity drainage 50-70."
+    },
+    {
+      "key": "gas_recovery_by_drive",
+      "description": "Ultimate gas recovery factor by reservoir drive mechanism; columns are the low and high ends of the range",
+      "unit": "% of original gas in place",
+      "source": "aapg_hartmann",
+      "confidence": "high",
+      "value": {
+        "table": {
+          "row_label": "drive_mechanism",
+          "columns": [
+            "min_pct",
+            "max_pct"
+          ],
+          "rows": [
+            {
+              "label": "strong_water",
+              "values": [
+                30,
+                40
+              ]
+            },
+            {
+              "label": "partial_water",
+              "values": [
+                40,
+                50
+              ]
+            },
+            {
+              "label": "gas_expansion",
+              "values": [
+                50,
+                70
+              ]
+            },
+            {
+              "label": "rock_compaction",
+              "values": [
+                60,
+                80
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Same table, column 'Gas': Strong water 30-40; Partial water 40-50; Gas expansion 50-70; Rock 60-80 (Solution gas and Gravity drainage listed N/A for gas)."
+    },
+    {
+      "key": "oil_primary_recovery_range",
+      "description": "Range of oil recovered by primary production alone",
+      "unit": "% of OOIP",
+      "source": "nysdec_ch12",
+      "confidence": "medium",
+      "value": {
+        "range": {
+          "min": 5,
+          "max": 30
+        }
+      },
+      "note": "'Usually, only 5 to 30 percent of a reservoir's original-oil-in-place (OOIP) can be recovered by primary production.'"
+    },
+    {
+      "key": "oil_primary_recovery_solution_gas_example",
+      "description": "Primary recovery of old solution-gas-drive New York oil fields",
+      "unit": "% of OOIP",
+      "source": "nysdec_ch12",
+      "confidence": "medium",
+      "value": {
+        "point": 7
+      },
+      "note": "'Primary production accounted for approximately 7 percent recovery of the OOIP in New York State's old oil fields.'"
+    },
+    {
+      "key": "oil_waterflood_increment_average",
+      "description": "Average additional recovery from waterflooding over primary (New York old oil fields)",
+      "unit": "% of OOIP",
+      "source": "nysdec_ch12",
+      "confidence": "medium",
+      "value": {
+        "point": 14
+      },
+      "note": "'Secondary recovery by waterflooding has resulted in an average recovery of an additional 14 percent of the OOIP.' Primary 7 + 14 gives about 21 percent combined (derived)."
+    },
+    {
+      "key": "oil_secondary_increment_max",
+      "description": "Upper bound on additional oil recoverable by secondary techniques over primary",
+      "unit": "% of OOIP",
+      "source": "nysdec_ch12",
+      "confidence": "medium",
+      "value": {
+        "point": 30
+      },
+      "note": "'As much as 30 percent more of the OOIP may be recovered by supplementing primary energy with secondary recovery techniques.'"
+    },
+    {
+      "key": "black_oil_initial_gor_upper",
+      "description": "Upper limit of initial gas-oil ratio for black oil",
+      "unit": "scf/stb",
+      "source": "ihs_fluids",
+      "confidence": "medium",
+      "value": {
+        "point": 2000
+      },
+      "note": "'It is characterized as having initial gas-oil ratios of 2000 scf/stb or less.' Lower bound not stated in this source."
+    },
+    {
+      "key": "volatile_oil_initial_gor",
+      "description": "Initial gas-oil ratio range for volatile (light) oil",
+      "unit": "scf/stb",
+      "source": "ihs_fluids",
+      "confidence": "medium",
+      "value": {
+        "range": {
+          "min": 2000,
+          "max": 3300
+        }
+      },
+      "note": "'Volatile oils generally have initial gas-oil ratios in the 2000 to 3300 scf/Bbl range, and the stock tank gravity is usually 40 API or higher.'"
+    },
+    {
+      "key": "world_average_water_oil_ratio",
+      "description": "Worldwide average water produced per barrel of oil from depleting reservoirs (late-life field average)",
+      "unit": "bbl water per bbl oil",
+      "source": "bailey2000",
+      "confidence": "high",
+      "value": {
+        "point": 3
+      },
+      "note": "'Today, oil companies produce an average of three barrels of water for each barrel of oil from their depleting reservoirs.' Equivalent water cut 3/(3+1) = 75 percent (derived)."
+    },
+    {
+      "key": "world_water_to_oil_volumes",
+      "description": "Worldwide daily water production accompanying oil production (210 / 75 = 2.8 bbl water per bbl oil)",
+      "unit": "million bbl per day (water, oil)",
+      "source": "bailey2000",
+      "confidence": "high",
+      "value": {
+        "table": {
+          "row_label": "stream",
+          "columns": [
+            "million_bbl_per_day"
+          ],
+          "rows": [
+            {
+              "label": "water",
+              "values": [
+                210
+              ]
+            },
+            {
+              "label": "oil",
+              "values": [
+                75
+              ]
+            }
+          ]
+        }
+      },
+      "note": "'worldwide daily water production of roughly 210 million barrels of water accompanying every 75 million barrels of oil'."
+    },
+    {
+      "key": "giant_field_decline_by_type",
+      "description": "Observed annual decline rate of post-plateau giant oil fields (261 fields, end 2005); magnitudes, source prints as negative",
+      "unit": "% per year",
+      "source": "hook2009",
+      "confidence": "high",
+      "value": {
+        "table": {
+          "row_label": "field_group",
+          "columns": [
+            "mean",
+            "median",
+            "production_weighted"
+          ],
+          "rows": [
+            {
+              "label": "all_giants",
+              "values": [
+                6.5,
+                5.3,
+                5.5
+              ]
+            },
+            {
+              "label": "land",
+              "values": [
+                4.9,
+                4.4,
+                3.9
+              ]
+            },
+            {
+              "label": "offshore",
+              "values": [
+                9.4,
+                9.0,
+                9.7
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Table 1: Decline rate -6.5% / -5.3% / -5.5% (Mean/Median/Prod. weight); Table 2: Land fields (170) -4.9% -4.4% -3.9%; Offshore fields (91) -9.4% -9.0% -9.7%."
+    },
+    {
+      "key": "iea2008_decline_by_field_size",
+      "description": "IEA WEO 2008 production-weighted average decline rates by decline phase and field size (as tabulated by UKERC); phase 1 peak to end of plateau, phase 2 plateau to 50% of peak, phase 3 50% of peak to latest year",
+      "unit": "% per year",
+      "source": "ukerc2009",
+      "confidence": "high",
+      "value": {
+        "table": {
+          "row_label": "field_class",
+          "columns": [
+            "phase1",
+            "phase2",
+            "phase3",
+            "total"
+          ],
+          "rows": [
+            {
+              "label": "super_giant",
+              "values": [
+                0.8,
+                3.0,
+                4.9,
+                3.4
+              ]
+            },
+            {
+              "label": "giant",
+              "values": [
+                3.0,
+                3.7,
+                7.6,
+                6.5
+              ]
+            },
+            {
+              "label": "large",
+              "values": [
+                5.5,
+                7.2,
+                11.8,
+                10.4
+              ]
+            },
+            {
+              "label": "all_fields",
+              "values": [
+                1.4,
+                3.6,
+                6.7,
+                5.1
+              ]
+            }
+          ]
+        }
+      },
+      "note": "UKERC Table 4.4 'Production-weighted average decline rates by decline phase (%)', 'Source: IEA WEO 2008'."
+    },
+    {
+      "key": "iea2008_observed_post_peak_decline",
+      "description": "IEA WEO 2008 global production-weighted observed decline rate for all post-peak fields",
+      "unit": "% per year",
+      "source": "ukerc2009",
+      "confidence": "high",
+      "value": {
+        "point": 6.7
+      },
+      "note": "'the IEA estimate a production-weighted global average decline rate of 6.7%/year for all post-peak fields.'"
+    },
+    {
+      "key": "iea2008_natural_post_peak_decline",
+      "description": "IEA WEO 2008 global production-weighted natural (no extra investment) decline rate of post-peak fields, 2003-2007",
+      "unit": "% per year",
+      "source": "ukerc2009",
+      "confidence": "high",
+      "value": {
+        "point": 9.0
+      },
+      "note": "'the global average production-weighted natural decline rate of all post-peak fields to be 9.0%/year. This is 2.3% higher than the estimated observed decline rate (6.7%/year).'"
+    },
+    {
+      "key": "arps_b_conventional_oil",
+      "description": "Typical Arps hyperbolic b exponent for conventional oil wells (b=0 exponential, b=1 harmonic)",
+      "unit": "dimensionless",
+      "source": "ressmith",
+      "confidence": "low",
+      "value": {
+        "range": {
+          "min": 0.3,
+          "max": 0.7
+        }
+      },
+      "note": "'b (typically 0.3-0.7 for oil wells)'; 'Typical b-factors: 0.3-0.7 for solution gas drive, 0.5-0.8 for water drive'; 'Validate b-factor is between 0 and 1'. Software documentation, not the primary Arps/Fetkovich papers."
+    },
+    {
+      "key": "arps_b_gas",
+      "description": "Typical Arps b exponent for gas wells",
+      "unit": "dimensionless",
+      "source": "ressmith",
+      "confidence": "low",
+      "value": {
+        "range": {
+          "min": 0.5,
+          "max": 1.0
+        }
+      },
+      "note": "'Typical: 0.3-0.7 for oil, 0.5-1.0 for gas'."
+    },
+    {
+      "key": "methane_loss_us_supply_chain",
+      "description": "Methane emitted by the US oil and gas supply chain as a fraction of gross gas production, 2015 (facility-based estimate 13 +/- 2 Tg/yr)",
+      "unit": "% of gross gas production",
+      "source": "alvarez2018",
+      "confidence": "high",
+      "value": {
+        "point": 2.3
+      },
+      "note": "'our facility-based estimate of 2015 supply chain emissions is 13 +/- 2 teragrams per year ... equivalent to 2.3% of gross U.S. gas production.' About 60% above the EPA inventory."
+    },
+    {
+      "key": "blowout_per_well_drilled",
+      "description": "Blowout (total, incl. underground flow) frequency per well drilled, 1980-2011; columns US Gulf of Mexico OCS (31,574 wells) and North Sea (13,727 wells)",
+      "unit": "per well drilled",
+      "source": "boem2014",
+      "confidence": "high",
+      "value": {
+        "table": {
+          "row_label": "drilling_type",
+          "columns": [
+            "us_gom",
+            "north_sea"
+          ],
+          "rows": [
+            {
+              "label": "exploration",
+              "values": [
+                0.00358,
+                0.00439
+              ]
+            },
+            {
+              "label": "development",
+              "values": [
+                0.00171,
+                0.000436
+              ]
+            },
+            {
+              "label": "all_drilling",
+              "values": [
+                0.00244,
+                0.00175
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Table 3.1 and Table 4.1, row 'Blowout Total', columns Exploration/Development/All Drilling (per well): GOM 3.58E-03, 1.71E-03, 2.44E-03; North Sea 4.39E-03, 4.36E-04, 1.75E-03. Offshore data."
+    },
+    {
+      "key": "blowout_per_well_year_production",
+      "description": "Blowout frequency per producing well-year, 1980-2011; columns US GOM (197,721 well-years) and North Sea (59,141 well-years)",
+      "unit": "per well-year",
+      "source": "boem2014",
+      "confidence": "high",
+      "value": {
+        "table": {
+          "row_label": "well_type",
+          "columns": [
+            "us_gom",
+            "north_sea"
+          ],
+          "rows": [
+            {
+              "label": "oil_production",
+              "values": [
+                9.88e-05,
+                2.5e-05
+              ]
+            },
+            {
+              "label": "all_production",
+              "values": [
+                8.6e-05,
+                3.38e-05
+              ]
+            },
+            {
+              "label": "well_intervention",
+              "values": [
+                0.000177,
+                6.76e-05
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Table 3.1 and 4.1 row 'Blowout Total': Oil Production 9.88E-05 (GOM), 2.50E-05 (NS); All Production 8.60E-05, 3.38E-05; Well Interventions 1.77E-04, 6.76E-05."
+    },
+    {
+      "key": "well_release_frequency",
+      "description": "Well release (smaller loss-of-well-control, not full blowout) frequency, 1980-2011; columns US GOM and North Sea",
+      "unit": "per well drilled or per well-year (see row)",
+      "source": "boem2014",
+      "confidence": "high",
+      "value": {
+        "table": {
+          "row_label": "category",
+          "columns": [
+            "us_gom",
+            "north_sea"
+          ],
+          "rows": [
+            {
+              "label": "all_drilling_per_well_drilled",
+              "values": [
+                0.00101,
+                0.00124
+              ]
+            },
+            {
+              "label": "all_production_per_well_year",
+              "values": [
+                2.02e-05,
+                1.69e-05
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Tables 3.1 and 4.1 row 'Well Release Total': All Drilling 1.01E-03 (GOM), 1.24E-03 (NS); All Production 2.02E-05, 1.69E-05."
+    },
+    {
+      "key": "well_spacing_range",
+      "description": "Range of well spacing draining oil and gas formations in New York State",
+      "unit": "acres per well",
+      "source": "nysdec_ch8",
+      "confidence": "medium",
+      "value": {
+        "range": {
+          "min": 1,
+          "max": 160
+        }
+      },
+      "note": "'Most oil and gas formations in New York State are being drained by wells spaced from 1 to 160 acres.'"
+    },
+    {
+      "key": "well_spacing_statewide_default",
+      "description": "Statewide default well spacing rule (New York) and minimum distance between wells",
+      "unit": "acres per well; 1320 ft minimum",
+      "source": "nysdec_ch8",
+      "confidence": "medium",
+      "value": {
+        "point": 40
+      },
+      "note": "'Most wells must be spaced according to the statewide 40 acre spacing rule ... Under the 40 acre rule a well can be no closer than 1,320' from any other well completed in the same producing formation.'"
+    },
+    {
+      "key": "stripper_well_rate_example",
+      "description": "Average output per well of a depleted solution-gas-drive field (western New York, 1912, about 7 percent of OOIP recovered)",
+      "unit": "bbl oil per well per day",
+      "source": "nysdec_ch12",
+      "confidence": "low",
+      "value": {
+        "range": {
+          "min": 0.1,
+          "max": 0.125
+        }
+      },
+      "note": "'each well averaged only 1/8 to 1/10 barrel of oil per day and it was estimated only 7 percent of the original oil in place had been recovered'. Historical stripper-well illustration only."
+    },
+    {
+      "key": "nz_gas_field_ultimate_remaining_2019",
+      "description": "New Zealand gas fields, 2P ultimate recoverable and remaining gas as at 1 Jan 2019 (field-size distribution; NZ total ultimate 9,173 PJ)",
+      "unit": "PJ",
+      "source": "wiki_nzfields",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "field",
+          "columns": [
+            "ultimate_pj",
+            "remaining_pj"
+          ],
+          "rows": [
+            {
+              "label": "Maui",
+              "values": [
+                4331,
+                110
+              ]
+            },
+            {
+              "label": "Pohokura",
+              "values": [
+                1563,
+                714
+              ]
+            },
+            {
+              "label": "Kapuni",
+              "values": [
+                1142,
+                143
+              ]
+            },
+            {
+              "label": "Mangahewa",
+              "values": [
+                648,
+                403
+              ]
+            },
+            {
+              "label": "Kupe",
+              "values": [
+                533,
+                311
+              ]
+            },
+            {
+              "label": "Turangi",
+              "values": [
+                376,
+                277
+              ]
+            },
+            {
+              "label": "McKee",
+              "values": [
+                264,
+                63
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Table 'Proven and probable (2P or P50) reserves, ultimate and remaining, as at 1 January 2019': Maui 4,331 / 110; Pohokura 1,563 / 714; Kapuni 1,142 / 143; Kupe 533 / 311; Mangahewa 648 / 403; Turangi 376 / 277; McKee 264 / 63; Total 9,173 / 2,102. Cited to MBIE Energy in NZ 2019; read via Wikipedia."
+    },
+    {
+      "key": "nz_oil_field_ultimate_remaining_2019",
+      "description": "New Zealand oil/condensate, 2P ultimate recoverable and remaining oil as at 1 Jan 2019 (NZ total ultimate 600 million bbl)",
+      "unit": "million bbl",
+      "source": "wiki_nzfields",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "field",
+          "columns": [
+            "ultimate_mmbbl",
+            "remaining_mmbbl"
+          ],
+          "rows": [
+            {
+              "label": "Maui",
+              "values": [
+                227,
+                5
+              ]
+            },
+            {
+              "label": "Kapuni",
+              "values": [
+                70,
+                4
+              ]
+            },
+            {
+              "label": "Pohokura",
+              "values": [
+                62,
+                15
+              ]
+            },
+            {
+              "label": "McKee",
+              "values": [
+                47,
+                0
+              ]
+            },
+            {
+              "label": "Tui",
+              "values": [
+                47,
+                6
+              ]
+            },
+            {
+              "label": "Maari",
+              "values": [
+                44,
+                6
+              ]
+            },
+            {
+              "label": "Kupe",
+              "values": [
+                21,
+                7
+              ]
+            },
+            {
+              "label": "Mangahewa",
+              "values": [
+                16,
+                10
+              ]
+            },
+            {
+              "label": "Turangi",
+              "values": [
+                10,
+                6
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Same table, columns 'Ultimate oil recoverable (million bbl)' / 'Remaining oil reserves': Maui 227/5; Kapuni 70/4; Pohokura 62/15; McKee 47/0; Tui 47/6; Maari 44/6; Kupe 21/7; Mangahewa 16/10; Turangi 10/6; Total 600/71."
+    }
+  ]
+}
