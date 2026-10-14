@@ -174,25 +174,6 @@ pub fn step_regional_weather(
     }
 }
 
-/// Orographic rain over `elevation_m` (coarse), with the vapour budget it
-/// draws on.
-///
-/// Air forced up a slope (`lift = wind · ∇h`, m/s) condenses vapour at
-/// `efficiency × lift / H` of its column per second, and that rain is
-/// taken out of the air: a column crossing a windward slope leaves it
-/// drier, by `exp(-efficiency × lift × t / H)` over its crossing time `t`.
-/// The vapour the air still carries is a fraction `f` of what it would
-/// hold in equilibrium; every cell's ordinary rain scales with it, so the
-/// rain shadow persists downwind of a range for as long as the air stays
-/// depleted, recovering by evapotranspiration over the same adjustment
-/// length as the air's heat and humidity ([`super::maritime`]). Over the
-/// sea the air is replenished at once.
-///
-/// Nothing is rescaled afterwards. The rain a range wrings out is vapour
-/// that would otherwise have passed on, so the island's total rises above
-/// the background's by exactly what the windward slopes condensed; the
-/// background normalisation of [`step_regional_weather`] still holds over
-/// the open sea (deviations D26 and D38).
 /// Near-surface relative humidity (0-1) at a coarse cell and air
 /// temperature, read back from the vapour the weather carries there:
 /// [`step_regional_weather`] puts `rh × q_sat(T) × column ×
@@ -228,6 +209,25 @@ pub fn relative_humidity_at(
     }
 }
 
+/// Orographic rain over `elevation_m` (coarse), with the vapour budget it
+/// draws on.
+///
+/// Air forced up a slope (`lift = wind · ∇h`, m/s) condenses vapour at
+/// `efficiency × lift / H` of its column per second, and that rain is
+/// taken out of the air: a column crossing a windward slope leaves it
+/// drier, by `exp(-efficiency × lift × t / H)` over its crossing time `t`.
+/// The vapour the air still carries is a fraction `f` of what it would
+/// hold in equilibrium; every cell's ordinary rain scales with it, so the
+/// rain shadow persists downwind of a range for as long as the air stays
+/// depleted, recovering by evapotranspiration over the same adjustment
+/// length as the air's heat and humidity ([`super::maritime`]). Over the
+/// sea the air is replenished at once.
+///
+/// Nothing is rescaled afterwards. The rain a range wrings out is vapour
+/// that would otherwise have passed on, so the island's total rises above
+/// the background's by exactly what the windward slopes condensed; the
+/// background normalisation of [`step_regional_weather`] still holds over
+/// the open sea (deviations D26 and D38).
 ///
 /// Adds the slopes' rain to `weather.precipitation` in place, and returns
 /// the vapour budget's fraction `f` per coarse cell (1 over the sea and on
