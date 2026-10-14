@@ -111,6 +111,8 @@ Upstream has 9 node kinds (`resource_economy.rs:13-23`) placed by biome, maps on
 - [ ] **Step 5:** Run both tests and `cargo test -p mk_engine --lib -- resource_economy:: agents::`; expect PASS, with existing upstream tests unchanged.
 - [ ] **Step 6:** Record the extended enums, tool mapping and every abundance/grade source in `UPSTREAM.md`. Commit `feat(engine): nodes for every resource and material on the island`.
 
+> **Status (2026-10-14):** the catalogue and the mineral sites are done (`regional/resources.rs`, `tests/regional_resources.rs`): primary deposits, placer gold by the bulletin's model 39a sited where the river gradient flattens, ironsand below andesite (GNS 2024); deposits never regenerate; panning needs a pan or sluice. Open: biotic and animal nodes, gem and diamond placers, tools and recipes; see `WORK_REMAINING.md` §2b.
+>
 > **Status (2026-10-13):** started, not done. `node_kind_for_resource` is an exhaustive match that names each resource kind with no node yet and why (`UPSTREAM.md`, PR #6 item 8); the estate's shed has an axe, a crosscut saw and a gold pan, and founders fell patch trees through the ledger. Felled stems become green logs moved by excavator, ute or hand (`regional/timber.rs`, D40). Not started: `materials/catalogue.rs`, `regional/resources.rs`, placers and ironsand, the new `ToolKind`s and recipes. Blocked on sources: a cited downstream placer-gold grade decay and a cited artisanal shaft size. `WORK_REMAINING.md` §2b.
 
 ### Task 3: Physical materials — carbon, oxygen and water through the economy

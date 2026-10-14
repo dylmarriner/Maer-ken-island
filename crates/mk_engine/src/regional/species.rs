@@ -46,7 +46,6 @@ use mk_core::grid::Grid2;
 use mk_island::{DomainLevel, IslandDomain};
 
 use super::ecology::{residence_years, RegionalEcologyState};
-use super::hydrology::{discharge_m3_s, RIVER_MIN_DISCHARGE_M3_S};
 use super::physical::RegionalPhysicalState;
 use crate::biosphere::{BiosphereSystem, SpeciesCategory, TerrainAffinity};
 
@@ -105,8 +104,9 @@ fn is_vegetated(biome: BiomeType) -> bool {
 pub struct CellSetting {
     /// Land with the sea beside it.
     pub on_the_coast: bool,
-    /// Land a river runs through: discharge at or above the hydrology's
-    /// own river threshold (`RIVER_MIN_DISCHARGE_M3_S`). A 2 km cell is a
+    /// Land a river runs through all year: perennial in the island's
+    /// simulated year of flows, with a mean at or above the hydrology's own
+    /// river threshold (`RiverFlowRecord::is_river`). A 2 km cell is a
     /// `River` biome only when the channel fills half of it, which no
     /// river on this island does, but a river running through a forest
     /// cell is still a river to what lives in it.
@@ -255,9 +255,7 @@ impl IslandBiota {
                 let setting = CellSetting {
                     on_the_coast,
                     in_the_sea: is_sea(r, c),
-                    has_a_river: !is_sea(r, c)
-                        && discharge_m3_s(&physical.hydrology, domain, r, c)
-                            >= RIVER_MIN_DISCHARGE_M3_S,
+                    has_a_river: !is_sea(r, c) && physical.river_flows.is_river(r * cols + c),
                 };
                 let biome = *ecology.biome_grid.get(r, c);
                 let mut mask = 0u16;

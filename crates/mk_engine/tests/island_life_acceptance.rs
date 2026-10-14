@@ -132,7 +132,16 @@ const DAY: u64 = 86_400;
 /// shortfalls, Gem-D 13.0 kg of body carbon against 13.0 and Gem-K 10.4
 /// against 10.4, eating 47 and 43 minutes a day, drinking 1.81 and 1.43 L
 /// a day, temperate-forest NPP 567 g C/m2/yr, intimacy 65 a year.
-const WEEK_DIGEST: &str = "54b48e5bef3d049f3376e015c4d2db549c9a4eb34f954d6ab20b2a4ad243bb18";
+///
+/// And for D38 (2026-10-14): the wind carries the sea air's specific
+/// humidity inland rather than its relative humidity, so air over colder
+/// ground keeps its vapour; the median land cell's rain rose from 533 to
+/// 657 mm a year and the forest's NPP, which follows the air's dryness,
+/// fell. Audited the same way: 10,514 audits closed, no food or water
+/// shortfalls, body carbon 13.0 of 13.0 and 10.4 of 10.4 kg, eating 47 and
+/// 43 minutes a day, drinking 1.81 and 1.43 L a day, temperate-forest NPP
+/// 471 g C/m2/yr (reference 400-900), intimacy 39 a year.
+const WEEK_DIGEST: &str = "ff6eeb03603b899eb900fc9ce832e835663891794d294a44f8316efd7b19b04a";
 
 fn repo(path: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))

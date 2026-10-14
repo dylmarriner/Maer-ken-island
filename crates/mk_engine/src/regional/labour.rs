@@ -353,6 +353,19 @@ impl LabourTable {
         })
     }
 
+    /// Gravel (m³ in place) one worker washes in a working day with a pan
+    /// or a sluice box.
+    pub fn gravel_washed_m3_per_day(&self, tool: LabourTool) -> Result<f64, LabourError> {
+        let row = match tool {
+            LabourTool::GoldPan => "gold_pan",
+            LabourTool::SluiceBox => "sluice_box",
+            _ => return Err(LabourError::MissingReference("a panning tool".into())),
+        };
+        Ok(self
+            .table_range(ReferenceDomain::Labour, "gold_panning_throughput", row)?
+            .mid())
+    }
+
     /// One working day of washing placer gravel of `grade_g_m3` (g of gold
     /// per m³ in place) with a pan or a sluice: yield is grade × volume ×
     /// recovery, all from the packs.
@@ -362,16 +375,14 @@ impl LabourTable {
         grade_g_m3: f64,
         coarse_gold: bool,
     ) -> Result<TaskSpec, LabourError> {
-        let (rate_row, recovery_row) = match (tool, coarse_gold) {
-            (LabourTool::GoldPan, true) => ("gold_pan", "pan_coarse_gold"),
-            (LabourTool::GoldPan, false) => ("gold_pan", "pan_fine_gold"),
-            (LabourTool::SluiceBox, true) => ("sluice_box", "sluice_coarse_gold"),
-            (LabourTool::SluiceBox, false) => ("sluice_box", "sluice_fine_gold"),
+        let recovery_row = match (tool, coarse_gold) {
+            (LabourTool::GoldPan, true) => "pan_coarse_gold",
+            (LabourTool::GoldPan, false) => "pan_fine_gold",
+            (LabourTool::SluiceBox, true) => "sluice_coarse_gold",
+            (LabourTool::SluiceBox, false) => "sluice_fine_gold",
             _ => return Err(LabourError::MissingReference("a panning tool".into())),
         };
-        let volume = self
-            .table_range(ReferenceDomain::Labour, "gold_panning_throughput", rate_row)?
-            .mid();
+        let volume = self.gravel_washed_m3_per_day(tool)?;
         let recovery = self
             .table_range(
                 ReferenceDomain::Labour,

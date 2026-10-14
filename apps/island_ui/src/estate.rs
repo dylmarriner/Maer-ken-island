@@ -123,6 +123,85 @@ pub fn rooms(layout: &EstateLayout) -> Vec<Placed> {
         .collect()
 }
 
+/// The walls of each room, as an outline: its four corners on the floor,
+/// in order round it, for a line drawing rather than a solid.
+///
+/// Only `Room`s have walls; a `Zone` is part of an open floor (a bay of
+/// the shed) and a `WholeBuilding` is the building's own box. Drawn as
+/// lines because the island gives a room's extent and nothing about how
+/// thick or tall its walls are; a line claims neither.
+pub fn room_outlines(layout: &EstateLayout) -> Vec<(String, [Point; 4])> {
+    let origin = (layout.patch.x0, layout.patch.y0);
+    // Just above the floor's top face: a floor is drawn centred
+    // `FLOOR_THICKNESS_M` up and that thick, so its top is at one and a
+    // half thicknesses, and a line any lower is inside it and hidden.
+    let floor = 2.0 * f64::from(FLOOR_THICKNESS_M);
+    layout
+        .spaces
+        .iter()
+        .filter(|space| space.kind == "Room")
+        .map(|space| {
+            let r = &space.rect_m;
+            let corner = |x: f64, y: f64| estate_of(origin, x, y, floor);
+            (
+                space.label.clone(),
+                [
+                    corner(r.x0, r.y0),
+                    corner(r.x1, r.y0),
+                    corner(r.x1, r.y1),
+                    corner(r.x0, r.y1),
+                ],
+            )
+        })
+        .collect()
+}
+
+/// Where each door is, on the floor in the estate frame, and how tall a
+/// marker for it may stand: the eaves of the building it is in (the
+/// island's own height), or a storey where it is in none.
+pub fn door_marks(layout: &EstateLayout) -> Vec<(Point, f32)> {
+    let origin = (layout.patch.x0, layout.patch.y0);
+    layout
+        .doors
+        .iter()
+        .map(|door| {
+            let (x, y) = door.position_m;
+            let eaves = layout
+                .buildings
+                .iter()
+                .filter(|b| b.height_m > 0.0)
+                // A door in an outside wall sits on its edge: inclusive.
+                .find(|b| {
+                    let r = &b.rect_m;
+                    (r.x0.min(r.x1)..=r.x0.max(r.x1)).contains(&x)
+                        && (r.y0.min(r.y1)..=r.y0.max(r.y1)).contains(&y)
+                })
+                .map_or(WALL_HEIGHT_M, |b| b.height_m as f32);
+            (estate_of(origin, x, y, 0.0), eaves)
+        })
+        .collect()
+}
+
+/// Where a door in `label` leads, in words: the other side's label, or
+/// "outdoors".
+fn doors_of(layout: &EstateLayout, label: &str) -> Vec<String> {
+    layout
+        .doors
+        .iter()
+        .filter_map(|door| {
+            let here = Some(label);
+            if door.a.as_deref() == here {
+                Some(door.b.clone())
+            } else if door.b.as_deref() == here {
+                Some(door.a.clone())
+            } else {
+                None
+            }
+        })
+        .map(|other| other.map_or_else(|| "outdoors".to_string(), |o| format!("the {o}")))
+        .collect()
+}
+
 /// Everything standing on the estate, the four machines in the computer
 /// room included.
 pub fn things(layout: &EstateLayout) -> Vec<Placed> {
@@ -332,6 +411,7 @@ pub fn describe(layout: &EstateLayout, picked: Picked) -> Option<Vec<String>> {
                 .items_in(&space.label)
                 .map(|item| item.name.as_str())
                 .collect();
+            let doors = doors_of(layout, &space.label);
             vec![
                 space.label.clone(),
                 format!("A {}", words(&space.kind)),
@@ -345,6 +425,11 @@ pub fn describe(layout: &EstateLayout, picked: Picked) -> Option<Vec<String>> {
                 match inside.len() {
                     0 => "Nothing placed in it".to_string(),
                     n => format!("{n} things in it: {}", inside.join(", ")),
+                },
+                match doors.len() {
+                    0 => "No door".to_string(),
+                    1 => format!("A door to {}", doors[0]),
+                    n => format!("{n} doors: to {}", doors.join(", to ")),
                 },
             ]
         }
@@ -440,7 +525,7 @@ pub const MIN_LOOK_M: f32 = 3.0;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mk_island_api::{BuildingFootprint, PlacedItem, SpaceRect};
+    use mk_island_api::{BuildingFootprint, Doorway, PlacedItem, SpaceRect};
 
     fn rect(x0: f64, y0: f64, x1: f64, y1: f64) -> Rect {
         Rect { x0, y0, x1, y1 }
@@ -479,6 +564,26 @@ mod tests {
                 kind: "Room".to_string(),
                 rect_m: rect(113_964.0, 124_012.0, 113_968.0, 124_016.0),
             }],
+            doors: vec![
+                // The computer room's door, in its south wall.
+                Doorway {
+                    a: Some("Computer Room".to_string()),
+                    b: None,
+                    position_m: (113_966.0, 124_012.0),
+                },
+                // The shed's, on its south edge.
+                Doorway {
+                    a: None,
+                    b: Some("Tool Shed".to_string()),
+                    position_m: (113_978.0, 124_010.0),
+                },
+                // A gate out on the open yard, in no building.
+                Doorway {
+                    a: None,
+                    b: None,
+                    position_m: (113_955.0, 124_030.0),
+                },
+            ],
             items: vec![
                 PlacedItem {
                     name: "Gem-D's Computer (gaming, 3 monitors)".to_string(),
@@ -745,6 +850,44 @@ mod tests {
     }
 
     #[test]
+    fn a_room_is_outlined_on_its_floor_and_a_zone_or_whole_building_is_not() {
+        let mut layout = layout();
+        layout.spaces.push(SpaceRect {
+            id: 8,
+            label: "Bay 1".to_string(),
+            kind: "Zone".to_string(),
+            rect_m: rect(113_975.0, 124_010.0, 113_978.0, 124_015.0),
+        });
+        let outlines = room_outlines(&layout);
+        assert_eq!(outlines.len(), 1, "the zone has no walls");
+        let (name, corners) = &outlines[0];
+        assert_eq!(name, "Computer Room");
+        // Round the room in order, each side its 4 m, on the floor.
+        for i in 0..4 {
+            let (a, b) = (corners[i], corners[(i + 1) % 4]);
+            let side = ((a.x - b.x).powi(2) + (a.z - b.z).powi(2)).sqrt();
+            assert!((side - 4.0).abs() < 1e-3, "side {i} is {side} m");
+            // Above the floor's top face, which is at 1.5 thicknesses.
+            assert!(a.y > 1.5 * FLOOR_THICKNESS_M, "{a:?} is inside the floor");
+        }
+    }
+
+    #[test]
+    fn a_door_is_marked_where_the_island_hangs_it_up_to_its_buildings_eaves() {
+        let layout = layout();
+        let marks = door_marks(&layout);
+        assert_eq!(marks.len(), 3);
+        let origin = (layout.patch.x0, layout.patch.y0);
+        assert_eq!(marks[0].0, estate_of(origin, 113_966.0, 124_012.0, 0.0));
+        // In the house, the shed, and neither: the island's two eaves
+        // heights, and a storey for the gate in the open.
+        assert_eq!(
+            marks.iter().map(|m| m.1).collect::<Vec<_>>(),
+            [3.0, 6.0, WALL_HEIGHT_M]
+        );
+    }
+
+    #[test]
     fn a_click_on_the_open_yard_picks_nothing() {
         let layout = layout();
         // The yard's south-west corner, clear of both buildings.
@@ -835,6 +978,7 @@ mod tests {
             room.iter().any(|l| l.starts_with("2 things in it")),
             "{room:?}"
         );
+        assert!(room.contains(&"A door to outdoors".to_string()), "{room:?}");
 
         let house = describe(&layout, Picked::Building(0)).unwrap();
         assert!(house.contains(&"A house".to_string()));
