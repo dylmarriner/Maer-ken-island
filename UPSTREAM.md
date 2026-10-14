@@ -417,3 +417,8 @@ have no upstream counterpart.
    ground (`regional::species`, Phase 3 Task 1b) without `initialize` installing them in a
    planetary system or logging 4,096 creation events. **No behaviour change**: nothing upstream
    calls it.
+5. `mk_core::flux` — a new reservoir `AtmosCH4` (carbon in atmospheric methane), appended
+   last so every earlier index and any serialized ledger is unchanged; the exhaustive
+   `reservoir_all` test now covers 36, and it is an interior reservoir. The island's oil and gas
+   fields (`regional::industry::petroleum`, Phase 4b Task 4) book leaked methane into it.
+   **No behaviour change** upstream: nothing upstream writes to it.

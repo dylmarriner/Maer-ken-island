@@ -11,6 +11,7 @@ pub mod deposits;
 pub mod drying;
 pub mod ecology;
 pub mod edge;
+pub mod edible;
 pub mod energy;
 pub mod estate_layout;
 pub mod fauna;

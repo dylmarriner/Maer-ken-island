@@ -1,0 +1,352 @@
+{
+  "id": "gas",
+  "domain": "industry",
+  "title": "Gas processing: natural gas composition, liquids recovery and heating values",
+  "retrieved": "2026-10-14",
+  "licence": "Numerical values cited as facts with attribution; no text, figures or datasets reproduced.",
+  "sources": [
+    {
+      "key": "nzic_kapuni",
+      "citation": "NZ Institute of Chemistry (n.d.). The Processing of Natural Gas at Kapuni, Table 1 'Composition of Kapuni gas before further processing by NGC' (nzic.org.nz/unsecure_files/book/7C.pdf).",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "unfccc_nz_review",
+      "citation": "UNFCCC expert review report for New Zealand (example, Energy, section C.1 stationary combustion: gaseous fuels), citing Baines (1993) New Zealand Energy Information Handbook; member.ghginstitute.org/ghgcourses/UNFCCC/updated/feb2010/energy/l04_t02_p39.html.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "funnell2000",
+      "citation": "Funnell, R. H. et al. (2000). Scenarios of Oil and Gas Migration into the Maui Field, Taranaki Basin, New Zealand. AAPG Search and Discovery Article 90913 (abstract).",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "ipcc2006",
+      "citation": "IPCC (2006). 2006 IPCC Guidelines for National Greenhouse Gas Inventories, Vol. 2 Energy, Ch. 1, Table 1.2 (default net calorific values).",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "offshoretech_kupe",
+      "citation": "Offshore Technology. Kupe Gas Project, Taranaki Basin, New Zealand (offshore-technology.com/projects/kupe-field/), accessed 2026-10-14.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "eia_ng_prod",
+      "citation": "US Energy Information Administration. Natural Gas Gross Withdrawals and Production, annual, U.S. (eia.gov/dnav/ng/ng_prod_sum_dc_NUS_mmcf_a.htm), release 9/30/2026, rows Marketed Production, NGPL Production Gaseous Equivalent, Dry Production.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "eia_nga_2024",
+      "citation": "US Energy Information Administration, Natural Gas Annual 2024, Table 1 'Summary statistics for natural gas in the United States, 2020-2024' (eia.gov/naturalgas/Annual/pdf/table_001.pdf) and Table 14 'Consumption of natural gas by state, 2020-2024' (eia.gov/naturalgas/annual/pdf/table_014.pdf); retrieved 2026-10-14. Percentages in this pack are my arithmetic on EIA volumes.",
+      "licence": "Facts cited with attribution"
+    }
+  ],
+  "items": [
+    {
+      "key": "kapuni_raw_gas_composition",
+      "description": "Composition of Kapuni gas before further processing (combined low/high-pressure separator and stabiliser gas); mol%",
+      "unit": "mol%",
+      "source": "nzic_kapuni",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "component",
+          "columns": [
+            "mol_pct"
+          ],
+          "rows": [
+            {
+              "label": "Carbon dioxide",
+              "values": [
+                42.6
+              ]
+            },
+            {
+              "label": "Nitrogen",
+              "values": [
+                0.3
+              ]
+            },
+            {
+              "label": "Methane",
+              "values": [
+                45.8
+              ]
+            },
+            {
+              "label": "Ethane",
+              "values": [
+                5.5
+              ]
+            },
+            {
+              "label": "Propane",
+              "values": [
+                3.5
+              ]
+            },
+            {
+              "label": "Butanes",
+              "values": [
+                1.6
+              ]
+            },
+            {
+              "label": "Pentanes",
+              "values": [
+                0.4
+              ]
+            },
+            {
+              "label": "Hexanes and heavier",
+              "values": [
+                0.3
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Table 1: 'Carbon dioxide 42.6; Nitrogen 0.3; Methane 45.8; Ethane 5.5; Propane 3.5; Butanes 1.6; Pentanes 0.4; Hexanes and heavier 0.3'. Text: 'about 43% being carbon dioxide', calorific value 27.3 MJ/m3, specific gravity 1.07. Historic (pre-NGC) analysis."
+    },
+    {
+      "key": "nz_sales_gas_ethane_range",
+      "description": "Ethane content of NZ field sales gas streams (typical compositions)",
+      "unit": "vol%",
+      "source": "unfccc_nz_review",
+      "confidence": "low",
+      "value": {
+        "range": {
+          "min": 3.8,
+          "max": 11.2
+        }
+      },
+      "note": "'ethane (3.8 to 11.2 per cent by volume) and propane (2.9 to 11.7 per cent by volume)', citing Baines (1993)."
+    },
+    {
+      "key": "nz_sales_gas_propane_range",
+      "description": "Propane content of NZ field sales gas streams (typical compositions)",
+      "unit": "vol%",
+      "source": "unfccc_nz_review",
+      "confidence": "low",
+      "value": {
+        "range": {
+          "min": 2.9,
+          "max": 11.7
+        }
+      },
+      "note": "'propane (2.9 to 11.7 per cent by volume)', citing Baines (1993)."
+    },
+    {
+      "key": "nz_sales_gas_co2",
+      "description": "CO2 concentration of the majority of natural gas distributed in New Zealand",
+      "unit": "vol%",
+      "source": "unfccc_nz_review",
+      "confidence": "low",
+      "value": {
+        "point": 4
+      },
+      "note": "'the majority of the natural gas that is distributed in New Zealand has a CO2 concentration of about 4 per cent.'"
+    },
+    {
+      "key": "maui_methane",
+      "description": "Methane content of Maui gas (basis, mol or vol, not stated in the abstract)",
+      "unit": "%",
+      "source": "funnell2000",
+      "confidence": "low",
+      "value": {
+        "point": 85
+      },
+      "note": "'Maui gases consist of ~85% methane and 3He/4He ratios, indicated by a RMRA ratio of 3.4'."
+    },
+    {
+      "key": "ncv_natural_gas_lpg",
+      "description": "IPCC default net calorific values: natural gas, LPG, natural gas liquids, ethane (TJ/Gg = MJ/kg) with 95% interval lower/upper",
+      "unit": "TJ/Gg",
+      "source": "ipcc2006",
+      "confidence": "high",
+      "value": {
+        "table": {
+          "row_label": "fuel",
+          "columns": [
+            "ncv",
+            "lower",
+            "upper"
+          ],
+          "rows": [
+            {
+              "label": "Natural Gas",
+              "values": [
+                48.0,
+                46.5,
+                50.4
+              ]
+            },
+            {
+              "label": "Liquefied Petroleum Gases",
+              "values": [
+                47.3,
+                44.8,
+                52.2
+              ]
+            },
+            {
+              "label": "Natural Gas Liquids",
+              "values": [
+                44.2,
+                40.9,
+                46.9
+              ]
+            },
+            {
+              "label": "Ethane",
+              "values": [
+                46.4,
+                44.9,
+                48.8
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Table 1.2: 'Natural Gas 48.0 46.5 50.4'; 'Liquefied Petroleum Gases 47.3 44.8 52.2'."
+    },
+    {
+      "key": "kupe_annual_products",
+      "description": "Kupe gas project annual production of sales gas, condensate and LPG (ratio per PJ of sales gas: about 4.5 t LPG and 85,000 bbl condensate, derived 90,000/20 and 1.7e6/20; per sales gas, not raw gas)",
+      "unit": "PJ/yr; bbl/yr; t/yr",
+      "source": "offshoretech_kupe",
+      "confidence": "low",
+      "value": {
+        "table": {
+          "row_label": "product",
+          "columns": [
+            "annual_quantity"
+          ],
+          "rows": [
+            {
+              "label": "sales gas (PJ/yr)",
+              "values": [
+                20
+              ]
+            },
+            {
+              "label": "condensate (bbl/yr)",
+              "values": [
+                1700000
+              ]
+            },
+            {
+              "label": "LPG (t/yr)",
+              "values": [
+                90000
+              ]
+            }
+          ]
+        }
+      },
+      "note": "'The project produces about 20 petajoules (PJ) per year of sales gas'; 'Kupe produces 1.7m barrels of condensate and 90,000t of LPG per year.'"
+    },
+    {
+      "key": "kupe_reserves",
+      "description": "Kupe recoverable proven and probable reserves",
+      "unit": "PJ; bbl; t",
+      "source": "offshoretech_kupe",
+      "confidence": "low",
+      "value": {
+        "table": {
+          "row_label": "product",
+          "columns": [
+            "reserves"
+          ],
+          "rows": [
+            {
+              "label": "sales gas (PJ)",
+              "values": [
+                254
+              ]
+            },
+            {
+              "label": "light oil/condensate (bbl)",
+              "values": [
+                14700000
+              ]
+            },
+            {
+              "label": "LPG (t)",
+              "values": [
+                1100000
+              ]
+            }
+          ]
+        }
+      },
+      "note": "'Recoverable proven and probable reserves for the project are estimated at 254PJ of sales gas ... 14.7m barrels of light oil / condensate and 1.1 million tonnes of LPG'."
+    },
+    {
+      "key": "us_ngl_extraction_shrinkage",
+      "description": "US natural gas: marketed production, NGPL production (gaseous equivalent) and dry production; NGPL extraction as share of marketed gas was 0.0912 in 2025 (derived NGPL/marketed; 2023 and 2024 about 0.0825 and 0.0884)",
+      "unit": "MMcf/yr",
+      "source": "eia_ng_prod",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "year",
+          "columns": [
+            "marketed_production",
+            "ngpl_gaseous_equivalent",
+            "dry_production"
+          ],
+          "rows": [
+            {
+              "label": "2023",
+              "values": [
+                41037735,
+                3385297,
+                37652438
+              ]
+            },
+            {
+              "label": "2024",
+              "values": [
+                41383893,
+                3658962,
+                37724931
+              ]
+            },
+            {
+              "label": "2025",
+              "values": [
+                43229110,
+                3941527,
+                39287583
+              ]
+            }
+          ]
+        }
+      },
+      "note": "EIA table rows 'Marketed Production', 'NGPL Production, Gaseous Equivalent', 'Dry Production': 2025: 43,229,110 / 3,941,527 / 39,287,583 (dry = marketed minus NGPL). Shrinkage fraction derived by division."
+    },
+    {
+      "key": "us_gas_plant_fuel_share_of_marketed",
+      "description": "US natural gas plant fuel as a share of marketed production, 2024 (arithmetic on EIA volumes; denominator is all marketed gas, not only gas processed)",
+      "unit": "% of marketed production",
+      "source": "eia_nga_2024",
+      "confidence": "low",
+      "value": {
+        "point": 1.17
+      },
+      "note": "Derived by me. Table 1 (2024): 'Plant fuel 484,359' MMcf; 'Marketed production 41,383,893'; 'Total gross withdrawals 45,867,761'. 484,359 / 41,383,893 = 1.17%; versus gross withdrawals 1.06%. Table 14: '2024 Total ... Plant fuel 484,359'; the 2020-2023 plant fuel (518,913; 480,658; 467,511; 474,788 MMcf) is of the same order. Gas actually processed is not reported in these tables, so the share of processed gas would differ."
+    },
+    {
+      "key": "us_gas_plant_extraction_shrinkage_share_of_marketed",
+      "description": "US natural gas plant liquids extraction shrinkage (NGPL gaseous equivalent) as a share of marketed production, 2024; combined with plant fuel about 10 %",
+      "unit": "% of marketed production",
+      "source": "eia_nga_2024",
+      "confidence": "low",
+      "value": {
+        "point": 8.84
+      },
+      "note": "Derived by me. Table 1 (2024): 'NGPL production, gaseous equivalent 3,658,962' MMcf; 'Marketed production 41,383,893'; note: 'Total dry production volumes are equal to marketed production minus NGPL production.' 3,658,962 / 41,383,893 = 8.84%; plus plant fuel 1.17% = 10.0% total plant fuel and shrinkage against marketed gas. Includes liquids from rich gas and gas not run through plants in the denominator; no GPSA or per-plant percentage found."
+    }
+  ]
+}

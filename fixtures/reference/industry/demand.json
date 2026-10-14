@@ -1,0 +1,453 @@
+{
+  "id": "demand",
+  "domain": "industry",
+  "title": "New Zealand household energy demand: electricity, end uses and private vehicle travel",
+  "retrieved": "2026-10-14",
+  "licence": "Numerical values cited as facts with attribution; no text, figures or datasets reproduced.",
+  "sources": [
+    {
+      "key": "bu486",
+      "citation": "BRANZ (June 2007). Bulletin 486: BRANZ Household Energy End-use Project (HEEP), sections 3.0.3, 3.1.1, 4.1, 5.1, 6.1 and Figures 1-4 (citing HEEP Year 10 report; HEEP final report is SR221, Isaacs et al. 2010), branz.co.nz/documents/3958/BU486-BRANZ-Household-Energy-End-Use-Project-HEEP_LdjjDCn.pdf, retrieved 2026-10-14.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "mbie_icp",
+      "citation": "MBIE, Energy in New Zealand: Electricity (June 2025), as republished by Figure.NZ, 'Average electricity consumption per ICP for New Zealand households' (estimated sales, 1999-2024), figure.nz/chart/WYKrv65R1rBAfLzO, retrieved 2026-10-14.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "mbie_qrss",
+      "citation": "MBIE Quarterly Retail Sales Survey (Electricity and Gas), as republished by Figure.NZ, 'Average electricity consumption per household in New Zealand', kWh per quarter 2015 Q1-2025 Q1, figure.nz/chart/4uo7UXl7WRE0CsL6, retrieved 2026-10-14.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "mot_dts2015",
+      "citation": "Ministry of Transport (March 2015). Driver Travel: New Zealand Household Travel Survey 2011-2014, Key facts and 'Who does the driving?', transport.govt.nz/assets/Uploads/Report/Drivers-Travel-Survey-2015.pdf, retrieved 2026-10-14.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "mot_fleet2021",
+      "citation": "Ministry of Transport. Annual Fleet Statistics (2000-2021 edition), section 1 and 2.1-2.2, transport.govt.nz/assets/Uploads/Report/AnnualFleetStatistics.pdf, retrieved 2026-10-14.",
+      "licence": "Facts cited with attribution"
+    }
+  ],
+  "items": [
+    {
+      "key": "household_electricity_kwh_per_icp_2024",
+      "description": "Average residential electricity consumption per ICP (household connection), 2024",
+      "unit": "kWh/year",
+      "source": "mbie_icp",
+      "confidence": "high",
+      "value": {
+        "point": 7483
+      },
+      "note": "Figure.NZ table 'Based on estimated sales, 1999-2024, kilowatt hours': 2024 = 7,483.035438999; 2023 = 7,457.9; 1999 = 7,854.2. Based on MBIE Energy in New Zealand: Electricity June 2025."
+    },
+    {
+      "key": "household_electricity_kwh_per_icp_series",
+      "description": "Average residential electricity per ICP, 2014-2024",
+      "unit": "kWh/year",
+      "source": "mbie_icp",
+      "confidence": "high",
+      "value": {
+        "table": {
+          "row_label": "Year",
+          "columns": [
+            "kWh per ICP"
+          ],
+          "rows": [
+            {
+              "label": "2014",
+              "values": [
+                7341.1
+              ]
+            },
+            {
+              "label": "2015",
+              "values": [
+                7246.4
+              ]
+            },
+            {
+              "label": "2016",
+              "values": [
+                7130.9
+              ]
+            },
+            {
+              "label": "2017",
+              "values": [
+                7131.9
+              ]
+            },
+            {
+              "label": "2018",
+              "values": [
+                7339.4
+              ]
+            },
+            {
+              "label": "2019",
+              "values": [
+                7328.9
+              ]
+            },
+            {
+              "label": "2020",
+              "values": [
+                7420.2
+              ]
+            },
+            {
+              "label": "2021",
+              "values": [
+                7550.0
+              ]
+            },
+            {
+              "label": "2022",
+              "values": [
+                7382.4
+              ]
+            },
+            {
+              "label": "2023",
+              "values": [
+                7457.9
+              ]
+            },
+            {
+              "label": "2024",
+              "values": [
+                7483.0
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Same Figure.NZ table; e.g. \"2016 | 7,130.911413334\" (low) and \"2021 | 7,550.045363609\" (high) in 2014-2024."
+    },
+    {
+      "key": "household_electricity_kwh_per_quarter_2024",
+      "description": "Average electricity consumption per household by quarter, 2024 (shows winter peak)",
+      "unit": "kWh/quarter",
+      "source": "mbie_qrss",
+      "confidence": "high",
+      "value": {
+        "table": {
+          "row_label": "Quarter 2024",
+          "columns": [
+            "kWh per household"
+          ],
+          "rows": [
+            {
+              "label": "Q1 (Jan-Mar)",
+              "values": [
+                1410.6
+              ]
+            },
+            {
+              "label": "Q2 (Apr-Jun)",
+              "values": [
+                1814.5
+              ]
+            },
+            {
+              "label": "Q3 (Jul-Sep)",
+              "values": [
+                2262.1
+              ]
+            },
+            {
+              "label": "Q4 (Oct-Dec)",
+              "values": [
+                1596.0
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Table rows: \"2024 Q1 | 1,410.598015429\", \"2024 Q2 | 1,814.460993343\", \"2024 Q3 | 2,262.117023888\", \"2024 Q4 | 1,596.047874172\". Sum = about 7,083 kWh/household/year (derived), slightly below the per-ICP series because the denominators differ. Q3/Q1 ratio 1.60."
+    },
+    {
+      "key": "heep_avg_household_energy_all_fuels",
+      "description": "Average household delivered energy, all fuels, HEEP 2005 sample",
+      "unit": "kWh/year",
+      "source": "bu486",
+      "confidence": "medium",
+      "value": {
+        "range": {
+          "min": 6900,
+          "max": 14400,
+          "typical": 11000
+        }
+      },
+      "note": "\"New Zealand average household energy consumption is approximately 11,000 kWh/yr\"; \"The energy from all fuels used by the top 20% was over 14,400 kWh/year, while for the bottom 20% of users it was less than 6,900 kWh/year\" (range = quintile bounds). Includes wood, coal and gas as well as electricity."
+    },
+    {
+      "key": "heep_end_use_split",
+      "description": "Household total energy use by end-use, all fuels (HEEP)",
+      "unit": "% of total household energy",
+      "source": "bu486",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "End use",
+          "columns": [
+            "Share (%)"
+          ],
+          "rows": [
+            {
+              "label": "Space heating",
+              "values": [
+                34
+              ]
+            },
+            {
+              "label": "Hot water",
+              "values": [
+                29
+              ]
+            },
+            {
+              "label": "Other appliances",
+              "values": [
+                13
+              ]
+            },
+            {
+              "label": "Refrigeration",
+              "values": [
+                10
+              ]
+            },
+            {
+              "label": "Lighting",
+              "values": [
+                8
+              ]
+            },
+            {
+              "label": "Range (cooking)",
+              "values": [
+                6
+              ]
+            }
+          ]
+        }
+      },
+      "note": "\"Household energy use splits into three almost equal areas: space heating (average 34%), hot water heating (29%) and all other uses (37%).\" Figure 2 labels: Hot Water 29%, Space Heating 34%, Refrigeration 10%, Range 6%, Lighting 8%, Other Appliances 13%. Space heating share is up to half in colder regions."
+    },
+    {
+      "key": "heep_cooking_energy_derived",
+      "description": "Derived household cooking (range) energy",
+      "unit": "kWh/year",
+      "source": "bu486",
+      "confidence": "low",
+      "value": {
+        "point": 660
+      },
+      "note": "Derivation only: Range share 6% (Figure 2) x approx. 11,000 kWh/yr average household energy = 660 kWh/yr. No direct cooking kWh figure was read. The bulletin says 'The big three uses are cooking, refrigeration and lighting' among appliance uses."
+    },
+    {
+      "key": "heep_fuel_split",
+      "description": "Household total energy use by fuel (HEEP)",
+      "unit": "% of total household energy",
+      "source": "bu486",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "Fuel",
+          "columns": [
+            "Share (%)"
+          ],
+          "rows": [
+            {
+              "label": "Electricity",
+              "values": [
+                69
+              ]
+            },
+            {
+              "label": "Solid fuel (wood, coal)",
+              "values": [
+                20
+              ]
+            },
+            {
+              "label": "Natural gas",
+              "values": [
+                9
+              ]
+            },
+            {
+              "label": "LPG",
+              "values": [
+                2
+              ]
+            },
+            {
+              "label": "Oil",
+              "values": [
+                0
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Figure 1 labels: \"Electricity 69%\", \"Solid Fuel 20%\", \"Gas 9%\", \"LPG 2%\", \"Oil 0%\". Text: \"Piped natural gas is only found in about 14% of houses\"."
+    },
+    {
+      "key": "heep_space_heating_fuel",
+      "description": "Gross space-heating energy by fuel (HEEP)",
+      "unit": "% of space-heating energy",
+      "source": "bu486",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "Fuel",
+          "columns": [
+            "Share (%)"
+          ],
+          "rows": [
+            {
+              "label": "Solid fuel",
+              "values": [
+                56
+              ]
+            },
+            {
+              "label": "Electricity",
+              "values": [
+                24
+              ]
+            },
+            {
+              "label": "Reticulated gas",
+              "values": [
+                14
+              ]
+            },
+            {
+              "label": "LPG",
+              "values": [
+                6
+              ]
+            }
+          ]
+        }
+      },
+      "note": "\"This heating is dominated by solid fuels (56%), with electricity coming a distant second at 24%\"; Figure 3 labels Reticulated Gas 14%, LPG 6%. \"Nearly three quarters (72%) of houses use space heating from April to October.\""
+    },
+    {
+      "key": "heep_water_heating_fuel",
+      "description": "Domestic hot water energy by fuel (HEEP)",
+      "unit": "% of water-heating energy",
+      "source": "bu486",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "Fuel",
+          "columns": [
+            "Share (%)"
+          ],
+          "rows": [
+            {
+              "label": "Electricity",
+              "values": [
+                75
+              ]
+            },
+            {
+              "label": "Natural gas",
+              "values": [
+                20
+              ]
+            },
+            {
+              "label": "Wetback",
+              "values": [
+                5
+              ]
+            }
+          ]
+        }
+      },
+      "note": "\"75% of water heating energy comes from electricity ... 20% comes from natural gas ... 5% of water heating energy comes from wetbacks.\" Rule of thumb: \"45 litres of hot water per day per person\"."
+    },
+    {
+      "key": "heep_baseload_power",
+      "description": "Baseload (standby and always-on appliances) in an average house",
+      "unit": "W continuous",
+      "source": "bu486",
+      "confidence": "medium",
+      "value": {
+        "point": 112
+      },
+      "note": "\"this use adds up to about 112 W continuous in an average house - about 13% of the total electricity use.\""
+    },
+    {
+      "key": "heep_occupants_per_house",
+      "description": "Average occupants per HEEP house",
+      "unit": "people/house",
+      "source": "bu486",
+      "confidence": "medium",
+      "value": {
+        "point": 2.9
+      },
+      "note": "\"on average, each house had 1.4 televisions and 2.9 people\"."
+    },
+    {
+      "key": "km_per_driver_per_year",
+      "description": "Average annual distance driven per driver in cars, vans, utes and SUVs (household travel survey 2011-2014)",
+      "unit": "km/driver/year",
+      "source": "mot_dts2015",
+      "confidence": "low",
+      "value": {
+        "table": {
+          "row_label": "Sex",
+          "columns": [
+            "km per driver per year (just over)"
+          ],
+          "rows": [
+            {
+              "label": "Male",
+              "values": [
+                12000
+              ]
+            },
+            {
+              "label": "Female",
+              "values": [
+                8000
+              ]
+            }
+          ]
+        }
+      },
+      "note": "\"On average, New Zealand men drive just over 12,000 km per driver per year, while women on average drive just over 8,000 km per driver per year.\" Values rounded to the stated floors; data are 2011-2014, not current."
+    },
+    {
+      "key": "vehicles_per_1000_people_2021",
+      "description": "Total motor vehicle fleet per 1,000 people, 2021",
+      "unit": "vehicles/1,000 people",
+      "source": "mot_fleet2021",
+      "confidence": "high",
+      "value": {
+        "point": 889
+      },
+      "note": "\"The total motor vehicle fleet of 2021 equates to 889 vehicles per 1,000 people - one of the highest rates of vehicle ownership in the world.\" Light vehicles are \"about 91%\" of the fleet."
+    },
+    {
+      "key": "total_vkt_2021",
+      "description": "Total vehicle kilometres travelled in NZ, 2021",
+      "unit": "billion km",
+      "source": "mot_fleet2021",
+      "confidence": "high",
+      "value": {
+        "point": 47.4
+      },
+      "note": "\"Total vehicle kilometres travelled in 2021 was 47.4 billion kilometres - close to the pre-pandemic value (47.8 billion kilometres).\""
+    }
+  ]
+}

@@ -1,0 +1,858 @@
+{
+  "id": "refinery",
+  "domain": "industry",
+  "title": "Small refinery: crude assay, yields by configuration, energy, CO2, densities and carbon content",
+  "retrieved": "2026-10-14",
+  "licence": "Numerical values cited as facts with attribution; no text, figures or datasets reproduced.",
+  "sources": [
+    {
+      "key": "troll2026",
+      "citation": "Equinor (2026). Crude oil assay: Troll Blend, reference TROLLBLEND202602 (sample 07 Feb 2026, issued 25 Mar 2026), 'Crude Summary Report' sheet; https://www.equinor.com/energy/crude-oil-assays",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "ipcc2006",
+      "citation": "IPCC (2006). 2006 IPCC Guidelines for National Greenhouse Gas Inventories, Vol. 2 Energy, Ch. 1 Introduction, Table 1.2 (default net calorific values) and Table 1.3 (default carbon content). IGES, Hayama.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "downey_oil101",
+      "citation": "Downey, M. Oil 101, Chapter 7: Refining, Table 7-2 'Approximate product yield by refinery type (% by volume)'; https://oil101.morgandowney.com/chapters/refining (accessed 2026-10-14).",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "concawe2018",
+      "citation": "Concawe (2018). Air emissions from the refining sector: Analysis of E-PRTR data 2007-2014. Report no. 4/18, Table 18.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "jacobs_stanford2020",
+      "citation": "Jing, L., El-Houjeiri, H. M., Monfort, J.-C., et al. (2020). Carbon intensity of global crude oil refining and mitigation potential. Nature Climate Change 10, 526-532 (abstract, via eao.stanford.edu).",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "nz_efs2011",
+      "citation": "New Zealand Engine Fuel Specifications Regulations 2011 (SR 2011/352), Schedule 2 'Requirements for diesel', density at 15 C; www.legislation.govt.nz.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "wiki_gasoline",
+      "citation": "Wikipedia, 'Gasoline' (accessed 2026-10-14), density statements; secondary source.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "wiki_jetfuel",
+      "citation": "Wikipedia, 'Jet fuel', Typical physical properties table (density at 15 C), citing Air BP Handbook of Products pp. 11-13; secondary source.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "nz_efsr2011_2026",
+      "citation": "Engine Fuel Specifications Regulations 2011 (SL 2011/352), New Zealand, as amended to the Engine Fuel Specifications Amendment Regulations 2026 (SL 2026/57): Schedule 1 (petrol) and Schedule 2 (diesel). legislation.govt.nz, read 2026-10-14.",
+      "licence": "Crown copyright; facts cited with attribution"
+    },
+    {
+      "key": "nefthim",
+      "citation": "Nefthim, 'Catalytic reforming' manual page (nefthim.com/manual/Reforming-catalyst_Catalytic-reforming/), paragraph on semi-regenerative units in Russia; retrieved 2026-10-14. Vendor page, wt% basis.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "speight_5e",
+      "citation": "Speight, J. G. The Chemistry and Technology of Petroleum, 5th ed., CRC Press, chapter 24 'Product Improvement and Treating', Tables 24.6 (p. 663) and 24.7 (p. 664) (excerpt pages_from_J.Speight_-_Reforming.pdf, files.engineering.com); retrieved 2026-10-14. Not Gary and Handwerk.",
+      "licence": "Facts cited with attribution"
+    }
+  ],
+  "items": [
+    {
+      "key": "troll_api_gravity",
+      "description": "API gravity of Troll Blend whole crude (light sweet North Sea crude)",
+      "unit": "deg API",
+      "source": "troll2026",
+      "confidence": "high",
+      "value": {
+        "point": 38.77
+      },
+      "note": "Whole Crude Properties: 'API Gravity' 38.77 (Equinor listing: 'Light, low sulphur crude oil')."
+    },
+    {
+      "key": "troll_density_15c",
+      "description": "Density at 15 C of Troll Blend whole crude",
+      "unit": "g/cm3",
+      "source": "troll2026",
+      "confidence": "high",
+      "value": {
+        "point": 0.8307
+      },
+      "note": "Whole Crude Properties: 'Density @ 15C (g/cc)' 0.8307."
+    },
+    {
+      "key": "troll_sulphur",
+      "description": "Total sulphur of Troll Blend whole crude",
+      "unit": "wt%",
+      "source": "troll2026",
+      "confidence": "high",
+      "value": {
+        "point": 0.131
+      },
+      "note": "Whole Crude Properties: 'Total Sulphur (% wt)' 0.131."
+    },
+    {
+      "key": "troll_atmospheric_cut_yields",
+      "description": "Troll Blend assay yields on crude by atmospheric cut (true boiling point ranges), wt% and vol%; the first three rows approximate LPG/gases, light naphtha, heavy naphtha/gasoline, then kerosene/jet (150-250 C), diesel/gasoil (250-370 C) and 370 C+ residue",
+      "unit": "% of crude",
+      "source": "troll2026",
+      "confidence": "high",
+      "value": {
+        "table": {
+          "row_label": "cut",
+          "columns": [
+            "yield_wt_pct",
+            "yield_vol_pct"
+          ],
+          "rows": [
+            {
+              "label": "IBP-C4 (C1-C4 gases incl. LPG range)",
+              "values": [
+                1.843,
+                2.777
+              ]
+            },
+            {
+              "label": "C5-65 C (light naphtha)",
+              "values": [
+                4.114,
+                5.274
+              ]
+            },
+            {
+              "label": "65-100 C",
+              "values": [
+                8.638,
+                9.825
+              ]
+            },
+            {
+              "label": "100-150 C",
+              "values": [
+                13.081,
+                13.982
+              ]
+            },
+            {
+              "label": "150-200 C",
+              "values": [
+                9.163,
+                9.495
+              ]
+            },
+            {
+              "label": "200-250 C",
+              "values": [
+                8.182,
+                8.142
+              ]
+            },
+            {
+              "label": "250-300 C",
+              "values": [
+                10.11,
+                9.762
+              ]
+            },
+            {
+              "label": "300-350 C",
+              "values": [
+                9.746,
+                9.2
+              ]
+            },
+            {
+              "label": "350-370 C",
+              "values": [
+                3.183,
+                2.963
+              ]
+            },
+            {
+              "label": "370 C-FBP (residue)",
+              "values": [
+                31.941,
+                28.581
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Crude Summary Report sheet, 'Cut Data' block; rows 'Yield (% wt)' and 'Yield (% vol)' under 'Atmospheric Cuts'; start/end temperatures rows 35-36. Rounded to 3 dp."
+    },
+    {
+      "key": "troll_vacuum_cut_yields",
+      "description": "Troll Blend assay yields on crude by vacuum cut (the 370 C+ residue split further), wt% and vol%",
+      "unit": "% of crude",
+      "source": "troll2026",
+      "confidence": "high",
+      "value": {
+        "table": {
+          "row_label": "cut",
+          "columns": [
+            "yield_wt_pct",
+            "yield_vol_pct"
+          ],
+          "rows": [
+            {
+              "label": "370-450 C (vacuum gasoil)",
+              "values": [
+                11.957,
+                10.982
+              ]
+            },
+            {
+              "label": "450-500 C (vacuum gasoil)",
+              "values": [
+                6.48,
+                5.877
+              ]
+            },
+            {
+              "label": "500-550 C",
+              "values": [
+                5.094,
+                4.552
+              ]
+            },
+            {
+              "label": "550 C-FBP (vacuum residue)",
+              "values": [
+                8.409,
+                7.171
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Crude Summary Report sheet, 'Cut Data' block; 'Vacuum Cuts' columns 370-450, 450-500, 500-550, 550-FBP; rounded to 3 dp."
+    },
+    {
+      "key": "troll_cut_density_api",
+      "description": "Density at 15 C and API gravity of each Troll Blend atmospheric cut (cut densities approximate naphtha, kerosene, gasoil)",
+      "unit": "g/cm3 and deg API",
+      "source": "troll2026",
+      "confidence": "high",
+      "value": {
+        "table": {
+          "row_label": "cut",
+          "columns": [
+            "density_15c_g_cm3",
+            "api_gravity"
+          ],
+          "rows": [
+            {
+              "label": "C5-65 C (light naphtha)",
+              "values": [
+                0.646,
+                87.5
+              ]
+            },
+            {
+              "label": "65-100 C",
+              "values": [
+                0.7281,
+                62.8
+              ]
+            },
+            {
+              "label": "100-150 C",
+              "values": [
+                0.7748,
+                51.1
+              ]
+            },
+            {
+              "label": "150-200 C",
+              "values": [
+                0.7992,
+                45.5
+              ]
+            },
+            {
+              "label": "200-250 C",
+              "values": [
+                0.8321,
+                38.5
+              ]
+            },
+            {
+              "label": "250-300 C",
+              "values": [
+                0.8576,
+                33.4
+              ]
+            },
+            {
+              "label": "300-350 C",
+              "values": [
+                0.8772,
+                29.7
+              ]
+            },
+            {
+              "label": "350-370 C",
+              "values": [
+                0.8896,
+                27.5
+              ]
+            },
+            {
+              "label": "370 C-FBP (residue)",
+              "values": [
+                0.9254,
+                21.3
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Crude Summary Report sheet, 'Cut Data' block; rows 'Density @ 15C (g/cc)' and 'API Gravity' (no value published for the IBP-C4 gas cut)."
+    },
+    {
+      "key": "troll_cut_sulphur",
+      "description": "Total sulphur of each Troll Blend atmospheric cut",
+      "unit": "wt%",
+      "source": "troll2026",
+      "confidence": "high",
+      "value": {
+        "table": {
+          "row_label": "cut",
+          "columns": [
+            "sulphur_wt_pct"
+          ],
+          "rows": [
+            {
+              "label": "C5-65 C (light naphtha)",
+              "values": [
+                0.0001
+              ]
+            },
+            {
+              "label": "65-100 C",
+              "values": [
+                0.0005
+              ]
+            },
+            {
+              "label": "100-150 C",
+              "values": [
+                0.0016
+              ]
+            },
+            {
+              "label": "150-200 C",
+              "values": [
+                0.0065
+              ]
+            },
+            {
+              "label": "200-250 C",
+              "values": [
+                0.019
+              ]
+            },
+            {
+              "label": "250-300 C",
+              "values": [
+                0.0519
+              ]
+            },
+            {
+              "label": "300-350 C",
+              "values": [
+                0.1377
+              ]
+            },
+            {
+              "label": "350-370 C",
+              "values": [
+                0.2006
+              ]
+            },
+            {
+              "label": "370 C-FBP (residue)",
+              "values": [
+                0.324
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Crude Summary Report sheet, 'Cut Data' block; row 'Total Sulphur (% wt)'; 4 dp."
+    },
+    {
+      "key": "yield_pattern_by_configuration",
+      "description": "Approximate product yield by refinery type; hydroskimming vs cracking (Downey also lists coking). Processing gain is printed in parentheses in the source and entered here as a negative number; refinery fuel is the fuel burned in the refinery as a share of crude",
+      "unit": "vol% of crude",
+      "source": "downey_oil101",
+      "confidence": "low",
+      "value": {
+        "table": {
+          "row_label": "product",
+          "columns": [
+            "hydroskimming",
+            "cracking"
+          ],
+          "rows": [
+            {
+              "label": "Gasoline",
+              "values": [
+                25,
+                45
+              ]
+            },
+            {
+              "label": "Kerosene / jet fuel",
+              "values": [
+                10,
+                10
+              ]
+            },
+            {
+              "label": "Diesel / heating oil",
+              "values": [
+                20,
+                25
+              ]
+            },
+            {
+              "label": "Residual fuel oil",
+              "values": [
+                35,
+                10
+              ]
+            },
+            {
+              "label": "Propane",
+              "values": [
+                0,
+                3
+              ]
+            },
+            {
+              "label": "Other products",
+              "values": [
+                5,
+                5
+              ]
+            },
+            {
+              "label": "Refinery fuel",
+              "values": [
+                8,
+                12
+              ]
+            },
+            {
+              "label": "Processing gain",
+              "values": [
+                -3,
+                -10
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Table 7-2: 'Approximate product yield by refinery type (% by volume)': Gasoline 25 | 45; Residual fuel oil 35 | 10; Refinery fuel 8 | 12; Processing gain (3) | (10). Propane '-' for hydroskimming entered as 0. Illustrative secondary source."
+    },
+    {
+      "key": "refinery_fuel_use_vol_pct",
+      "description": "Refinery fuel use as a share of crude run, hydroskimming vs cracking",
+      "unit": "vol% of crude",
+      "source": "downey_oil101",
+      "confidence": "low",
+      "value": {
+        "range": {
+          "min": 8,
+          "max": 12
+        }
+      },
+      "note": "Table 7-2 row 'Refinery fuel': 8 (hydroskimming), 12 (cracking), 13 (coking)."
+    },
+    {
+      "key": "refinery_energy_use_global",
+      "description": "Volume-weighted global average refining energy use per barrel of crude",
+      "unit": "MJ/bbl",
+      "source": "jacobs_stanford2020",
+      "confidence": "medium",
+      "value": {
+        "point": 606
+      },
+      "note": "Abstract: 'with a volume-weighted average of 40.7 kgCO2e per barrel (equivalent to 7.3 gCO2e MJ-1) and energy use of 606 MJ per barrel.'"
+    },
+    {
+      "key": "refinery_co2_per_bbl_global",
+      "description": "Volume-weighted global average refining carbon intensity; country range 13.9-62.1",
+      "unit": "kg CO2e/bbl crude",
+      "source": "jacobs_stanford2020",
+      "confidence": "medium",
+      "value": {
+        "range": {
+          "min": 13.9,
+          "max": 62.1,
+          "typical": 40.7
+        }
+      },
+      "note": "Abstract: '13.9-62.1 kg of CO2-equivalent (CO2e) per barrel ... with a volume-weighted average of 40.7 kgCO2e per barrel'."
+    },
+    {
+      "key": "refinery_co2_per_t_crude_eu",
+      "description": "Reported CO2 emissions of EU oil refineries per million tonnes of crude processed, 2007 and 2014 (222,000 t/Mt = 0.222 t CO2 per t crude)",
+      "unit": "t CO2 per Mt crude",
+      "source": "concawe2018",
+      "confidence": "high",
+      "value": {
+        "table": {
+          "row_label": "year",
+          "columns": [
+            "t_co2_per_mt_crude"
+          ],
+          "rows": [
+            {
+              "label": "2007",
+              "values": [
+                237000
+              ]
+            },
+            {
+              "label": "2014",
+              "values": [
+                222000
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Table 18 'Variations in reported air emissions in t/Mt crude processed': CO2 237,000 (2007), 222,000 (2014), reduction 6.5%."
+    },
+    {
+      "key": "density_diesel_spec",
+      "description": "NZ diesel specification density limits at 15 C",
+      "unit": "kg/m3",
+      "source": "nz_efs2011",
+      "confidence": "high",
+      "value": {
+        "range": {
+          "min": 820,
+          "max": 850
+        }
+      },
+      "note": "Schedule 2 Requirements for diesel: 'Density at 15C (kg/m3) 820 minimum 850 maximum'."
+    },
+    {
+      "key": "density_gasoline",
+      "description": "Density of finished gasoline: reference value and range",
+      "unit": "kg/L",
+      "source": "wiki_gasoline",
+      "confidence": "low",
+      "value": {
+        "range": {
+          "min": 0.71,
+          "max": 0.77,
+          "typical": 0.755
+        }
+      },
+      "note": "'Finished marketable gasoline is traded (in Europe) with a standard reference of 0.755 kilograms per liter'; specific gravity 'ranges from 0.71 to 0.77'."
+    },
+    {
+      "key": "density_jet_a1",
+      "description": "Density of Jet A-1 at 15 C",
+      "unit": "kg/L",
+      "source": "wiki_jetfuel",
+      "confidence": "low",
+      "value": {
+        "point": 0.804
+      },
+      "note": "Typical physical properties table, 'Density at 15 C': Jet A-1 0.804 kg/L (Jet A 0.820 kg/L)."
+    },
+    {
+      "key": "ipcc_ncv_and_carbon_content",
+      "description": "IPCC default net calorific value (TJ/Gg = MJ/kg) and default carbon content (kg C/GJ) for refinery feeds and products",
+      "unit": "NCV TJ/Gg; carbon kg/GJ",
+      "source": "ipcc2006",
+      "confidence": "high",
+      "value": {
+        "table": {
+          "row_label": "fuel",
+          "columns": [
+            "ncv_tj_per_gg",
+            "carbon_kg_per_gj"
+          ],
+          "rows": [
+            {
+              "label": "Crude Oil",
+              "values": [
+                42.3,
+                20.0
+              ]
+            },
+            {
+              "label": "Natural Gas Liquids",
+              "values": [
+                44.2,
+                17.5
+              ]
+            },
+            {
+              "label": "Motor Gasoline",
+              "values": [
+                44.3,
+                18.9
+              ]
+            },
+            {
+              "label": "Jet Kerosene",
+              "values": [
+                44.1,
+                19.5
+              ]
+            },
+            {
+              "label": "Gas/Diesel Oil",
+              "values": [
+                43.0,
+                20.2
+              ]
+            },
+            {
+              "label": "Residual Fuel Oil",
+              "values": [
+                40.4,
+                21.1
+              ]
+            },
+            {
+              "label": "Liquefied Petroleum Gases",
+              "values": [
+                47.3,
+                17.2
+              ]
+            },
+            {
+              "label": "Naphtha",
+              "values": [
+                44.5,
+                20.0
+              ]
+            },
+            {
+              "label": "Refinery Gas",
+              "values": [
+                49.5,
+                15.7
+              ]
+            },
+            {
+              "label": "Petroleum Coke",
+              "values": [
+                32.5,
+                26.6
+              ]
+            },
+            {
+              "label": "Ethane",
+              "values": [
+                46.4,
+                16.8
+              ]
+            },
+            {
+              "label": "Natural Gas",
+              "values": [
+                48.0,
+                15.3
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Table 1.2: Crude Oil 42.3, Motor Gasoline 44.3, Gas/Diesel Oil 43.0; Table 1.3: Crude Oil 20.0, Motor Gasoline 18.9, Gas/Diesel Oil 20.2 (kg/GJ)."
+    },
+    {
+      "key": "carbon_mass_fraction_derived",
+      "description": "Carbon mass fraction derived as NCV (MJ/kg) x carbon content (kg C/GJ) / 1000",
+      "unit": "kg C per kg fuel",
+      "source": "ipcc2006",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "fuel",
+          "columns": [
+            "carbon_mass_fraction"
+          ],
+          "rows": [
+            {
+              "label": "Crude Oil",
+              "values": [
+                0.846
+              ]
+            },
+            {
+              "label": "Natural Gas Liquids",
+              "values": [
+                0.7735
+              ]
+            },
+            {
+              "label": "Motor Gasoline",
+              "values": [
+                0.8373
+              ]
+            },
+            {
+              "label": "Jet Kerosene",
+              "values": [
+                0.8599
+              ]
+            },
+            {
+              "label": "Gas/Diesel Oil",
+              "values": [
+                0.8686
+              ]
+            },
+            {
+              "label": "Residual Fuel Oil",
+              "values": [
+                0.8524
+              ]
+            },
+            {
+              "label": "Liquefied Petroleum Gases",
+              "values": [
+                0.8136
+              ]
+            },
+            {
+              "label": "Naphtha",
+              "values": [
+                0.89
+              ]
+            },
+            {
+              "label": "Refinery Gas",
+              "values": [
+                0.7772
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Derivation from IPCC Table 1.2 (e.g. Crude Oil 42.3 TJ/Gg) and Table 1.3 (Crude Oil 20.0 kg/GJ): 42.3 x 20.0 / 1000 = 0.846. Not stated directly by the source."
+    },
+    {
+      "key": "petrol_final_boiling_point_max",
+      "description": "Highest final boiling point of petrol sold in New Zealand",
+      "unit": "degrees C",
+      "source": "nz_efsr2011_2026",
+      "confidence": "high",
+      "value": {
+        "point": 210.0
+      },
+      "note": "Schedule 1: 'Distillation—final boiling point 210°C maximum ASTM D86'."
+    },
+    {
+      "key": "diesel_t95_max",
+      "description": "Highest temperature at which 95% by volume of diesel is recovered on distillation, for diesel sold in New Zealand",
+      "unit": "degrees C",
+      "source": "nz_efsr2011_2026",
+      "confidence": "high",
+      "value": {
+        "point": 360.0
+      },
+      "note": "Schedule 2: 'Distillation—T95 360°C maximum ASTM D86'; the same schedule sets 'Flash point 60.5°C minimum' and density '820–850 kg/m3' for conventional diesel."
+    },
+    {
+      "key": "catalytic_reformate_yield_ron",
+      "description": "C5+ reformate yield (vol% of naphtha feed) at product RON for commercial reforming processes; columns are yield and product research octane number",
+      "unit": "vol% C5+ of naphtha feed; RON",
+      "source": "speight_5e",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "process_case",
+          "columns": [
+            "c5plus_vol_pct",
+            "ron"
+          ],
+          "rows": [
+            {
+              "label": "platforming_semiregenerative_295psi",
+              "values": [
+                70,
+                100
+              ]
+            },
+            {
+              "label": "platforming_continuous_123psi",
+              "values": [
+                78,
+                100
+              ]
+            },
+            {
+              "label": "platforming_continuous_49psi",
+              "values": [
+                82,
+                100
+              ]
+            },
+            {
+              "label": "powerforming_semiregenerative",
+              "values": [
+                79,
+                99
+              ]
+            },
+            {
+              "label": "powerforming_cyclic",
+              "values": [
+                79,
+                101
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Table 24.6 (p. 663) 'Feedstock and Product Data for the Platforming Process': feed API 59.0, 197-233 F, paraffins 69 / naphthenes 21 / aromatics 10 % v/v; 'Research octane number 100 100 100'; 'Composition,% v/v C5+ 70 78 82' at 295, 123, 49 psi. Table 24.7 (p. 664) Powerforming: feed paraffins 57 / naphthenes 30 / aromatics 13; 'Research octane number 99 101'; 'C5+ 79 79'. Yield falls with octane and with feed paraffin content; lower pressure and continuous regeneration raise it. Textbook is Speight, not Gary and Handwerk (not found)."
+    },
+    {
+      "key": "catalytic_reformate_yield_wt_semiregen",
+      "description": "Semi-regenerative reformer reformate yield and product RON (weight basis)",
+      "unit": "wt% of feed; RON",
+      "source": "nefthim",
+      "confidence": "low",
+      "value": {
+        "table": {
+          "row_label": "quantity",
+          "columns": [
+            "min",
+            "max"
+          ],
+          "rows": [
+            {
+              "label": "reformate_yield_wt_pct",
+              "values": [
+                80,
+                88
+              ]
+            },
+            {
+              "label": "ron",
+              "values": [
+                94,
+                100
+              ]
+            }
+          ]
+        }
+      },
+      "note": "'The main process parameters of reforming units operation over semi-regenerative type are the following: pressure — from 1.3 up to 3.0 MPa; temperature — from 480 up to 530o C; octane number (RON) — from 94 up to 100; reformate yield — from 80 up to 88 wt. %.' Vendor page; wt basis (reformate is denser than naphtha, so vol% is lower than wt% would suggest in volume terms)."
+    }
+  ]
+}

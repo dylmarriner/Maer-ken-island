@@ -74,6 +74,21 @@
       "key": "christie2024",
       "citation": "Christie, A. B., Barker, R. G., Brathwaite, R. L., Hill, M. P., Rooyakkers, S. M. and de Ronde, C. E. J. (2024). The mineral potential of New Zealand - Part 1: Overview of New Zealand's mineral deposits and their resources. GNS Science Consultancy Report 2024/62A, revised September 2024; section 4.2.1, Table 7.2 and section 8.",
       "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "almas_lanyon",
+      "citation": "Almas Resources, Lanyon Vale project page (almasresources.com/projects/projects/lanyon-vale), Middle Orange River alluvial diamond terraces, South Africa; retrieved 2026-10-14. Company web page, not a technical report.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "dominion_salt",
+      "citation": "Dominion Salt, 'Salt Production at Lake Grassmere' fact sheet (dominionsalt.co.nz/wp-content/uploads/2017/03/DS_LakeGrassmere_dle_v4e.pdf), pp. 2-3, and Dominion Salt 'Our Locations' web page (dominionsalt.co.nz/about-us/our-locations/); retrieved 2026-10-14. Per-hectare yields in this pack are my arithmetic on figures read there.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "lucapa_2014",
+      "citation": "Lucapa Diamond Company, ASX announcement 'More exceptional diamond grades at Lulo', 8 December 2014 (lucapa.com.au/wp-content/uploads/2023/03/6703310-1.pdf), p. 1 and Table 1 notes; retrieved 2026-10-14.",
+      "licence": "Facts cited with attribution"
     }
   ],
   "items": [
@@ -303,6 +318,111 @@
       "confidence": "medium",
       "value": { "point": 55.0 },
       "note": "Section 8: production peaked at c. 3.5 Mt of concentrate (about 55% Fe) in 2016. Offshore Davis Tube concentrate from the Cook and Kupe blocks is 56-57% Fe (section 11.2)."
+    },
+    {
+      "key": "alluvial_diamond_grade_cpht",
+      "description": "Recovered or reported grade of alluvial diamond gravels, carats per 100 tonnes (cpht); columns are the low and high ends of each reported range (equal where a single figure)",
+      "unit": "carats per 100 tonnes",
+      "source": "almas_lanyon",
+      "confidence": "low",
+      "value": {
+        "table": {
+          "row_label": "deposit",
+          "columns": [
+            "min_cpht",
+            "max_cpht"
+          ],
+          "rows": [
+            {
+              "label": "middle_orange_river_recoverable",
+              "values": [
+                0.3,
+                0.8
+              ]
+            },
+            {
+              "label": "wouterspan_b_terrace_bulk_samples",
+              "values": [
+                0.4,
+                0.6
+              ]
+            },
+            {
+              "label": "sierra_leone_average_pk_hall",
+              "values": [
+                50,
+                50
+              ]
+            },
+            {
+              "label": "sewa_river_kono_preliminary",
+              "values": [
+                56,
+                56
+              ]
+            }
+          ]
+        }
+      },
+      "note": "almas_lanyon: 'Recoverable diamond grades are generally low (0.30 to 0.80 cpht)'; 'Historic bulk sampling on the Wouterspan B terrace deliver grades between 0.4 – 0.6 cpht' ... 'totalling 820ct at an average grade of 0.53 cpht' (Lanyon Vale project page). ggsm_2012 (rows 3 and 4, source differs from the item source): 'The results show an average yield of 56 carats per hundred tonne (Cpht) of hi-grade diamonds, slightly above the average grade of Sierra Leone, which, according to the comprehensive report undertaken in the 1970s by PK Hall, shows an average of approximately 50 Cpht.' Promoter release, preliminary, 2012. Two orders of magnitude between Orange River terraces and Sierra Leone gravels. Namibian marine/beach grades per tonne were not found."
+    },
+    {
+      "key": "solar_salt_yield_lake_grassmere_t_per_ha_yr",
+      "description": "Solar sea-salt harvest per hectare of total saltworks footprint, Lake Grassmere NZ, in a normal year (arithmetic: 60,000-70,000 t / 1416 ha)",
+      "unit": "t salt per ha of total solar salt production area per year",
+      "source": "dominion_salt",
+      "confidence": "medium",
+      "value": {
+        "range": {
+          "min": 42.4,
+          "max": 49.4
+        }
+      },
+      "note": "Derived by me. Dominion Salt 'Our Locations': 'Some 60,000 – 70,000 tonnes of salt are harvested from Lake Grassmere each year.' Fact sheet p. 2: 'The total area for solar salt production at Lake Grassmere is approximately 1416 hectares' (688 ha main lake, 486 ha concentrating, 81 ha final, 20 ha deep storage, 93 ha crystallising, 40 ha re-concentrating, 8 ha wash brine). 60,000/1416 = 42.4; 70,000/1416 = 49.4. Per hectare of crystalliser only (93 ha) would be roughly 15 times higher. No FAO or other temperate source found."
+    },
+    {
+      "key": "solar_salt_harvest_extremes_lake_grassmere",
+      "description": "Lake Grassmere annual harvest extremes, and equivalent per-hectare yield over 1416 ha",
+      "unit": "t per year; t/ha/yr",
+      "source": "dominion_salt",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "case",
+          "columns": [
+            "tonnes_per_year",
+            "t_per_ha_yr_derived"
+          ],
+          "rows": [
+            {
+              "label": "worst_year_1986",
+              "values": [
+                0,
+                0
+              ]
+            },
+            {
+              "label": "maximum_year_1998",
+              "values": [
+                130000,
+                91.8
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Fact sheet p. 3: 'annual harvests have ranged from a nil harvest in 1986 to a maximum yield of 130,000 in 1998.' Also: 'Salt production is highly dependent on the amount of rainfall'; 'The salt crust thickness may vary from 25mm to 75mm when harvested, depending on evaporation and particularly the rainfall'; 'The yearly average rainfall is 610mm'. Unit of 130,000 assumed tonnes (sheet omits unit). 130,000/1416 = 91.8 is my arithmetic."
+    },
+    {
+      "key": "lulo_alluvial_grade_per_100m3",
+      "description": "Alluvial bulk-sample diamond grade, Lulo (Lunda Norte, Angola), per 100 cubic metres of in-situ gravel",
+      "unit": "carats per 100 m3 in-situ gravel",
+      "source": "lucapa_2014",
+      "confidence": "medium",
+      "value": {
+        "point": 35.02
+      },
+      "note": "p. 1: 'The completed BLK_29 alluvial bulk sample (Table 1) produced diamond grades of 35.02 carats per 100 cubic metres. The average size of the diamonds recovered from BLK_29 was 1.81 carats.' Table notes: 'Grade is quoted in carats per 100 cubic metres of in-situ gravel.' Volume basis, single block, bottom screen 1.2 mm; not convertible to per-tonne without a gravel bulk density."
     }
   ]
 }

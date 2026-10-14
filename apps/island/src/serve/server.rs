@@ -150,10 +150,14 @@ pub fn detail(population: &IslandHumanPopulation, agent_id: &str) -> Option<serd
     let folder = population
         .folder_of(agent_id)
         .map(|f| f.display().to_string());
+    let everyone: Vec<&mk_engine::humans::HumanBeing> =
+        population.system().registry.iter().collect();
+    let mut sections = view::sections(human, &summary, folder.as_deref());
+    sections.push(view::family_section(human, &everyone));
     Some(serde_json::json!({
         "summary": summary,
         "folder": folder,
-        "sections": view::sections(human, &summary, folder.as_deref()),
+        "sections": sections,
         "human": serde_json::to_value(human).unwrap_or(serde_json::Value::Null),
     }))
 }
@@ -181,10 +185,13 @@ pub fn world_detail(
         .people
         .iter()
         .find(|p| p.agent_id == summary.agent_id);
+    let everyone: Vec<&mk_engine::humans::HumanBeing> = current.records.values().collect();
+    let mut sections = view::sections(human, &summary, None);
+    sections.push(view::family_section(human, &everyone));
     serde_json::json!({
         "summary": summary,
         "folder": serde_json::Value::Null,
-        "sections": view::sections(human, &summary, None),
+        "sections": sections,
         "human": serde_json::to_value(human).unwrap_or(serde_json::Value::Null),
         // Where they are now, which the stored roster has no answer for.
         "where": here.map(|p| serde_json::json!({
@@ -241,15 +248,23 @@ pub fn activity(population: &IslandHumanPopulation, limit: usize) -> serde_json:
 }
 
 pub fn options() -> serde_json::Value {
-    serde_json::json!({
-        "biological_sex": SEXES,
-        "build": BUILDS,
-        "hair_color": HAIR_COLORS,
-        "eye_color": EYE_COLORS,
-        "skin_tone": SKIN_TONES,
-        "max_age_years": mk_interventions::MAX_SPAWN_AGE_YEARS,
-        "height_cm": [mk_interventions::SPAWN_HEIGHT_RANGE_CM.start(), mk_interventions::SPAWN_HEIGHT_RANGE_CM.end()],
+    let words = |list: &[&str]| list.iter().map(|w| w.to_string()).collect();
+    serde_json::to_value(mk_island_api::CreatorOptions {
+        biological_sex: words(&SEXES),
+        build: words(&BUILDS),
+        hair_color: words(&HAIR_COLORS),
+        eye_color: words(&EYE_COLORS),
+        skin_tone: words(&SKIN_TONES),
+        max_age_years: mk_interventions::MAX_SPAWN_AGE_YEARS,
+        height_cm: (
+            *mk_interventions::SPAWN_HEIGHT_RANGE_CM.start(),
+            *mk_interventions::SPAWN_HEIGHT_RANGE_CM.end(),
+        ),
     })
+    // Strings and finite numbers, which always serialize; an empty `{}`
+    // in its place would be a form with nothing to choose from and no
+    // word of why.
+    .expect("the creator's options are plain strings and numbers")
 }
 
 /// The answer to a write this caller may not make.

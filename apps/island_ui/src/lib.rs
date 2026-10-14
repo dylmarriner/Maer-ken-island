@@ -16,6 +16,8 @@
 
 pub mod camera;
 pub mod estate;
+pub mod foundry;
+pub mod human_inspector;
 pub mod inspectors;
 pub mod property;
 pub mod scene;

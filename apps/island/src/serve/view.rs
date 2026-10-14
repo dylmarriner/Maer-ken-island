@@ -9,8 +9,9 @@
 //! still served alongside for anyone who wants it.
 
 use crate::population::HumanSummary;
-use mk_core::human::{BiologicalSex, Generation, Locality};
+use mk_core::human::{BiologicalSex, Generation, HumanStatus, Locality};
 use mk_engine::humans::needs::SurvivalStatus;
+use mk_engine::humans::thought::generate_thought;
 use mk_engine::humans::HumanBeing;
 use serde::Serialize;
 
@@ -183,6 +184,92 @@ fn emotions_are_at_rest(human: &HumanBeing) -> bool {
     standout_emotions(human, 1)
         .first()
         .is_none_or(|(_, level, baseline)| (level - baseline).abs() < 0.001)
+}
+
+/// `EatFood` as "Eat food", and an acronym kept whole: `EatCPU` as
+/// "Eat CPU", `XMLParser` as "XML parser".
+///
+/// A word starts at a capital that follows a small letter, or at the last
+/// capital of a run that a small letter follows (the P of `XMLParser`).
+fn spaced(name: &str) -> String {
+    let chars: Vec<char> = name.chars().collect();
+    let mut words: Vec<String> = Vec::new();
+    for (i, &c) in chars.iter().enumerate() {
+        let starts = i > 0
+            && c.is_uppercase()
+            && (chars[i - 1].is_lowercase()
+                || (chars[i - 1].is_uppercase()
+                    && chars.get(i + 1).is_some_and(|n| n.is_lowercase())));
+        match words.last_mut() {
+            Some(word) if !starts => word.push(c),
+            _ => words.push(c.to_string()),
+        }
+    }
+    words
+        .iter()
+        .enumerate()
+        .map(|(i, word)| {
+            let acronym = word.chars().count() > 1 && word.chars().all(char::is_uppercase);
+            if i == 0 || acronym {
+                word.clone()
+            } else {
+                word.to_lowercase()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// Their parents and children, by whoever the island has a record of.
+///
+/// Separate from [`sections`] because it needs the rest of the
+/// population: a person carries their parents' ids, not their parents,
+/// and nobody carries a list of their children.
+pub fn family_section(human: &HumanBeing, everyone: &[&HumanBeing]) -> Section {
+    // Each of the three states in its own words: dormant is not dead.
+    let named = |h: &HumanBeing| match h.profile.status {
+        HumanStatus::Alive => h.agent_id().to_string(),
+        HumanStatus::Dead => format!("{} (dead)", h.agent_id()),
+        HumanStatus::Dormant => format!("{} (dormant)", h.agent_id()),
+    };
+    let who = |id: &str| {
+        everyone
+            .iter()
+            .find(|h| h.agent_id() == id)
+            .map_or_else(|| format!("{id} (no record on the island)"), |h| named(h))
+    };
+    let (father, mother) = match human.parent_agent_ids() {
+        Some((father, mother)) => (who(&father), who(&mother)),
+        None => {
+            let founder = "None: they came to the island, they were not born on it".to_string();
+            (founder.clone(), founder)
+        }
+    };
+    let children: Vec<String> = everyone
+        .iter()
+        .filter(|h| {
+            h.parent_agent_ids()
+                .is_some_and(|(f, m)| f == human.agent_id() || m == human.agent_id())
+        })
+        .map(|h| named(h))
+        .collect();
+    section(
+        "family",
+        "Family",
+        "Their parents and their children, as the island records them.",
+        vec![
+            text("Father", father),
+            text("Mother", mother),
+            text(
+                "Children",
+                if children.is_empty() {
+                    "None".to_string()
+                } else {
+                    children.join(", ")
+                },
+            ),
+        ],
+    )
 }
 
 /// The sections the People page shows for one person, in reading order.
@@ -381,7 +468,7 @@ pub fn sections(human: &HumanBeing, summary: &HumanSummary, folder: Option<&str>
             vec![noted(
                 "At rest",
                 "Nothing stirring",
-                "Every emotion sits exactly on this person's baseline. Nothing has happened to them yet, because time is not running.",
+                "Every emotion sits exactly on this person's own baseline: nothing they have met has moved one away from it.",
             )]
         } else {
         standout_emotions(human, 6)
@@ -421,6 +508,87 @@ pub fn sections(human: &HumanBeing, summary: &HumanSummary, folder: Option<&str>
             scale("Flow", attention.flow, "Absorbed in what they are doing."),
             scale("Distractibility", attention.distractibility, ""),
         ],
+    ));
+
+    let doing = human.economy_action.kind;
+    let learned = human
+        .autonomous_mind
+        .preferences
+        .iter()
+        .find(|preference| preference.action == doing)
+        .map(|preference| preference.value);
+    let learning = [
+        noted(
+            "Worth of this, to them",
+            learned.map_or_else(
+                || "Not yet learned".to_string(),
+                // A learned zero is "nothing either way", not "-0.00".
+                |v| {
+                    if v.abs() < 0.005 {
+                        "0.00".to_string()
+                    } else {
+                        format!("{v:+.2}")
+                    }
+                },
+            ),
+            "What they have come to expect doing this brings, learned from how it went before.",
+        ),
+        noted(
+            "Reward so far",
+            format!("{:.1}", human.autonomous_mind.total_reward),
+            "Everything their choices have brought them, summed.",
+        ),
+        noted(
+            "Choices remembered",
+            human.autonomous_mind.experiences.len().to_string(),
+            "Recent choices and how they went, which their learning draws on.",
+        ),
+    ];
+    // Only the living are thinking and doing. A dead or dormant person is
+    // not stepped, so what their record holds is where they left off, and
+    // it is said in the past tense rather than as if it were now.
+    let fields = match human.profile.status {
+        HumanStatus::Alive => [
+            noted(
+                "Thinking",
+                generate_thought(human),
+                "Their inner speech this hour, put together from their own state.",
+            ),
+            text("Doing", spaced(&format!("{doing:?}"))),
+            noted(
+                "Last choice",
+                if human.last_action_success {
+                    "Went as meant"
+                } else {
+                    "Did not come off"
+                },
+                "Whether the last thing they chose to do succeeded.",
+            ),
+        ]
+        .into_iter()
+        .chain(learning)
+        .collect(),
+        status => [
+            noted(
+                "Doing",
+                if status == HumanStatus::Dead {
+                    "Nothing: they are dead"
+                } else {
+                    "Nothing: they are dormant"
+                },
+                "Nobody who is not alive is stepped, so nothing here is moving.",
+            ),
+            text("Last thing they did", spaced(&format!("{doing:?}"))),
+        ]
+        .into_iter()
+        .chain(learning)
+        .collect(),
+    };
+    sections.push(section(
+        "choosing",
+        "What they are doing",
+        "What their own choice settled on, what they make of it, and what they have learned from choosing.",
+        fields,
     ));
 
     sections.push(section(
@@ -644,5 +812,129 @@ mod tests {
         let standouts = standout_emotions(&human, 6);
         assert_eq!(standouts[0].0, "Awe");
         assert_eq!(standouts.len(), 6);
+    }
+
+    #[test]
+    fn they_are_seen_choosing_with_a_thought_of_their_own() {
+        let (population, id) = founder();
+        let human = population.get(&id).unwrap();
+        let summary = summarize(human);
+        let all = sections(human, &summary, None);
+        let choosing = all
+            .iter()
+            .find(|s| s.id == "choosing")
+            .expect("a section on what they are doing");
+        let value = |label: &str| {
+            choosing
+                .fields
+                .iter()
+                .find(|f| f.label == label)
+                .unwrap_or_else(|| panic!("no {label}"))
+                .value
+                .clone()
+        };
+        assert_eq!(value("Thinking"), generate_thought(human));
+        assert!(!value("Doing").is_empty());
+        assert_eq!(
+            value("Choices remembered"),
+            human.autonomous_mind.experiences.len().to_string()
+        );
+    }
+
+    #[test]
+    fn a_founder_has_no_parents_on_the_island_and_a_child_names_theirs() {
+        let (population, id) = founder();
+        let founder = population.get(&id).unwrap();
+        let everyone: Vec<&HumanBeing> = population.system().registry.iter().collect();
+        let family = family_section(founder, &everyone);
+        assert_eq!(family.id, "family");
+        assert!(
+            family.fields[0].value.starts_with("None"),
+            "{:?}",
+            family.fields
+        );
+        assert_eq!(family.fields[2].value, "None");
+
+        // A child of the two founders, recorded the way a birth records
+        // one (as upstream's own tests build a child).
+        let mut child = HumanBeing::new("Gem-DK-1".to_string(), BiologicalSex::Female);
+        child.profile.canonical_schema = Some(
+            mk_core::human::schema::HumanSchema::canonical_minimal(child.agent_id()),
+        );
+        child
+            .profile
+            .canonical_schema
+            .as_mut()
+            .unwrap()
+            .reproductive_systems
+            .genetics_system
+            .birth_records
+            .push(mk_core::human::schema::BirthRecordSchema {
+                birth_id: "birth_Gem-DK-1".to_string(),
+                genotype_id: "genotype_Gem-DK-1".to_string(),
+                father_id: "Gem-D".to_string(),
+                mother_id: "Gem-K".to_string(),
+                birth_timestamp: "tick-0".to_string(),
+                agent_id: "Gem-DK-1".to_string(),
+                mutations: vec![],
+            });
+        let mut everyone = everyone;
+        everyone.push(&child);
+        let theirs = family_section(&child, &everyone);
+        assert_eq!(theirs.fields[0].value, "Gem-D");
+        assert_eq!(theirs.fields[1].value, "Gem-K");
+        let fathers = family_section(founder, &everyone);
+        assert_eq!(fathers.fields[2].value, "Gem-DK-1");
+    }
+
+    #[test]
+    fn an_action_name_is_said_in_words() {
+        assert_eq!(spaced("EatFood"), "Eat food");
+        assert_eq!(spaced("Rest"), "Rest");
+        assert_eq!(spaced("EatCPU"), "Eat CPU");
+        assert_eq!(spaced("XMLParser"), "XML parser");
+        assert_eq!(spaced("GoToWork"), "Go to work");
+    }
+
+    #[test]
+    fn the_dead_are_not_said_to_be_thinking_and_the_dormant_are_not_called_dead() {
+        let (population, id) = founder();
+        let mut gone = population.get(&id).unwrap().clone();
+        gone.profile.status = HumanStatus::Dead;
+        let summary = summarize(&gone);
+        let choosing = sections(&gone, &summary, None)
+            .into_iter()
+            .find(|s| s.id == "choosing")
+            .unwrap();
+        assert!(!choosing.fields.iter().any(|f| f.label == "Thinking"));
+        assert_eq!(choosing.fields[0].value, "Nothing: they are dead");
+
+        let mut resting = population.get("Gem-K").unwrap().clone();
+        resting.profile.status = HumanStatus::Dormant;
+        let founder = population.get(&id).unwrap();
+        let everyone: Vec<&HumanBeing> = vec![founder, &resting];
+        // Gem-K, dormant, as somebody's mother.
+        let mut born = HumanBeing::new("Gem-DK-2".to_string(), BiologicalSex::Male);
+        born.profile.canonical_schema = Some(
+            mk_core::human::schema::HumanSchema::canonical_minimal(born.agent_id()),
+        );
+        born.profile
+            .canonical_schema
+            .as_mut()
+            .unwrap()
+            .reproductive_systems
+            .genetics_system
+            .birth_records
+            .push(mk_core::human::schema::BirthRecordSchema {
+                birth_id: "birth_Gem-DK-2".to_string(),
+                genotype_id: "genotype_Gem-DK-2".to_string(),
+                father_id: "Gem-D".to_string(),
+                mother_id: "Gem-K".to_string(),
+                birth_timestamp: "tick-0".to_string(),
+                agent_id: "Gem-DK-2".to_string(),
+                mutations: vec![],
+            });
+        let family = family_section(&born, &everyone);
+        assert_eq!(family.fields[1].value, "Gem-K (dormant)");
     }
 }
