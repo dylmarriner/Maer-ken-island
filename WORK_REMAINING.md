@@ -142,7 +142,10 @@ animal and fish resource nodes (§2b), which can now read the habitats.
 
 ### 2c. D9: most actions still take one tick
 
-- **Now:** felling and hauling are timed and costed; everything else completes in one tick.
+- **Now:** felling, hauling and panning a placer for gold (2026-10-14: walk there, the packs'
+  working day at the pan, walk home, the gold to the store) are timed and costed; everything
+  else completes in one tick. Foraging food (R3, with session 38's Kelly 2013 return rates) is
+  next.
 - **Needs:** a cited duration for each action (`fixtures/reference/labour/productivity.json`
   holds some already), and the same task machinery felling uses (`life.rs` `work`) extended to
   them. Actions with no Compendium row cost the resting baseline (D22, accepted).
