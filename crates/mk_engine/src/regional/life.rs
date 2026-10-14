@@ -176,19 +176,23 @@ pub struct WaterTrip {
     pub reached: bool,
 }
 
-/// A meal being gathered (realism programme R3): the walk to `cell` and
-/// back, and the hours of picking and preparing in between at the pack's
-/// return rate for the food energy owed when they set out. The meal is
-/// eaten when the work is done, not before. Like a water trip, it is seen
-/// through once begun.
+/// A meal being gathered (realism programme R3): the walk to `cell`, the
+/// hours of picking and preparing there at the pack's return rate for the
+/// food energy owed when they set out, and, for someone who set out from
+/// home, the walk back. The meal is eaten when the work is done, not
+/// before. Someone away from home keeps moving as they gather, so their
+/// meal comes from the plants around wherever they are when it is done.
+/// Like a water trip, it is seen through once begun.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ForageTrip {
     pub cell: (usize, usize),
     /// Plant carbon to bring in (kg C): the meal owed at the start.
     pub kgc: f64,
-    /// Seconds walking to the cell (and the same back), and gathering.
-    pub walk_s: f64,
+    /// Seconds walking to the cell, gathering, and walking home (0 for a
+    /// trip that ends at the food).
+    pub out_s: f64,
     pub forage_s: f64,
+    pub back_s: f64,
     pub worked_s: f64,
 }
 
@@ -1652,7 +1656,7 @@ impl IslandLife {
             return Ok(());
         };
         let body = LabourBody::from_human(human);
-        let walk_s = if cell == stands {
+        let out_s = if cell == stands {
             0.0
         } else {
             let here = self.place_m(stands);
@@ -1683,8 +1687,9 @@ impl IslandLife {
             ForageTrip {
                 cell,
                 kgc: owed_kgc,
-                walk_s,
+                out_s,
                 forage_s: kcal / rate_kcal_h.max(f64::MIN_POSITIVE) * 3_600.0,
+                back_s: if self.at_home(stands) { out_s } else { 0.0 },
                 worked_s: 0.0,
             },
         );
@@ -1719,10 +1724,10 @@ impl IslandLife {
             }
             let body = LabourBody::from_human(human);
             let trip = self.foraging.get_mut(&id).expect("listed");
-            let picking = (trip.walk_s..trip.walk_s + trip.forage_s).contains(&trip.worked_s);
+            let picking = (trip.out_s..trip.out_s + trip.forage_s).contains(&trip.worked_s);
             let met = if picking { foraging_met } else { WALKING_MET };
             trip.worked_s += dt_s;
-            if trip.worked_s >= 2.0 * trip.walk_s + trip.forage_s {
+            if trip.worked_s >= trip.out_s + trip.forage_s + trip.back_s {
                 fed.push((id.clone(), self.foraging.remove(&id).expect("listed")));
             }
             let extra = self
@@ -1743,6 +1748,34 @@ impl IslandLife {
         }
         let area = self.domain.cell_area_m2(DomainLevel::Medium);
         let carbon_per_kg = composition(Material::PlantFood).carbon_per_kg;
+        let (rows, cols) = (
+            self.domain.rows(DomainLevel::Medium),
+            self.domain.cols(DomainLevel::Medium),
+        );
+        // Where each meal is picked: the planned cell for a trip from home;
+        // for anyone else, the nearest food around where they now stand,
+        // or, with none left there, the planned cell, where they now are.
+        let fed: Vec<(String, ForageTrip)> = fed
+            .into_iter()
+            .map(|(id, mut trip)| {
+                if trip.back_s <= 0.0 {
+                    let stands = self.standing_cell(&id, rows, cols);
+                    match cells_around(stands, FORAGE_RADIUS_CELLS, rows, cols)
+                        .into_iter()
+                        .find(|c| self.edible_kgc_m2(*c) > 0.0)
+                    {
+                        Some(cell) => trip.cell = cell,
+                        None => {
+                            if let Some(h) = self.humans.registry.get_human_mut(&id) {
+                                h.position.row = trip.cell.0 as i32;
+                                h.position.col = trip.cell.1 as i32;
+                            }
+                        }
+                    }
+                }
+                (id, trip)
+            })
+            .collect();
         self.audited(|life, ledger| {
             for (id, trip) in &fed {
                 // What they gathered is eaten; what was eaten off the cell
@@ -2339,8 +2372,10 @@ impl IslandLife {
             self.work(human_s as f64)?;
             self.household_water_step(human_s as f64)?;
             self.meals()?;
-            self.foraging_step(human_s as f64)?;
             self.water_trips_step(human_s as f64)?;
+            // After the water: a trip that ends at a source moves its
+            // walker, and a meal is picked around where they end up.
+            self.foraging_step(human_s as f64)?;
             // A death is written at once: every other record can lag a
             // cadence and catch up, but a dead person's folder never will.
             for id in died {
@@ -2672,13 +2707,13 @@ mod tests {
         let minute = 60.0;
         let mut worked = 0.0;
         while life.foraging.contains_key("Gem-D") {
-            assert!(worked < 2.0 * trip.walk_s + trip.forage_s + minute);
+            assert!(worked < trip.out_s + trip.forage_s + trip.back_s + minute);
             life.foraging_step(minute).unwrap();
             worked += minute;
             let met = life.humans.registry.get_human("Gem-D").unwrap().labour_met;
             assert!(met == Some(foraging_met) || met == Some(WALKING_MET));
         }
-        assert!(worked >= 2.0 * trip.walk_s + trip.forage_s);
+        assert!(worked >= trip.out_s + trip.forage_s + trip.back_s);
         assert!(
             life.respired_since_meal["Gem-D"] < 1e-9,
             "the meal was eaten: {} kg C still owed",
@@ -2692,7 +2727,7 @@ mod tests {
         println!(
             "{kcal} kcal gathered in {:.1} h of foraging and {:.1} h walking",
             trip.forage_s / 3_600.0,
-            2.0 * trip.walk_s / 3_600.0
+            (trip.out_s + trip.back_s) / 3_600.0
         );
     }
 
