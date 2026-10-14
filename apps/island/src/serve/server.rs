@@ -248,15 +248,23 @@ pub fn activity(population: &IslandHumanPopulation, limit: usize) -> serde_json:
 }
 
 pub fn options() -> serde_json::Value {
-    serde_json::json!({
-        "biological_sex": SEXES,
-        "build": BUILDS,
-        "hair_color": HAIR_COLORS,
-        "eye_color": EYE_COLORS,
-        "skin_tone": SKIN_TONES,
-        "max_age_years": mk_interventions::MAX_SPAWN_AGE_YEARS,
-        "height_cm": [mk_interventions::SPAWN_HEIGHT_RANGE_CM.start(), mk_interventions::SPAWN_HEIGHT_RANGE_CM.end()],
+    let words = |list: &[&str]| list.iter().map(|w| w.to_string()).collect();
+    serde_json::to_value(mk_island_api::CreatorOptions {
+        biological_sex: words(&SEXES),
+        build: words(&BUILDS),
+        hair_color: words(&HAIR_COLORS),
+        eye_color: words(&EYE_COLORS),
+        skin_tone: words(&SKIN_TONES),
+        max_age_years: mk_interventions::MAX_SPAWN_AGE_YEARS,
+        height_cm: (
+            *mk_interventions::SPAWN_HEIGHT_RANGE_CM.start(),
+            *mk_interventions::SPAWN_HEIGHT_RANGE_CM.end(),
+        ),
     })
+    // Strings and finite numbers, which always serialize; an empty `{}`
+    // in its place would be a form with nothing to choose from and no
+    // word of why.
+    .expect("the creator's options are plain strings and numbers")
 }
 
 /// The answer to a write this caller may not make.

@@ -321,6 +321,38 @@ fn the_application_reads_an_island_and_has_enough_to_draw_it() {
         gem_d.whereabouts.is_some(),
         "a running island knows where a founder is"
     );
+    // And somebody new, made by the foundry (Phase 5 Task 4): the form
+    // filled from the creator's own options, sent down the creation
+    // route, followed to the island's answer, and then readable.
+    let options = island
+        .client()
+        .creator_options()
+        .expect("the creator's options");
+    let mut form = island_ui::foundry::Form::new(&options);
+    form.name = "Ata".to_string();
+    form.birth_local = "1999-09-09T09:09".to_string();
+    form.birth_offset = "+13:00".to_string();
+    let space = island.snapshot().world.estate.spaces[0].id;
+    form.place = Some(island_ui::foundry::Place::Space(space));
+    let request = form.request(&options).expect("a complete form");
+    let accepted = island
+        .client()
+        .create_human(&request)
+        .expect("the island takes it");
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    let agent_id = loop {
+        match island.client().outcome(accepted.command).unwrap() {
+            mk_island_api::Outcome::Created { agent_id, .. } => break agent_id,
+            mk_island_api::Outcome::Queued => {
+                assert!(std::time::Instant::now() < deadline, "never applied");
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
+            other => panic!("the foundry's request was not carried out: {other:?}"),
+        }
+    };
+    let made = island_ui::human_inspector::read(&island.client().human(&agent_id).unwrap())
+        .expect("the new person can be read at once");
+    assert!(made.sections.iter().any(|s| s.id == "identity"));
 }
 
 #[test]
