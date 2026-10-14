@@ -30,6 +30,9 @@ use mk_island::{
 use super::ecology::{RegionalEcologyError, RegionalEcologyState};
 use super::energy::{solar_output_kw, EstateEnergy, ROOM_LIGHT_LUX};
 use super::estate_layout::{Space, SpaceId};
+use super::energy::FuelKind;
+use super::industry::chain::{ChainModels, IndustryChain};
+use super::industry::refinery::Product;
 use super::household_water::{
     installed_capacity_kg, storage_needed_kg, HouseholdWater, HouseholdWaterSpec,
 };
@@ -138,6 +141,8 @@ pub enum IslandLifeError {
     Scenario(IslandScenarioError),
     /// The deep-time spin-up could not run or its cache could not be used.
     DeepTime(super::deep_time::DeepTimeError),
+    /// The oil chain's reference data could not be read.
+    Industry(String),
 }
 
 impl std::fmt::Display for IslandLifeError {
@@ -235,6 +240,10 @@ pub struct IslandLifeSnapshot {
     pub household_water: Option<HouseholdWater>,
     #[serde(default)]
     pub water_trips: BTreeMap<String, WaterTrip>,
+    /// The island's oil fields and refinery (Phase 4b). `None` in an island
+    /// saved before it had them; restoring surveys them.
+    #[serde(default)]
+    pub industry: Option<IndustryChain>,
 }
 
 pub struct IslandLife {
@@ -319,6 +328,11 @@ pub struct IslandLife {
     pub household_water: Option<HouseholdWater>,
     /// Who is walking to water, or home with it (realism programme R1b).
     pub water_trips: BTreeMap<String, WaterTrip>,
+    /// The island's oil fields and refinery, which keep the estate's diesel
+    /// topped up (Phase 4b Tasks 4-5).
+    pub industry: Option<IndustryChain>,
+    /// What the chain runs on, read from the reference packs (not state).
+    industry_models: Option<ChainModels>,
     topology: GridTopology,
     /// How the living world was spun up before the founders arrived, when
     /// this island was bootstrapped rather than restored (a record, not
@@ -566,6 +580,8 @@ impl IslandLife {
             water_cell,
             household_water: None,
             water_trips: BTreeMap::new(),
+            industry: None,
+            industry_models: None,
             topology,
             spin_up,
         };
@@ -596,6 +612,7 @@ impl IslandLife {
         if life.ecology.soil.is_none() {
             life.install_soil()?;
         }
+        life.install_industry()?;
         life.replay_log = super::replay::IslandReplayLog::new(life.scenario_digest_hex());
         Ok(life)
     }
@@ -645,6 +662,7 @@ impl IslandLife {
             water_cell: self.water_cell,
             household_water: self.household_water.clone(),
             water_trips: self.water_trips.clone(),
+            industry: self.industry.clone(),
         }
     }
 
@@ -710,6 +728,8 @@ impl IslandLife {
             water_cell: snapshot.water_cell,
             household_water: snapshot.household_water,
             water_trips: snapshot.water_trips,
+            industry: snapshot.industry,
+            industry_models: None,
             topology,
             spin_up: None,
         };
@@ -721,6 +741,8 @@ impl IslandLife {
             // Saved before the island had soil carbon.
             life.install_soil()?;
         }
+        // Surveys the fields if the island was saved before it had them.
+        life.install_industry()?;
         life.replay_log = super::replay::IslandReplayLog::new(life.scenario_digest_hex());
         Ok(life)
     }
@@ -836,17 +858,26 @@ impl IslandLife {
         &mut self,
         f: impl FnOnce(&mut Self, &mut Ledger),
     ) -> Result<(), IslandLifeError> {
-        let stocks = |m: &MaterialLedger| {
+        // Material carbon is the material ledger's, the oil chain's (field
+        // tanks and refinery store) and the island-made fuel in the estate's
+        // stores and tanks.
+        let stocks = |life: &Self| {
+            let industry = match (&life.industry, &life.industry_models) {
+                (Some(chain), Some(models)) => chain.material_kgc(models),
+                _ => 0.0,
+            };
             [
-                m.stock_of(Reservoir::MaterialCarbon),
-                m.stock_of(Reservoir::HumanCarbon),
-                m.stock_of(Reservoir::MaterialWater),
+                life.materials.stock_of(Reservoir::MaterialCarbon)
+                    + industry
+                    + life.energy.island_fuel_kgc(),
+                life.materials.stock_of(Reservoir::HumanCarbon),
+                life.materials.stock_of(Reservoir::MaterialWater),
             ]
         };
-        let before = stocks(&self.materials);
+        let before = stocks(self);
         let mut ledger = Ledger::new();
         f(self, &mut ledger);
-        let after = stocks(&self.materials);
+        let after = stocks(self);
         for (i, (reservoir, kind)) in [
             (Reservoir::MaterialCarbon, FluxKind::Carbon),
             (Reservoir::HumanCarbon, FluxKind::Carbon),
@@ -1957,7 +1988,59 @@ impl IslandLife {
         let cell_area = self.domain.cell_area_m2(DomainLevel::Medium);
         self.ecology.step_with_grazers(dt_ecology as f64, cell_area);
         self.vegetation.step(&self.ecology, dt_ecology);
+        self.industry_step(dt_ecology as f64)?;
         Ok(())
+    }
+
+    /// Survey the island's oil fields, if it has not been, and read the
+    /// chain's models.
+    fn install_industry(&mut self) -> Result<(), IslandLifeError> {
+        let models = ChainModels::load_default().map_err(|e| IslandLifeError::Industry(e.0))?;
+        if self.industry.is_none() {
+            let seed = self
+                .scenario
+                .profile
+                .seed_bytes()
+                .ok_or_else(|| IslandLifeError::Industry("the scenario has no seed".into()))?;
+            self.industry = Some(IndustryChain::survey(
+                &self.physical.geophysics.deposits,
+                &models,
+                &seed,
+            ));
+        }
+        self.industry_models = Some(models);
+        Ok(())
+    }
+
+    /// Run the oil chain for `dt_s` and let the depot top the estate's
+    /// diesel up to what it started with (the scenario's `diesel_litres`),
+    /// from the refinery's diesel-range distillate. The fuel moves by its
+    /// carbon, so nothing is made or lost on the way; it is audited.
+    fn industry_step(&mut self, dt_s: f64) -> Result<(), IslandLifeError> {
+        if self.industry.is_none() || self.industry_models.is_none() {
+            return Ok(());
+        }
+        let target = self.scenario.estate_energy.diesel_litres;
+        self.audited(|life, ledger| {
+            let (Some(chain), Some(models)) = (life.industry.as_mut(), life.industry_models.as_ref())
+            else {
+                return;
+            };
+            chain.step(dt_s, models, ledger);
+            let per_litre = FuelKind::Diesel.carbon_kg_per_litre();
+            let wanted_l = (target - life.energy.stored_litres(FuelKind::Diesel)).max(0.0);
+            let slot = super::industry::refinery::PRODUCTS
+                .iter()
+                .position(|p| *p == Product::Distillate)
+                .expect("listed");
+            let (held_t, held_kgc) = (chain.store_t[slot], chain.store_kgc[slot]);
+            if wanted_l > 0.0 && held_t > 0.0 && held_kgc > 0.0 {
+                let tonnes = wanted_l * per_litre / (held_kgc / held_t);
+                let (_, kgc) = chain.take(Product::Distillate, tonnes);
+                life.energy
+                    .deliver_island_fuel(FuelKind::Diesel, kgc / per_litre);
+            }
+        })
     }
 
     /// A person who died this step: the body's carbon goes to detritus and its
@@ -2255,6 +2338,7 @@ impl IslandLife {
         h.update(canonical(&self.labour_kcal).as_bytes());
         h.update(canonical(&self.water_drunk_kg).as_bytes());
         h.update(canonical(&self.household_water).as_bytes());
+        h.update(canonical(&self.industry).as_bytes());
         h.update(canonical(&self.water_trips).as_bytes());
         h.update(canonical(&self.sleep_seconds).as_bytes());
         h.update(&self.sim_time_s.to_le_bytes());

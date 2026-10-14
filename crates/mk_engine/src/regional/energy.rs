@@ -25,8 +25,11 @@
 //!   someone is awake in it and daylight is dimmer than they are, and
 //!   draw from the same supply as everything else.
 //!
-//! There is no refinery: fuel is finite until Phase 4b's production route
-//! (deviation D16).
+//! Fuel the island's refinery makes reaches the store through the depot
+//! ([`EstateEnergy::deliver_island_fuel`]). Its carbon left the crust when
+//! the oil was produced, so burning it books material carbon to the air;
+//! every store and tank keeps the share of its fuel that was made on the
+//! island, mixed by volume as fuel moves.
 
 use std::collections::BTreeSet;
 
@@ -134,6 +137,11 @@ impl FuelKind {
 pub struct FuelStore {
     pub fuel: FuelKind,
     pub litres: f64,
+    /// Share of the litres made on the island (the refinery's), whose
+    /// carbon is already material; the rest came with the estate and its
+    /// carbon is the crust's until burned.
+    #[serde(default)]
+    pub island_share: f64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -226,6 +234,9 @@ pub struct EstateVehicle {
     pub tank_litres: f64,
     pub litres: f64,
     pub engine: VehicleEngine,
+    /// Share of the tank made on the island, as for [`FuelStore`].
+    #[serde(default)]
+    pub island_share: f64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -307,16 +318,25 @@ impl Burn {
 /// Book a burn: carbon crust → atmosphere (kg C) and the free oxygen bound
 /// into that CO₂ (kg O₂).
 pub fn book_burn(ledger: &mut Ledger, burn: Burn) {
+    book_burn_from(ledger, burn, 0.0);
+}
+
+/// Book a burn of fuel of which `island_share` was made on the island: that
+/// share's carbon leaves the island's materials, the rest the crust.
+pub fn book_burn_from(ledger: &mut Ledger, burn: Burn, island_share: f64) {
     if burn.litres <= 0.0 {
         return;
     }
     let carbon = burn.litres * burn.fuel.carbon_kg_per_litre();
-    ledger.push(FluxEntry::new(
-        Reservoir::CrustCarbon,
-        Reservoir::AtmosCO2,
-        carbon,
-        FluxKind::Carbon,
-    ));
+    let island = carbon * island_share.clamp(0.0, 1.0);
+    for (from, kgc) in [
+        (Reservoir::MaterialCarbon, island),
+        (Reservoir::CrustCarbon, carbon - island),
+    ] {
+        if kgc > 0.0 {
+            ledger.push(FluxEntry::new(from, Reservoir::AtmosCO2, kgc, FluxKind::Carbon));
+        }
+    }
     ledger.push(FluxEntry::new(
         Reservoir::AtmosO2,
         Reservoir::AtmosCO2,
@@ -419,6 +439,7 @@ impl EstateEnergy {
                             tank_litres: tank,
                             litres: 0.0,
                             engine,
+                            island_share: 0.0,
                         });
                     }
                 }
@@ -430,10 +451,12 @@ impl EstateEnergy {
                 FuelStore {
                     fuel: FuelKind::Diesel,
                     litres: config.diesel_litres,
+                    island_share: 0.0,
                 },
                 FuelStore {
                     fuel: FuelKind::Petrol,
                     litres: config.petrol_litres,
+                    island_share: 0.0,
                 },
             ],
             generators: vec![Generator {
@@ -646,15 +669,18 @@ impl EstateEnergy {
                 continue;
             }
             let litres = kwh * g.litres_per_kwh;
+            let mut share = 0.0;
             if let Some(store) = self.store_mut(g.fuel) {
                 store.litres = (store.litres - litres).max(0.0);
+                share = store.island_share;
             }
-            book_burn(
+            book_burn_from(
                 ledger,
                 Burn {
                     fuel: g.fuel,
                     litres,
                 },
+                share,
             );
             deficit -= kwh;
             generator_kwh += kwh;
@@ -703,11 +729,41 @@ impl EstateEnergy {
         );
         let available = self.stored_litres(fuel);
         let moved = litres.max(0.0).min(room).min(available);
+        let mut share = 0.0;
         if let Some(store) = self.store_mut(fuel) {
             store.litres -= moved;
+            share = store.island_share;
         }
-        self.vehicles[i].litres += moved;
+        let v = &mut self.vehicles[i];
+        v.island_share = mix(v.litres, v.island_share, moved, share);
+        v.litres += moved;
         moved
+    }
+
+    /// Put `litres` of island-made fuel into the store; returns them.
+    pub fn deliver_island_fuel(&mut self, fuel: FuelKind, litres: f64) -> f64 {
+        let litres = litres.max(0.0);
+        if let Some(store) = self.store_mut(fuel) {
+            store.island_share = mix(store.litres, store.island_share, litres, 1.0);
+            store.litres += litres;
+            litres
+        } else {
+            0.0
+        }
+    }
+
+    /// Carbon of the island-made fuel held in stores and tanks (kg C): it
+    /// is material until burned.
+    pub fn island_fuel_kgc(&self) -> f64 {
+        self.fuel_stores
+            .iter()
+            .map(|s| s.litres * s.island_share * s.fuel.carbon_kg_per_litre())
+            .sum::<f64>()
+            + self
+                .vehicles
+                .iter()
+                .map(|v| v.litres * v.island_share * v.fuel.carbon_kg_per_litre())
+                .sum::<f64>()
     }
 
     /// Drive a road vehicle `km` on `surface`: the distance it actually
@@ -729,12 +785,13 @@ impl EstateEnergy {
         let driven = km.max(0.0).min(v.litres / per_km.max(f64::MIN_POSITIVE));
         let litres = driven * per_km;
         v.litres -= litres;
-        book_burn(
+        book_burn_from(
             ledger,
             Burn {
                 fuel: v.fuel,
                 litres,
             },
+            v.island_share,
         );
         driven
     }
@@ -787,12 +844,13 @@ impl EstateEnergy {
             .min(v.litres / per_hour.max(f64::MIN_POSITIVE));
         let litres = run * per_hour;
         v.litres -= litres;
-        book_burn(
+        book_burn_from(
             ledger,
             Burn {
                 fuel: v.fuel,
                 litres,
             },
+            v.island_share,
         );
         run
     }
@@ -938,5 +996,16 @@ mod lighting_tests {
         object.remove("lit");
         let old: EstateEnergy = serde_json::from_value(json).unwrap();
         assert!(old.lighting.is_empty());
+    }
+}
+
+/// The island-made share of `a` litres at share `sa` mixed with `b` litres
+/// at share `sb`.
+fn mix(a: f64, sa: f64, b: f64, sb: f64) -> f64 {
+    let total = a.max(0.0) + b.max(0.0);
+    if total > 0.0 {
+        ((a.max(0.0) * sa + b.max(0.0) * sb) / total).clamp(0.0, 1.0)
+    } else {
+        sa
     }
 }
