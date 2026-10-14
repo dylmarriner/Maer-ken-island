@@ -39,6 +39,21 @@
       "key": "simpson_hart2000",
       "citation": "Simpson, W. T. and Hart, C. A. (2000). Estimates of air drying times for several hardwoods and softwoods. General Technical Report FPL-GTR-121. Madison, WI: USDA Forest Service, Forest Products Laboratory. Table 1 (4/4 northern red oak, 1.125 in = 29 mm actual), Table 2 (estimated air drying times for 4/4 northern red oak to 30, 25 and 20% moisture content in Madison, Wisconsin, with the dry-bulb temperature and relative humidity for each stacking date) and the text (green moisture content of northern red oak 80%; the simulation's diffusion coefficient adjusted in proportion to the saturated vapour pressure of water). Retrieved from https://research.fs.usda.gov/download/treesearch/9684.pdf.",
       "licence": "Public domain (US Government work); values cited with attribution"
+    },
+    {
+      "key": "nz_sl2025_216",
+      "citation": "Building (Exempt Roof-mounted Solar Panel Arrays and Building Work) Order 2025 (SL 2025/216), New Zealand, explanatory note: Schedule 1 of the Building Act 2004 exempts 'single-storey detached buildings not exceeding 10 square metres in floor area', and 'includes 4 types of single-storey detached buildings with a floor area not exceeding 30 square metres (such as a garden shed, sleep-out, or garage)'. Read from https://legislation.govt.nz/secondary-legislation/pco-drafted/2025/216/en/2025-09-22.pdf.",
+      "licence": "New Zealand legislation, Crown copyright, reproduced facts"
+    },
+    {
+      "key": "vanhoutte2019",
+      "citation": "van Houtte, A. and Parker, J. (2019). NZ Wood Design Guides. New Zealand Journal of Forestry 64(2): 'The size of the residential market for structural timber is estimated at 450,000 m3 per annum, which equates to approximately 14 m3 of structural timber per house', against 'residential dwellings consented grew in 2019 to 33,000'. Read from https://nzif.org.nz/nzif-journal/publications/downloadfulltext/23013.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "statsnz2020_floor",
+      "citation": "Stats NZ (12 February 2020). New homes around 20 percent smaller (media release, December 2019 year building consents): the average floor area of new homes consented 'compared with around 160 square metres in 2019'; median 148 m2. Read from the release as reproduced at https://www.scoop.co.nz/stories/BU2002/S00145.htm.",
+      "licence": "Facts cited with attribution"
     }
   ],
   "items": [
@@ -630,6 +645,24 @@
         }
       },
       "note": "Derived here, not published: GTR-121 scales its diffusion coefficient with saturated vapour pressure and then refines it by a fitted relative activation energy, which the exponent stands in for. With these values the 72 times are reproduced with a median error of 3.4% and a worst of 21%; regional/drying.rs's tests re-run the fit's check from the table above."
+    },
+    {
+      "key": "exempt_detached_building_floor_area",
+      "description": "Largest floor area of a single-storey detached building, such as a shed, that New Zealand lets be built without a building consent (Building Act 2004, Schedule 1, clause 3)",
+      "unit": "m2",
+      "source": "nz_sl2025_216",
+      "confidence": "high",
+      "value": { "point": 10.0 },
+      "note": "The other three single-storey detached types (up to 30 m2) carry further conditions on design and materials."
+    },
+    {
+      "key": "structural_timber_per_floor_area",
+      "description": "Structural (framing) timber in New Zealand's new housing per m2 of floor, 2019: the market's 14 m3 per house (van Houtte & Parker 2019) over the average new home's 160 m2 the same year (Stats NZ)",
+      "unit": "m3 / m2",
+      "source": "vanhoutte2019",
+      "confidence": "low",
+      "value": { "point": 0.0875 },
+      "note": "Derived: 14 / 160. The 14 m3 is the residential market's 450,000 m3 a year over about 33,000 dwellings consented in 2019, so it averages detached houses and multi-unit homes, as Stats NZ's 160 m2 does. Floor area includes attached garages. A shed has no internal walls or floor joists over a slab, so this overstates its framing."
     }
   ]
 }

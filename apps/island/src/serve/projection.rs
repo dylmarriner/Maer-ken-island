@@ -667,6 +667,15 @@ impl IslandProjection {
                     })
                 })
                 .collect(),
+            doors: layout
+                .doors
+                .iter()
+                .map(|door| mk_island_api::Doorway {
+                    a: label_of(door.a),
+                    b: label_of(door.b),
+                    position_m: door.position_m,
+                })
+                .collect(),
         }
     }
 

@@ -488,6 +488,24 @@ pub struct EstateLayout {
     pub buildings: Vec<BuildingFootprint>,
     pub spaces: Vec<SpaceRect>,
     pub items: Vec<PlacedItem>,
+    /// Where the island hangs its doors, the graph people route through.
+    /// Defaulted so a layout from an older backend, which served none,
+    /// still reads.
+    #[serde(default)]
+    pub doors: Vec<Doorway>,
+}
+
+/// A door: the two spaces it joins, by the layout's own labels (`None` is
+/// outdoors), and where it is in domain metres.
+///
+/// A position and nothing else, because that is all the island models: a
+/// door has no width or height there, only a place in the door graph. A
+/// renderer that drew one any particular size would be inventing it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Doorway {
+    pub a: Option<String>,
+    pub b: Option<String>,
+    pub position_m: (f64, f64),
 }
 
 impl EstateLayout {

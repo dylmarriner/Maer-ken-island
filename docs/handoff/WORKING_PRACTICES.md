@@ -35,7 +35,7 @@ checks the founders' week against the reference packs, **then** compares the fin
 with `WEEK_DIGEST`. Any change to physics, life or serialized state moves the digest.
 
 1. Run it: `cargo test --release -p mk_engine --test island_life_acceptance -- --ignored --nocapture`.
-2. Read every printed audit: every audit closed (10,500 in the week as of 2026-10-14 (with R3's foraging time): the household water and meal audits run each substep), no food or water shortfall, body carbon at 1.00x,
+2. Read every printed audit: every audit closed (20,594 in the week as of 2026-10-14: the household water, meal and gas stove audits run each substep), no food or water shortfall, body carbon at 1.00x,
    eating about 43-47 min/day, drinking 1.4-1.8 L/day, forest NPP inside the reference range,
    intimacy about 65/yr in the four-week test.
 3. Only if every deferred assertion passed and the movement is explained by your change, copy the

@@ -237,15 +237,25 @@ fn walking_takes_real_time_and_heavy_loads_are_refused() {
         "climb added {:.2} h",
         climb - hours
     );
-    // A load past the sustainable fraction slows the walk; within it does not.
+    // People choose their pace under load as measured: a fifth of body
+    // mass does not slow them, two fifths slows them about 3%, and the
+    // heaviest load allowed no more than the heaviest measured.
     let sustainable = t.sustainable_load_kg(&body).unwrap();
     let light = t
-        .walking_time_s(&body, 10_000.0, 0.0, 0.5 * sustainable)
+        .walking_time_s(&body, 10_000.0, 0.0, 0.2 * body.weight_kg)
         .unwrap();
     assert_eq!(light, hours * 3_600.0);
+    let forty = t
+        .walking_time_s(&body, 10_000.0, 0.0, 0.4 * body.weight_kg)
+        .unwrap();
+    assert!(
+        (1.01..=1.06).contains(&(forty / light)),
+        "40% of body mass: {:.3}x the time",
+        forty / light
+    );
     let max = t.max_load_kg(&body).unwrap();
     let heavy = t.walking_time_s(&body, 10_000.0, 0.0, max).unwrap();
-    assert!(heavy > light * 1.3, "heavy {heavy} vs light {light}");
+    assert_eq!(heavy, forty);
     // Above the maximum the load is refused.
     assert!(matches!(
         t.walking_time_s(&body, 1_000.0, 0.0, max + 1.0),
@@ -254,6 +264,41 @@ fn walking_takes_real_time_and_heavy_loads_are_refused() {
     assert!(t.check_carry(&body, max).is_ok());
     assert!(t.check_carry(&body, max + 0.1).is_err());
     assert!(max > sustainable && sustainable < body.weight_kg);
+}
+
+#[test]
+fn a_load_costs_energy_as_pandolf_says_and_nothing_unloaded_changes() {
+    let t = table();
+    let body = founder();
+    let walking = 3.55;
+    // Nothing carried: the Compendium's walking MET, untouched.
+    assert_eq!(t.loaded_walking_met(&body, 0.0, walking).unwrap(), walking);
+    // Pandolf's equation itself, at 70 kg with 20 kg at 1.4 m/s on a
+    // treadmill: 1.5x70 + 2x90x(20/70)^2 + 90x1.5x1.96 = 384.3 W.
+    let seventy = LabourBody {
+        weight_kg: 70.0,
+        ..body
+    };
+    let m = t.pandolf_w(&seventy, 20.0, 1.4, "blacktop").unwrap();
+    assert!((m - 384.29).abs() < 0.01, "{m}");
+    // Heavier is dearer, and more than in proportion once the load term
+    // (L/W)^2 grows.
+    let met = |kg: f64| t.loaded_walking_met(&body, kg, walking).unwrap();
+    let (twenty, forty) = (met(0.2 * body.weight_kg), met(0.4 * body.weight_kg));
+    assert!(
+        walking < twenty && twenty < forty,
+        "{walking} {twenty} {forty}"
+    );
+    assert!(
+        (1.1..=1.5).contains(&(twenty / walking)),
+        "a fifth of body mass: {:.2}x",
+        twenty / walking
+    );
+    // Rougher ground is dearer.
+    assert!(
+        t.pandolf_w(&seventy, 20.0, 1.4, "sand").unwrap()
+            > t.pandolf_w(&seventy, 20.0, 1.4, "dirt_road").unwrap()
+    );
 }
 
 #[test]

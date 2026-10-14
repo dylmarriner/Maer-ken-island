@@ -468,6 +468,11 @@ pub enum Reservoir {
     MaterialWater,
     /// Carbon held in human bodies: eaten food in, respiration out.
     HumanCarbon,
+
+    /// Carbon in atmospheric methane (Phase 4b Task 4): what leaks from oil
+    /// and gas production. Declared last so every earlier variant's index,
+    /// and any serialized ledger, is unchanged.
+    AtmosCH4,
 }
 
 impl Reservoir {
@@ -556,6 +561,8 @@ impl Reservoir {
             MaterialCarbon,
             MaterialWater,
             HumanCarbon,
+            // Methane
+            AtmosCH4,
         ][..]
     }
 
@@ -601,6 +608,7 @@ impl Reservoir {
             Reservoir::MaterialCarbon => "MaterialCarbon",
             Reservoir::MaterialWater => "MaterialWater",
             Reservoir::HumanCarbon => "HumanCarbon",
+            Reservoir::AtmosCH4 => "AtmosCH4",
         }
     }
 }
@@ -1235,12 +1243,13 @@ mod tests {
             MaterialCarbon => 32,
             MaterialWater => 33,
             HumanCarbon => 34,
+            AtmosCH4 => 35,
         }
     }
 
     #[test]
     fn reservoir_all() {
-        const VARIANTS: usize = 35;
+        const VARIANTS: usize = 36;
         let all = Reservoir::all();
 
         // Every variant appears in `all()` exactly once.
@@ -1271,6 +1280,7 @@ mod tests {
             Reservoir::MaterialCarbon,
             Reservoir::MaterialWater,
             Reservoir::HumanCarbon,
+            Reservoir::AtmosCH4,
         ] {
             assert!(!r.is_boundary());
         }

@@ -40,6 +40,30 @@ pub fn neighbourhood(layout: &EstateLayout) -> (f64, f64, f64, f64) {
     )
 }
 
+/// How often the stand cover's picture is asked for again. It follows the
+/// field's biomass, which moves with the seasons and with felling, not
+/// from one frame to the next.
+pub const STAND_POLL: std::time::Duration = std::time::Duration::from_secs(120);
+
+/// Where `at`, a point of the estate frame, falls on the island's picture
+/// of the patch's stand cover (`/api/patch.png`): `[u, v]` with u running
+/// east and v south, each 0 to 1 over the whole patch, because the picture
+/// is drawn north up with one pixel per 5 m stand cell.
+///
+/// The wood's floor is textured with that picture, so the ground between
+/// the trunks shows how much stand there is -- undergrowth, small stems
+/// and the rest of the cell's carbon that is not an individual tree --
+/// in the island's own figures rather than one flat green.
+pub fn stand_uv(layout: &EstateLayout, at: Point) -> [f32; 2] {
+    let far = estate_of(
+        (layout.patch.x0, layout.patch.y0),
+        layout.patch.x1,
+        layout.patch.y1,
+        0.0,
+    );
+    [at.x / far.x, 1.0 - at.z / far.z]
+}
+
 /// One trunk, ready to draw.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Stem {
@@ -70,6 +94,23 @@ pub fn stems(trees: &Trees, origin_m: (f64, f64)) -> Vec<Stem> {
         .collect()
 }
 
+/// What the inspector says about the tree `id` among `trees`: the
+/// island's own figures for it. `None` when that tree is no longer in the
+/// read -- felled since it was picked, or outside the box now asked for.
+pub fn describe(trees: &Trees, id: u64, origin_m: (f64, f64)) -> Option<Vec<String>> {
+    let tree = trees.trees.iter().find(|t| t.id == id)?;
+    Some(vec![
+        format!("{} {id}", tree.kind),
+        format!("{:.1} m tall", tree.height_m),
+        format!("{:.0} cm across the stem", tree.stem_diameter_m * 100.0),
+        format!(
+            "At {:.1}, {:.1} m from the patch corner",
+            tree.x_m - origin_m.0,
+            tree.y_m - origin_m.1
+        ),
+    ])
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -92,6 +133,7 @@ mod tests {
             buildings: vec![],
             spaces: vec![],
             items: vec![],
+            doors: vec![],
         }
     }
 
@@ -117,6 +159,19 @@ mod tests {
     }
 
     #[test]
+    fn the_stand_picture_is_laid_north_up_across_the_whole_patch() {
+        let layout = layout();
+        let origin = (layout.patch.x0, layout.patch.y0);
+        let at = |x: f64, y: f64| stand_uv(&layout, estate_of(origin, x, y, 0.0));
+        // The patch's south-west corner is the picture's bottom-left, and
+        // its north-east the top-right: row 0 of the image is the north.
+        assert_eq!(at(1_000.0, 2_000.0), [0.0, 1.0]);
+        assert_eq!(at(5_000.0, 6_000.0), [1.0, 0.0]);
+        // A quarter of the way east and three quarters north.
+        assert_eq!(at(2_000.0, 5_000.0), [0.25, 0.25]);
+    }
+
+    #[test]
     fn a_stem_is_drawn_where_it_stands_as_tall_and_thick_as_it_is() {
         let trees = Trees {
             trees: vec![
@@ -139,5 +194,24 @@ mod tests {
         assert_eq!(oak.base, Point::new(150.0, 0.0, -2_100.0));
         assert_eq!((oak.height_m, oak.radius_m), (24.0, 0.21));
         assert!(!oak.shrub && drawn[1].shrub);
+    }
+
+    #[test]
+    fn a_picked_tree_is_described_in_the_islands_figures_until_it_is_gone() {
+        let trees = Trees {
+            trees: vec![tree(7, "Tree", 1_150.0, 4_100.0, 24.0, 0.42)],
+            ..Default::default()
+        };
+        assert_eq!(
+            describe(&trees, 7, (1_000.0, 2_000.0)).unwrap(),
+            [
+                "Tree 7",
+                "24.0 m tall",
+                "42 cm across the stem",
+                "At 150.0, 2100.0 m from the patch corner",
+            ]
+        );
+        // Felled since: nothing to say rather than a stale description.
+        assert_eq!(describe(&trees, 8, (1_000.0, 2_000.0)), None);
     }
 }

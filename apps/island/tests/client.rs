@@ -512,6 +512,34 @@ async fn the_estate_is_served_as_geometry_a_renderer_can_place() {
             "the founders start in their own bedrooms, so those are rooms"
         );
 
+        // The doors the island routes people through, by the spaces'
+        // own labels: every room can be reached, so every one has a door,
+        // and at least one of them leads outdoors.
+        assert!(!layout.doors.is_empty(), "the layout serves its doors");
+        let labels: Vec<&str> = layout.spaces.iter().map(|s| s.label.as_str()).collect();
+        for door in &layout.doors {
+            for side in [&door.a, &door.b].into_iter().flatten() {
+                assert!(
+                    labels.contains(&side.as_str()),
+                    "a door names {side}, which is no space: {labels:?}"
+                );
+            }
+        }
+        assert!(
+            layout.doors.iter().any(|d| d.a.is_none() || d.b.is_none()),
+            "some door leads outdoors"
+        );
+        for space in layout.spaces.iter().filter(|s| s.kind == "Room") {
+            assert!(
+                layout.doors.iter().any(|d| {
+                    d.a.as_deref() == Some(space.label.as_str())
+                        || d.b.as_deref() == Some(space.label.as_str())
+                }),
+                "{} has no door",
+                space.label
+            );
+        }
+
         // And the things in them, with the join from placement to name
         // already done.
         let computers: Vec<&mk_island_api::PlacedItem> = layout

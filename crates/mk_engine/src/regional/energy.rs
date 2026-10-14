@@ -310,7 +310,15 @@ pub fn book_burn(ledger: &mut Ledger, burn: Burn) {
     if burn.litres <= 0.0 {
         return;
     }
-    let carbon = burn.litres * burn.fuel.carbon_kg_per_litre();
+    book_fossil_carbon(ledger, burn.litres * burn.fuel.carbon_kg_per_litre());
+}
+
+/// Book `carbon` kg of fossil fuel's carbon burned: crust → atmosphere as
+/// CO₂, binding the free oxygen that takes.
+pub fn book_fossil_carbon(ledger: &mut Ledger, carbon: f64) {
+    if carbon <= 0.0 {
+        return;
+    }
     ledger.push(FluxEntry::new(
         Reservoir::CrustCarbon,
         Reservoir::AtmosCO2,

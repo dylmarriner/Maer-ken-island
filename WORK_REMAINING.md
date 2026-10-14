@@ -42,9 +42,9 @@ this list holds the current state. The evidence for what is *done* is in
 | Living world | D9: actions take one tick | Open (felling, hauling done) | Cited durations per task |
 | Living world | D31: NPP ignores soil nutrients | Open | Regional soils model and data |
 | Runtime | Phase 4 Task 2b: deep-time spin-up | **Done** (2026-10-14) | — |
-| Industry | Phase 4b Task 1 remainder: reference tables | Open | Sources (petroleum, refinery, staffing, wages, demand) |
-| Industry | Phase 4b Task 4: oil and gas field (D14, D19) | Open | Task 1 tables; a petroleum deposit |
-| Industry | Phase 4b Task 5: refinery, gas plant, fuel depot (D16) | Open | Task 1 tables |
+| Industry | Phase 4b Task 1 remainder: reference tables | Done 2026-10-14 (nine packs); gaps listed in §4a | A few items (see §4a) |
+| Industry | Phase 4b Task 4: oil and gas field (D14, D19) | Fields, decline and carbon done 2026-10-14 (D58); wells, water cut, spills open | Per-well rate, water-cut series |
+| Industry | Phase 4b Task 5: refinery, gas plant, fuel depot (D16) | Topping refinery done 2026-10-14; gas plant, reformer, depot open | Reformate yield; gas-plant own use |
 | Industry | Phase 4b Task 6: jobs, trades, maintenance (D39) | Open | Upstream human-runtime change first |
 | Industry | Phase 4b Task 7: money, enterprises, payroll | Open | Owner: ownership split, policies |
 | Industry | Phase 4b Task 7b: food and timber chains | Open | Task 2 catalogue; crop/livestock data |
@@ -98,8 +98,9 @@ the log's last water is booked to the air at that moment rather than when the wo
   coordination change in `life.rs`, plus a cited two-person sawing rate.
 - **Excavator rigging:** the CAT 330 lifts with the shed's rope; attaching a sling is untimed
   because no cited figure was found. Either source a rigging time or the owner adds a grapple.
-- **Routes:** legs are straight lines; slope (`EstateLayout::terrain_m`) and obstacles are
-  ignored, and vehicles have no position of their own. A route over the patch terrain with a
+- **Routes:** legs are straight lines. Walks climb the ground's rises along them (Naismith,
+  `EstateLayout::ground_m`, 2026-10-14); obstacles are ignored, vehicle times ignore slope, and
+  vehicles have no position of their own. A route over the patch terrain with a
   slope cost, and vehicles that stay where they were parked, would close this.
 - **Files:** `regional/timber.rs`, `regional/life.rs` (`work`, `plan_haul`,
   `finish_haul_task`), `regional/labour.rs`.
@@ -141,7 +142,10 @@ animal and fish resource nodes (§2b), which can now read the habitats.
 
 ### 2c. D9: most actions still take one tick
 
-- **Now:** felling and hauling are timed and costed; everything else completes in one tick.
+- **Now:** felling, hauling and panning a placer for gold (2026-10-14: walk there, the packs'
+  working day at the pan, walk home, the gold to the store) are timed and costed; everything
+  else completes in one tick. Foraging food (R3, with session 38's Kelly 2013 return rates) is
+  next.
 - **Needs:** a cited duration for each action (`fixtures/reference/labour/productivity.json`
   holds some already), and the same task machinery felling uses (`life.rs` `work`) extended to
   them. Actions with no Compendium row cost the resting baseline (D22, accepted).
@@ -175,40 +179,66 @@ reference tables, which were not fetched.
 
 ### 4a. Task 1 remainder: the reference tables
 
-Add to `fixtures/reference/industry/` (new packs alongside `hydro.json`), each value cited:
+**Done 2026-10-14:** nine cited packs, every value read at its source with a quote or table
+reference in its note:
 
-| Table | For | Notes |
-|---|---|---|
-| Reservoir recovery factors, gas-oil ratios, water cut, Arps decline parameters | Task 4 | Published field studies or textbooks |
-| Methane leak fraction from production | Task 4, D14 | An inventory figure (e.g. a national GHG inventory) |
-| Spill and blowout frequencies | Task 4 | An offshore/onshore incident database |
-| Crude assays and product yields; refinery energy and CO₂ per barrel | Task 5 | A published assay for a light crude; refinery benchmarks |
-| Gas composition and processing yields | Task 5 | |
-| Staffing per plant type and size | Task 6 | |
-| Occupational wage ratios | Task 7 | e.g. a national statistics office's wage tables |
-| Household electricity, cooking and transport-fuel demand | Task 8 | e.g. a national energy-use survey |
-| Crop growth (growing degree days, water stress), yields per hectare, livestock feed and growth | Task 7b | FAO tables are the natural source |
-| Sawmill recovery rates; house bill of materials and labour hours by trade | Task 7b | |
-| Demographic structure for the founding town | Task 8 | A national census age/sex table |
+- `industry/petroleum.json`: recovery factors by drive, gas-oil ratios, the world water-oil ratio,
+  decline rates (Höök et al. 2009; IEA WEO 2008 via UKERC), Arps b (low), methane loss (Alvarez et al.
+  2018), blowout frequencies per well and well-year (BOEM 2014 from SINTEF), well spacing, and New
+  Zealand's field sizes (MBIE 2019 via Wikipedia).
+- `industry/refinery.json`: the Equinor Troll Blend assay (cuts, densities, sulphur),
+  hydroskimming against cracking yields (low), refinery energy and CO2 (Jing et al. 2020;
+  Concawe 2018), NZ diesel density, IPCC 2006 calorific values and carbon contents.
+- `industry/gas.json`: Kapuni raw gas, NZ sales-gas ranges, Kupe's products, IPCC calorific values,
+  US NGL shrinkage.
+- `industry/staffing.json`, `industry/wages.json`, `industry/demand.json`: dairy and sheep-and-beef
+  labour, GP list size, Marsden Point's staff and throughput, supermarket staff; Stats NZ wages by
+  occupation and industry, the 2026 minimum wage, leave and KiwiSaver; household electricity, the
+  HEEP end-use and fuel split, driving per year and vehicles per person.
+- `industry/agriculture.json`, `industry/construction.json`, `humans/demography.json`: NZ dairy,
+  sheep, beef and pig production, pasture growth, crop yields, maize thermal time, Pukekohe's
+  urban area; sawmill recovery (low), a reference house's areas, framing labour rates, new-house
+  floor areas; NZ age-sex structure, household sizes and labour-force participation.
+
+**Not found, still needed:** a per-well production rate and water-cut history (Task 4); a primary
+refinery energy figure per tonne and gas-plant own use (Task 5); staffing for hospitals, sawmills,
+gas plants and hydro stations, Marsden Point's nameplate capacity (Task 6); transport fuel per
+vehicle in litres (Task 8); a minimum breeding herd, lamb slaughter age, NZ pig carcass and intake,
+beef intake, wheat and pasture degree days (Task 7b); framing m³ per m² and whole-house labour by
+trade, a 2-3 bedroom cottage's floor area (Task 6 and 7b); the Pukekohe growing district's area.
 
 ### 4b. Task 4: oil and gas field (D14, D19)
 
-- **Requires** a Phase 1 petroleum deposit on the chosen island; if there is none, the
-  enterprises are not created and the dashboard says why.
-- **Files:** create `regional/industry/petroleum.rs` (`PetroleumReservoir`, `Well`,
-  `ArpsDecline`); modify `crates/mk_core/src/flux/mod.rs` (an `AtmosCH4` reservoir, appended last
-  so earlier indices are unchanged; record in `UPSTREAM.md`) and `regional/climate.rs` (methane
-  forcing per Myhre et al. 1998 as the plan states; transcribe the formula from the paper).
-- **Tests:** `tests/petroleum_field.rs` (the plan's Step 1 list).
-- **Decision:** D19 (no drilling rigs can be made on the island) stays open or is accepted by the
-  owner as imported equipment (D15 already accepts imported plant).
+- **Done 2026-10-14** (`regional/industry/petroleum.rs`, `tests/petroleum_field.rs`): every
+  petroleum deposit is a field the size of one of New Zealand's nine (the owner's island has three,
+  like Kapuni, McKee and Maari), declining exponentially at 4.4% a year, exact for any step length;
+  its carbon comes out of the crust into the field's tanks, and 2.3% of its gas leaks as methane into
+  the new `AtmosCH4` reservoir (`UPSTREAM.md`).
+- **Also done:** `regional/industry/chain.rs` runs the fields and the refinery as one plant, choked to
+  the plan's default 500 bbl/day nameplate, its material carbon auditable step by step; leaked
+  methane oxidises with its 11.8-year lifetime (IPCC AR6). Packs gained reformate yields (Speight),
+  gas-plant fuel and shrinkage (EIA), methane lifetimes, alluvial diamond grades (low), Lake
+  Grassmere solar salt and hand-dug shaft depth and sinking rate (a well analogue, low).
+- **Next:** carry `IndustryChain` in `IslandLife` (state, snapshot, the audited material stock) and
+  let a depot top the estate's diesel up from the store, burning island diesel as material carbon.
+- **Left (D58):** a plateau, reservoir pressure and water cut; wells, workover crews and blowouts
+  (the frequencies are in the pack, but there is no per-well rate to count wells by); spills and their
+  harm to shellfish; methane warming (negligible at island scale, Etminan et al. 2016);
+  who runs the field (Task 6). D19 (drill rigs cannot be made on the island) stays the owner's call;
+  the default is imported equipment, as D15 accepts imported plant.
 
 ### 4c. Task 5: refinery, gas plant, fuel depot (D16)
 
-- **Files:** create `regional/industry/{refinery.rs,gas_plant.rs,fuel.rs}`; modify
-  `regional/energy.rs` so vehicles and generators buy fuel at the depot.
-- **Tests:** `tests/refinery.rs` (yields by assay, mass and carbon close, campaigns stop on full
-  tanks, no petrol without the reformer, a vehicle refuels and pays).
+- **Done 2026-10-14** (`regional/industry/refinery.rs`, `tests/refinery.rs`): a topping refinery
+  distils crude into the Troll assay's atmospheric cuts and names each by where it boils, against
+  New Zealand's fuel specifications (petrol's 210 °C final boiling point, diesel's 360 °C T95). It
+  burns its own refinery gas, then residue, for the world's average 606 MJ a barrel (Jing et al.
+  2020): about 11% of the crude and 43 kg of CO2 a barrel, inside Downey's 8-12% and Jing et al.'s
+  13.9-62.1 kg. Mass and carbon close (IPCC carbon contents, scaled by one factor of 0.974). Crude
+  comes from a field's tanks (`PetroleumField::take_oil`).
+- **Left:** the gas plant (LPG and condensate from raw gas; gas-plant own use is not sourced), a
+  reformer for petrol (needs a cited reformate yield), the fuel depot and vehicles and generators
+  buying fuel (`regional/energy.rs`), campaigns that stop on full tanks, and payment (Task 7).
 
 ### 4d. Task 6: jobs, trades, shifts, maintenance (D39) — upstream first
 
@@ -316,15 +346,14 @@ dashboard; the desktop panels).
 | Task | Remaining | Needs |
 |---|---|---|
 | 3 | Individual stems in 3D around the yard are drawn (2026-10-14, `stems.rs`: up to 3,000 trunks within 250 m, at their own height and diameter); left of 2a: stand cover and instanced trees beyond the patch from biomass. Interiors (2b), industry and town (2d, after Phase 4b), resource visuals and inventory icons (2c, after Phase 3 Task 2), tests for every building kind and vehicle | Engineering |
-| 4 | Human detail view, inspector, foundry panel; portraits | **Owner picks the two portraits** from upstream `apps/mk_ui/assets/portraits/`, and confirms their provenance before any distribution |
-| 5 | Done 2026-10-14 for the clock, controls and terrain cell (`apps/island_ui/src/inspectors.rs`): six speeds with requested and achieved, Save, the local date (year, day of 288, time of a 36-hour day) with Earth time elapsed, and the cell under the view with its biome, climate and production. A click on the estate picks a building, room or item and the right panel describes it (`estate.rs` `pick`). Left: picking a tree, once the stems are drawn | Engineering |
-| 6 | `island_bench`, the allocation-bound test (`construction-counters` feature), the resolution gate | **Owner confirms targets** (default: headless one simulated day per real minute; real time with the UI open) and **decides on formal predictive processing** (wire it into decisions upstream, or stop running it) |
+| 4 | Person inspector done 2026-10-14 (the backend's sections, now with what they are doing and thinking, and family). The foundry (create somebody from the desktop) done the same day. Left: portraits | **Owner picks the two portraits** from upstream `apps/mk_ui/assets/portraits/`, and confirms their provenance before any distribution |
+| 5 | Done 2026-10-14 for the clock, controls and terrain cell (`apps/island_ui/src/inspectors.rs`): six speeds with requested and achieved, Save, the local date (year, day of 288, time of a 36-hour day) with Earth time elapsed, and the cell under the view with its biome, climate and production. A click on the estate picks a building, room, item or tree and the right panel describes it (`estate.rs` `pick`, `stems.rs` `describe`). Nothing left | — |
+| 6 | Done except the owner's word on the targets: `island_bench` and `benchmarks/2026-10-08-regional-baseline.json` (12.9 simulated days per real minute headless against a default target of one, so no fallback profile), the allocation-bound test (`tests/island_allocation_bounds.rs`, `construction-counters`), and formal predictive processing measured at 0.9% of the human step (`tests/island_dead_compute.rs`), so keeping it running costs little. The plan's Task 6 status has the detail | **Owner confirms the targets** (default: headless one simulated day per real minute; real time with the UI open) and **decides on formal predictive processing**: its `selected_action` is read by nothing, so wire it into decisions upstream or stop running it (the measurement prices the choice, it does not make it) |
 | 7 | The sync script is done (2026-10-14, `scripts/sync_maerken_upstream.py`, `UPSTREAM.md` § Sync procedure). The creator moved into `apps/island` (`island::population`) and `apps/island_humans` is retired. Pruning is the owner's call (the inventory recommends not to) | Engineering |
 | 8 | Final acceptance: every design criterion run and recorded | All of the above |
 
 Also: **a GPU frame-rate figure** for `island-ui` (every frame so far was rasterised on the CPU,
-0.6 frames/s for the island view and 10.8 for the estate), and other window sizes. The Creator
-page does not yet use the map.
+0.6 frames/s for the island view and 10.8 for the estate), and other window sizes.
 
 ---
 
@@ -374,10 +403,10 @@ Ordered by what most changes the founders' daily life:
 |---|---|---|---|
 | R0 | Honest register: deviation rows for every mind and sense gap; book grazer faeces and deaths to detritus; remove or wire dead code | humans §1.11, earth §4 Step 0 | Done: D44-D54 record the mind and sense gaps; litter, faeces and carcasses feed RothC soil carbon (`regional/soil.rs`, D43); the unused sparse plant view is gone |
 | R1 | Water at home: a rainwater tank filled by simulated rain on the house roof, sized from the estate's own climate (ESR 2021 use, Harrison Grierson 2011 inflow model); people away from home drink where they find water; a dry tank means fetching by hand | work §3.2 | Tank done (PR #10, D42); R1b fetching by hand with two 20 L jerrycans when dry done (PR #12) |
-| R2 | Mass-based carrying and real containers: load limits by body mass, pace and energy by load | work §3.1, §2.2 | Open |
+| R2 | Mass-based carrying and real containers: load limits by body mass, pace and energy by load | work §3.1, §2.2 | In part (2026-10-14): load limits by body mass; pace under load from measured self-selected speeds; energy by load from Pandolf's equation for water fetched by hand. Open: a general mass inventory of what each person holds, and baskets, sacks and packs |
 | R3 | An edible food base: edible fractions, foraging with a food store at home, seasonal and soil-limited plant production (D31) | earth Steps 1-2, work §3.3 | Started (#42, D57): people eat only a forest's fruit and seed, grown at NPP times Ward et al. 2025's reproductive allocation, not its wood. A meal is now gathered before it is eaten: the walk to the food and back, and the meal's energy over Kelly's (2013, Table 3-4) acorn return rate, 821 kcal/h, at the Compendium's foraging MET. Left: search time (Kelly's rates are post-encounter), a food store at home, bracken and raupo once their extent per cell is sourced, seasonality, soil limits (D31) |
-| R4 | Firewood, drying (D40), fire and cooking | work §3.4, §2.5-2.6 | Open |
-| R5 | Every action takes its real time (D9): gather, mine, build with delivered materials and visible progress, craft chains; skill improves with practice (power law) | work §3.5-3.8 | Open |
+| R4 | Firewood, drying (D40), fire and cooking | work §3.4, §2.5-2.6 | In part: logs dry (D40); the kitchen's gas stove burns the house's average cooking LPG from two bottles (D59, 2026-10-14); when the bottles are empty, a wood fire burns the store's air-dry wood at kitchen-performance-test rates (1.74-1.98 kg per adult equivalent per day). Open: meals cooked at times of day, fire tending and fetching time, splitting (no peer-reviewed split-only axe rate was found; Granqvist 1993's 0.95 m³/h includes chainsaw crosscutting) |
+| R5 | Every action takes its real time (D9): gather, mine, build with delivered materials and visible progress, craft chains; skill improves with practice (power law) | work §3.5-3.8 | Started (2026-10-14): mining a placer is timed (D9); the first building, a 10 m² firewood shed, takes its timber from the store's seasoned wood and the packs' timber-frame hours with the powered saw (D60); the starting estate counts as pre-built (D60, the owner's ruling). Open: gathering clay, sand, gravel and stone, a covered stack's drying, craft chains, skill |
 | R6 | Senses and perception as things (sight, hearing, smell, taste, touch and pain from injury), memory of places, and choices that use memory, emotion, goals and personality | humans ranks 1, 3 | Open |
 | R7 | Emotion by appraisal with mood; per-person bonds and cooperation; teaching; dependent children who learn and acquire language; invention from experience, not a timer | humans ranks 2, 4-6 | Open |
 | R8 | Game and hunting, fish and shellfish, farming and livestock | earth Steps 3-4, §2.5 | Open |
@@ -408,5 +437,5 @@ invertebrate densities, fire danger indices (see each report's "unsourced" secti
   push; the `dependency audit` CI job replaced it.
 - **Firecrawl credits ran out** on 2026-10-12. WebSearch and the TinyFish fetcher still work for
   sources; the container's own network blocks most hosts.
-- **Persist digests.** `WEEK_DIGEST` is `bbbc144d…cb7a`; the planetary topology pin is
+- **Persist digests.** `WEEK_DIGEST` is `cc90144d…2b5d`; the planetary topology pin is
   `e4ece246…73e2`. Any change that moves either is a behaviour change and must say so.

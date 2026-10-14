@@ -142,15 +142,37 @@ const DAY: u64 = 86_400;
 /// 43 minutes a day, drinking 1.81 and 1.43 L a day, temperate-forest NPP
 /// 471 g C/m2/yr (reference 400-900), intimacy 39 a year.
 ///
-/// And for R3's foraging time (2026-10-14): a meal is gathered before it is
-/// eaten, at Kelly's (2013) acorn return rate and the Compendium's foraging
-/// MET, and eaten when the trip ends. Read from CI's slow tier (run
-/// 38509974775) on top of R3's edible food: 10,500 audits closed (meals now
-/// land when the gathering ends), no food or water shortfalls, body carbon
-/// 13.0 of 13.0 and 10.4 of 10.4 kg, eating 48 and 43 minutes a day,
-/// drinking 2.37 and 1.75 L a day (gathering costs water), temperate-forest
-/// NPP 471 g C/m2/yr (reference 400-900).
-const WEEK_DIGEST: &str = "bbbc144d7123a4e492d58ae277be0978155972915219fa9d2a098b0c8215cb7a";
+/// And for D9's mining (2026-10-14): the island keeps #31's surveyed
+/// resource sites and the founders' mining jobs, both hashed, so the digest
+/// moves although nobody chose to mine in the week. Read from CI's slow
+/// tier (run 38501193896) on top of R3's edible food: 10,514 audits closed,
+/// no food or water shortfalls, body carbon 13.0 of 13.0 and 10.4 of 10.4
+/// kg, eating 47 and 43 minutes a day, drinking 1.81 and 1.43 L a day,
+/// temperate-forest NPP 471 g C/m2/yr (reference 400-900).
+/// And for the kitchen's gas stove (R4 in part, D59, 2026-10-14): the house
+/// burns HEEP's cooking energy from its two LPG bottles while anyone is
+/// home, booking the carbon from the crust to the air in an audit of its
+/// own each substep. Read from CI's slow tier (run 38543088969) on top of
+/// D9's mining: 20,594 audits closed, no food or water shortfalls,
+/// body carbon 13.0 of 13.0 and 10.4 of 10.4 kg, eating 47 and 43 minutes
+/// a day, drinking 1.81 and 1.43 L a day, temperate-forest NPP 471 g
+/// C/m2/yr (reference 400-900).
+///
+/// And for the kitchen's wood fire (R4, D59, 2026-10-14): the stove's spec
+/// and counters gain the fire's rate and tallies, hashed, though the gas
+/// outlasts the week and no fire burns in it. Read from CI's slow tier (run
+/// 38548515120) on top of the gas stove: unchanged otherwise, 20,594
+/// audits closed, no shortfalls, body carbon 13.0 of 13.0 and 10.4 of 10.4
+/// kg, eating 47 and 43 minutes a day, drinking 1.81 and 1.43 L a day, NPP
+/// 471 g C/m2/yr.
+///
+/// And for the firewood shed (D9, R5, D60, 2026-10-14): the shed's build
+/// state is kept and hashed, though no wood seasons in the week and nobody
+/// can start it. Read from CI's slow tier (run 38552662905) on top of the
+/// wood fire: unchanged otherwise, 20,594 audits closed, no shortfalls,
+/// body carbon 13.0 of 13.0 and 10.4 of 10.4 kg, eating 47 and 43 minutes
+/// a day, drinking 1.81 and 1.43 L a day, NPP 471 g C/m2/yr.
+const WEEK_DIGEST: &str = "cc90144d45521376897a594226bf8d95875820e7c37a2c057fce488ad08a2b5d";
 
 fn repo(path: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))

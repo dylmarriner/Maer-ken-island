@@ -1,0 +1,482 @@
+{
+  "id": "construction",
+  "domain": "industry",
+  "title": "New Zealand timber, house construction labour, and floor areas",
+  "retrieved": "2026-10-14",
+  "licence": "Numerical values cited as facts with attribution; no text, figures or datasets reproduced.",
+  "sources": [
+    {
+      "key": "fao2020",
+      "citation": "FAO, ITTO and United Nations (2020). Forest product conversion factors. Rome. https://doi.org/10.4060/ca7952en. Chapter 4 Sawnwood, summary table by country (conifer; column New Zealand): 'Sawnwood all' m3 roundwood per m3 product, and 'Material balance' percentages.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "thinkstep2022",
+      "citation": "thinkstep ltd (Vickers, J.) for MBIE (November 2022). Cost-neutral, low-carbon residential construction: Supporting analysis for Building for Climate Change, v1.2. Table 2-2 (reference building materials and areas, Waikato single-storey NZS 3604 timber house, GFA approx. 194-218 m2) and Table 6-2 (wall assemblies).",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "page2013",
+      "citation": "Page, I. (2013). New Zealand new housing characteristics and costs. BRANZ; paper CIB World Building Congress 2013 (wbc2013.apps.qut.edu.au, submission 68). Table 3 (labour hours by component, from Rawlinsons NZ Construction Handbook 2012), Table 4 (BRANZ new dwellings survey) and section 2.1.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "statsnz_bc",
+      "citation": "Stats NZ. Building consents issued: August 2026, download 'Building consents by territorial authority (Monthly).csv', series New Zealand / Houses / New / Number (BLDM.SY0001110A1) and Floor area (BLDM.SY0001110A3), and Dwelling units (BLDM.SY0001100A1, BLDM.SY0001100A3); calendar-year sums of monthly values (www.stats.govt.nz, retrieved 2026-10-14).",
+      "licence": "Facts cited with attribution"
+    }
+  ],
+  "items": [
+    {
+      "key": "softwood_roundwood_per_sawnwood_nz",
+      "description": "Roundwood input per m3 of sawnwood output, coniferous, New Zealand (national questionnaire factor, all sawnwood states)",
+      "unit": "m3 roundwood / m3 sawnwood",
+      "source": "fao2020",
+      "confidence": "low",
+      "value": {
+        "point": 1.81
+      },
+      "note": "Table row 'CONIFER  Sawnwood all  m3rw/m3p ... 1.81' in the New Zealand (Oceania) column, the last value in the row; implies about 0.55 m3 sawnwood per m3 log (derived 1/1.81 = 0.552). The text quotes Germany 1.59 and the United States of America 2.04 m3 roundwood per m3 sawnwood for comparison. Position-based column assignment from a wide PDF table; verify. Read from a wide PDF table by column position; confirm against the PDF before any test gates on it."
+    },
+    {
+      "key": "softwood_sawmill_material_balance_nz",
+      "description": "Sawmill material balance, coniferous logs, New Zealand: shares of log volume going to sawnwood, chips/slabs, sawdust and shavings",
+      "unit": "percent of log input",
+      "source": "fao2020",
+      "confidence": "low",
+      "value": {
+        "table": {
+          "row_label": "product",
+          "columns": [
+            "percent"
+          ],
+          "rows": [
+            {
+              "label": "sawnwood",
+              "values": [
+                47
+              ]
+            },
+            {
+              "label": "chips_slabs",
+              "values": [
+                33
+              ]
+            },
+            {
+              "label": "sawdust",
+              "values": [
+                9
+              ]
+            },
+            {
+              "label": "shavings",
+              "values": [
+                8
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Table 'Material balance' rows for conifer: Sawnwood 47, Chips/slabs 33, Sawdust 9, Shavings 8 (last value in each row, New Zealand column). Table was extracted from a wide PDF layout; the New Zealand column assignment is by position (last column) and should be checked against the PDF. Read from a wide PDF table by column position; confirm against the PDF before any test gates on it."
+    },
+    {
+      "key": "reference_house_areas",
+      "description": "Element areas of a single-storey NZS 3604 timber reference house (Waikato, consented design) and area per m2 of gross internal floor area",
+      "unit": "m2; m2 per m2 floor",
+      "source": "thinkstep2022",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "element",
+          "columns": [
+            "area_m2",
+            "area_per_m2_gross_internal_floor"
+          ],
+          "rows": [
+            {
+              "label": "roof_corrugated_steel_on_trusses_with_10mm_plasterboard_ceiling",
+              "values": [
+                263,
+                1.2584
+              ]
+            },
+            {
+              "label": "envelope_wall_brick_veneer_over_90x45_timber_frame_10mm_plasterboard",
+              "values": [
+                156,
+                0.7464
+              ]
+            },
+            {
+              "label": "internal_walls_90x45_timber_frame_10mm_plasterboard_both_sides",
+              "values": [
+                169,
+                0.8086
+              ]
+            },
+            {
+              "label": "windows_and_exterior_doors",
+              "values": [
+                36,
+                0.1722
+              ]
+            },
+            {
+              "label": "floor_concrete_slab_on_grade",
+              "values": [
+                209,
+                1.0
+              ]
+            },
+            {
+              "label": "conditioned_living_area",
+              "values": [
+                170,
+                0.8134
+              ]
+            },
+            {
+              "label": "double_garage",
+              "values": [
+                39,
+                0.1866
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Table 2-2: 'Roof ... 263', 'Envelope wall ... 156', 'Internal walls Timber frame (90x45mm) with 10mm plasterboard lining on both sides 169', 'Windows and exterior doors ... 36', 'Floor Concrete slab on grade (100mm thick, 17.5 MPa) ... 209', 'Gross internal area 209', 'Gross floor area 218'. Per-m2 columns are derived (area / 209). The house includes a double garage; 'Building Lifespan 90', 'GFA Approx. 194', 'NLA 156' appear in the building summary."
+    },
+    {
+      "key": "slab_concrete_per_floor_area",
+      "description": "Concrete in a slab-on-grade floor per m2 of floor, from the reference house slab thickness",
+      "unit": "m3 concrete / m2 floor",
+      "source": "thinkstep2022",
+      "confidence": "low",
+      "value": {
+        "point": 0.1
+      },
+      "note": "Derived: floor 'Concrete slab on grade (100mm thick, 17.5 MPa)' over 209 m2 = 20.9 m3 for the slab, i.e. 0.1 m3 per m2; excludes footings and thickenings."
+    },
+    {
+      "key": "wall_framing_ratio",
+      "description": "Timber framing ratio (framing area as share of wall area) for light timber-framed wall assemblies",
+      "unit": "fraction of wall area",
+      "source": "thinkstep2022",
+      "confidence": "medium",
+      "value": {
+        "point": 0.18
+      },
+      "note": "Table 6-2: 'Timber-framed, cavity, 90 mm frame studs @ 400 mm centres, dwangs 800 mm centres (18% framing ratio)'; steel-framed assemblies use 14.4%. Framing volume per m2 of floor was not stated in any source read."
+    },
+    {
+      "key": "plasterboard_lining_thickness",
+      "description": "Plasterboard lining thickness specified in the reference house",
+      "unit": "mm",
+      "source": "thinkstep2022",
+      "confidence": "medium",
+      "value": {
+        "point": 10
+      },
+      "note": "'a 10mm plasterboard interior ceiling lining'; 'Timber frame (90x45mm) with 10mm plasterboard lining on both sides'."
+    },
+    {
+      "key": "framing_labour_rates_rawlinsons",
+      "description": "New Zealand labour hours per unit by building component (Rawlinsons NZ Construction Handbook 2012, as tabulated by BRANZ)",
+      "unit": "hours per stated unit",
+      "source": "page2013",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "component_unit",
+          "columns": [
+            "new_zealand_hours_per_unit"
+          ],
+          "rows": [
+            {
+              "label": "ground_floor_joists_200x50_hr_per_m",
+              "values": [
+                0.21
+              ]
+            },
+            {
+              "label": "plates_and_studs_100x50_hr_per_m",
+              "values": [
+                0.13
+              ]
+            },
+            {
+              "label": "dwangs_nogs_100x50_hr_per_m",
+              "values": [
+                0.17
+              ]
+            },
+            {
+              "label": "ceiling_joists_150x50_hr_per_m",
+              "values": [
+                0.2
+              ]
+            },
+            {
+              "label": "erect_trusses_6m_span_hr_each",
+              "values": [
+                1.5
+              ]
+            },
+            {
+              "label": "particleboard_flooring_19mm_hr_per_m2",
+              "values": [
+                0.36
+              ]
+            },
+            {
+              "label": "brickwork_lay_standard_hr_per_1000_bricks",
+              "values": [
+                16
+              ]
+            },
+            {
+              "label": "brick_clean_point_hr_per_m2",
+              "values": [
+                0.2
+              ]
+            },
+            {
+              "label": "weatherboard_timber_hr_per_m2",
+              "values": [
+                0.85
+              ]
+            },
+            {
+              "label": "roofing_concrete_tiles_hr_per_m2",
+              "values": [
+                0.3
+              ]
+            },
+            {
+              "label": "roofing_sheet_steel_hr_per_m2",
+              "values": [
+                0.15
+              ]
+            },
+            {
+              "label": "painting_walls_prep_2_coats_hr_per_m2",
+              "values": [
+                0.2
+              ]
+            },
+            {
+              "label": "painting_ceiling_prep_2_coats_hr_per_m2",
+              "values": [
+                0.25
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Table 3 Labour hours by component in New Zealand and Australia, column New Zealand: 'Ground floor joists 200 x50 hr/m 0.21', 'Plates and studs 100 x50 hr/m 0.13', 'Particleboard flooring 19mm hrs/sqm 0.36', 'Weatherboard timber hr/sqm 0.85', 'Roofing sheet steel hr/sqm 0.15'. Source line: Rawlinsons NZ Construction Handbook 2012. Whole-house hours by trade per m2 were not found."
+    },
+    {
+      "key": "tradesman_rate_nz_2012",
+      "description": "Average tradesman rate in New Zealand including all overheads, 2012",
+      "unit": "NZ$/hour",
+      "source": "page2013",
+      "confidence": "low",
+      "value": {
+        "point": 38
+      },
+      "note": "'Rawlinson (2012) has average tradesman rates at $A62/ hour in Australia compared to New Zealand rates at $NZ38 per hour, including all overheads.'"
+    },
+    {
+      "key": "new_house_cost_per_m2_2012",
+      "description": "New house construction price per m2, Auckland and Dunedin (Productivity Commission 2012, via BRANZ paper)",
+      "unit": "NZ$/m2 (2012)",
+      "source": "page2013",
+      "confidence": "low",
+      "value": {
+        "table": {
+          "row_label": "city",
+          "columns": [
+            "nz_dollars_per_m2"
+          ],
+          "rows": [
+            {
+              "label": "auckland",
+              "values": [
+                1650
+              ]
+            },
+            {
+              "label": "dunedin",
+              "values": [
+                1525
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Table 1 rows 'Auckland $1,650/sqm 100% 108%' and 'Dunedin $1,525/sqm 92% 100%'."
+    },
+    {
+      "key": "new_house_floor_area_by_year",
+      "description": "New Zealand new stand-alone houses consented: number, total floor area, and average floor area (derived), calendar years",
+      "unit": "count; m2; m2 per house",
+      "source": "statsnz_bc",
+      "confidence": "high",
+      "value": {
+        "table": {
+          "row_label": "year",
+          "columns": [
+            "houses_consented",
+            "floor_area_m2",
+            "average_m2_per_house"
+          ],
+          "rows": [
+            {
+              "label": "2019",
+              "values": [
+                22269,
+                4320654,
+                194.0
+              ]
+            },
+            {
+              "label": "2022",
+              "values": [
+                21400,
+                4137361,
+                193.3
+              ]
+            },
+            {
+              "label": "2023",
+              "values": [
+                15675,
+                2886662,
+                184.2
+              ]
+            },
+            {
+              "label": "2024",
+              "values": [
+                15780,
+                2783922,
+                176.4
+              ]
+            },
+            {
+              "label": "2025",
+              "values": [
+                16635,
+                2964728,
+                178.2
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Series New Zealand / Houses / New: Number (BLDM.SY0001110A1) and Floor area SQM (BLDM.SY0001110A3), sums of 12 monthly values per calendar year; average derived as floor area / number."
+    },
+    {
+      "key": "new_dwelling_floor_area_all_types",
+      "description": "All new dwelling units consented (houses, apartments, townhouses, units): number, floor area and derived average",
+      "unit": "count; m2; m2 per dwelling",
+      "source": "statsnz_bc",
+      "confidence": "high",
+      "value": {
+        "table": {
+          "row_label": "year",
+          "columns": [
+            "dwellings_consented",
+            "floor_area_m2",
+            "average_m2_per_dwelling"
+          ],
+          "rows": [
+            {
+              "label": "2019",
+              "values": [
+                37627,
+                5946051,
+                158.0
+              ]
+            },
+            {
+              "label": "2022",
+              "values": [
+                49538,
+                7173411,
+                144.8
+              ]
+            },
+            {
+              "label": "2023",
+              "values": [
+                37239,
+                5203004,
+                139.7
+              ]
+            },
+            {
+              "label": "2024",
+              "values": [
+                33600,
+                4697026,
+                139.8
+              ]
+            },
+            {
+              "label": "2025",
+              "values": [
+                36619,
+                5156439,
+                140.8
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Series New Zealand / Dwelling units / New: Number (BLDM.SY0001100A1) and Floor area SQM (BLDM.SY0001100A3), calendar-year sums; average derived. The mix includes multi-unit homes, so the stand-alone house figure above is the relevant one for a detached cottage or house."
+    },
+    {
+      "key": "new_detached_house_floor_area_by_storeys",
+      "description": "Average floor area of new detached houses by number of storeys (BRANZ New Dwellings Survey)",
+      "unit": "m2",
+      "source": "page2013",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "storeys",
+          "columns": [
+            "average_floor_area_m2",
+            "share_percent"
+          ],
+          "rows": [
+            {
+              "label": "one_storey",
+              "values": [
+                202,
+                78.2
+              ]
+            },
+            {
+              "label": "two_storey",
+              "values": [
+                253,
+                20.3
+              ]
+            },
+            {
+              "label": "more_than_two",
+              "values": [
+                313,
+                1.5
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Table 4 Number of storeys in New Zealand new detached houses: 'One storey 78.2% 202', 'Two storey 20.3% 253', '>Two storey 1.5% 313' (Percent, Average floor area sqm); survey era about 2010-2012."
+    }
+  ]
+}

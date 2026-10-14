@@ -1,0 +1,321 @@
+{
+  "id": "wages",
+  "domain": "industry",
+  "title": "New Zealand wages by occupation and industry, minimum wage, leave and KiwiSaver",
+  "retrieved": "2026-10-14",
+  "licence": "Numerical values cited as facts with attribution; no text, figures or datasets reproduced.",
+  "sources": [
+    {
+      "key": "figurenz_occ",
+      "citation": "Figure.NZ (republishing Stats NZ Household Labour Force Survey, Earnings from main wage and salary job by occupation (ANZSCO 2006)), 'Median hourly wages in New Zealand' by occupation, as at June 2026, figure.nz/chart/MSIRisSBOv6iKHAP-eR6F11F7RQcDjTch, retrieved 2026-10-14.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "statsnz_income",
+      "citation": "Stats NZ (26 Aug 2026). Labour market statistics (income): June 2026 quarter, Key facts and 'Wages and salaries' section, stats.govt.nz/information-releases/labour-market-statistics-income-june-2026-quarter, retrieved 2026-10-14.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "statsnz_qes",
+      "citation": "Stats NZ (Aug 2026). Labour market statistics: June 2026 quarter CSV (lms-jun26qtr-tables.csv), group 'Average Hourly Earnings by Industry (ANZSIC06) and Sex' (Quarterly Employment Survey), series QEMQ.SAA*9A, period 2026.06, status FINAL, retrieved 2026-10-14.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "enz_mw",
+      "citation": "Employment New Zealand (9 Mar 2026). 'Minimum wage is increasing on 1 April 2026', employment.govt.nz/news-and-updates/minimum-wage-is-increasing-on-1-april-2026, retrieved 2026-10-14.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "enz_leave",
+      "citation": "Employment New Zealand. 'Annual holidays', employment.govt.nz/leave-and-holidays/annual-holidays, retrieved 2026-10-14 (Holidays Act 2003 entitlement).",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "ird_ks",
+      "citation": "Inland Revenue. 'Employer contributions to KiwiSaver schemes and complying funds', ird.govt.nz/kiwisaver/kiwisaver-employers/contributions-and-deductions/employer-contributions-to-kiwisaver-and-complying-funds, retrieved 2026-10-14.",
+      "licence": "Facts cited with attribution"
+    }
+  ],
+  "items": [
+    {
+      "key": "median_hourly_by_occupation_2026",
+      "description": "Median hourly earnings from main wage and salary job by ANZSCO major occupation group, year as at June 2026, before tax",
+      "unit": "NZD/hour",
+      "source": "figurenz_occ",
+      "confidence": "high",
+      "value": {
+        "table": {
+          "row_label": "ANZSCO major group",
+          "columns": [
+            "Median hourly earnings (NZD)"
+          ],
+          "rows": [
+            {
+              "label": "Managers",
+              "values": [
+                43.15
+              ]
+            },
+            {
+              "label": "Professionals",
+              "values": [
+                47.71
+              ]
+            },
+            {
+              "label": "Technicians and trades workers",
+              "values": [
+                34.0
+              ]
+            },
+            {
+              "label": "Community and personal service workers",
+              "values": [
+                29.5
+              ]
+            },
+            {
+              "label": "Clerical and administrative workers",
+              "values": [
+                35.0
+              ]
+            },
+            {
+              "label": "Sales workers",
+              "values": [
+                28.0
+              ]
+            },
+            {
+              "label": "Machinery operators and drivers",
+              "values": [
+                31.65
+              ]
+            },
+            {
+              "label": "Labourers",
+              "values": [
+                28.3
+              ]
+            },
+            {
+              "label": "Other",
+              "values": [
+                28.0
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Table on the page: \"Year as at June: 2026, Measure: Median Hourly Earnings, Income source: Wage and salary income (main job)\" with rows Managers 43.15, Professionals 47.71, Technicians and trades workers 34, Community and personal service workers 29.5, Clerical and administrative workers 35, Sales workers 28, Machinery operators and drivers 31.65, Labourers 28.3, Other 28."
+    },
+    {
+      "key": "median_hourly_all_wage_salary_2026",
+      "description": "Median hourly earnings from wages and salaries, all employees, June 2026 quarter",
+      "unit": "NZD/hour",
+      "source": "statsnz_income",
+      "confidence": "high",
+      "value": {
+        "point": 35.96
+      },
+      "note": "\"Median hourly earnings from wages and salaries increased by $0.96 (2.7 percent) to $35.96 in the year to the June 2026 quarter.\""
+    },
+    {
+      "key": "median_weekly_wage_salary_2026",
+      "description": "Median weekly earnings from wages and salaries, June 2026 quarter",
+      "unit": "NZD/week",
+      "source": "statsnz_income",
+      "confidence": "high",
+      "value": {
+        "point": 1419
+      },
+      "note": "\"Median weekly earnings from wages and salaries were $1,419 in the June 2026 quarter, an increase of $38 (2.8 percent) from $1,381\"."
+    },
+    {
+      "key": "qes_ordinary_hourly_by_industry_2026q2",
+      "description": "Average ordinary-time hourly earnings by industry (ANZSIC06), both sexes, June 2026 quarter (Quarterly Employment Survey)",
+      "unit": "NZD/hour",
+      "source": "statsnz_qes",
+      "confidence": "high",
+      "value": {
+        "table": {
+          "row_label": "Industry",
+          "columns": [
+            "Ordinary time hourly (NZD)"
+          ],
+          "rows": [
+            {
+              "label": "Forestry and Mining",
+              "values": [
+                48.93
+              ]
+            },
+            {
+              "label": "Manufacturing",
+              "values": [
+                40.91
+              ]
+            },
+            {
+              "label": "Electricity, Gas, Water and Waste Services",
+              "values": [
+                53.69
+              ]
+            },
+            {
+              "label": "Construction",
+              "values": [
+                41.82
+              ]
+            },
+            {
+              "label": "Wholesale Trade",
+              "values": [
+                44.91
+              ]
+            },
+            {
+              "label": "Retail Trade",
+              "values": [
+                33.67
+              ]
+            },
+            {
+              "label": "Accommodation and Food Services",
+              "values": [
+                31.1
+              ]
+            },
+            {
+              "label": "Transport, Postal and Warehousing",
+              "values": [
+                40.83
+              ]
+            },
+            {
+              "label": "Information Media and Telecommunications",
+              "values": [
+                55.43
+              ]
+            },
+            {
+              "label": "Financial and Insurance Services",
+              "values": [
+                64.29
+              ]
+            },
+            {
+              "label": "Rental, Hiring and Real Estate Services",
+              "values": [
+                43.0
+              ]
+            },
+            {
+              "label": "Professional, Scientific, Technical, Administrative and Support Services",
+              "values": [
+                50.37
+              ]
+            },
+            {
+              "label": "Public Administration and Safety",
+              "values": [
+                51.26
+              ]
+            },
+            {
+              "label": "Education and Training",
+              "values": [
+                45.96
+              ]
+            },
+            {
+              "label": "Health Care and Social Assistance",
+              "values": [
+                48.27
+              ]
+            },
+            {
+              "label": "Arts, Recreation and Other Services",
+              "values": [
+                39.59
+              ]
+            },
+            {
+              "label": "Total All Industries",
+              "values": [
+                44.62
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Rows read from the CSV, e.g. \"QEMQ.SAAD9A FINAL 53.69 | Electricity, Gas, Water and Waste Services | Total Both Sexes | Ordinary Time Hourly\" and \"QEMQ.SAAG9A ... 33.67 | Retail Trade\" (period 2026.06). Averages, not medians; the QES industry list in this table has no agriculture row."
+    },
+    {
+      "key": "minimum_wage_adult_2026",
+      "description": "Adult minimum wage from 1 April 2026",
+      "unit": "NZD/hour",
+      "source": "enz_mw",
+      "confidence": "high",
+      "value": {
+        "point": 23.95
+      },
+      "note": "\"Adult minimum wage: increases from NZD$23.50 to NZD$23.95 per hour\"; all rates are before tax."
+    },
+    {
+      "key": "minimum_wage_starting_out_2026",
+      "description": "Starting-out and training minimum wage from 1 April 2026",
+      "unit": "NZD/hour",
+      "source": "enz_mw",
+      "confidence": "high",
+      "value": {
+        "point": 19.16
+      },
+      "note": "\"Starting-out and training minimum wage: increases from NZD$18.80 to NZD$19.16 per hour.\""
+    },
+    {
+      "key": "median_to_minimum_wage_ratio_2026",
+      "description": "Derived ratio of all-employee median hourly earnings to the adult minimum wage, 2026",
+      "unit": "ratio",
+      "source": "statsnz_income",
+      "confidence": "medium",
+      "value": {
+        "point": 1.5
+      },
+      "note": "Derived: 35.96 (Stats NZ, June 2026 quarter) / 23.95 (Employment NZ, from 1 April 2026) = 1.50. Occupation ratios to minimum wage: compute from the occupation table, e.g. Professionals 47.71/23.95 = 1.99, Labourers 28.3/23.95 = 1.18."
+    },
+    {
+      "key": "annual_leave_weeks",
+      "description": "Statutory paid annual holidays after 12 months continuous employment (Holidays Act 2003)",
+      "unit": "weeks/year",
+      "source": "enz_leave",
+      "confidence": "high",
+      "value": {
+        "point": 4
+      },
+      "note": "\"All employees become entitled to 4 weeks annual holidays (annual leave) after 12 months of continuous employment.\""
+    },
+    {
+      "key": "kiwisaver_employer_min_rate",
+      "description": "Minimum compulsory employer KiwiSaver contribution (current rate; the brief's 3% is superseded)",
+      "unit": "fraction of gross pay",
+      "source": "ird_ks",
+      "confidence": "high",
+      "value": {
+        "point": 0.035
+      },
+      "note": "\"The lowest rate for your contribution is 3.5% of your employee's gross salary or wages unless your employee is on a temporary rate reduction.\" Employer-superannuation contribution tax also applies."
+    },
+    {
+      "key": "kiwisaver_employer_rate_temp_reduction",
+      "description": "Employer contribution rate when matching an employee's temporary rate reduction",
+      "unit": "fraction of gross pay",
+      "source": "ird_ks",
+      "confidence": "high",
+      "value": {
+        "point": 0.03
+      },
+      "note": "\"If you have an employee with a temporary rate reduction, you can choose to lower your employer contribution to 3% as well.\""
+    }
+  ]
+}
