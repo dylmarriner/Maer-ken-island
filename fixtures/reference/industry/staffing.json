@@ -1,0 +1,343 @@
+{
+  "id": "staffing",
+  "domain": "industry",
+  "title": "Staffing levels for farms, a refinery, supermarkets, general practice and small hydro in New Zealand",
+  "retrieved": "2026-10-14",
+  "licence": "Numerical values cited as facts with attribution; no text, figures or datasets reproduced.",
+  "sources": [
+    {
+      "key": "dairynz_econ2425",
+      "citation": "DairyNZ (2025). DairyNZ Economic Survey 2024-25, section 3.3 (Cows per FTE, Graph 3.4), dairynz.co.nz/media/10wl5avc/economic-survey-24-25.pdf, retrieved 2026-10-14.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "dairynz_stats2324",
+      "citation": "DairyNZ and LIC (2024). New Zealand Dairy Statistics 2023-24, section 1.2.3 and Table 2.2, dairynz.co.nz/media/bywm13d4/dairy-statistics-2023-24.pdf, retrieved 2026-10-14.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "dairynz_wps2023",
+      "citation": "DairyNZ and QCONZ (2023). Workplace Productivity Survey 2023 Report (154 farms, survey of 2021/22 season), Tables 1a-1c and Table 2, dairynz.co.nz/media/whxmiut5/workplace-productivity-survey-report-2023-v5.pdf, retrieved 2026-10-14.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "blnz_nld2025",
+      "citation": "Beef + Lamb New Zealand Insights (2026). Sheep & Beef Farm Survey, Northland: quintile analysis of final 2024-25 survey data (P26007), Table Sfb.1.A1, Class 4 Hill Country Northland, beeflambnz.com/sites/default/files/2026-08/2025 NLD.pdf, retrieved 2026-10-14.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "mohoia",
+      "citation": "Ministry of Health (Senior Advisor, Primary Health Care System Improvement and Innovation), reply to OIA/FYI request 17591 'Ratio - GP / NP to patients for funding', fyi.org.nz/request/17591-ratio-gp-np-to-patients-for-funding, retrieved 2026-10-14.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "nzr_fy2020",
+      "citation": "Refining NZ (2021). 2020 Annual Results investor presentation (FY2020, 17 Feb 2021), slides on results summary and 'Strategic Review: restructure', channelnz.com mirror of 2020-NZR-FY2020-Investor-Presentation-FINAL-17-Feb.pdf, retrieved 2026-10-14.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "1news2021",
+      "citation": "1News (6 Aug 2021). 'Hundreds of jobs threatened as shareholders vote to close Marsden Point refinery', 1news.co.nz, retrieved 2026-10-14.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "nzstalk",
+      "citation": "Newstalk ZB. 'The massive numbers behind the shutdown of Marsden Point refinery' (undated article on the refinery's turnaround shutdown; quotes CEO Sjoerd Post), newstalkzb.co.nz, retrieved 2026-10-14.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "wnz",
+      "citation": "Woolworths New Zealand. 'About Woolworths NZ' (woolworths.co.nz/info/about/woolworths-nz) and 'About us' (woolworths.co.nz/info/about-us), retrieved 2026-10-14.",
+      "licence": "Facts cited with attribution"
+    }
+  ],
+  "items": [
+    {
+      "key": "dairy_cows_per_fte",
+      "description": "Cows per full-time-equivalent labour unit on NZ dairy farms (DairyBase owner-operator sample), 2024-25 season",
+      "unit": "cows/FTE",
+      "source": "dairynz_econ2425",
+      "confidence": "medium",
+      "value": {
+        "point": 147
+      },
+      "note": "Derived by reading the text: \"the number of cows per full-time equivalent (FTE) labour unit decreased from 147 to 141. However, since 2023-24 the number has increased and in the 2024-25 season it reached the same level as in the 2019-20 season\" (147 in 2019-20, so 147 in 2024-25). Graph 3.4 Cows per FTE. Range over the series: 141 (2022-23) to 147."
+    },
+    {
+      "key": "dairy_cows_per_fte_range",
+      "description": "Range of cows per FTE over 2019-20 to 2024-25 (DairyBase)",
+      "unit": "cows/FTE",
+      "source": "dairynz_econ2425",
+      "confidence": "medium",
+      "value": {
+        "range": {
+          "min": 141,
+          "max": 147
+        }
+      },
+      "note": "\"decreased from 147 to 141 ... in the 2024-25 season it reached the same level as in the 2019-20 season\" (Economic Survey 2024-25, section 3.3)."
+    },
+    {
+      "key": "dairy_national_avg_herd_size",
+      "description": "National average dairy herd size, 2023/24",
+      "unit": "cows/herd",
+      "source": "dairynz_stats2324",
+      "confidence": "high",
+      "value": {
+        "point": 448
+      },
+      "note": "\"There were 10,485 herds this season - 116 fewer than the previous season. The national average herd size was 448\"; Table 2.2 row 2023/24: 10,485 herds, 4,701,596 cows, 1,703,404 effective ha, average 162 ha, 2.76 cows/ha."
+    },
+    {
+      "key": "dairy_weekly_hours_by_herd_size",
+      "description": "Modelled hours of work needed to run a dairy farm per week, by period and herd size",
+      "unit": "hours/week",
+      "source": "dairynz_wps2023",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "Period of season",
+          "columns": [
+            "100 cows",
+            "200 cows",
+            "400 cows",
+            "600 cows",
+            "800 cows",
+            "1000 cows"
+          ],
+          "rows": [
+            {
+              "label": "Calving",
+              "values": [
+                96,
+                121,
+                169,
+                218,
+                267,
+                316
+              ]
+            },
+            {
+              "label": "Mating",
+              "values": [
+                85,
+                104,
+                143,
+                182,
+                220,
+                259
+              ]
+            },
+            {
+              "label": "Mid lactation",
+              "values": [
+                72,
+                89,
+                122,
+                156,
+                189,
+                223
+              ]
+            },
+            {
+              "label": "Dry period",
+              "values": [
+                47,
+                62,
+                93,
+                124,
+                155,
+                186
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Table 2: \"Estimated hours work required to run a dairy farm per week by period and herd size (modelled data)\". Includes owner/manager hours; contractor use reduces staff hours."
+    },
+    {
+      "key": "dairy_cows_milked_per_person_per_hour",
+      "description": "Average cows milked per person per hour, by platform and period",
+      "unit": "cows/person/hour",
+      "source": "dairynz_wps2023",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "Milking platform",
+          "columns": [
+            "Calving average",
+            "Mid-late lactation average"
+          ],
+          "rows": [
+            {
+              "label": "All platforms",
+              "values": [
+                113,
+                166
+              ]
+            },
+            {
+              "label": "Herringbone",
+              "values": [
+                91,
+                135
+              ]
+            },
+            {
+              "label": "Rotary",
+              "values": [
+                159,
+                227
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Tables 1a-1c, row \"Cows milked per person per hour\": all platforms 113 (calving) and 166 (mid-late lactation); herringbone 91 and 135; rotary 159 and 227."
+    },
+    {
+      "key": "sheep_beef_farm_labour_and_scale",
+      "description": "Sheep and beef farm mean total labour units (incl. working owners), effective area and stock units, 2024-25 survey, two farm classes",
+      "unit": "varies (see columns)",
+      "source": "blnz_nld2025",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "Farm class (survey mean 2024-25)",
+          "columns": [
+            "Total labour units (No.)",
+            "Working owners (No.)",
+            "Effective area (ha)",
+            "Total stock units at open (SU)"
+          ],
+          "rows": [
+            {
+              "label": "Class 4 N.I. Hill Country, Northland",
+              "values": [
+                2.34,
+                1.13,
+                504,
+                4267
+              ]
+            },
+            {
+              "label": "Class 3 N.I. Hard Hill Country, Taranaki-Manawatu",
+              "values": [
+                2.37,
+                1.13,
+                959,
+                7937
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Northland Table Sfb.1.A1 Mean column: \"Total labour units No. ... 2.34\", \"Working owners ... 1.13\", \"Effective area ha ... 504\", \"Total at open SU ... 4,267\". Taranaki-Manawatu (blnz_wni2025) Mean: labour 2.37, working owners 1.13, area 959, total at open 7,937. Derived ratios: ~215 ha and ~1,800 SU per labour unit (Northland); ~405 ha and ~3,350 SU per labour unit (Taranaki-Manawatu). Source for the second row is the Taranaki/Rangitikei/Manawatu 2024-25 survey table: \"Total labour units No. ... 2.37\"."
+    },
+    {
+      "key": "gp_patients_per_gp_recommended",
+      "description": "RNZCGP-recommended enrolled patients per GP, as quoted by the Ministry of Health",
+      "unit": "patients/GP",
+      "source": "mohoia",
+      "confidence": "medium",
+      "value": {
+        "range": {
+          "min": 1300,
+          "max": 1500
+        }
+      },
+      "note": "\"The Royal New Zealand College of General Practitioners (RNZCGP) recommends approximately one GP to 1300-1500 patients\"; also \"There is no maximum number of patients allowed per GP or Nurse Practitioner\"."
+    },
+    {
+      "key": "refinery_throughput_fy2019",
+      "description": "Marsden Point refinery throughput, FY2019 (pre-COVID, last full normal year)",
+      "unit": "million barrels/year",
+      "source": "nzr_fy2020",
+      "confidence": "high",
+      "value": {
+        "point": 42.7
+      },
+      "note": "FY2020 results table: \"Refinery Throughput Mbbl 42.7 29.9 12.8 30%\" (FY19 42.7, FY20 29.9). 42.7 Mbbl/yr is about 117 kbbl/day (derived: 42.7e6 / 365)."
+    },
+    {
+      "key": "refinery_staff_cut_2020_21",
+      "description": "Refining NZ employees who left or were leaving in the 2020-21 restructure (about a 25% staff reduction)",
+      "unit": "employees",
+      "source": "nzr_fy2020",
+      "confidence": "medium",
+      "value": {
+        "point": 90
+      },
+      "note": "\"c.25% reduction in staff\" with footnote \"c.90 employees left or leaving Refining NZ either through redundancy or resignation from November 2020 through to April 2021\". Implies roughly 360 staff before the cut (derived, 90/0.25)."
+    },
+    {
+      "key": "refinery_employees_2021",
+      "description": "Marsden Point refinery employees in Aug 2021 before conversion to an import terminal",
+      "unit": "employees",
+      "source": "1news2021",
+      "confidence": "medium",
+      "value": {
+        "point": 300
+      },
+      "note": "\"It currently employs around 300 people, with 240 jobs likely to go.\""
+    },
+    {
+      "key": "refinery_employees_per_kbpd_derived",
+      "description": "Derived Marsden Point staffing intensity: about 300 employees over FY2019 throughput of about 117 kbbl/day",
+      "unit": "employees per 1,000 bbl/day",
+      "source": "nzr_fy2020",
+      "confidence": "low",
+      "value": {
+        "point": 2.6
+      },
+      "note": "Derivation only: 300 employees (1news2021) / (42.7e6 bbl / 365 d / 1000 = 117.0 kbbl/d) = 2.56. Mixes a 2021 headcount (after cuts) with FY2019 throughput; contractors excluded. Using the c.360 pre-cut implied headcount gives about 3.1."
+    },
+    {
+      "key": "refinery_site_workforce_shutdown",
+      "description": "Marsden Point site workforce (staff plus contractors) normally and during a major turnaround",
+      "unit": "people",
+      "source": "nzstalk",
+      "confidence": "low",
+      "value": {
+        "range": {
+          "min": 500,
+          "max": 1200
+        }
+      },
+      "note": "\"the shutdown will see staff and contractor numbers at the refinery swell from 500-plus to around 1200\". Article undated (refers to a first full-refinery shutdown in 14 years); includes contractors."
+    },
+    {
+      "key": "supermarket_woolworths_nz_stores",
+      "description": "Woolworths NZ company-owned supermarkets",
+      "unit": "stores",
+      "source": "wnz",
+      "confidence": "medium",
+      "value": {
+        "point": 185
+      },
+      "note": "\"Woolworths New Zealand proudly owns and operates over 185 supermarkets in New Zealand.\" (the figure is a lower bound: 'over 185')."
+    },
+    {
+      "key": "supermarket_woolworths_nz_staff",
+      "description": "Woolworths NZ total team, including support offices, processing plants and distribution centres",
+      "unit": "people",
+      "source": "wnz",
+      "confidence": "medium",
+      "value": {
+        "point": 20000
+      },
+      "note": "\"20,000 New Zealanders employed in our stores, support offices, processing plants and distribution centres.\""
+    },
+    {
+      "key": "supermarket_staff_per_store_derived",
+      "description": "Upper-bound staff per supermarket derived from company totals",
+      "unit": "people/store",
+      "source": "wnz",
+      "confidence": "low",
+      "value": {
+        "point": 108
+      },
+      "note": "Derived: 20,000 / 185 = 108. Overstates in-store staff because the 20,000 includes support offices, processing plants and four dry grocery distribution centres; actual in-store headcount per store is lower. No per-store or per-m2 figure was found."
+    }
+  ]
+}

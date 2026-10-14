@@ -142,22 +142,14 @@ const DAY: u64 = 86_400;
 /// 43 minutes a day, drinking 1.81 and 1.43 L a day, temperate-forest NPP
 /// 471 g C/m2/yr (reference 400-900), intimacy 39 a year.
 ///
-/// And for the kitchen's gas stove (R4 in part, D58, 2026-10-14): the house
-/// burns HEEP's cooking energy from its two LPG bottles while anyone is
-/// home, booking the carbon from the crust to the air in an audit of its
-/// own each substep. Read from CI's slow tier (run 38500528556) on top of
-/// R3's edible food: 20,594 audits closed, no food or water shortfalls,
-/// body carbon 13.0 of 13.0 and 10.4 of 10.4 kg, eating 47 and 43 minutes
-/// a day, drinking 1.81 and 1.43 L a day, temperate-forest NPP 471 g
-/// C/m2/yr (reference 400-900).
-///
-/// And for the kitchen's wood fire (R4, D58, 2026-10-14): the stove's spec
-/// and counters gain the fire's rate and tallies, hashed, though the gas
-/// outlasts the week and no fire burns in it. Read from CI's slow tier (run
-/// 38521071647): unchanged otherwise, 20,594 audits closed, no shortfalls,
-/// body carbon 13.0 of 13.0 and 10.4 of 10.4 kg, eating 47 and 43 minutes
-/// a day, drinking 1.81 and 1.43 L a day, NPP 471 g C/m2/yr.
-const WEEK_DIGEST: &str = "34e198867d8220807bdd433ee971ffa53a56dfddcbdb007db58e8afa9b2581a5";
+/// And for D9's mining (2026-10-14): the island keeps #31's surveyed
+/// resource sites and the founders' mining jobs, both hashed, so the digest
+/// moves although nobody chose to mine in the week. Read from CI's slow
+/// tier (run 38501193896) on top of R3's edible food: 10,514 audits closed,
+/// no food or water shortfalls, body carbon 13.0 of 13.0 and 10.4 of 10.4
+/// kg, eating 47 and 43 minutes a day, drinking 1.81 and 1.43 L a day,
+/// temperate-forest NPP 471 g C/m2/yr (reference 400-900).
+const WEEK_DIGEST: &str = "2c9db9409306cd67e70b59dbd04109679782364e580f523fc0d4858a612de414";
 
 fn repo(path: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))

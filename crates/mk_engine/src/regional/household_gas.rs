@@ -1,5 +1,5 @@
 //! The house's gas stove and its bottled LPG (realism programme R4, in
-//! part; deviation D58).
+//! part; deviation D59).
 //!
 //! The founders' kitchen has a four-burner gas stove with an oven
 //! (`organisms::property`), and until this nothing it cooked burned
@@ -8,7 +8,7 @@
 //! - **Use** is HEEP's average cooking energy per house (BRANZ SR155,
 //!   Table 66), drawn as a steady rate while anyone is at home. It is
 //!   averaged over every fuel and house, not measured on gas stoves, and
-//!   has no meals in it; D58 records both.
+//!   has no meals in it; D59 records both.
 //! - **Supply** is the typical home installation, two 45 kg bottles
 //!   (Elgas), full at the start. Nobody delivers more: when they are empty
 //!   the stove is out, and the time the household spends at home without

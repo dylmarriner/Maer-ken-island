@@ -1,0 +1,473 @@
+{
+  "id": "demography",
+  "domain": "humans",
+  "title": "New Zealand age-sex structure, households and labour force participation",
+  "retrieved": "2026-10-14",
+  "licence": "Numerical values cited as facts with attribution; no text, figures or datasets reproduced.",
+  "sources": [
+    {
+      "key": "statsnz_erp2018",
+      "citation": "Stats NZ. National population estimates: At 30 June 2018, download 'population by sex and age group CSV' (national-population-estimates-at-30-june-2018-population-by-sex-age-csv.csv), rows period 2018-06-30, status P, 5-year age groups by sex. Estimated resident population, not a Census count.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "statsnz_c23",
+      "citation": "Stats NZ. 2023 Census totals by topic for individuals and for households by statistical area 2 (SA2), Stats NZ ArcGIS feature layers '2023_Census_totals_by_topic_for_individuals_by_SA2' (fields VAR_1_49 to VAR_1_67 age 5-year groups, VAR_1_285/286 sex at birth) and '2023_Census_totals_by_topic_for_households_by_SA2' (VAR_4_106 to VAR_4_113 number of usual residents in household), summed over all 2,311 SA2 records by the compiler, retrieved 2026-10-14. Small-area counts are randomly rounded and some SA2 values are suppressed, so sums differ slightly from published national totals.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "statsnz_hlfs",
+      "citation": "Stats NZ. Labour market statistics: June 2026 quarter, download file hlfs-jun26qtr-csv.csv (Household Labour Force Survey), series HLFQ.S1E1S, S1E2S, S1E3S and SEES, seasonally adjusted labour force participation rate.",
+      "licence": "Facts cited with attribution"
+    }
+  ],
+  "items": [
+    {
+      "key": "age_sex_structure_2018_erp",
+      "description": "New Zealand estimated resident population by 5-year age group and sex at 30 June 2018",
+      "unit": "persons",
+      "source": "statsnz_erp2018",
+      "confidence": "high",
+      "value": {
+        "table": {
+          "row_label": "age_group",
+          "columns": [
+            "male",
+            "female"
+          ],
+          "rows": [
+            {
+              "label": "0-4",
+              "values": [
+                157370,
+                149020
+              ]
+            },
+            {
+              "label": "5-9",
+              "values": [
+                167910,
+                159330
+              ]
+            },
+            {
+              "label": "10-14",
+              "values": [
+                159200,
+                151740
+              ]
+            },
+            {
+              "label": "15-19",
+              "values": [
+                161060,
+                153090
+              ]
+            },
+            {
+              "label": "20-24",
+              "values": [
+                186440,
+                171820
+              ]
+            },
+            {
+              "label": "25-29",
+              "values": [
+                193850,
+                186200
+              ]
+            },
+            {
+              "label": "30-34",
+              "values": [
+                161920,
+                168800
+              ]
+            },
+            {
+              "label": "35-39",
+              "values": [
+                144100,
+                153560
+              ]
+            },
+            {
+              "label": "40-44",
+              "values": [
+                140060,
+                151060
+              ]
+            },
+            {
+              "label": "45-49",
+              "values": [
+                155190,
+                169240
+              ]
+            },
+            {
+              "label": "50-54",
+              "values": [
+                150970,
+                161960
+              ]
+            },
+            {
+              "label": "55-59",
+              "values": [
+                150880,
+                161720
+              ]
+            },
+            {
+              "label": "60-64",
+              "values": [
+                131400,
+                140600
+              ]
+            },
+            {
+              "label": "65-69",
+              "values": [
+                115320,
+                121850
+              ]
+            },
+            {
+              "label": "70-74",
+              "values": [
+                94430,
+                100890
+              ]
+            },
+            {
+              "label": "75-79",
+              "values": [
+                65040,
+                73290
+              ]
+            },
+            {
+              "label": "80-84",
+              "values": [
+                40270,
+                49090
+              ]
+            },
+            {
+              "label": "85-89",
+              "values": [
+                22960,
+                32730
+              ]
+            },
+            {
+              "label": "90+",
+              "values": [
+                10480,
+                20500
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Rows e.g. '2018-06-30,P,male,20-24,186440' and '2018-06-30,P,female,20-24,171820'; totals 'total,total,4885350' (male 2,408,860; female 2,476,490); median age male 35.55, female 38.16, total 36.88."
+    },
+    {
+      "key": "age_structure_2023_census",
+      "description": "2023 Census usually resident population by 5-year age group, both sexes (sum of SA2 counts)",
+      "unit": "persons",
+      "source": "statsnz_c23",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "age_group",
+          "columns": [
+            "persons"
+          ],
+          "rows": [
+            {
+              "label": "0-4",
+              "values": [
+                288285
+              ]
+            },
+            {
+              "label": "5-9",
+              "values": [
+                311739
+              ]
+            },
+            {
+              "label": "10-14",
+              "values": [
+                336207
+              ]
+            },
+            {
+              "label": "15-19",
+              "values": [
+                320514
+              ]
+            },
+            {
+              "label": "20-24",
+              "values": [
+                311991
+              ]
+            },
+            {
+              "label": "25-29",
+              "values": [
+                335634
+              ]
+            },
+            {
+              "label": "30-34",
+              "values": [
+                373947
+              ]
+            },
+            {
+              "label": "35-39",
+              "values": [
+                345507
+              ]
+            },
+            {
+              "label": "40-44",
+              "values": [
+                315708
+              ]
+            },
+            {
+              "label": "45-49",
+              "values": [
+                302157
+              ]
+            },
+            {
+              "label": "50-54",
+              "values": [
+                322602
+              ]
+            },
+            {
+              "label": "55-59",
+              "values": [
+                304077
+              ]
+            },
+            {
+              "label": "60-64",
+              "values": [
+                296382
+              ]
+            },
+            {
+              "label": "65-69",
+              "values": [
+                252339
+              ]
+            },
+            {
+              "label": "70-74",
+              "values": [
+                213459
+              ]
+            },
+            {
+              "label": "75-79",
+              "values": [
+                163617
+              ]
+            },
+            {
+              "label": "80-84",
+              "values": [
+                107913
+              ]
+            },
+            {
+              "label": "85-89",
+              "values": [
+                57984
+              ]
+            },
+            {
+              "label": "90+",
+              "values": [
+                33156
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Age (5-year groups) Census usually resident population count, 2023, e.g. 0-4 years 288,285 and 90 years and over 33,156 after summing 2,311 SA2s; sum of the listed groups 4,993,218 versus summed Total field 4,993,611 (about 39 SA2 values suppressed per group). A published age by sex cross-tabulation for 2023 was not obtained."
+    },
+    {
+      "key": "sex_totals_2023_census",
+      "description": "2023 Census usually resident population by sex at birth (sum of SA2 counts)",
+      "unit": "persons",
+      "source": "statsnz_c23",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "sex",
+          "columns": [
+            "persons"
+          ],
+          "rows": [
+            {
+              "label": "male",
+              "values": [
+                2470605
+              ]
+            },
+            {
+              "label": "female",
+              "values": [
+                2522898
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Sex at birth (Male/Tane) 2,470,605 and (Female/Wahine) 2,522,898 summed over SA2s; 28 SA2 records had suppressed values, so these sum to 4,993,503 versus 4,993,611 total."
+    },
+    {
+      "key": "household_size_distribution_2023",
+      "description": "Households in occupied private dwellings by number of usual residents, 2023 Census (sum of SA2 counts); share of stated households derived",
+      "unit": "households; percent",
+      "source": "statsnz_c23",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "household_size",
+          "columns": [
+            "households",
+            "share_percent"
+          ],
+          "rows": [
+            {
+              "label": "1_person",
+              "values": [
+                389580,
+                22.67
+              ]
+            },
+            {
+              "label": "2_people",
+              "values": [
+                570486,
+                33.2
+              ]
+            },
+            {
+              "label": "3_people",
+              "values": [
+                288057,
+                16.76
+              ]
+            },
+            {
+              "label": "4_people",
+              "values": [
+                266031,
+                15.48
+              ]
+            },
+            {
+              "label": "5_people",
+              "values": [
+                118122,
+                6.87
+              ]
+            },
+            {
+              "label": "6_people",
+              "values": [
+                48360,
+                2.81
+              ]
+            },
+            {
+              "label": "7_people",
+              "values": [
+                19686,
+                1.15
+              ]
+            },
+            {
+              "label": "8_or_more",
+              "values": [
+                18198,
+                1.06
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Number of usual residents in household (One ... Eight or more usual residents), Year 2023, summed over SA2s; total households 1,780,320; rows sum to 1,718,520 stated; share = count / 1,718,520."
+    },
+    {
+      "key": "average_household_size_2023",
+      "description": "Average number of usual residents per household, 2023 Census, derived from the size distribution (8-or-more counted as 8, so slightly understated)",
+      "unit": "persons per household",
+      "source": "statsnz_c23",
+      "confidence": "medium",
+      "value": {
+        "point": 2.69
+      },
+      "note": "Derived: sum(size x households)/stated households from the table above; the source also has a per-SA2 'Number of usual residents in household (Average)' field, which cannot be summed."
+    },
+    {
+      "key": "labour_force_participation_rate",
+      "description": "Labour force participation rate, seasonally adjusted (persons 15 and over)",
+      "unit": "percent",
+      "source": "statsnz_hlfs",
+      "confidence": "high",
+      "value": {
+        "table": {
+          "row_label": "measure",
+          "columns": [
+            "jun_2023",
+            "jun_2026"
+          ],
+          "rows": [
+            {
+              "label": "both_sexes",
+              "values": [
+                72.4,
+                70.7
+              ]
+            },
+            {
+              "label": "male",
+              "values": [
+                76.9,
+                74.7
+              ]
+            },
+            {
+              "label": "female",
+              "values": [
+                68.0,
+                66.7
+              ]
+            },
+            {
+              "label": "aged_15_to_64",
+              "values": [
+                83.5,
+                81.9
+              ]
+            }
+          ]
+        }
+      },
+      "note": "HLFQ.S1E3S Labour Force Participation Rate, Total Both Sexes, 2023.06 72.4 (REVISED), 2026.06 70.7 (FINAL); S1E1S Male 76.9 and 74.7; S1E2S Female 68 and 66.7; SEES (15 to 64 years) 83.5 and 81.9."
+    }
+  ]
+}

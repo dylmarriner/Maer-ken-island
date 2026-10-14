@@ -283,9 +283,34 @@ fn distance_m(a: (f64, f64), b: (f64, f64)) -> f64 {
     (a.0 - b.0).hypot(a.1 - b.1)
 }
 
-/// Every way of moving `log` the estate allows, with its tasks, for a
-/// founder with `body` standing at `founder_m`. Cross-cut pieces take ids
-/// from `first_piece_id`.
+/// The climb (m) along the straight line from `from` to `to` over ground
+/// whose height `ground` gives: the rises summed, sampled every `step_m`.
+/// Going down costs nothing extra, as in Naismith's rule.
+pub fn ascent_m(
+    ground: impl Fn((f64, f64)) -> f64,
+    from: (f64, f64),
+    to: (f64, f64),
+    step_m: f64,
+) -> f64 {
+    let n = (distance_m(from, to) / step_m.max(1e-6))
+        .ceil()
+        .clamp(1.0, 10_000.0) as usize;
+    let at = |i: usize| {
+        let t = i as f64 / n as f64;
+        ground((from.0 + t * (to.0 - from.0), from.1 + t * (to.1 - from.1)))
+    };
+    let mut climb = 0.0;
+    let mut last = at(0);
+    for i in 1..=n {
+        let h = at(i);
+        climb += (h - last).max(0.0);
+        last = h;
+    }
+    climb
+}
+
+/// Every way of moving `log` the estate allows, on flat ground; see
+/// [`haul_plans_over`].
 pub fn haul_plans(
     log: &Log,
     founder_m: (f64, f64),
@@ -295,11 +320,43 @@ pub fn haul_plans(
     fleet: &Fleet,
     first_piece_id: u64,
 ) -> Result<Vec<HaulJob>, LabourError> {
+    haul_plans_over(
+        log,
+        founder_m,
+        body,
+        labour,
+        site,
+        fleet,
+        first_piece_id,
+        &|_, _| 0.0,
+    )
+}
+
+/// Every way of moving `log` the estate allows, with its tasks, for a
+/// founder with `body` standing at `founder_m`, over ground whose climb
+/// from one point to another `climb` gives (m). Cross-cut pieces take ids
+/// from `first_piece_id`. Walking legs outdoors climb that ground at
+/// Naismith's hour per 600 m; the carry inside the store is level; the
+/// vehicles' times ignore slope.
+#[allow(clippy::too_many_arguments)]
+pub fn haul_plans_over(
+    log: &Log,
+    founder_m: (f64, f64),
+    body: &LabourBody,
+    labour: &LabourTable,
+    site: &HaulSite,
+    fleet: &Fleet,
+    first_piece_id: u64,
+    climb: &dyn Fn((f64, f64), (f64, f64)) -> f64,
+) -> Result<Vec<HaulJob>, LabourError> {
     let walk = |d: f64| labour.walking_time_s(body, d, 0.0, 0.0);
+    let leg = |from: (f64, f64), to: (f64, f64), load_kg: f64| {
+        labour.walking_time_s(body, distance_m(from, to), climb(from, to), load_kg)
+    };
     let carry_met = labour.met("carrying_stacking_logs")?;
     let mut plans = Vec::new();
     let butt = log.butt_m();
-    let to_butt = walk(distance_m(founder_m, butt))?;
+    let to_butt = leg(founder_m, butt, 0.0)?;
 
     // Cross-cut pieces: none heavier than the body's sustainable load.
     let sustainable = labour.sustainable_load_kg(body)?;
@@ -333,7 +390,7 @@ pub fn haul_plans(
         tasks.push_back(cross_cut(pieces));
         tasks.push_back(HaulTask {
             action: HaulAction::Walk,
-            duration_s: walk(distance_m(butt, site.garage_m))?,
+            duration_s: leg(butt, site.garage_m, 0.0)?,
             met: WALKING_MET,
             ends_at_m: site.garage_m,
         });
@@ -353,9 +410,9 @@ pub fn haul_plans(
         for (t, trip) in ids.chunks(per_trip as usize).enumerate() {
             let (mut carry_s, mut back_s) = (0.0, 0.0);
             for &id in trip {
-                let d = distance_m(piece_at(pieces, (id - first_piece_id) as u32), butt);
-                carry_s += labour.walking_time_s(body, d, 0.0, piece_kg)?;
-                back_s += walk(d)?;
+                let p = piece_at(pieces, (id - first_piece_id) as u32);
+                carry_s += leg(p, butt, piece_kg)?;
+                back_s += leg(butt, p, 0.0)?;
             }
             tasks.push_back(HaulTask {
                 action: HaulAction::Load {
@@ -406,13 +463,9 @@ pub fn haul_plans(
         for i in 0..pieces {
             let id = first_piece_id + u64::from(i);
             let p = piece_at(pieces, i);
-            let to_piece = walk(distance_m(at, p))?;
-            let carry_s = labour.walking_time_s(
-                body,
-                distance_m(p, site.store_m) + site.store_carry_m,
-                0.0,
-                piece_kg,
-            )?;
+            let to_piece = leg(at, p, 0.0)?;
+            let carry_s = leg(p, site.store_m, piece_kg)?
+                + labour.walking_time_s(body, site.store_carry_m, 0.0, piece_kg)?;
             let back_s = walk(site.store_carry_m)?;
             let walk_s = to_piece + back_s;
             tasks.push_back(HaulTask {
@@ -454,7 +507,7 @@ pub fn haul_plans(
             let tasks: VecDeque<HaulTask> = [
                 HaulTask {
                     action: HaulAction::Walk,
-                    duration_s: walk(distance_m(founder_m, site.garage_m))?,
+                    duration_s: leg(founder_m, site.garage_m, 0.0)?,
                     met: WALKING_MET,
                     ends_at_m: site.garage_m,
                 },
@@ -510,6 +563,23 @@ pub fn quickest(plans: Vec<HaulJob>) -> Option<HaulJob> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_walk_climbs_the_rises_along_it_and_going_down_is_free() {
+        let flat = ascent_m(|_| 120.0, (0.0, 0.0), (500.0, 0.0), 5.0);
+        assert_eq!(flat, 0.0);
+        // A steady 10% grade over 300 m: 30 m of climb, either sampling.
+        let ramp = |p: (f64, f64)| 0.1 * p.0;
+        for step in [1.0, 7.0, 50.0] {
+            let up = ascent_m(ramp, (0.0, 0.0), (300.0, 0.0), step);
+            assert!((up - 30.0).abs() < 1e-9, "step {step}: {up}");
+            assert_eq!(ascent_m(ramp, (300.0, 0.0), (0.0, 0.0), step), 0.0);
+        }
+        // Over a 20 m hump and back down: only the way up counts.
+        let hump = |p: (f64, f64)| 20.0 * (1.0 - ((p.0 - 100.0) / 100.0).abs()).max(0.0);
+        let over = ascent_m(hump, (0.0, 0.0), (200.0, 0.0), 1.0);
+        assert!((over - 20.0).abs() < 1e-9, "{over}");
+    }
 
     fn log() -> Log {
         felled_log(1, (0.0, 0.0), 0.0, 0.30, 20.0, 400.0, 190.0, 0.82, 0.52)

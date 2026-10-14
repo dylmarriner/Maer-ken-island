@@ -62,9 +62,11 @@ pub enum Material {
     Meat,
     Fibre,
     Water,
+    /// Gold won from a placer (`regional::resources`).
+    Gold,
 }
 
-pub const ALL_MATERIALS: [Material; 9] = [
+pub const ALL_MATERIALS: [Material; 10] = [
     Material::Wood,
     Material::Charcoal,
     Material::Coal,
@@ -74,6 +76,7 @@ pub const ALL_MATERIALS: [Material; 9] = [
     Material::Meat,
     Material::Fibre,
     Material::Water,
+    Material::Gold,
 ];
 
 /// What a kilogram of a material is made of.
@@ -153,6 +156,12 @@ pub fn composition(m: Material) -> Composition {
             water_per_kg: 1.0,
             origin: Origin::Water,
             source: "H2O",
+        },
+        Material::Gold => Composition {
+            carbon_per_kg: 0.0,
+            water_per_kg: 0.0,
+            origin: Mineral,
+            source: "Au, an element",
         },
     }
 }
@@ -348,6 +357,18 @@ impl MaterialLedger {
 
     pub fn stock_kg(&self, m: Material) -> f64 {
         self.stock.get(&m).copied().unwrap_or(0.0)
+    }
+
+    /// Put mined material in the store. Only a mineral that carries no
+    /// carbon and no water can come in this way, so nothing the audit
+    /// counts moves.
+    pub fn bank_mined(&mut self, m: Material, kg: f64) -> Result<(), MaterialError> {
+        let c = composition(m);
+        if !matches!(c.origin, Origin::Mineral) || c.carbon_per_kg != 0.0 || c.water_per_kg != 0.0 {
+            return Err(MaterialError::WrongMaterial(m));
+        }
+        self.add(m, kg.max(0.0));
+        Ok(())
     }
 
     fn add(&mut self, m: Material, kg: f64) {
