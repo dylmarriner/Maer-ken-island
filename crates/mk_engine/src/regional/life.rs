@@ -1833,11 +1833,6 @@ impl IslandLife {
             .count()
     }
 
-    /// Put a rainwater tank on the house: its roof is the house's footprint,
-    /// and its size is what the estate's climatology needs for the people
-    /// at home (whole tanks, at least one). It starts full, as a lived-in
-    /// house's would: the water comes out of the estate cell's soil, where
-    /// earlier rain put it. An estate with no house gets no tank.
     /// Put the typical home's bottled LPG on the kitchen stove, full.
     fn install_household_gas(&mut self) -> Result<(), IslandLifeError> {
         let spec = HouseholdGasSpec::from_reference(self.labour.library())
@@ -1861,6 +1856,11 @@ impl IslandLife {
         })
     }
 
+    /// Put a rainwater tank on the house: its roof is the house's footprint,
+    /// and its size is what the estate's climatology needs for the people
+    /// at home (whole tanks, at least one). It starts full, as a lived-in
+    /// house's would: the water comes out of the estate cell's soil, where
+    /// earlier rain put it. An estate with no house gets no tank.
     fn install_household_water(&mut self) -> Result<(), IslandLifeError> {
         let Some(house) = self
             .placed
