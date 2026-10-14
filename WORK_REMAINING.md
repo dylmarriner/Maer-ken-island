@@ -346,9 +346,9 @@ dashboard; the desktop panels).
 | Task | Remaining | Needs |
 |---|---|---|
 | 3 | Individual stems in 3D around the yard are drawn (2026-10-14, `stems.rs`: up to 3,000 trunks within 250 m, at their own height and diameter); left of 2a: stand cover and instanced trees beyond the patch from biomass. Interiors (2b), industry and town (2d, after Phase 4b), resource visuals and inventory icons (2c, after Phase 3 Task 2), tests for every building kind and vehicle | Engineering |
-| 4 | Person inspector done 2026-10-14 (the backend's sections, now with what they are doing and thinking, and family). The foundry (create somebody from the desktop) done the same day. Left: portraits | **Owner picks the two portraits** from upstream `apps/mk_ui/assets/portraits/`, and confirms their provenance before any distribution |
+| 4 | Done 2026-10-14: the person inspector (the backend's sections, with what they are doing and thinking, and family), the foundry (create somebody from the desktop), and the founders' portraits (the owner chose upstream's `new-gem-d` and `new-gem-k` and confirmed their provenance; `assets/humans/portraits/`). Nothing left | — |
 | 5 | Done 2026-10-14 for the clock, controls and terrain cell (`apps/island_ui/src/inspectors.rs`): six speeds with requested and achieved, Save, the local date (year, day of 288, time of a 36-hour day) with Earth time elapsed, and the cell under the view with its biome, climate and production. A click on the estate picks a building, room, item or tree and the right panel describes it (`estate.rs` `pick`, `stems.rs` `describe`). Nothing left | — |
-| 6 | Done except the owner's word on the targets: `island_bench` and `benchmarks/2026-10-08-regional-baseline.json` (12.9 simulated days per real minute headless against a default target of one, so no fallback profile), the allocation-bound test (`tests/island_allocation_bounds.rs`, `construction-counters`), and formal predictive processing measured at 0.9% of the human step (`tests/island_dead_compute.rs`), so keeping it running costs little. The plan's Task 6 status has the detail | **Owner confirms the targets** (default: headless one simulated day per real minute; real time with the UI open) and **decides on formal predictive processing**: its `selected_action` is read by nothing, so wire it into decisions upstream or stop running it (the measurement prices the choice, it does not make it) |
+| 6 | Done; the owner accepted the default targets on 2026-10-14: `island_bench` and `benchmarks/2026-10-08-regional-baseline.json` (12.9 simulated days per real minute headless against a default target of one, so no fallback profile), the allocation-bound test (`tests/island_allocation_bounds.rs`, `construction-counters`), and formal predictive processing measured at 0.9% of the human step (`tests/island_dead_compute.rs`), so keeping it running costs little. The plan's Task 6 status has the detail | Targets confirmed: headless one simulated day per real minute, real time with the UI open. Formal predictive processing: the owner decided on 2026-10-14 to **wire its `selected_action` into decisions** (Engineering, open) |
 | 7 | The sync script is done (2026-10-14, `scripts/sync_maerken_upstream.py`, `UPSTREAM.md` § Sync procedure). The creator moved into `apps/island` (`island::population`) and `apps/island_humans` is retired. Pruning is the owner's call (the inventory recommends not to) | Engineering |
 | 8 | Final acceptance: every design criterion run and recorded | All of the above |
 
@@ -403,10 +403,10 @@ Ordered by what most changes the founders' daily life:
 |---|---|---|---|
 | R0 | Honest register: deviation rows for every mind and sense gap; book grazer faeces and deaths to detritus; remove or wire dead code | humans §1.11, earth §4 Step 0 | Done: D44-D54 record the mind and sense gaps; litter, faeces and carcasses feed RothC soil carbon (`regional/soil.rs`, D43); the unused sparse plant view is gone |
 | R1 | Water at home: a rainwater tank filled by simulated rain on the house roof, sized from the estate's own climate (ESR 2021 use, Harrison Grierson 2011 inflow model); people away from home drink where they find water; a dry tank means fetching by hand | work §3.2 | Tank done (PR #10, D42); R1b fetching by hand with two 20 L jerrycans when dry done (PR #12) |
-| R2 | Mass-based carrying and real containers: load limits by body mass, pace and energy by load | work §3.1, §2.2 | Open |
-| R3 | An edible food base: edible fractions, foraging with a food store at home, seasonal and soil-limited plant production (D31) | earth Steps 1-2, work §3.3 | Started (#42, D57): people eat only a forest's fruit and seed, grown at NPP times Ward et al. 2025's reproductive allocation, not its wood. Left: foraging time at a sourced return rate (Kelly 2013 Table 3-4 is read), a food store at home, bracken and raupo once their extent per cell is sourced, seasonality, soil limits (D31) |
-| R4 | Firewood, drying (D40), fire and cooking | work §3.4, §2.5-2.6 | Open |
-| R5 | Every action takes its real time (D9): gather, mine, build with delivered materials and visible progress, craft chains; skill improves with practice (power law) | work §3.5-3.8 | Open |
+| R2 | Mass-based carrying and real containers: load limits by body mass, pace and energy by load | work §3.1, §2.2 | In part (2026-10-14): load limits by body mass; pace under load from measured self-selected speeds; energy by load from Pandolf's equation for water fetched by hand. Open: a general mass inventory of what each person holds, and baskets, sacks and packs |
+| R3 | An edible food base: edible fractions, foraging with a food store at home, seasonal and soil-limited plant production (D31) | earth Steps 1-2, work §3.3 | Started (#42, D57): people eat only a forest's fruit and seed, grown at NPP times Ward et al. 2025's reproductive allocation, not its wood. A meal is now gathered before it is eaten: the walk to the food and back, and the meal's energy over Kelly's (2013, Table 3-4) acorn return rate, 821 kcal/h, at the Compendium's foraging MET. Left: search time (Kelly's rates are post-encounter), a food store at home, bracken and raupo once their extent per cell is sourced, seasonality, soil limits (D31) |
+| R4 | Firewood, drying (D40), fire and cooking | work §3.4, §2.5-2.6 | In part: logs dry (D40); the kitchen's gas stove burns the house's average cooking LPG from two bottles (D59, 2026-10-14); when the bottles are empty, a wood fire burns the store's air-dry wood at kitchen-performance-test rates (1.74-1.98 kg per adult equivalent per day). Open: meals cooked at times of day, fire tending and fetching time, splitting (no peer-reviewed split-only axe rate was found; Granqvist 1993's 0.95 m³/h includes chainsaw crosscutting) |
+| R5 | Every action takes its real time (D9): gather, mine, build with delivered materials and visible progress, craft chains; skill improves with practice (power law) | work §3.5-3.8 | Started (2026-10-14): mining a placer is timed (D9); the first building, a 10 m² firewood shed, takes its timber from the store's seasoned wood and the packs' timber-frame hours with the powered saw (D60); the starting estate counts as pre-built (D60, the owner's ruling). Open: gathering clay, sand, gravel and stone, a covered stack's drying, craft chains, skill |
 | R6 | Senses and perception as things (sight, hearing, smell, taste, touch and pain from injury), memory of places, and choices that use memory, emotion, goals and personality | humans ranks 1, 3 | Open |
 | R7 | Emotion by appraisal with mood; per-person bonds and cooperation; teaching; dependent children who learn and acquire language; invention from experience, not a timer | humans ranks 2, 4-6 | Open |
 | R8 | Game and hunting, fish and shellfish, farming and livestock | earth Steps 3-4, §2.5 | Open |
@@ -422,10 +422,9 @@ invertebrate densities, fire danger indices (see each report's "unsourced" secti
 
 - **The repository is public.** The licence stays all rights reserved (`LICENSE`), so the code is
   readable but not licensed for reuse. Two things follow:
-  - The founders' GLB models (`assets/humans/GemD.glb`, `GemK.glb`) have unverified provenance
-    (`assets/CREDITS.md`) and are now distributed. **The owner should confirm their origin**, or
-    replace them.
-  - The Phase 5 portraits must have their provenance confirmed **before** they are copied in.
+  - The founders' GLB models (`assets/humans/GemD.glb`, `GemK.glb`) and their two portraits:
+    the owner confirmed on 2026-10-14 that all four are theirs to use and distribute
+    (`assets/CREDITS.md`).
   - A scan of the whole git history on 2026-10-13 found no keys, tokens or private keys;
     `deploy/island.env` holds empty token placeholders. Keep secrets in environment variables.
 
@@ -437,5 +436,5 @@ invertebrate densities, fire danger indices (see each report's "unsourced" secti
   push; the `dependency audit` CI job replaced it.
 - **Firecrawl credits ran out** on 2026-10-12. WebSearch and the TinyFish fetcher still work for
   sources; the container's own network blocks most hosts.
-- **Persist digests.** `WEEK_DIGEST` is `2c9db940…e414`; the planetary topology pin is
+- **Persist digests.** `WEEK_DIGEST` is `844ccde7…06a0`; the planetary topology pin is
   `e4ece246…73e2`. Any change that moves either is a behaviour change and must say so.

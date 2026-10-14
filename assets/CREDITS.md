@@ -15,7 +15,8 @@ projects, not a third-party import.
 
 | File | Origin | Caveat |
 |---|---|---|
-| `humans/GemD.glb`, `humans/GemK.glb` | Imported at extraction (2026-10-01) with `crates/mk_core`/`mk_engine`; upstream `apps/mk_ui/assets/models/` | Upstream's own `CREDITS.md` records these as "pre-existing project assets; origin not re-verified". That caveat is carried here unchanged: **verify provenance.** The repository is now public, so these files are already distributed; until their origin is confirmed, replace them or keep the repository private. |
+| `humans/GemD.glb`, `humans/GemK.glb` | Imported at extraction (2026-10-01) with `crates/mk_core`/`mk_engine`; upstream `apps/mk_ui/assets/models/` | Upstream's own `CREDITS.md` records these as "pre-existing project assets; origin not re-verified". Upstream's caveat is answered: on 2026-10-14 the owner confirmed both are theirs to use and distribute. |
+| `humans/portraits/GemD.png`, `humans/portraits/GemK.png` | Upstream `apps/mk_ui/assets/portraits/new-gem-d.png` and `new-gem-k.png` (ported there from the predecessor `gemini_universe/avatars/`), chosen by the owner on 2026-10-14 and downscaled to 480 × 322 | AI-generated renders of the founders. Upstream recorded their origin as not re-verified; the owner confirmed on 2026-10-14 that they are theirs to use and distribute. Only the founders have portraits (`apps/island_ui/src/property.rs` `portrait`). |
 
 ## The estate: buildings, computers, tools, vehicles
 

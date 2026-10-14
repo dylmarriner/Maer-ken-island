@@ -174,6 +174,41 @@ pub fn step_regional_weather(
     }
 }
 
+/// Near-surface relative humidity (0-1) at a coarse cell and air
+/// temperature, read back from the vapour the weather carries there:
+/// [`step_regional_weather`] puts `rh × q_sat(T) × column ×
+/// VAPOUR_COLUMN_FRACTION` in each cell, and the orographic vapour budget
+/// leaves only `vapour_remaining` of it in the air (the rest fell as the
+/// slope's rain), so this inverts the same expression on what is left.
+/// `weather.moisture` keeps the undepleted column because the synoptic
+/// step and the digests read it; the budget's fraction is applied here.
+///
+/// `air_temperature_k` is the temperature the humidity is wanted at: the
+/// vapour is a fixed amount, so the same air is drier in the warm of the
+/// afternoon than at dawn.
+pub fn relative_humidity_at(
+    canon: &CanonLocked,
+    weather: &WeatherState,
+    vapour_remaining: Option<&Grid2<f64>>,
+    air_temperature_k: f64,
+    row: usize,
+    col: usize,
+) -> f64 {
+    let pressure_hpa = canon.sea_level_pressure_pa / 100.0;
+    let air_column_kg_m2 = canon.sea_level_pressure_pa / canon.surface_gravity_m_s2.max(1e-9);
+    let capacity = saturation_specific_humidity(air_temperature_k, pressure_hpa)
+        * air_column_kg_m2
+        * VAPOUR_COLUMN_FRACTION;
+    if capacity > 0.0 {
+        let remaining = vapour_remaining
+            .and_then(|f| f.get_safe(row, col).copied())
+            .unwrap_or(1.0);
+        (weather.moisture.get(row, col) * remaining / capacity).clamp(0.0, 1.0)
+    } else {
+        0.0
+    }
+}
+
 /// Orographic rain over `elevation_m` (coarse), with the vapour budget it
 /// draws on.
 ///
@@ -193,38 +228,20 @@ pub fn step_regional_weather(
 /// the background's by exactly what the windward slopes condensed; the
 /// background normalisation of [`step_regional_weather`] still holds over
 /// the open sea (deviations D26 and D38).
-/// Near-surface relative humidity (0-1) at a coarse cell, read back from
-/// the vapour the weather carries there: [`step_regional_weather`] puts
-/// `rh × q_sat(T) × column × VAPOUR_COLUMN_FRACTION` in each cell, and the
-/// orographic vapour budget takes rain out of it, so this inverts the same
-/// expression on what is left.
-pub fn relative_humidity_at(
-    canon: &CanonLocked,
-    weather: &WeatherState,
-    surface_temperature_k: f64,
-    row: usize,
-    col: usize,
-) -> f64 {
-    let pressure_hpa = canon.sea_level_pressure_pa / 100.0;
-    let air_column_kg_m2 = canon.sea_level_pressure_pa / canon.surface_gravity_m_s2.max(1e-9);
-    let capacity = saturation_specific_humidity(surface_temperature_k, pressure_hpa)
-        * air_column_kg_m2
-        * VAPOUR_COLUMN_FRACTION;
-    if capacity > 0.0 {
-        (weather.moisture.get(row, col) / capacity).clamp(0.0, 1.0)
-    } else {
-        0.0
-    }
-}
-
+///
+/// Adds the slopes' rain to `weather.precipitation` in place, and returns
+/// the vapour budget's fraction `f` per coarse cell (1 over the sea and on
+/// a grid too small for slopes), for [`relative_humidity_at`].
 pub fn apply_orographic_precipitation(
     weather: &mut WeatherState,
     elevation_m: &Grid2<f64>,
     domain: &IslandDomain,
-) {
+) -> Grid2<f64> {
     let (rows, cols) = (elevation_m.nlat(), elevation_m.nlon());
+    let mut fraction = elevation_m.clone();
+    fraction.data_mut().iter_mut().for_each(|f| *f = 1.0);
     if rows < 3 || cols < 3 {
-        return;
+        return fraction;
     }
     let size = domain.cell_size_m(DomainLevel::Coarse);
     let h = |r: usize, c: usize| elevation_m.get(r, c).max(0.0);
@@ -254,6 +271,8 @@ pub fn apply_orographic_precipitation(
             *rain = *rain * budget.remaining[idx] + wrung;
         }
     }
+    fraction.data_mut().copy_from_slice(&budget.remaining);
+    fraction
 }
 
 /// The vapour budget along the wind: per cell, the fraction of its

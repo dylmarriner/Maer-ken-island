@@ -17,6 +17,7 @@ pub mod estate_layout;
 pub mod fauna;
 pub mod geology;
 pub mod geophysics;
+pub mod household_gas;
 pub mod household_water;
 pub mod human_store;
 pub mod humans;

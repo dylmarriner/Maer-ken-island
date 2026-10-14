@@ -81,6 +81,21 @@
       "licence": "Public domain"
     },
     {
+      "key": "pandolf1977",
+      "citation": "Pandolf, K. B., Givoni, B. and Goldman, R. F. (1977). Predicting energy expenditure with loads while standing or walking very slowly. Journal of Applied Physiology 43, 577-581. Equation as reproduced in Richmond, Potter and Santee (2015), eq. 2, with M in W and V in m/s.",
+      "licence": "Facts cited with attribution (formula)"
+    },
+    {
+      "key": "richmond2015",
+      "citation": "Richmond, P. W., Potter, A. W. and Santee, W. R. (2015). Terrain factors for predicting walking and load carriage energy costs: review and refinement. Journal of Sport and Human Performance 3(3), 1-26. doi:10.12922/jshp.0067.2015. Tables 1-2, from Soule and Goldman (1972).",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "loadspeed2022",
+      "citation": "Mechanical differences between men and women during overground load carriage at self-selected walking speeds (2022). International Journal of Environmental Research and Public Health 19(7), 3927. PMC8997774, Table 2.",
+      "licence": "Facts cited with attribution"
+    },
+    {
       "key": "gooley2011",
       "citation": "Gooley, J. J., Chamberlain, K., Smith, K. A., Khalsa, S. B. S., Rajaratnam, S. M. W., Van Reen, E., Zeitzer, J. M., Czeisler, C. A. and Lockley, S. W. (2011). Exposure to room light before bedtime suppresses melatonin onset and shortens melatonin duration in humans. Journal of Clinical Endocrinology & Metabolism 96, E463-E472.",
       "licence": "Facts cited with attribution"
@@ -166,11 +181,12 @@
             { "label": "sexual_activity", "values": [1.3, 2.8] },
             { "label": "driving_light_truck", "values": [2.0, 2.0] },
             { "label": "operating_heavy_equipment", "values": [2.5, 2.5] },
-            { "label": "carrying_stacking_logs", "values": [8.5, 8.5] }
+            { "label": "carrying_stacking_logs", "values": [8.5, 8.5] },
+            { "label": "foraging_with_pack", "values": [2.8, 3.0] }
           ]
         }
       },
-      "note": "Ranges span the Compendium codes for each activity at light-to-vigorous effort. Gold panning has no Compendium code; its range is taken from standing-in-stream and moderate manual work codes (low confidence). Sexual activity spans codes 14030 (passive, light effort, 1.3) to 14010 (active, vigorous effort, 2.8). Driving a light truck (16010, 2.0), crane operation or heavy levers (11590, 2.5) and carrying or stacking logs (11266, 8.5) are single codes from the 2024 Adult Compendium (pacompendium.com)."
+      "note": "Ranges span the Compendium codes for each activity at light-to-vigorous effort. Gold panning has no Compendium code; its range is taken from standing-in-stream and moderate manual work codes (low confidence). Sexual activity spans codes 14030 (passive, light effort, 1.3) to 14010 (active, vigorous effort, 2.8). Driving a light truck (16010, 2.0), crane operation or heavy levers (11590, 2.5) and carrying or stacking logs (11266, 8.5) are single codes from the 2024 Adult Compendium (pacompendium.com). Foraging spans the 2024 codes 04150 ('Foraging, 0-9.9kg backpack', 2.8) and 04152 ('Foraging, 10-15kg backpack', 3.0)."
     },
     {
       "key": "total_water_adequate_intake",
@@ -310,6 +326,67 @@
       "confidence": "medium",
       "value": { "range": { "min": 0.3, "max": 0.45, "typical": 0.33 } },
       "note": "About one third of body mass for sustained marching; loads above ~45% sharply raise injury and energy cost."
+    },
+    {
+      "key": "pandolf_load_carriage",
+      "description": "Pandolf's metabolic rate of standing or walking with a load: M = a W + b (W + L)(L / W)^2 + eta (W + L)(c V^2 + d V G), M in W, body mass W and load L in kg, speed V in m/s, grade G in %",
+      "unit": "coefficient",
+      "source": "pandolf1977",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "term",
+          "columns": ["value"],
+          "rows": [
+            { "label": "standing_a", "values": [1.5] },
+            { "label": "load_b", "values": [2.0] },
+            { "label": "speed_c", "values": [1.5] },
+            { "label": "grade_d", "values": [0.35] }
+          ]
+        }
+      },
+      "note": "Transcribed from the 2015 USARIEM review, which reproduces the 1977 paper; the paper itself was not reachable. Developed without downhill data (the review), so it is used for level ground only."
+    },
+    {
+      "key": "pandolf_terrain_factor",
+      "description": "Terrain factor eta in Pandolf's equation for level surfaces",
+      "unit": "dimensionless",
+      "source": "richmond2015",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "surface",
+          "columns": ["value"],
+          "rows": [
+            { "label": "blacktop", "values": [1.0] },
+            { "label": "dirt_road", "values": [1.1] },
+            { "label": "light_brush", "values": [1.2] },
+            { "label": "heavy_brush", "values": [1.5] },
+            { "label": "swamp", "values": [1.8] },
+            { "label": "sand", "values": [2.1] }
+          ]
+        }
+      },
+      "note": "Empirical, from Soule and Goldman (1972); the review finds they do not reproduce those measurements exactly through Pandolf's equation."
+    },
+    {
+      "key": "walking_speed_by_load",
+      "description": "Self-selected overground walking speed carrying a load of the given fraction of body mass (n = 30, 10-minute trials)",
+      "unit": "km/h",
+      "source": "loadspeed2022",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "load_fraction_of_body_mass",
+          "columns": ["female_kmh", "male_kmh"],
+          "rows": [
+            { "label": "0.0", "values": [4.8, 4.7] },
+            { "label": "0.2", "values": [4.8, 4.7] },
+            { "label": "0.4", "values": [4.6, 4.6] }
+          ]
+        }
+      },
+      "note": "Speed fell about 3% (0.15 km/h) at 40% of body mass and not at 20% (p = 0.001)."
     },
     {
       "key": "room_light_illuminance",
