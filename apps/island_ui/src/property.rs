@@ -211,6 +211,20 @@ pub fn human(agent_id: &str, biological_sex_is_female: bool) -> Model {
     }
 }
 
+/// A human's portrait, under `assets/`.
+///
+/// Only the founders have one. Unlike the models, nobody else is given a
+/// founder's face as a stand-in: a picture of a face in an inspector reads
+/// as what that person looks like, and nobody created later looks like
+/// anybody yet.
+pub fn portrait(agent_id: &str) -> Option<&'static str> {
+    match agent_id {
+        "Gem-D" => Some("humans/portraits/GemD.png"),
+        "Gem-K" => Some("humans/portraits/GemK.png"),
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -415,5 +429,14 @@ mod tests {
             "a roster where every woman has Gem-K's face must say so"
         );
         assert_eq!(made_up.path, "humans/GemK.glb");
+    }
+
+    #[test]
+    fn only_the_founders_have_portraits_and_both_are_files() {
+        for founder in ["Gem-D", "Gem-K"] {
+            let path = portrait(founder).expect("a founder has a portrait");
+            assert!(asset_root().join(path).is_file(), "{path} is missing");
+        }
+        assert_eq!(portrait("hine-moana"), None, "no stand-in faces");
     }
 }
