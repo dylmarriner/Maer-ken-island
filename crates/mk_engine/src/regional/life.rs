@@ -182,6 +182,20 @@ pub struct FellingJob {
     pub worked_s: f64,
 }
 
+/// A placer a founder is panning (D9): the walk there and back and the
+/// packs' working day at the pan, as one job that resumes where it was
+/// left if the founder stops to do something else.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct MiningJob {
+    pub site_id: u32,
+    /// Seconds of walking each way, set when the job was planned.
+    pub walk_s: f64,
+    pub worked_s: f64,
+}
+
+/// The shed tool a founder pans with.
+pub const PANNING_TOOL: &str = "Gold Pan";
+
 /// The shed tool a founder fells with: the estate's axe, at the felling
 /// pack's steel-axe times. The two-person crosscut saw needs a second
 /// person on the other end, which nothing here arranges yet.
@@ -221,6 +235,10 @@ pub struct IslandLifeSnapshot {
     pub lost_since_drink: BTreeMap<String, f64>,
     #[serde(default)]
     pub felling: BTreeMap<String, FellingJob>,
+    #[serde(default)]
+    pub resources: Option<super::resources::IslandResources>,
+    #[serde(default)]
+    pub mining: BTreeMap<String, MiningJob>,
     #[serde(default)]
     pub hauling: BTreeMap<String, HaulJob>,
     #[serde(default)]
@@ -268,6 +286,12 @@ pub struct IslandLife {
     /// steps as that is, and a founder who stops comes back to the same
     /// tree.
     felling: BTreeMap<String, FellingJob>,
+    /// The island's mineral sites, as surveyed and as worked since
+    /// (`regional::resources`).
+    pub resources: Option<super::resources::IslandResources>,
+    /// The placer each founder is panning and how long they have been at
+    /// it, walks included (D9).
+    mining: BTreeMap<String, MiningJob>,
     /// The log each founder is moving to the store and the tasks they
     /// still have to do (`regional::timber`).
     hauling: BTreeMap<String, HaulJob>,
@@ -560,6 +584,8 @@ impl IslandLife {
             respired_since_meal: BTreeMap::new(),
             lost_since_drink: BTreeMap::new(),
             felling: BTreeMap::new(),
+            resources: None,
+            mining: BTreeMap::new(),
             hauling: BTreeMap::new(),
             labour_kcal: BTreeMap::new(),
             water_drunk_kg: BTreeMap::new(),
@@ -599,6 +625,11 @@ impl IslandLife {
         if life.energy.hydro.is_empty() {
             // Saved before the river's plant was connected.
             attach_estate_hydro(&mut life.energy, &life.placed, &life.domain);
+        }
+        if life.resources.is_none() {
+            // Saved before the island's mineral sites were surveyed, or
+            // newly built.
+            life.install_resources()?;
         }
         if life.household_water.is_none() {
             life.install_household_water()?;
@@ -654,6 +685,8 @@ impl IslandLife {
             respired_since_meal: self.respired_since_meal.clone(),
             lost_since_drink: self.lost_since_drink.clone(),
             felling: self.felling.clone(),
+            resources: self.resources.clone(),
+            mining: self.mining.clone(),
             hauling: self.hauling.clone(),
             labour_kcal: self.labour_kcal.clone(),
             water_drunk_kg: self.water_drunk_kg.clone(),
@@ -709,6 +742,8 @@ impl IslandLife {
             respired_since_meal: snapshot.respired_since_meal,
             lost_since_drink: snapshot.lost_since_drink,
             felling: snapshot.felling,
+            resources: snapshot.resources,
+            mining: snapshot.mining,
             hauling: snapshot.hauling,
             labour_kcal: snapshot.labour_kcal,
             water_drunk_kg: snapshot.water_drunk_kg,
@@ -732,6 +767,11 @@ impl IslandLife {
             topology,
             spin_up: None,
         };
+        if life.resources.is_none() {
+            // Saved before the island's mineral sites were surveyed, or
+            // newly built.
+            life.install_resources()?;
+        }
         if life.household_water.is_none() {
             // Saved before the house had a tank.
             life.install_household_water()?;
@@ -1883,6 +1923,138 @@ impl IslandLife {
     /// at home (whole tanks, at least one). It starts full, as a lived-in
     /// house's would: the water comes out of the estate cell's soil, where
     /// earlier rain put it. An estate with no house gets no tank.
+    /// Survey the island's mineral sites (`regional::resources`).
+    fn install_resources(&mut self) -> Result<(), IslandLifeError> {
+        let models = super::resources::SecondaryModels::from_reference(self.labour.library())
+            .map_err(|e| {
+                IslandLifeError::Labour(LabourError::MissingReference(format!("{e:?}")))
+            })?;
+        self.resources = Some(super::resources::IslandResources::survey(
+            &self.physical,
+            &self.domain,
+            &self.scenario.seed,
+            &models,
+        ));
+        Ok(())
+    }
+
+    /// Everyone whose choice is to mine, with the shed's gold pan, works
+    /// the placer nearest them by hand (D9): they walk there over the
+    /// ground, pan for the packs' working day at the panning MET, walk
+    /// home, and the day's gold goes into the store. A job left part-way
+    /// is taken up again where it was; a placer worked out ends it.
+    fn mine(&mut self, dt_s: f64) -> Result<(), IslandLifeError> {
+        if self.resources.is_none() || !self.estate_has_tool(PANNING_TOOL) {
+            return Ok(());
+        }
+        let awake_met = self
+            .labour
+            .met(AWAKE_AT_HOME_ACTIVITY)
+            .map_err(IslandLifeError::Labour)?;
+        let panning = self
+            .labour
+            .pan_gravel(LabourTool::GoldPan, 0.0, false)
+            .map_err(IslandLifeError::Labour)?;
+        let miners: Vec<(String, (f64, f64), LabourBody)> = self
+            .humans
+            .registry
+            .iter()
+            .filter(|h| matches!(h.profile.status, mk_core::human::HumanStatus::Alive))
+            .filter(|h| h.economy_action.kind == crate::humans::ActionKind::Mine)
+            .filter_map(|h| {
+                let at = self
+                    .positions
+                    .0
+                    .get(h.agent_id())
+                    .and_then(|p| match p.space {
+                        Space::Outdoors => Some(p.position_m),
+                        Space::Inside(_) => None,
+                    })?;
+                Some((h.agent_id().to_string(), at, LabourBody::from_human(h)))
+            })
+            .collect();
+        for (id, at, body) in miners {
+            if !self.mining.contains_key(&id) {
+                let Some((site_id, there)) = self.nearest_placer(at) else {
+                    continue;
+                };
+                let distance = (there.0 - at.0).hypot(there.1 - at.1);
+                let out = self
+                    .labour
+                    .walking_time_s(&body, distance, self.climb_m(at, there), 0.0)
+                    .map_err(IslandLifeError::Labour)?;
+                let back = self
+                    .labour
+                    .walking_time_s(&body, distance, self.climb_m(there, at), 0.0)
+                    .map_err(IslandLifeError::Labour)?;
+                self.mining.insert(
+                    id.clone(),
+                    MiningJob {
+                        site_id,
+                        walk_s: 0.5 * (out + back),
+                        worked_s: 0.0,
+                    },
+                );
+            }
+            let job = self.mining.get_mut(&id).expect("planned above");
+            let at_pan = (job.walk_s..job.walk_s + panning.duration_s).contains(&job.worked_s);
+            let met = if at_pan { panning.met } else { WALKING_MET };
+            job.worked_s += dt_s;
+            let done = job.worked_s >= 2.0 * job.walk_s + panning.duration_s;
+            let site_id = job.site_id;
+            let extra = self
+                .labour
+                .energy_kcal(&body, met, dt_s)
+                .map_err(IslandLifeError::Labour)?
+                - self
+                    .labour
+                    .energy_kcal(&body, awake_met, dt_s)
+                    .map_err(IslandLifeError::Labour)?;
+            *self.labour_kcal.entry(id.clone()).or_insert(0.0) += extra.max(0.0);
+            if let Some(h) = self.humans.registry.get_human_mut(&id) {
+                h.labour_met = Some(met);
+            }
+            if done {
+                self.mining.remove(&id);
+                let models =
+                    super::resources::SecondaryModels::from_reference(self.labour.library())
+                        .map_err(|e| {
+                            IslandLifeError::Labour(LabourError::MissingReference(format!("{e:?}")))
+                        })?;
+                let resources = self.resources.as_mut().expect("checked above");
+                // A site worked out while they walked yields nothing.
+                if let Ok(work) =
+                    resources.work_day(site_id, LabourTool::GoldPan, false, &self.labour, &models)
+                {
+                    self.materials
+                        .bank_mined(super::materials::Material::Gold, work.product_kg)
+                        .expect("gold carries no carbon or water");
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// The placer gold site nearest `at` (domain metres) that still holds
+    /// gravel, and where it is.
+    fn nearest_placer(&self, at: (f64, f64)) -> Option<(u32, (f64, f64))> {
+        self.resources
+            .as_ref()?
+            .sites()
+            .iter()
+            .filter(|s| s.kind == super::resources::SiteKind::PlacerGold && !s.is_exhausted())
+            .map(|s| {
+                let c = self
+                    .domain
+                    .cell_center_m(DomainLevel::Medium, s.cell.0, s.cell.1);
+                (s.id, c)
+            })
+            .min_by(|a, b| {
+                let d = |p: (f64, f64)| (p.0 - at.0).hypot(p.1 - at.1);
+                d(a.1).total_cmp(&d(b.1)).then(a.0.cmp(&b.0))
+            })
+    }
+
     fn install_household_water(&mut self) -> Result<(), IslandLifeError> {
         let Some(house) = self
             .placed
@@ -2229,11 +2401,13 @@ impl IslandLife {
                 self.respired_since_meal.remove(&id);
                 self.lost_since_drink.remove(&id);
                 self.felling.remove(&id);
+                self.mining.remove(&id);
                 self.hauling.remove(&id);
                 self.water_trips.remove(&id);
                 self.labour_kcal.remove(&id);
             }
             self.work(human_s as f64)?;
+            self.mine(human_s as f64)?;
             self.household_water_step(human_s as f64)?;
             self.household_gas_step(human_s as f64)?;
             self.meals()?;
@@ -2330,6 +2504,8 @@ impl IslandLife {
         h.update(canonical(&self.respired_since_meal).as_bytes());
         h.update(canonical(&self.lost_since_drink).as_bytes());
         h.update(canonical(&self.felling).as_bytes());
+        h.update(canonical(&self.resources).as_bytes());
+        h.update(canonical(&self.mining).as_bytes());
         h.update(canonical(&self.hauling).as_bytes());
         h.update(canonical(&self.labour_kcal).as_bytes());
         h.update(canonical(&self.water_drunk_kg).as_bytes());
@@ -2390,6 +2566,116 @@ mod tests {
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("../..")
             .join(path)
+    }
+
+    /// A founder who chooses to mine, with the shed's gold pan, walks to
+    /// the nearest placer, pans the packs' working day and walks home
+    /// (D9): the job takes exactly that long, it is labour throughout, the
+    /// day's gold lands in the store and the gravel leaves the site.
+    #[test]
+    fn a_founder_with_the_pan_works_the_nearest_placer_for_a_day() {
+        let mut scenario =
+            IslandScenario::load(&repo("fixtures/island/default_scenario.json")).unwrap();
+        scenario.estate_patch.tree_cap = 200;
+        let canon = Arc::new(CanonLocked::load(&repo("fixtures/island/canon.json")).unwrap());
+        let mut life = IslandLife::bootstrap(scenario, canon).expect("the island bootstraps");
+        assert!(
+            life.estate_has_tool(PANNING_TOOL),
+            "the shed has the gold pan"
+        );
+
+        let at = life.vegetation.centre_m();
+        life.positions.0.insert(
+            "Gem-D".into(),
+            super::super::humans::EstatePosition {
+                space: Space::Outdoors,
+                position_m: at,
+            },
+        );
+        life.humans
+            .registry
+            .get_human_mut("Gem-D")
+            .unwrap()
+            .economy_action
+            .kind = crate::humans::ActionKind::Mine;
+        let (site_id, there) = life.nearest_placer(at).expect("the island has a placer");
+        let before_t = life
+            .resources
+            .as_ref()
+            .unwrap()
+            .site(site_id)
+            .unwrap()
+            .remaining_t;
+        let body = LabourBody::from_human(life.humans.registry.get_human("Gem-D").unwrap());
+        let distance = (there.0 - at.0).hypot(there.1 - at.1);
+        let day = life
+            .labour
+            .pan_gravel(LabourTool::GoldPan, 0.0, false)
+            .unwrap()
+            .duration_s;
+        let needed = life
+            .labour
+            .walking_time_s(&body, distance, life.climb_m(at, there), 0.0)
+            .unwrap()
+            + day
+            + life
+                .labour
+                .walking_time_s(&body, distance, life.climb_m(there, at), 0.0)
+                .unwrap();
+
+        let step = 600.0;
+        let mut worked = 0.0;
+        life.mine(step).unwrap();
+        worked += step;
+        assert_eq!(life.mining.get("Gem-D").map(|j| j.site_id), Some(site_id));
+        while life.mining.contains_key("Gem-D") {
+            assert!(
+                worked < needed + step,
+                "still out after {worked} s of {needed}"
+            );
+            assert!(
+                life.humans
+                    .registry
+                    .get_human("Gem-D")
+                    .unwrap()
+                    .labour_met
+                    .is_some(),
+                "mining is labour"
+            );
+            life.mine(step).unwrap();
+            worked += step;
+        }
+        assert!(
+            worked >= needed,
+            "home after {worked} s, before its {needed}"
+        );
+
+        let site = life.resources.as_ref().unwrap().site(site_id).unwrap();
+        assert!(site.remaining_t < before_t, "no gravel left the site");
+        let gold = life.materials.stock_kg(Material::Gold);
+        assert!(gold > 0.0, "a day at the pan banked no gold");
+        // No more than the gravel moved held at the site's grade (g/t).
+        let moved_t = before_t - site.remaining_t;
+        assert!(
+            gold * 1_000.0 <= site.grade * moved_t + 1e-9,
+            "{gold} kg of gold"
+        );
+        // The job is in the snapshot and the digest sees the store.
+        let digest = life.state_digest();
+        life.mining.insert(
+            "Gem-K".into(),
+            MiningJob {
+                site_id,
+                walk_s: 1.0,
+                worked_s: 0.0,
+            },
+        );
+        assert_ne!(
+            life.state_digest(),
+            digest,
+            "the digest does not see a mining job"
+        );
+        assert_eq!(life.snapshot().mining, life.mining);
     }
 
     /// A founder who gathers outdoors with the shed's axe walks to the

@@ -142,7 +142,10 @@ animal and fish resource nodes (§2b), which can now read the habitats.
 
 ### 2c. D9: most actions still take one tick
 
-- **Now:** felling and hauling are timed and costed; everything else completes in one tick.
+- **Now:** felling, hauling and panning a placer for gold (2026-10-14: walk there, the packs'
+  working day at the pan, walk home, the gold to the store) are timed and costed; everything
+  else completes in one tick. Foraging food (R3, with session 38's Kelly 2013 return rates) is
+  next.
 - **Needs:** a cited duration for each action (`fixtures/reference/labour/productivity.json`
   holds some already), and the same task machinery felling uses (`life.rs` `work`) extended to
   them. Actions with no Compendium row cost the resting baseline (D22, accepted).
@@ -434,5 +437,5 @@ invertebrate densities, fire danger indices (see each report's "unsourced" secti
   push; the `dependency audit` CI job replaced it.
 - **Firecrawl credits ran out** on 2026-10-12. WebSearch and the TinyFish fetcher still work for
   sources; the container's own network blocks most hosts.
-- **Persist digests.** `WEEK_DIGEST` is `e1a03624…c244`; the planetary topology pin is
+- **Persist digests.** `WEEK_DIGEST` is `2c9db940…e414`; the planetary topology pin is
   `e4ece246…73e2`. Any change that moves either is a behaviour change and must say so.
