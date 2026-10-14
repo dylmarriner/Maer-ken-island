@@ -465,6 +465,10 @@ impl IslandLife {
         } else {
             None
         };
+        // The fruit and seed people eat, laid down on the spun-up forest.
+        let shares = super::edible::ReproductiveShares::from_reference(labour.library())
+            .map_err(|e| IslandLifeError::Labour(LabourError::MissingReference(e)))?;
+        ecology.install_edible(&shares);
         let placed = place_regional_estate(
             &canon,
             &physical,
@@ -596,6 +600,9 @@ impl IslandLife {
         if life.ecology.soil.is_none() {
             life.install_soil()?;
         }
+        if life.ecology.edible.is_none() {
+            life.install_edible()?;
+        }
         life.replay_log = super::replay::IslandReplayLog::new(life.scenario_digest_hex());
         Ok(life)
     }
@@ -720,6 +727,10 @@ impl IslandLife {
         if life.ecology.soil.is_none() {
             // Saved before the island had soil carbon.
             life.install_soil()?;
+        }
+        if life.ecology.edible.is_none() {
+            // Saved before people ate only what is edible.
+            life.install_edible()?;
         }
         life.replay_log = super::replay::IslandReplayLog::new(life.scenario_digest_hex());
         Ok(life)
@@ -1453,8 +1464,7 @@ impl IslandLife {
                 let stands = life.standing_cell(id, rows, cols);
                 let mut ate = Err(MaterialError::NothingToHarvest);
                 for cell in cells_around(stands, FORAGE_RADIUS_CELLS, rows, cols) {
-                    ate = life.materials.gather_biotic(
-                        Material::PlantFood,
+                    ate = life.materials.gather_edible(
                         owed_kgc / carbon_per_kg,
                         &mut life.ecology,
                         cell,
@@ -1882,6 +1892,13 @@ impl IslandLife {
                 .dry_logs(&drying, t_k - 273.15, rh, dt_s, ledger);
             life.materials.season_stored_logs(ledger);
         })
+    }
+
+    fn install_edible(&mut self) -> Result<(), IslandLifeError> {
+        let shares = super::edible::ReproductiveShares::from_reference(self.labour.library())
+            .map_err(|e| IslandLifeError::Labour(LabourError::MissingReference(e)))?;
+        self.ecology.install_edible(&shares);
+        Ok(())
     }
 
     fn install_soil(&mut self) -> Result<(), IslandLifeError> {

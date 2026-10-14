@@ -328,6 +328,11 @@ pub struct RegionalEcologyState {
     /// `None` until the island installs it, and in older snapshots.
     #[serde(default)]
     pub soil: Option<SoilCarbon>,
+    /// The fruit and seed people can eat, part of `biomass_kgc_m2` (R3,
+    /// `super::edible`). `None` until the island installs it, and in older
+    /// snapshots.
+    #[serde(default)]
+    pub edible: Option<super::edible::EdibleFood>,
 }
 
 /// Where the grazers' carbon went in one step, summed over the land (kg C).
@@ -583,6 +588,7 @@ impl RegionalEcologyState {
             biomass_kgc_m2: Grid2::from_data(&spec, biomass),
             herbivore_kgc_m2: Grid2::from_data(&spec, herbivores),
             soil: None,
+            edible: None,
         })
     }
 
@@ -651,6 +657,16 @@ impl RegionalEcologyState {
         ));
     }
 
+    /// Lay down a year's fruit and seed on every cell that makes them.
+    pub fn install_edible(&mut self, shares: &super::edible::ReproductiveShares) {
+        self.edible = Some(super::edible::EdibleFood::install(
+            shares,
+            self.biome_grid.data(),
+            self.npp_kgc_m2_yr.data(),
+            self.biomass_kgc_m2.data(),
+        ));
+    }
+
     /// One ecology step with the grazers: they eat a capped share of each
     /// cell's production (passed to the plants as harvest), then their own
     /// pools advance. `cell_area_m2` converts the per-area flows to kg.
@@ -669,6 +685,13 @@ impl RegionalEcologyState {
             *h = super::fauna::intake_kgc_m2_yr(*g, *npp);
         }
         let shed = self.step_shedding(dt_seconds, Some(&harvest), None);
+        if let Some(edible) = self.edible.as_mut() {
+            edible.step(
+                self.npp_kgc_m2_yr.data(),
+                self.biomass_kgc_m2.data(),
+                dt_years,
+            );
+        }
         let mut totals = GrazerFlows::default();
         let mut inputs: Vec<SoilInputs> = shed
             .iter()
