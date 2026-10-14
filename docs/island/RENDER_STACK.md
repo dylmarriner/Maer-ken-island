@@ -285,6 +285,22 @@ prints the rate achieved. Measured here, 1600×1000, four cores, no GPU:
 | island | 0.5 FPS | 0.6 FPS |
 | estate | 8.9 FPS | 10.8 FPS |
 
+On a GPU (2026-10-15: AMD Radeon RX 470, RADV Polaris10, Vulkan, the
+release build, 1600×1000, default detail, `--measure 30`; the startup
+line named the card):
+
+| view | with vsync | without vsync |
+|---|---|---|
+| island | 60.0 FPS | **255.6 FPS** |
+| estate | 60.0 FPS | **508.9 FPS** |
+
+Under vsync both views hold the monitor's 59.96 Hz, which says only that
+a frame costs less than a refresh; `--measure` now draws without vsync
+(`PresentMode::AutoNoVsync`; everything else keeps Bevy's `Fifo`) so the
+figure is what a frame costs: about 3.9 ms on the island and 2.0 ms on
+the estate, 430 and 47 times the software rasteriser. The full-detail
+island needs no `--detail` on this card.
+
 Pacing the island bought 21% on the estate and essentially nothing on
 the island. That corrects an assumption: the island view is
 **drawing-bound, not contention-bound**. 285 chunks is about 2.3 M
@@ -353,10 +369,10 @@ a message rather than a silently-dead check.
 - **How it feels.** The gestures are shown to *work*; whether the
   sensitivities are pleasant under a real hand is a judgement, not a
   measurement, and no script settles it.
-- **Frame rate on a GPU.** Every figure above was rasterised by
-  **lavapipe** on the CPU, because this container has no GPU in it. What
-  a real adapter *costs* is not inferable from these numbers and is not
-  claimed anywhere.
+- **Frame rate on other GPUs and window sizes.** One card is measured
+  (the RX 470 above, 2026-10-15); every other figure was rasterised by
+  **lavapipe** on the CPU. Other adapters, and sizes other than
+  1600×1000, are not claimed.
 
   What does carry across is correctness, and that is an argument rather
   than an assumption, so it is worth setting out. `wgpu` is the
