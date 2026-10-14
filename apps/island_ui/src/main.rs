@@ -81,8 +81,8 @@ island-ui (--scenario <path> | --snapshot <path>) [--data-dir <dir>] [--speed re
                    the trench; 8 flattens it into a smooth green shape
                    and is the point at which this stops looking like the
                    island.
-  --measure N      draw for N seconds, print the frame rate achieved, and
-                   exit. For putting a number on what this costs on the
+  --measure N      draw for N seconds without vsync, print the frame rate
+                   achieved, and exit. For putting a number on what this costs on the
                    machine it is actually running on, rather than
                    guessing: a software rasteriser and a GPU are orders of
                    magnitude apart and neither can be inferred from the
@@ -890,6 +890,15 @@ fn main() {
                     // panels and a map between them is what this draws, and
                     // at 1280 the map is the narrowest of the three.
                     resolution: bevy::window::WindowResolution::new(1600, 1000),
+                    // A measurement asks what a frame costs, so it is not
+                    // held to the display's refresh: under vsync a GPU
+                    // reports the monitor's 60 Hz however little each frame
+                    // takes (60.0 on an RX 470 for both views, 2026-10-15).
+                    present_mode: if measure.is_some() {
+                        bevy::window::PresentMode::AutoNoVsync
+                    } else {
+                        bevy::window::PresentMode::Fifo
+                    },
                     ..default()
                 }),
                 ..default()

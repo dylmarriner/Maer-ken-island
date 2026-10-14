@@ -12,10 +12,13 @@ in this order:
 3. **[WORKING_PRACTICES.md](WORKING_PRACTICES.md)**: the rules the project holds itself to
    (realism, reference data, digests, CI), the environment's traps, and the owner's standing
    decisions.
-4. **[SESSION_2026-10-13.md](SESSION_2026-10-13.md)**: the latest session: production readiness
+4. **[SESSION_2026-10-14.md](SESSION_2026-10-14.md)**: the latest session: three Claude sessions
+   in parallel, what merged, what waits for review (with merge order and digest collisions), and
+   the owner's open decisions.
+5. **[SESSION_2026-10-13.md](SESSION_2026-10-13.md)**: the session before: production readiness
    (installed backend, persistence, health), the realism research and programme, water at home,
    soil carbon, and what was learned the hard way.
-5. **[SESSION_2026-10-12.md](SESSION_2026-10-12.md)**: the session before (PR #6).
+6. **[SESSION_2026-10-12.md](SESSION_2026-10-12.md)**: the one before that (PR #6).
 
 ## The authoritative documents (do not duplicate them, read them)
 

@@ -344,10 +344,10 @@ cost the resting baseline (D22).
   a scroll 59.0%, the `e` key 32.5% and clicking the estate row 59.5%. CI runs it and uploads
   the frames.
 
-  What rendering has **not** answered is what it costs on a GPU, because every frame so far was
-  rasterised by lavapipe on the CPU. The application asks for the high-performance adapter in
-  its own code and says which one it got, but no frame-rate figure from real hardware is
-  claimed anywhere. Other window sizes are untested too.
+  On a GPU it is measured on one card (2026-10-15, AMD Radeon RX 470, release build,
+  1600×1000, without vsync): 255.6 frames per second on the island view and 508.9 on the
+  estate, against 0.6 and 10.8 under lavapipe on the CPU. Other cards and window sizes are
+  untested.
 
   The estate is drawn too, from `EstateLayout` rather than from the model table:
   `/api/world/estate/layout` serves the patch, every building footprint, every room and zone
