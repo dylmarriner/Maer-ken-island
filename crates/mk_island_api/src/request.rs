@@ -87,6 +87,23 @@ impl CreateHumanRequest {
     }
 }
 
+/// What a creation form may offer: `/api/creator/options`.
+///
+/// The server builds its answer from this type, so the dashboard's form
+/// and the desktop foundry read the same lists and the same limits, and
+/// neither can drift from what the creator accepts.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CreatorOptions {
+    pub biological_sex: Vec<String>,
+    pub build: Vec<String>,
+    pub hair_color: Vec<String>,
+    pub eye_color: Vec<String>,
+    pub skin_tone: Vec<String>,
+    pub max_age_years: f64,
+    /// Shortest and tallest, in centimetres.
+    pub height_cm: (f64, f64),
+}
+
 /// Running the island: pause it, resume it, step it, or change its speed.
 ///
 /// Internally tagged on `command`, which is the shape the dashboard has

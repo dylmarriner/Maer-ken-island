@@ -111,6 +111,13 @@
             <input name="col" id="col" type="number" min="0" step="1" inputmode="numeric">
           </label>
           <span class="hint full" id="cell-hint" hidden></span>
+          <figure class="full cell-map" id="cell-map-figure" hidden>
+            <div class="cell-map-frame">
+              <img id="cell-map" alt="The island from above, land shaded by height and the sea around it. Click a point to start the person in that cell.">
+              <span id="cell-map-mark" class="cell-map-mark" hidden></span>
+            </div>
+            <figcaption id="cell-map-read" aria-live="polite">Click the island to choose a cell, or type its row and column.</figcaption>
+          </figure>
         </div>
       </fieldset>
 

@@ -465,6 +465,10 @@ impl IslandLife {
         } else {
             None
         };
+        // The fruit and seed people eat, laid down on the spun-up forest.
+        let shares = super::edible::ReproductiveShares::from_reference(labour.library())
+            .map_err(|e| IslandLifeError::Labour(LabourError::MissingReference(e)))?;
+        ecology.install_edible(&shares);
         let placed = place_regional_estate(
             &canon,
             &physical,
@@ -596,6 +600,9 @@ impl IslandLife {
         if life.ecology.soil.is_none() {
             life.install_soil()?;
         }
+        if life.ecology.edible.is_none() {
+            life.install_edible()?;
+        }
         life.replay_log = super::replay::IslandReplayLog::new(life.scenario_digest_hex());
         Ok(life)
     }
@@ -720,6 +727,10 @@ impl IslandLife {
         if life.ecology.soil.is_none() {
             // Saved before the island had soil carbon.
             life.install_soil()?;
+        }
+        if life.ecology.edible.is_none() {
+            // Saved before people ate only what is edible.
+            life.install_edible()?;
         }
         life.replay_log = super::replay::IslandReplayLog::new(life.scenario_digest_hex());
         Ok(life)
@@ -1126,7 +1137,7 @@ impl IslandLife {
                 let distance_m = ((tree_at.0 - at.0).powi(2) + (tree_at.1 - at.1).powi(2)).sqrt();
                 let walk_s = self
                     .labour
-                    .walking_time_s(&body, distance_m, 0.0, 0.0)
+                    .walking_time_s(&body, distance_m, self.climb_m(at, tree_at), 0.0)
                     .map_err(IslandLifeError::Labour)?;
                 let job = self.felling.entry(id.clone()).or_insert(FellingJob {
                     tree_id,
@@ -1254,6 +1265,21 @@ impl IslandLife {
         })
     }
 
+    /// The climb (m) walking straight from `from` to `to` over the ground:
+    /// the estate patch's terrain where the walk crosses it, the medium
+    /// grid's elsewhere, sampled every patch cell (§1c routes).
+    fn climb_m(&self, from: (f64, f64), to: (f64, f64)) -> f64 {
+        let layout = &self.placed.layout;
+        let elevation = &self.physical.geophysics.elevation_m;
+        let medium_m = self.domain.cell_size_m(DomainLevel::Medium);
+        timber::ascent_m(
+            |p| layout.ground_m(elevation, medium_m, p),
+            from,
+            to,
+            layout.patch.cell_size_m,
+        )
+    }
+
     /// The quickest haul of the log on the ground nearest `at` that no
     /// founder is already moving, or `None` if there is none.
     fn plan_haul(
@@ -1315,8 +1341,10 @@ impl IslandLife {
             .max((log.length_m / bed.max(1e-6)).ceil())
             .max(1.0) as u64;
         let first = self.materials.reserve_log_ids(most);
-        let plans = timber::haul_plans(&log, at, body, &self.labour, &site, &fleet, first)
-            .map_err(IslandLifeError::Labour)?;
+        let climb = |from: (f64, f64), to: (f64, f64)| self.climb_m(from, to);
+        let plans =
+            timber::haul_plans_over(&log, at, body, &self.labour, &site, &fleet, first, &climb)
+                .map_err(IslandLifeError::Labour)?;
         Ok(timber::quickest(plans))
     }
 
@@ -1453,8 +1481,7 @@ impl IslandLife {
                 let stands = life.standing_cell(id, rows, cols);
                 let mut ate = Err(MaterialError::NothingToHarvest);
                 for cell in cells_around(stands, FORAGE_RADIUS_CELLS, rows, cols) {
-                    ate = life.materials.gather_biotic(
-                        Material::PlantFood,
+                    ate = life.materials.gather_edible(
                         owed_kgc / carbon_per_kg,
                         &mut life.ecology,
                         cell,
@@ -1615,7 +1642,7 @@ impl IslandLife {
         let distance_m = (there.0 - here.0).hypot(there.1 - here.1);
         let out_s = self
             .labour
-            .walking_time_s(&body, distance_m, 0.0, 0.0)
+            .walking_time_s(&body, distance_m, self.climb_m(here, there), 0.0)
             .ok()?;
         let cans = self
             .placed
@@ -1638,7 +1665,12 @@ impl IslandLife {
             if carry_kg > 0.0 {
                 back_s = self
                     .labour
-                    .walking_time_s(&body, distance_m, 0.0, carry_kg + empty_kg)
+                    .walking_time_s(
+                        &body,
+                        distance_m,
+                        self.climb_m(there, here),
+                        carry_kg + empty_kg,
+                    )
                     .ok()?;
             }
         }
@@ -1883,6 +1915,13 @@ impl IslandLife {
                 .dry_logs(&drying, t_k - 273.15, rh, dt_s, ledger);
             life.materials.season_stored_logs(ledger);
         })
+    }
+
+    fn install_edible(&mut self) -> Result<(), IslandLifeError> {
+        let shares = super::edible::ReproductiveShares::from_reference(self.labour.library())
+            .map_err(|e| IslandLifeError::Labour(LabourError::MissingReference(e)))?;
+        self.ecology.install_edible(&shares);
+        Ok(())
     }
 
     fn install_soil(&mut self) -> Result<(), IslandLifeError> {
@@ -2347,7 +2386,7 @@ mod tests {
             ((tree.position_m.0 - at.0).powi(2) + (tree.position_m.1 - at.1).powi(2)).sqrt();
         let needed = life
             .labour
-            .walking_time_s(&body, distance, 0.0, 0.0)
+            .walking_time_s(&body, distance, life.climb_m(at, tree.position_m), 0.0)
             .unwrap()
             + life
                 .labour

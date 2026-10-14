@@ -1,0 +1,35 @@
+{
+  "id": "food_plants",
+  "domain": "ecology",
+  "title": "Plant food: how much of a forest's production is fruit and seed",
+  "retrieved": "2026-10-14",
+  "licence": "Numerical values cited as facts with attribution; no text, figures or datasets reproduced.",
+  "sources": [
+    {
+      "key": "ward2025",
+      "citation": "Ward, R. E., Zhang-Zheng, H., Abernethy, K., et al. and Kueppers, L. M. (2025). Forest Age Rivals Climate to Explain Reproductive Allocation Patterns in Forest Ecosystems Globally. Ecology Letters 28(8): e70191. doi:10.1111/ele.70191. Open-access full text read from https://www.stir.ac.uk/research/hub/file/2151418 (p.3 for the proxy, p.5 for the biome means).",
+      "licence": "Facts cited with attribution"
+    }
+  ],
+  "items": [
+    {
+      "key": "reproductive_allocation_by_forest_biome",
+      "description": "Mean annual reproductive allocation of forests by biome: reproductive litterfall (flowers, fruit, seed, cone scales, husks) as a share of reproductive plus leaf litterfall, R/(R+L), which the source validates against R/NPP",
+      "unit": "fraction",
+      "source": "ward2025",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "biome",
+          "columns": ["mean", "sd"],
+          "rows": [
+            { "label": "boreal", "values": [0.082, 0.070] },
+            { "label": "temperate", "values": [0.116, 0.084] },
+            { "label": "tropical", "values": [0.129, 0.087] }
+          ]
+        }
+      },
+      "note": "p.5: 'RA exhibited a ~60% increase from boreal forests (mean = 0.082) to tropical forests (mean = 0.129), with intermediate values observed in temperate forests (mean = 0.116)'; 'standard deviations were high across all biomes (SD = 0.070, 0.084, and 0.087 for boreal, temperate, and tropical forests, respectively)'. p.3: the proxy R/(R + L) is built from litterfall and correlates with R/NPP (R2 = 0.85). R counts everything reproductive, so as the human-edible share of production it is an upper bound (D57)."
+    }
+  ]
+}

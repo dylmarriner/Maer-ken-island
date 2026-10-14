@@ -190,6 +190,25 @@ pub struct EstateLayout {
 }
 
 impl EstateLayout {
+    /// Ground height (m above sea level) at domain point `p`: the patch's
+    /// own terrain, bilinear between its cell centres, inside the patch;
+    /// outside it, the medium-grid elevation the patch's terrain was built
+    /// from (`medium_elevation_m`, cells of `medium_cell_m`).
+    pub fn ground_m(
+        &self,
+        medium_elevation_m: &Grid2<f64>,
+        medium_cell_m: f64,
+        p: (f64, f64),
+    ) -> f64 {
+        let patch = &self.patch;
+        let (x, y) = (p.0 - patch.origin_x_m, p.1 - patch.origin_y_m);
+        if (0.0..patch.width_m).contains(&x) && (0.0..patch.height_m).contains(&y) {
+            medium_elevation(&self.terrain_m, patch.cell_size_m, x, y)
+        } else {
+            medium_elevation(medium_elevation_m, medium_cell_m, p.0, p.1)
+        }
+    }
+
     /// Whether a space is part of the founders' house: it belongs to the
     /// `House` building, or stands inside the house's footprint (the
     /// computer room keeps its own upstream building id but is a room of

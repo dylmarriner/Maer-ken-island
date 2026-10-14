@@ -60,6 +60,10 @@ features = [
   # tonemapper that needs no lookup tables instead (`main.rs`).
   "png",
   "multi_threaded",
+  # Lines: the rooms' walls and the doors are drawn as outlines, because
+  # the island gives where they are and nothing about how thick or tall a
+  # wall or a door is (`estate::room_outlines`).
+  "bevy_gizmos_render",
 ]
 
 [dependencies.bevy_egui]
