@@ -141,7 +141,16 @@ const DAY: u64 = 86_400;
 /// shortfalls, body carbon 13.0 of 13.0 and 10.4 of 10.4 kg, eating 47 and
 /// 43 minutes a day, drinking 1.81 and 1.43 L a day, temperate-forest NPP
 /// 471 g C/m2/yr (reference 400-900), intimacy 39 a year.
-const WEEK_DIGEST: &str = "5b01ed92896385fe1885f03ac8b613738510d534cfaefdb7e0fcfefcfd126d13";
+///
+/// And for the kitchen's gas stove (R4 in part, D58, 2026-10-14): the house
+/// burns HEEP's cooking energy from its two LPG bottles while anyone is
+/// home, booking the carbon from the crust to the air in an audit of its
+/// own each substep. Read from CI's slow tier (run 38500528556) on top of
+/// R3's edible food: 20,594 audits closed, no food or water shortfalls,
+/// body carbon 13.0 of 13.0 and 10.4 of 10.4 kg, eating 47 and 43 minutes
+/// a day, drinking 1.81 and 1.43 L a day, temperate-forest NPP 471 g
+/// C/m2/yr (reference 400-900).
+const WEEK_DIGEST: &str = "e1a036247e9d593194fcfe343a307a454b863022993151d3de317e5eb838c244";
 
 fn repo(path: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
