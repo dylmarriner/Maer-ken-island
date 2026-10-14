@@ -667,20 +667,28 @@ fn default_subjective_confidence() -> f64 {
 
 impl FormalPredictiveProcessingSnapshot {
     /// What this policy adds to an action's score in
-    /// [`super::autonomy::AutonomousMind::choose_action`]: its probability
-    /// of the action less an even share, times
+    /// [`super::autonomy::AutonomousMind::choose_action`]: what its critic
+    /// and actor have learned the action is worth (`learned_value` plus
+    /// `preference`), less the mean over the repertoire, times
     /// [`ActiveInferenceParams::decision_weight`]. Zero for an action
-    /// outside the repertoire, and zero for every action while the policy
-    /// is undecided. The probabilities are last step's, the same lag the
-    /// mind already takes from neurochemistry, and they are the π the
-    /// actor's next update treats the executed action as drawn from.
+    /// outside the repertoire, and zero everywhere until it has learned
+    /// something.
+    ///
+    /// Not the selection probabilities: those are mostly the immediate
+    /// utility of each action, built from the same hunger, thirst and
+    /// fatigue the mind's own drives already score, so adding them counts
+    /// every need twice. (Tried first: the founders slept 7 hours a night
+    /// instead of 8, and half of it away from home.) What this hierarchy
+    /// knows that the drives do not is what has actually relieved its goal
+    /// deficit when it was done.
     pub fn decision_bias(&self, kind: ActionKind) -> f64 {
         let Some(action) = FormalAction::from_action_kind(kind) else {
             return 0.0;
         };
-        let even = 1.0 / FormalAction::ALL.len() as f64;
-        self.params.decision_weight
-            * (self.action_values[action.index()].selection_probability - even)
+        let worth = |v: &ActionValue| v.learned_value + v.preference;
+        let mean =
+            self.action_values.iter().map(worth).sum::<f64>() / self.action_values.len() as f64;
+        self.params.decision_weight * (worth(&self.action_values[action.index()]) - mean)
     }
 
     pub fn from_profile(profile: &mk_core::human::HumanProfile) -> Self {
@@ -1590,19 +1598,22 @@ mod tests {
     }
 
     #[test]
-    fn the_policy_biases_only_its_own_actions_and_only_when_it_leans() {
+    fn the_policy_biases_only_its_own_actions_and_only_by_what_it_learned() {
         let mut snapshot = FormalPredictiveProcessingSnapshot::from_profile(&profile());
-        // Undecided: no bias anywhere.
+        // Nothing learned yet: no bias anywhere.
         for kind in [ActionKind::SeekWater, ActionKind::Rest, ActionKind::Gather] {
             assert_eq!(snapshot.decision_bias(kind), 0.0);
         }
-        for value in snapshot.action_values.iter_mut() {
-            value.selection_probability = 0.0;
-        }
+        // A confident policy that has learned nothing still adds nothing:
+        // its confidence is the needs the drives already count.
         snapshot.action_values[FormalAction::SeekWater.index()].selection_probability = 1.0;
+        assert_eq!(snapshot.decision_bias(ActionKind::SeekWater), 0.0);
+        // Learned that drinking relieves: water up, the rest down, by the
+        // difference from the mean.
+        snapshot.action_values[FormalAction::SeekWater.index()].learned_value = 0.5;
         let w = snapshot.params.decision_weight;
-        assert!((snapshot.decision_bias(ActionKind::SeekWater) - w * 0.8).abs() < 1e-12);
-        assert!((snapshot.decision_bias(ActionKind::Rest) + w * 0.2).abs() < 1e-12);
+        assert!((snapshot.decision_bias(ActionKind::SeekWater) - w * 0.4).abs() < 1e-12);
+        assert!((snapshot.decision_bias(ActionKind::Rest) + w * 0.1).abs() < 1e-12);
         assert_eq!(snapshot.decision_bias(ActionKind::Gather), 0.0);
         assert_eq!(
             FormalAction::from_action_kind(ActionKind::SocialApproach),

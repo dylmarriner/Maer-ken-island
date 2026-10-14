@@ -1752,7 +1752,14 @@ impl HumanBeing {
             &self.core_systems,
             &self.reproduction,
             &self.neurochemistry,
-            Some(&self.formal_predictive_processing),
+            // The policy steers waking choices only. Asleep, or at bedtime by
+            // their own clock, when to sleep is the body's call, not a
+            // weighing of options (the same reasoning as the mind's own
+            // sleep gate), and the policy's notion of rest has no idea that
+            // people sleep at home: let it lean here and a tired founder
+            // lies down wherever they happen to be.
+            (!self.circadian.asleep && !self.circadian.is_bedtime(self.needs.fatigue))
+                .then_some(&self.formal_predictive_processing),
             self.profile.human_id.0,
             tick,
             rng_registry,

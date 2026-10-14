@@ -963,12 +963,12 @@ mod tests {
         };
         let without = choose(None);
 
-        // An undecided policy changes nothing.
+        // A policy that has learned nothing changes nothing.
         let mut policy = FormalPredictiveProcessingSnapshot::from_profile(&profile);
         assert_eq!(choose(Some(&policy)), without);
 
-        // A policy sure of an action the mind would not have taken, and
-        // weighted to count, turns the choice.
+        // A policy that has learned an action the mind would not have taken
+        // relieves its goal deficit, weighted to count, turns the choice.
         let wanted = if without == ActionKind::SeekWater {
             ActionKind::Rest
         } else {
@@ -985,10 +985,7 @@ mod tests {
                 })
                 .unwrap()
         };
-        let at = index(wanted);
-        for (i, value) in policy.action_values.iter_mut().enumerate() {
-            value.selection_probability = if i == at { 1.0 } else { 0.0 };
-        }
+        policy.action_values[index(wanted)].learned_value = 1.0;
         policy.params.decision_weight = 10.0;
         assert_eq!(choose(Some(&policy)), wanted);
     }
