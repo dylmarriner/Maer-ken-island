@@ -244,6 +244,8 @@ struct Panels {
     person: PersonReading,
     /// The foundry window: making somebody new.
     foundry: Foundry,
+    /// The founders' portraits, by agent id, as egui textures.
+    portraits: Vec<(&'static str, egui::TextureId)>,
 }
 
 /// The foundry's state across frames. The creator's options are asked
@@ -937,6 +939,7 @@ fn main() {
             build_the_estate,
             light_the_island,
             prepare_trunks,
+            hang_the_portraits,
         ),
     )
     .add_systems(
@@ -1883,6 +1886,21 @@ fn place_islanders(
     }
 }
 
+/// Load the founders' portraits and hand them to egui, which draws them in
+/// the person inspector. Nobody else has one (`property::portrait`).
+fn hang_the_portraits(
+    assets: Res<AssetServer>,
+    mut textures: ResMut<bevy_egui::EguiUserTextures>,
+    mut panels: ResMut<Panels>,
+) {
+    for founder in ["Gem-D", "Gem-K"] {
+        if let Some(path) = property::portrait(founder) {
+            let id = textures.add_image(bevy_egui::EguiTextureHandle::Strong(assets.load(path)));
+            panels.portraits.push((founder, id));
+        }
+    }
+}
+
 /// The panels: what the island is doing, and what can be done to it.
 fn panels(
     mut contexts: EguiContexts,
@@ -2116,6 +2134,18 @@ fn panels(
                 }
                 Some(person) => {
                     ui.heading(&person.agent_id);
+                    if let Some((_, id)) = panels
+                        .portraits
+                        .iter()
+                        .find(|(who, _)| *who == person.agent_id)
+                    {
+                        // 480 × 322 on disk; drawn at the panel's width.
+                        let width = ui.available_width().min(240.0);
+                        ui.add(egui::Image::new((
+                            *id,
+                            egui::vec2(width, width * 322.0 / 480.0),
+                        )));
+                    }
                     ui.label(format!("{:.1} years old", person.age_years));
                     ui.label(if person.asleep { "Asleep" } else { "Awake" });
                     if let Some(space) = &person.space {
