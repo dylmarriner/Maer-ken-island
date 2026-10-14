@@ -16,6 +16,7 @@
 
 use crate::property::{self, Model};
 use crate::scene::{estate_of, Point};
+use crate::stems::Stem;
 use mk_island_api::{EstateLayout, Rect};
 
 /// How tall a building is drawn when the island does not say.
@@ -297,12 +298,35 @@ pub fn ray_hits(from: Point, along: Point, placed: &Placed) -> Option<f32> {
 
 /// What a click on the estate chose, by its index in [`things`], [`rooms`]
 /// or [`buildings`] -- which is also its index in the layout's `items`,
-/// `spaces` or `buildings`, because each of those maps one to one.
+/// `spaces` or `buildings`, because each of those maps one to one -- or a
+/// tree by the island's own id for it, which outlives any one read of the
+/// trees.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Picked {
     Thing(usize),
     Room(usize),
     Building(usize),
+    Tree(u64),
+}
+
+/// The narrowest a trunk is taken to be when clicked (m across). A sapling
+/// a few centimetres thick is a pixel or two at any useful distance; this
+/// is how near the pointer has to be, not a claim about the tree, and the
+/// tree is still drawn and described at its own diameter.
+pub const TRUNK_PICK_WIDTH_M: f32 = 1.0;
+
+/// The box a click on `stem` is tested against: the trunk as drawn,
+/// upright from its foot, at least [`TRUNK_PICK_WIDTH_M`] across.
+pub fn trunk_target(stem: &Stem) -> Placed {
+    let across = (2.0 * stem.radius_m).max(TRUNK_PICK_WIDTH_M);
+    Placed {
+        name: format!("Tree {}", stem.id),
+        kind: if stem.shrub { "Shrub" } else { "Tree" }.to_string(),
+        at: Point::new(stem.base.x, stem.base.y + stem.height_m / 2.0, stem.base.z),
+        size_m: (across, stem.height_m, across),
+        rotation_deg: 0.0,
+        model: None,
+    }
 }
 
 /// What a ray picks on the estate.
@@ -313,19 +337,35 @@ pub enum Picked {
 /// translucent so that what is inside them can be seen, and a click on a
 /// computer seen through the house's roof means the computer, not the
 /// roof. The yard is never picked; it is the ground everything stands on.
-pub fn pick(layout: &EstateLayout, from: Point, along: Point) -> Option<Picked> {
-    let nearest = |placed: Vec<Placed>| {
+///
+/// A tree among `stems` (the trunks drawn) is weighed by distance rather
+/// than ranked: it is picked only when the ray meets it before any room
+/// and before any building. A room is seen through its building's
+/// translucent walls, so it still wins over the building in front of it;
+/// a tree behind a building does not, or that part of the building could
+/// never be clicked.
+pub fn pick(layout: &EstateLayout, stems: &[Stem], from: Point, along: Point) -> Option<Picked> {
+    let nearest = |placed: &[Placed]| {
         placed
             .iter()
             .enumerate()
             .filter_map(|(i, p)| ray_hits(from, along, p).map(|t| (i, t)))
             .min_by(|a, b| a.1.total_cmp(&b.1))
-            .map(|(i, _)| i)
     };
-    nearest(things(layout))
-        .map(Picked::Thing)
-        .or_else(|| nearest(rooms(layout)).map(Picked::Room))
-        .or_else(|| nearest(buildings(layout)).map(Picked::Building))
+    if let Some((i, _)) = nearest(&things(layout)) {
+        return Some(Picked::Thing(i));
+    }
+    let trunks: Vec<Placed> = stems.iter().map(trunk_target).collect();
+    let room = nearest(&rooms(layout));
+    let building = nearest(&buildings(layout));
+    let in_front = |t: f32, other: Option<(usize, f32)>| other.is_none_or(|(_, d)| t < d);
+    if let Some((i, t)) = nearest(&trunks) {
+        if in_front(t, room) && in_front(t, building) {
+            return Some(Picked::Tree(stems[i].id));
+        }
+    }
+    room.map(|(i, _)| Picked::Room(i))
+        .or(building.map(|(i, _)| Picked::Building(i)))
 }
 
 /// What the inspector says about something picked on the estate: the
@@ -343,6 +383,9 @@ pub fn describe(layout: &EstateLayout, picked: Picked) -> Option<Vec<String>> {
         )
     };
     let lines = match picked {
+        // A tree is described from the trees the island served, which the
+        // layout does not hold: see `stems::describe`.
+        Picked::Tree(_) => return None,
         Picked::Thing(i) => {
             let item = layout.items.get(i)?;
             let (length, width, height) = item.size_m;
@@ -673,7 +716,7 @@ mod tests {
         let layout = layout();
         let machine = &things(&layout)[0];
         let (from, along) = from_above(machine.at.x, machine.at.z);
-        assert_eq!(pick(&layout, from, along), Some(Picked::Thing(0)));
+        assert_eq!(pick(&layout, &[], from, along), Some(Picked::Thing(0)));
     }
 
     #[test]
@@ -683,13 +726,77 @@ mod tests {
         // is 4 m square and they stand a metre in from opposite corners.
         let room = &rooms(&layout)[0];
         let (from, along) = from_above(room.at.x, room.at.z);
-        assert_eq!(pick(&layout, from, along), Some(Picked::Room(0)));
+        assert_eq!(pick(&layout, &[], from, along), Some(Picked::Room(0)));
 
         // The tool shed has no rooms in this layout, so its roof is all
         // there is to pick.
         let shed = &buildings(&layout)[1];
         let (from, along) = from_above(shed.at.x, shed.at.z);
-        assert_eq!(pick(&layout, from, along), Some(Picked::Building(1)));
+        assert_eq!(pick(&layout, &[], from, along), Some(Picked::Building(1)));
+    }
+
+    #[test]
+    fn a_click_on_a_trunk_picks_the_tree_and_a_tree_in_front_of_a_room_wins() {
+        let layout = layout();
+        let room = &rooms(&layout)[0];
+        // A 10 cm sapling standing on the open yard, well clear of the
+        // buildings, is still clickable a few tens of centimetres off.
+        let sapling = Stem {
+            id: 41,
+            base: Point::new(room.at.x - 40.0, 0.0, room.at.z),
+            height_m: 3.0,
+            radius_m: 0.05,
+            shrub: false,
+        };
+        let (from, along) = from_above(sapling.base.x + 0.3, sapling.base.z);
+        assert_eq!(
+            pick(&layout, &[sapling], from, along),
+            Some(Picked::Tree(41))
+        );
+        // Seen from the side, a tall tree between the eye and the room is
+        // the one in front; with the eye between them, the room is.
+        let oak = Stem {
+            id: 42,
+            base: Point::new(room.at.x - 10.0, 0.0, room.at.z),
+            height_m: 20.0,
+            radius_m: 0.4,
+            shrub: false,
+        };
+        let along = Point::new(1.0, 0.0, 0.0);
+        let behind_oak = Point::new(room.at.x - 30.0, room.at.y, room.at.z);
+        assert_eq!(
+            pick(&layout, &[oak], behind_oak, along),
+            Some(Picked::Tree(42))
+        );
+        let past_oak = Point::new(room.at.x - 5.0, room.at.y, room.at.z);
+        assert_eq!(
+            pick(&layout, &[oak], past_oak, along),
+            Some(Picked::Room(0))
+        );
+
+        // A tree behind the shed, seen past it, is hidden by it: the
+        // shed is what the click meets first. Looked at from the south
+        // (+z) towards the north, clear of the house to the west.
+        let shed = &buildings(&layout)[1];
+        let hidden = Stem {
+            id: 43,
+            base: Point::new(shed.at.x, 0.0, shed.at.z - 20.0),
+            height_m: 20.0,
+            radius_m: 0.4,
+            shrub: false,
+        };
+        let north = Point::new(0.0, 0.0, -1.0);
+        let south_of_shed = Point::new(shed.at.x, 1.0, shed.at.z + 20.0);
+        assert_eq!(
+            pick(&layout, &[hidden], south_of_shed, north),
+            Some(Picked::Building(1))
+        );
+        // And with nothing in the way, the same tree is picked.
+        let north_of_shed = Point::new(shed.at.x, 1.0, shed.at.z - 10.0);
+        assert_eq!(
+            pick(&layout, &[hidden], north_of_shed, north),
+            Some(Picked::Tree(43))
+        );
     }
 
     #[test]
@@ -741,7 +848,7 @@ mod tests {
             0.0,
         );
         let (from, along) = from_above(corner.x, corner.z);
-        assert_eq!(pick(&layout, from, along), None);
+        assert_eq!(pick(&layout, &[], from, along), None);
     }
 
     #[test]
