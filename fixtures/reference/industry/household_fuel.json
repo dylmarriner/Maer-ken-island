@@ -1,0 +1,71 @@
+{
+  "id": "household_fuel",
+  "domain": "industry",
+  "title": "Household cooking energy and bottled LPG",
+  "retrieved": "2026-10-14",
+  "licence": "Numerical values cited as facts with attribution; no text, figures or datasets reproduced.",
+  "sources": [
+    {
+      "key": "heep2006",
+      "citation": "Isaacs, N. (ed.) et al. (2006). Energy Use in New Zealand Households: Report on the Year 10 Analysis for the Household Energy End-use Project (HEEP). BRANZ Study Report SR155, Judgeford. Table 66 (average annual energy use per house for selected end-uses, gross kWh).",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "ipcc2006v2ch1",
+      "citation": "IPCC (2006). 2006 IPCC Guidelines for National Greenhouse Gas Inventories, Volume 2 Energy, Chapter 1 Introduction. Table 1.2 (net calorific values) and Table 1.3 (carbon content), row 'Liquefied Petroleum Gases'.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "elgasnz",
+      "citation": "Elgas New Zealand, 'Gas bottle sizes and dimensions' (retrieved 2026-10-14): 45 kg bottles, 'Two of the 45 kg gas bottle size are used for the typical home LPG gas bottle' installation.",
+      "licence": "Facts cited with attribution"
+    }
+  ],
+  "items": [
+    {
+      "key": "household_cooking_energy",
+      "description": "Average annual energy used for cooking per New Zealand house, all cooking appliances and fuels (gross energy)",
+      "unit": "kWh per house per year",
+      "source": "heep2006",
+      "confidence": "medium",
+      "value": { "range": { "min": 620.0, "max": 1090.0, "typical": 900.0 } },
+      "note": "900 kWh (SE 60) is the national 'All cooking' average; 620-1,090 the regional averages. Averaged over all houses and fuels, mostly electric, so it is not a gas-stove figure; ranges use about 50% more in winter than in summer."
+    },
+    {
+      "key": "lpg_fuel_properties",
+      "description": "Net calorific value and carbon content of liquefied petroleum gas",
+      "unit": "see rows",
+      "source": "ipcc2006v2ch1",
+      "confidence": "high",
+      "value": {
+        "table": {
+          "row_label": "property",
+          "columns": ["value", "lower", "upper"],
+          "rows": [
+            { "label": "net_calorific_value_mj_per_kg", "values": [47.3, 44.8, 52.2] },
+            { "label": "carbon_kg_per_gj", "values": [17.2, 16.8, 17.9] }
+          ]
+        }
+      },
+      "note": "IPCC gives TJ/Gg, equal to MJ/kg."
+    },
+    {
+      "key": "lpg_home_cylinders",
+      "description": "Bottled LPG installed at a typical New Zealand home",
+      "unit": "see rows",
+      "source": "elgasnz",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "term",
+          "columns": ["value"],
+          "rows": [
+            { "label": "cylinder_kg", "values": [45.0] },
+            { "label": "cylinders", "values": [2.0] }
+          ]
+        }
+      },
+      "note": "A supplier's page, not a survey."
+    }
+  ]
+}

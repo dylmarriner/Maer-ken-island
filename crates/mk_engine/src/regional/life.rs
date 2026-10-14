@@ -30,6 +30,7 @@ use mk_island::{
 use super::ecology::{RegionalEcologyError, RegionalEcologyState};
 use super::energy::{solar_output_kw, EstateEnergy, ROOM_LIGHT_LUX};
 use super::estate_layout::{Space, SpaceId};
+use super::household_gas::{HouseholdGas, HouseholdGasSpec};
 use super::household_water::{
     installed_capacity_kg, storage_needed_kg, HouseholdWater, HouseholdWaterSpec,
 };
@@ -257,6 +258,8 @@ pub struct IslandLifeSnapshot {
     pub household_water: Option<HouseholdWater>,
     #[serde(default)]
     pub water_trips: BTreeMap<String, WaterTrip>,
+    #[serde(default)]
+    pub household_gas: Option<HouseholdGas>,
 }
 
 pub struct IslandLife {
@@ -347,6 +350,8 @@ pub struct IslandLife {
     pub household_water: Option<HouseholdWater>,
     /// Who is walking to water, or home with it (realism programme R1b).
     pub water_trips: BTreeMap<String, WaterTrip>,
+    /// The kitchen stove's bottled LPG (realism programme R4, D59).
+    pub household_gas: Option<HouseholdGas>,
     topology: GridTopology,
     /// How the living world was spun up before the founders arrived, when
     /// this island was bootstrapped rather than restored (a record, not
@@ -600,6 +605,7 @@ impl IslandLife {
             water_cell,
             household_water: None,
             water_trips: BTreeMap::new(),
+            household_gas: None,
             topology,
             spin_up,
         };
@@ -631,6 +637,10 @@ impl IslandLife {
         }
         if life.household_water.is_none() {
             life.install_household_water()?;
+        }
+        if life.household_gas.is_none() {
+            // Saved before the stove burned gas, or newly built.
+            life.install_household_gas()?;
         }
         if life.ecology.soil.is_none() {
             life.install_soil()?;
@@ -689,6 +699,7 @@ impl IslandLife {
             water_cell: self.water_cell,
             household_water: self.household_water.clone(),
             water_trips: self.water_trips.clone(),
+            household_gas: self.household_gas.clone(),
         }
     }
 
@@ -756,6 +767,7 @@ impl IslandLife {
             water_cell: snapshot.water_cell,
             household_water: snapshot.household_water,
             water_trips: snapshot.water_trips,
+            household_gas: snapshot.household_gas,
             topology,
             spin_up: None,
         };
@@ -767,6 +779,10 @@ impl IslandLife {
         if life.household_water.is_none() {
             // Saved before the house had a tank.
             life.install_household_water()?;
+        }
+        if life.household_gas.is_none() {
+            // Saved before the stove burned gas, or newly built.
+            life.install_household_gas()?;
         }
         if life.ecology.soil.is_none() {
             // Saved before the island had soil carbon.
@@ -1895,6 +1911,29 @@ impl IslandLife {
             .count()
     }
 
+    /// Put the typical home's bottled LPG on the kitchen stove, full.
+    fn install_household_gas(&mut self) -> Result<(), IslandLifeError> {
+        let spec = HouseholdGasSpec::from_reference(self.labour.library())
+            .map_err(|e| IslandLifeError::Labour(LabourError::MissingReference(e)))?;
+        self.household_gas = Some(HouseholdGas::new(spec));
+        Ok(())
+    }
+
+    /// The stove for `dt_s`: while anyone is at home it burns the house's
+    /// average cooking gas, carbon to the air (D59).
+    fn household_gas_step(&mut self, dt_s: f64) -> Result<(), IslandLifeError> {
+        if self.household_gas.is_none() {
+            return Ok(());
+        }
+        let anyone_home = self.people_at_home() > 0;
+        self.audited(|life, ledger| {
+            if let Some(gas) = life.household_gas.as_mut() {
+                let kg = gas.cook(anyone_home, dt_s);
+                super::energy::book_fossil_carbon(ledger, kg * gas.spec.carbon_per_kg());
+            }
+        })
+    }
+
     /// Put a rainwater tank on the house: its roof is the house's footprint,
     /// and its size is what the estate's climatology needs for the people
     /// at home (whole tanks, at least one). It starts full, as a lived-in
@@ -2387,6 +2426,7 @@ impl IslandLife {
             self.work(human_s as f64)?;
             self.mine(human_s as f64)?;
             self.household_water_step(human_s as f64)?;
+            self.household_gas_step(human_s as f64)?;
             self.meals()?;
             self.water_trips_step(human_s as f64)?;
             // A death is written at once: every other record can lag a
@@ -2487,6 +2527,7 @@ impl IslandLife {
         h.update(canonical(&self.labour_kcal).as_bytes());
         h.update(canonical(&self.water_drunk_kg).as_bytes());
         h.update(canonical(&self.household_water).as_bytes());
+        h.update(canonical(&self.household_gas).as_bytes());
         h.update(canonical(&self.water_trips).as_bytes());
         h.update(canonical(&self.sleep_seconds).as_bytes());
         h.update(&self.sim_time_s.to_le_bytes());

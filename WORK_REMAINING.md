@@ -405,7 +405,7 @@ Ordered by what most changes the founders' daily life:
 | R1 | Water at home: a rainwater tank filled by simulated rain on the house roof, sized from the estate's own climate (ESR 2021 use, Harrison Grierson 2011 inflow model); people away from home drink where they find water; a dry tank means fetching by hand | work §3.2 | Tank done (PR #10, D42); R1b fetching by hand with two 20 L jerrycans when dry done (PR #12) |
 | R2 | Mass-based carrying and real containers: load limits by body mass, pace and energy by load | work §3.1, §2.2 | In part (2026-10-14): load limits by body mass; pace under load from measured self-selected speeds; energy by load from Pandolf's equation for water fetched by hand. Open: a general mass inventory of what each person holds, and baskets, sacks and packs |
 | R3 | An edible food base: edible fractions, foraging with a food store at home, seasonal and soil-limited plant production (D31) | earth Steps 1-2, work §3.3 | Started (#42, D57): people eat only a forest's fruit and seed, grown at NPP times Ward et al. 2025's reproductive allocation, not its wood. Left: foraging time at a sourced return rate (Kelly 2013 Table 3-4 is read), a food store at home, bracken and raupo once their extent per cell is sourced, seasonality, soil limits (D31) |
-| R4 | Firewood, drying (D40), fire and cooking | work §3.4, §2.5-2.6 | Open |
+| R4 | Firewood, drying (D40), fire and cooking | work §3.4, §2.5-2.6 | In part: logs dry (D40); the kitchen's gas stove burns the house's average cooking LPG from two bottles (D59, 2026-10-14). Open: meals cooked at times of day, a wood fire when the gas runs out, splitting (no peer-reviewed split-only axe rate was found; Granqvist 1993's 0.95 m³/h includes chainsaw crosscutting) |
 | R5 | Every action takes its real time (D9): gather, mine, build with delivered materials and visible progress, craft chains; skill improves with practice (power law) | work §3.5-3.8 | Open |
 | R6 | Senses and perception as things (sight, hearing, smell, taste, touch and pain from injury), memory of places, and choices that use memory, emotion, goals and personality | humans ranks 1, 3 | Open |
 | R7 | Emotion by appraisal with mood; per-person bonds and cooperation; teaching; dependent children who learn and acquire language; invention from experience, not a timer | humans ranks 2, 4-6 | Open |
@@ -437,5 +437,5 @@ invertebrate densities, fire danger indices (see each report's "unsourced" secti
   push; the `dependency audit` CI job replaced it.
 - **Firecrawl credits ran out** on 2026-10-12. WebSearch and the TinyFish fetcher still work for
   sources; the container's own network blocks most hosts.
-- **Persist digests.** `WEEK_DIGEST` is `2c9db940…e414`; the planetary topology pin is
+- **Persist digests.** `WEEK_DIGEST` is `2970fe84…10fa`; the planetary topology pin is
   `e4ece246…73e2`. Any change that moves either is a behaviour change and must say so.
