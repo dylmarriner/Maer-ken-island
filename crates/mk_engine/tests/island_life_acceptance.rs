@@ -132,7 +132,7 @@ const DAY: u64 = 86_400;
 /// shortfalls, Gem-D 13.0 kg of body carbon against 13.0 and Gem-K 10.4
 /// against 10.4, eating 47 and 43 minutes a day, drinking 1.81 and 1.43 L
 /// a day, temperate-forest NPP 567 g C/m2/yr, intimacy 65 a year.
-const WEEK_DIGEST: &str = "54b48e5bef3d049f3376e015c4d2db549c9a4eb34f954d6ab20b2a4ad243bb18";
+const WEEK_DIGEST: &str = "f7e06a5937ce248cff6f1f2333a2569bd8d2af200eb1f9449d2b5ccd959a180e";
 
 fn repo(path: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
