@@ -165,7 +165,14 @@ const DAY: u64 = 86_400;
 /// audits closed, no shortfalls, body carbon 13.0 of 13.0 and 10.4 of 10.4
 /// kg, eating 47 and 43 minutes a day, drinking 1.81 and 1.43 L a day, NPP
 /// 471 g C/m2/yr.
-const WEEK_DIGEST: &str = "a8ca281febb37727406833327f42f3f8ab4477450f612ae18ff91480057cc40f";
+///
+/// And for the firewood shed (D9, R5, D60, 2026-10-14): the shed's build
+/// state is kept and hashed, though no wood seasons in the week and nobody
+/// can start it. Read from CI's slow tier (run 38552662905) on top of the
+/// wood fire: unchanged otherwise, 20,594 audits closed, no shortfalls,
+/// body carbon 13.0 of 13.0 and 10.4 of 10.4 kg, eating 47 and 43 minutes
+/// a day, drinking 1.81 and 1.43 L a day, NPP 471 g C/m2/yr.
+const WEEK_DIGEST: &str = "cc90144d45521376897a594226bf8d95875820e7c37a2c057fce488ad08a2b5d";
 
 fn repo(path: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
