@@ -2076,7 +2076,8 @@ impl IslandLife {
         let rh = super::weather::relative_humidity_at(
             &self.canon,
             &self.physical.weather,
-            *self.physical.climate.surface_temperature.get(cr, cc),
+            self.physical.vapour_remaining.as_ref(),
+            t_k,
             cr,
             cc,
         );
