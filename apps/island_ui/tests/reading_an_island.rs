@@ -297,6 +297,30 @@ fn the_application_reads_an_island_and_has_enough_to_draw_it() {
             far.z
         );
     }
+
+    // And a founder, read the way the person inspector reads them (Phase 5
+    // Task 4): every section the backend builds, what they are doing and
+    // thinking, their family, and where they are on the running island.
+    let reply = island
+        .client()
+        .human("Gem-D")
+        .expect("the backend serves a founder");
+    let gem_d = island_ui::human_inspector::read(&reply).expect("the inspector reads them");
+    let ids: Vec<&str> = gem_d.sections.iter().map(|s| s.id.as_str()).collect();
+    for wanted in [
+        "identity", "vitals", "needs", "feeling", "choosing", "family",
+    ] {
+        assert!(ids.contains(&wanted), "no {wanted} section in {ids:?}");
+    }
+    let family = gem_d.sections.iter().find(|s| s.id == "family").unwrap();
+    assert!(
+        family.readings.iter().any(|r| r.label == "Father"),
+        "{family:?}"
+    );
+    assert!(
+        gem_d.whereabouts.is_some(),
+        "a running island knows where a founder is"
+    );
 }
 
 #[test]

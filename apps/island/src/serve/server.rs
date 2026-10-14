@@ -150,10 +150,14 @@ pub fn detail(population: &IslandHumanPopulation, agent_id: &str) -> Option<serd
     let folder = population
         .folder_of(agent_id)
         .map(|f| f.display().to_string());
+    let everyone: Vec<&mk_engine::humans::HumanBeing> =
+        population.system().registry.iter().collect();
+    let mut sections = view::sections(human, &summary, folder.as_deref());
+    sections.push(view::family_section(human, &everyone));
     Some(serde_json::json!({
         "summary": summary,
         "folder": folder,
-        "sections": view::sections(human, &summary, folder.as_deref()),
+        "sections": sections,
         "human": serde_json::to_value(human).unwrap_or(serde_json::Value::Null),
     }))
 }
@@ -181,10 +185,13 @@ pub fn world_detail(
         .people
         .iter()
         .find(|p| p.agent_id == summary.agent_id);
+    let everyone: Vec<&mk_engine::humans::HumanBeing> = current.records.values().collect();
+    let mut sections = view::sections(human, &summary, None);
+    sections.push(view::family_section(human, &everyone));
     serde_json::json!({
         "summary": summary,
         "folder": serde_json::Value::Null,
-        "sections": view::sections(human, &summary, None),
+        "sections": sections,
         "human": serde_json::to_value(human).unwrap_or(serde_json::Value::Null),
         // Where they are now, which the stored roster has no answer for.
         "where": here.map(|p| serde_json::json!({
