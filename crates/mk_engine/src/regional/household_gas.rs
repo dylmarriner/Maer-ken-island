@@ -16,6 +16,10 @@
 //! - **Burning** takes LPG's carbon from the crust to the air as CO₂,
 //!   binding the oxygen it needs, at IPCC's net calorific value and carbon
 //!   content, the way the generator's diesel is booked.
+//! - **A wood fire** cooks when the bottles are empty: the household burns
+//!   the measured firewood of households cooking on open fires, per person
+//!   at home, from the store's air-dry wood. With no wood either, the time
+//!   at home without any cooking fuel is counted.
 
 use serde::{Deserialize, Serialize};
 
@@ -36,6 +40,10 @@ pub struct HouseholdGasSpec {
     /// One bottle's fill (kg) and how many the house has.
     pub cylinder_kg: f64,
     pub cylinders: f64,
+    /// Air-dry firewood a person's cooking burns on an open fire (kg per
+    /// person per day). 0 in an island saved before the fire.
+    #[serde(default)]
+    pub firewood_kg_per_person_day: f64,
 }
 
 impl HouseholdGasSpec {
@@ -65,6 +73,10 @@ impl HouseholdGasSpec {
             lpg_carbon_kg_per_gj: lpg("carbon_kg_per_gj")?,
             cylinder_kg: bottles("cylinder_kg")?,
             cylinders: bottles("cylinders")?,
+            firewood_kg_per_person_day: library
+                .item(d, "household_firewood_use")
+                .and_then(|i| i.central())
+                .ok_or("household_firewood_use")?,
         })
     }
 
@@ -90,6 +102,12 @@ pub struct HouseholdGas {
     pub burned_kg: f64,
     /// Seconds the household was at home with the bottles empty.
     pub without_gas_s: f64,
+    /// Air-dry wood the fire has burned (kg), and the seconds at home with
+    /// neither gas nor wood.
+    #[serde(default)]
+    pub wood_burned_kg: f64,
+    #[serde(default)]
+    pub without_fuel_s: f64,
 }
 
 impl HouseholdGas {
@@ -100,6 +118,23 @@ impl HouseholdGas {
             spec,
             burned_kg: 0.0,
             without_gas_s: 0.0,
+            wood_burned_kg: 0.0,
+            without_fuel_s: 0.0,
+        }
+    }
+
+    /// Air-dry wood a fire for `people` at home needs to cover `short_s`
+    /// seconds the gas could not (kg).
+    pub fn firewood_wanted_kg(&self, people: usize, short_s: f64) -> f64 {
+        self.spec.firewood_kg_per_person_day * people as f64 * short_s.max(0.0) / 86_400.0
+    }
+
+    /// Record a fire that burned `burned_kg` of the `wanted_kg` it needed
+    /// over `short_s`: any shortfall is time without cooking fuel.
+    pub fn record_fire(&mut self, wanted_kg: f64, burned_kg: f64, short_s: f64) {
+        self.wood_burned_kg += burned_kg.max(0.0);
+        if wanted_kg > 0.0 && burned_kg < wanted_kg {
+            self.without_fuel_s += short_s * (1.0 - burned_kg.max(0.0) / wanted_kg);
         }
     }
 
@@ -153,6 +188,20 @@ mod tests {
         assert_eq!(gas.cook(true, 3_600.0), 0.0);
         assert_eq!(gas.without_gas_s, 3_600.0);
         assert_eq!(gas.burned_kg, 0.0);
+    }
+
+    #[test]
+    fn a_fire_covers_the_gas_it_lacks_at_the_measured_firewood_rate() {
+        let mut gas = HouseholdGas::new(spec());
+        let rate = gas.spec.firewood_kg_per_person_day;
+        assert!(rate > 0.0);
+        // Two people, a day without gas: two people's day of firewood.
+        let wanted = gas.firewood_wanted_kg(2, 86_400.0);
+        assert!((wanted - 2.0 * rate).abs() < 1e-12);
+        // Half of it in the store: half the day without any fuel.
+        gas.record_fire(wanted, 0.5 * wanted, 86_400.0);
+        assert_eq!(gas.wood_burned_kg, 0.5 * wanted);
+        assert!((gas.without_fuel_s - 43_200.0).abs() < 1e-9);
     }
 
     #[test]

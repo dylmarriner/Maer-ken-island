@@ -1842,16 +1842,35 @@ impl IslandLife {
     }
 
     /// The stove for `dt_s`: while anyone is at home it burns the house's
-    /// average cooking gas, carbon to the air (D58).
+    /// average cooking gas, carbon to the air (D58). With the bottles empty
+    /// the household cooks on a wood fire from the store's air-dry wood.
     fn household_gas_step(&mut self, dt_s: f64) -> Result<(), IslandLifeError> {
         if self.household_gas.is_none() {
             return Ok(());
         }
-        let anyone_home = self.people_at_home() > 0;
+        let people = self.people_at_home();
         self.audited(|life, ledger| {
+            let Some(gas) = life.household_gas.as_mut() else {
+                return;
+            };
+            let short_before = gas.without_gas_s;
+            let kg = gas.cook(people > 0, dt_s);
+            super::energy::book_fossil_carbon(ledger, kg * gas.spec.carbon_per_kg());
+            // The bottles are empty: cook on a wood fire from the store.
+            let short_s = gas.without_gas_s - short_before;
+            if short_s <= 0.0 {
+                return;
+            }
+            let wanted = gas.firewood_wanted_kg(people, short_s);
+            let have = life.materials.stock_kg(Material::Wood);
+            let burned = wanted.min(have);
+            if burned > 0.0 {
+                life.materials
+                    .burn(Material::Wood, burned, ledger)
+                    .expect("no more than the store holds");
+            }
             if let Some(gas) = life.household_gas.as_mut() {
-                let kg = gas.cook(anyone_home, dt_s);
-                super::energy::book_fossil_carbon(ledger, kg * gas.spec.carbon_per_kg());
+                gas.record_fire(wanted, burned, short_s);
             }
         })
     }
@@ -2496,6 +2515,57 @@ mod tests {
             sum(|l| l.dry_kg) + water,
             total
         );
+    }
+
+    /// With the bottles empty the household cooks on a wood fire (R4): it
+    /// burns the packs' firewood per person at home from the store's
+    /// air-dry wood, its carbon to the air through an audit, and with no
+    /// wood either the time without any cooking fuel is counted.
+    #[test]
+    fn with_the_gas_gone_the_kitchen_burns_stored_wood_at_the_measured_rate() {
+        let mut scenario =
+            IslandScenario::load(&repo("fixtures/island/default_scenario.json")).unwrap();
+        scenario.estate_patch.tree_cap = 200;
+        let canon = Arc::new(CanonLocked::load(&repo("fixtures/island/canon.json")).unwrap());
+        let mut life = IslandLife::bootstrap(scenario, canon).expect("the island bootstraps");
+        let people = life.people_at_home();
+        assert!(people > 0, "the founders start at home");
+        life.household_gas.as_mut().unwrap().stored_kg = 0.0;
+        let (cell, area) = (
+            life.placed.location,
+            life.domain.cell_area_m2(DomainLevel::Medium),
+        );
+        life.audited(|life, ledger| {
+            life.materials
+                .gather_biotic(Material::Wood, 10.0, &mut life.ecology, cell, area, ledger)
+                .unwrap();
+        })
+        .unwrap();
+        let wood = life.materials.stock_kg(Material::Wood);
+        let audits = life.audits_closed;
+
+        life.household_gas_step(3_600.0).unwrap();
+        let gas = life.household_gas.clone().unwrap();
+        let rate = gas.spec.firewood_kg_per_person_day;
+        let burned = wood - life.materials.stock_kg(Material::Wood);
+        let wanted = rate * people as f64 / 24.0;
+        assert!(
+            (burned - wanted).abs() < 1e-9,
+            "burned {burned} kg of {wanted}"
+        );
+        assert!((gas.wood_burned_kg - burned).abs() < 1e-9);
+        assert_eq!(gas.without_fuel_s, 0.0, "there was wood");
+        assert_eq!(life.audits_closed, audits + 1, "the fire closed its books");
+
+        // No wood left: an hour with nothing to cook on.
+        let left = life.materials.stock_kg(Material::Wood);
+        life.audited(|life, ledger| {
+            life.materials.burn(Material::Wood, left, ledger).unwrap();
+        })
+        .unwrap();
+        life.household_gas_step(3_600.0).unwrap();
+        let gas = life.household_gas.clone().unwrap();
+        assert!((gas.without_fuel_s - 3_600.0).abs() < 1e-9);
     }
 
     /// A dead founder's unspent hour and unpaid meal are dropped rather than

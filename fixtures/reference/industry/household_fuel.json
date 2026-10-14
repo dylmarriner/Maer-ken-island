@@ -19,6 +19,16 @@
       "key": "elgasnz",
       "citation": "Elgas New Zealand, 'Gas bottle sizes and dimensions' (retrieved 2026-10-14): 45 kg bottles, 'Two of the 45 kg gas bottle size are used for the typical home LPG gas bottle' installation.",
       "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "desta2020",
+      "citation": "Desta, G. A., Melka, Y., Sime, G., Yirga, F., Marie, M. and Haile, M. (2020). Biogas technology in fuelwood saving and carbon emission reduction in southern Ethiopia. Heliyon 6(10): e04791. doi:10.1016/j.heliyon.2020.e04791. Open access (CC BY), read from Europe PMC PMC7575848: Table 7 and Section 2 (kitchen performance test).",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "kefalew2021",
+      "citation": "Kefalew, T., Tilinti, B. and Betemariyam, M. (2021). The potential of biogas technology in fuelwood saving and carbon emission reduction in Central Rift Valley, Ethiopia. Heliyon 7(9): e07971. doi:10.1016/j.heliyon.2021.e07971. Open access (CC BY-NC-ND), read from Europe PMC PMC8453206: Table 6.",
+      "licence": "Facts cited with attribution"
     }
   ],
   "items": [
@@ -66,6 +76,15 @@
         }
       },
       "note": "A supplier's page, not a survey."
+    },
+    {
+      "key": "household_firewood_use",
+      "description": "Fuelwood a household cooking on traditional fires burns per adult equivalent fed, measured by kitchen performance tests",
+      "unit": "kg per adult equivalent per day",
+      "source": "desta2020",
+      "confidence": "low",
+      "value": { "range": { "min": 1.74, "max": 1.98 } },
+      "note": "Non-adopter households (traditional three-stone fires), 25 each. desta2020 Table 7: 8.34 +/- 2.20 kg per household per day for 5.14 +/- 1.49 adult equivalents served, '1.74' kg/AME/day; wood 'pre-weighed at the beginning of the day and the remaining wood was weighed at the end of the day'. kefalew2021 Table 6: 10.5 +/- 3.83 kg per household per day for 5.07 +/- 1.47 adult equivalents, 1.98 +/- 0.58 kg/AME/day. Adult equivalents follow FAO's wood-fuel survey weights (Openshaw). The wood's moisture is not stated; it is used as the store's air-dry wood. Rural Ethiopian households, not New Zealand ones."
     }
   ]
 }
