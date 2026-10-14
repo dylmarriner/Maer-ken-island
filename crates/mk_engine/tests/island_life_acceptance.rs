@@ -150,7 +150,14 @@ const DAY: u64 = 86_400;
 /// body carbon 13.0 of 13.0 and 10.4 of 10.4 kg, eating 47 and 43 minutes
 /// a day, drinking 1.81 and 1.43 L a day, temperate-forest NPP 471 g
 /// C/m2/yr (reference 400-900).
-const WEEK_DIGEST: &str = "e1a036247e9d593194fcfe343a307a454b863022993151d3de317e5eb838c244";
+///
+/// And for the kitchen's wood fire (R4, D58, 2026-10-14): the stove's spec
+/// and counters gain the fire's rate and tallies, hashed, though the gas
+/// outlasts the week and no fire burns in it. Read from CI's slow tier (run
+/// 38521071647): unchanged otherwise, 20,594 audits closed, no shortfalls,
+/// body carbon 13.0 of 13.0 and 10.4 of 10.4 kg, eating 47 and 43 minutes
+/// a day, drinking 1.81 and 1.43 L a day, NPP 471 g C/m2/yr.
+const WEEK_DIGEST: &str = "34e198867d8220807bdd433ee971ffa53a56dfddcbdb007db58e8afa9b2581a5";
 
 fn repo(path: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
