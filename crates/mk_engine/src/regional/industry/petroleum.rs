@@ -246,6 +246,14 @@ impl PetroleumField {
             + self.tank_gas_gj * model.gas_carbon_kg_per_gj
     }
 
+    /// Take up to `m3` of crude out of the tanks, for the refinery; returns
+    /// what was taken. Its carbon stays material.
+    pub fn take_oil(&mut self, m3: f64) -> f64 {
+        let taken = m3.max(0.0).min(self.tank_oil_m3);
+        self.tank_oil_m3 -= taken;
+        taken
+    }
+
     /// Produce for `dt_years`, booking the carbon in `ledger`.
     pub fn produce(
         &mut self,

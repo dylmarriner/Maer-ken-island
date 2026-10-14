@@ -44,7 +44,7 @@ this list holds the current state. The evidence for what is *done* is in
 | Runtime | Phase 4 Task 2b: deep-time spin-up | **Done** (2026-10-14) | — |
 | Industry | Phase 4b Task 1 remainder: reference tables | Done 2026-10-14 (nine packs); gaps listed in §4a | A few items (see §4a) |
 | Industry | Phase 4b Task 4: oil and gas field (D14, D19) | Fields, decline and carbon done 2026-10-14 (D57); wells, water cut, spills open | Per-well rate, water-cut series |
-| Industry | Phase 4b Task 5: refinery, gas plant, fuel depot (D16) | Open | Task 1 tables |
+| Industry | Phase 4b Task 5: refinery, gas plant, fuel depot (D16) | Topping refinery done 2026-10-14; gas plant, reformer, depot open | Reformate yield; gas-plant own use |
 | Industry | Phase 4b Task 6: jobs, trades, maintenance (D39) | Open | Upstream human-runtime change first |
 | Industry | Phase 4b Task 7: money, enterprises, payroll | Open | Owner: ownership split, policies |
 | Industry | Phase 4b Task 7b: food and timber chains | Open | Task 2 catalogue; crop/livestock data |
@@ -218,10 +218,16 @@ trade, a 2-3 bedroom cottage's floor area (Task 6 and 7b); the Pukekohe growing 
 
 ### 4c. Task 5: refinery, gas plant, fuel depot (D16)
 
-- **Files:** create `regional/industry/{refinery.rs,gas_plant.rs,fuel.rs}`; modify
-  `regional/energy.rs` so vehicles and generators buy fuel at the depot.
-- **Tests:** `tests/refinery.rs` (yields by assay, mass and carbon close, campaigns stop on full
-  tanks, no petrol without the reformer, a vehicle refuels and pays).
+- **Done 2026-10-14** (`regional/industry/refinery.rs`, `tests/refinery.rs`): a topping refinery
+  distils crude into the Troll assay's atmospheric cuts and names each by where it boils, against
+  New Zealand's fuel specifications (petrol's 210 °C final boiling point, diesel's 360 °C T95). It
+  burns its own refinery gas, then residue, for the world's average 606 MJ a barrel (Jing et al.
+  2020): about 11% of the crude and 43 kg of CO2 a barrel, inside Downey's 8-12% and Jing et al.'s
+  13.9-62.1 kg. Mass and carbon close (IPCC carbon contents, scaled by one factor of 0.974). Crude
+  comes from a field's tanks (`PetroleumField::take_oil`).
+- **Left:** the gas plant (LPG and condensate from raw gas; gas-plant own use is not sourced), a
+  reformer for petrol (needs a cited reformate yield), the fuel depot and vehicles and generators
+  buying fuel (`regional/energy.rs`), campaigns that stop on full tanks, and payment (Task 7).
 
 ### 4d. Task 6: jobs, trades, shifts, maintenance (D39) — upstream first
 
