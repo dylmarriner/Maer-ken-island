@@ -149,7 +149,23 @@ const DAY: u64 = 86_400;
 /// no food or water shortfalls, body carbon 13.0 of 13.0 and 10.4 of 10.4
 /// kg, eating 47 and 43 minutes a day, drinking 1.81 and 1.43 L a day,
 /// temperate-forest NPP 471 g C/m2/yr (reference 400-900).
-const WEEK_DIGEST: &str = "2c9db9409306cd67e70b59dbd04109679782364e580f523fc0d4858a612de414";
+/// And for the kitchen's gas stove (R4 in part, D59, 2026-10-14): the house
+/// burns HEEP's cooking energy from its two LPG bottles while anyone is
+/// home, booking the carbon from the crust to the air in an audit of its
+/// own each substep. Read from CI's slow tier (run 38543088969) on top of
+/// D9's mining: 20,594 audits closed, no food or water shortfalls,
+/// body carbon 13.0 of 13.0 and 10.4 of 10.4 kg, eating 47 and 43 minutes
+/// a day, drinking 1.81 and 1.43 L a day, temperate-forest NPP 471 g
+/// C/m2/yr (reference 400-900).
+///
+/// And for the kitchen's wood fire (R4, D59, 2026-10-14): the stove's spec
+/// and counters gain the fire's rate and tallies, hashed, though the gas
+/// outlasts the week and no fire burns in it. Read from CI's slow tier (run
+/// 38548515120) on top of the gas stove: unchanged otherwise, 20,594
+/// audits closed, no shortfalls, body carbon 13.0 of 13.0 and 10.4 of 10.4
+/// kg, eating 47 and 43 minutes a day, drinking 1.81 and 1.43 L a day, NPP
+/// 471 g C/m2/yr.
+const WEEK_DIGEST: &str = "a8ca281febb37727406833327f42f3f8ab4477450f612ae18ff91480057cc40f";
 
 fn repo(path: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))

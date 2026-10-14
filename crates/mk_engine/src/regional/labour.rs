@@ -450,9 +450,9 @@ impl LabourTable {
 
     /// Time (s) to walk `distance_m` with `ascent_m` of climb carrying
     /// `load_kg`: the comfortable speed on the flat, an hour more per
-    /// 600 m of ascent (Naismith), and a slowdown that grows as the load
-    /// passes the sustainable fraction of body mass. A load above the
-    /// packs' maximum fraction is refused.
+    /// 600 m of ascent (Naismith), at the pace people choose under that
+    /// load ([`Self::load_pace`]). A load above the packs' maximum fraction
+    /// is refused.
     pub fn walking_time_s(
         &self,
         body: &LabourBody,
@@ -474,12 +474,102 @@ impl LabourTable {
             "naismith_rule",
             "ascent_m_per_hour",
         )?;
-        let sustainable_kg = self.sustainable_load_kg(body)?;
-        // Beyond the sustainable load the pace falls linearly to 70% at the maximum.
-        let over = ((load_kg - sustainable_kg) / (max_kg - sustainable_kg).max(f64::MIN_POSITIVE))
-            .clamp(0.0, 1.0);
-        let pace = 1.0 - 0.3 * over;
+        let pace = self.load_pace(body, load_kg)?;
         Ok((distance_m.max(0.0) / speed + ascent_m.max(0.0) / ascent_per_hour * 3_600.0) / pace)
+    }
+
+    /// The fraction of their unloaded pace someone keeps carrying
+    /// `load_kg`: the self-selected overground speeds measured by load as a
+    /// fraction of body mass, for the body's sex (`walking_speed_by_load`),
+    /// interpolated linearly between the measured loads and held at the
+    /// heaviest one beyond it.
+    pub fn load_pace(&self, body: &LabourBody, load_kg: f64) -> Result<f64, LabourError> {
+        let key = "walking_speed_by_load";
+        let column = match body.sex {
+            BiologicalSex::Male => "male_kmh",
+            _ => "female_kmh",
+        };
+        let missing = || LabourError::MissingReference(format!("{key}/{column}"));
+        let mut points: Vec<(f64, f64)> = self
+            .set
+            .item(ReferenceDomain::Humans, key)
+            .and_then(|i| i.table())
+            .and_then(|t| t.column(column))
+            .ok_or_else(missing)?
+            .into_iter()
+            .map(|(label, kmh)| label.parse::<f64>().map(|f| (f, kmh)))
+            .collect::<Result<_, _>>()
+            .map_err(|_| missing())?;
+        points.sort_by(|a, b| a.0.total_cmp(&b.0));
+        let (first, last) = match (points.first(), points.last()) {
+            (Some(&first), Some(&last)) if first.1 > 0.0 => (first, last),
+            _ => return Err(missing()),
+        };
+        let fraction = load_kg.max(0.0) / body.weight_kg.max(f64::MIN_POSITIVE);
+        let kmh = if fraction >= last.0 {
+            last.1
+        } else {
+            points
+                .windows(2)
+                .find(|w| fraction <= w[1].0)
+                .map_or(first.1, |w| {
+                    let t = ((fraction - w[0].0) / (w[1].0 - w[0].0)).clamp(0.0, 1.0);
+                    w[0].1 + t * (w[1].1 - w[0].1)
+                })
+        };
+        Ok(kmh / first.1)
+    }
+
+    /// Pandolf's metabolic rate (W) of walking on level `surface` at
+    /// `speed_m_s` carrying `load_kg` (`pandolf_load_carriage`,
+    /// `pandolf_terrain_factor`).
+    pub fn pandolf_w(
+        &self,
+        body: &LabourBody,
+        load_kg: f64,
+        speed_m_s: f64,
+        surface: &str,
+    ) -> Result<f64, LabourError> {
+        let h = ReferenceDomain::Humans;
+        let k = "pandolf_load_carriage";
+        let (a, b, c) = (
+            self.scalar(h, k, "standing_a")?,
+            self.scalar(h, k, "load_b")?,
+            self.scalar(h, k, "speed_c")?,
+        );
+        let eta = self.scalar(h, "pandolf_terrain_factor", surface)?;
+        let w = body.weight_kg.max(f64::MIN_POSITIVE);
+        let l = load_kg.max(0.0);
+        // Level ground: the grade term (d V G) is zero.
+        Ok(a * w + b * (w + l) * (l / w).powi(2) + eta * (w + l) * c * speed_m_s * speed_m_s)
+    }
+
+    /// MET of walking the estate's ground carrying `load_kg`: the unloaded
+    /// walking MET (`unloaded_met`, a Compendium code) scaled by Pandolf's
+    /// ratio of the loaded rate, at the pace the load allows, to the
+    /// unloaded one. The Compendium sets the level; Pandolf says how load
+    /// moves it. The ground is taken as a dirt road, the nearest of the
+    /// measured surfaces to a farm track or a mown paddock.
+    pub fn loaded_walking_met(
+        &self,
+        body: &LabourBody,
+        load_kg: f64,
+        unloaded_met: f64,
+    ) -> Result<f64, LabourError> {
+        if load_kg <= 0.0 {
+            return Ok(unloaded_met);
+        }
+        let (_, typical) = self.range(ReferenceDomain::Humans, "comfortable_walking_speed")?;
+        let speed = typical.unwrap_or(1.4);
+        let surface = "dirt_road";
+        let loaded = self.pandolf_w(
+            body,
+            load_kg,
+            speed * self.load_pace(body, load_kg)?,
+            surface,
+        )?;
+        let unloaded = self.pandolf_w(body, 0.0, speed, surface)?;
+        Ok(unloaded_met * loaded / unloaded.max(f64::MIN_POSITIVE))
     }
 
     /// Load (kg) a body can carry for a day: the packs' typical fraction of

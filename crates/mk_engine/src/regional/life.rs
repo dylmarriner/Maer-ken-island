@@ -173,6 +173,10 @@ pub struct WaterTrip {
     /// Water to bring home for the tank (kg); 0 when not going home.
     pub carry_kg: f64,
     pub reached: bool,
+    /// The empty jerrycans' own mass (kg), carried both ways when water
+    /// is fetched for the tank. 0 in a trip saved before it was kept.
+    #[serde(default)]
+    pub cans_kg: f64,
 }
 
 /// A tree a founder is felling: which, and the seconds of work put in.
@@ -1730,10 +1734,6 @@ impl IslandLife {
             .domain
             .cell_center_m(DomainLevel::Medium, source.0, source.1);
         let distance_m = (there.0 - here.0).hypot(there.1 - here.1);
-        let out_s = self
-            .labour
-            .walking_time_s(&body, distance_m, self.climb_m(here, there), 0.0)
-            .ok()?;
         let cans = self
             .placed
             .property
@@ -1745,6 +1745,7 @@ impl IslandLife {
             .count() as f64;
         let mut carry_kg = 0.0;
         let mut back_s = 0.0;
+        let mut cans_kg = 0.0;
         if let (true, Some(tank)) = (self.at_home(stands), self.household_water.as_ref()) {
             let can = tank.spec.jerrycan_l;
             let empty_kg = cans * tank.spec.jerrycan_empty_kg;
@@ -1753,6 +1754,7 @@ impl IslandLife {
                 .min(tank.room_kg())
                 .min((max_kg - empty_kg).max(0.0));
             if carry_kg > 0.0 {
+                cans_kg = empty_kg;
                 back_s = self
                     .labour
                     .walking_time_s(
@@ -1764,6 +1766,11 @@ impl IslandLife {
                     .ok()?;
             }
         }
+        // The empty cans go out too, and a light body walks slower for them.
+        let out_s = self
+            .labour
+            .walking_time_s(&body, distance_m, self.climb_m(here, there), cans_kg)
+            .ok()?;
         self.water_trips.insert(
             id.to_string(),
             WaterTrip {
@@ -1773,14 +1780,17 @@ impl IslandLife {
                 worked_s: 0.0,
                 carry_kg,
                 reached: false,
+                cans_kg,
             },
         );
         Some(())
     }
 
     /// Move everyone on a water trip along by `dt_s`: out to the source, a
-    /// drink there (and the jerrycans filled), then home. Someone not going home stays at the water. Walking costs
-    /// the walking MET above sitting at home, as felling's walk does.
+    /// drink there (and the jerrycans filled), then home. Someone not going
+    /// home stays at the water. Walking costs the walking MET above sitting
+    /// at home, as felling's walk does, raised by Pandolf's equation for
+    /// the cans and the water they carry.
     fn water_trips_step(&mut self, dt_s: f64) -> Result<(), IslandLifeError> {
         if self.water_trips.is_empty() {
             return Ok(());
@@ -1792,7 +1802,8 @@ impl IslandLife {
         let area = self.domain.cell_area_m2(DomainLevel::Medium);
         let estate = self.placed.location;
         let ids: Vec<String> = self.water_trips.keys().cloned().collect();
-        let mut walked: Vec<(String, f64)> = Vec::new();
+        // Who walked, for how long, carrying what (kg).
+        let mut walked: Vec<(String, f64, f64)> = Vec::new();
         self.audited(|life, ledger| {
             for id in ids {
                 let Some(human) = life.humans.registry.get_human(&id) else {
@@ -1805,7 +1816,8 @@ impl IslandLife {
                 }
                 let trip = life.water_trips.get_mut(&id).expect("listed");
                 trip.worked_s += dt_s;
-                walked.push((id.clone(), dt_s));
+                let load_kg = trip.cans_kg + if trip.reached { trip.carry_kg } else { 0.0 };
+                walked.push((id.clone(), dt_s, load_kg));
                 if !trip.reached && trip.worked_s >= trip.out_s {
                     trip.reached = true;
                     let (source, carry) = (trip.source, trip.carry_kg);
@@ -1870,14 +1882,18 @@ impl IslandLife {
                 }
             }
         })?;
-        for (id, s) in walked {
+        for (id, s, load_kg) in walked {
             let Some(human) = self.humans.registry.get_human(&id) else {
                 continue;
             };
             let body = LabourBody::from_human(human);
+            let met = self
+                .labour
+                .loaded_walking_met(&body, load_kg, WALKING_MET)
+                .map_err(IslandLifeError::Labour)?;
             let extra = self
                 .labour
-                .energy_kcal(&body, WALKING_MET, s)
+                .energy_kcal(&body, met, s)
                 .map_err(IslandLifeError::Labour)?
                 - self
                     .labour
@@ -2288,7 +2304,8 @@ impl IslandLife {
         let rh = super::weather::relative_humidity_at(
             &self.canon,
             &self.physical.weather,
-            *self.physical.climate.surface_temperature.get(cr, cc),
+            self.physical.vapour_remaining.as_ref(),
+            t_k,
             cr,
             cc,
         );
