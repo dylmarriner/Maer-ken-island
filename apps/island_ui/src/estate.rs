@@ -491,6 +491,37 @@ pub fn framing(layout: &EstateLayout) -> Option<(Point, f32)> {
     Some((centre(&extent, origin, 0.0), distance.max(10.0)))
 }
 
+/// Where the camera should be to look at one picked thing up close: its
+/// centre, and far enough that its widest side fits the 45-degree view
+/// with the same room [`framing`] leaves around the whole estate.
+///
+/// For a room or a building this is the interior view: the buildings are
+/// drawn translucent, so from here the room's furniture, tools, vehicles
+/// and machines are what fills the picture. A tree is framed by its foot
+/// and height. `None` when the pick no longer names anything.
+pub fn framing_of(layout: &EstateLayout, stems: &[Stem], picked: Picked) -> Option<(Point, f32)> {
+    let fit = |placed: &Placed| {
+        let widest = placed.size_m.0.max(placed.size_m.1).max(placed.size_m.2);
+        // tan(22.5 degrees), the half-angle of the view.
+        let distance = (widest / 2.0) / 0.4142 * 1.3;
+        (placed.at, distance.max(MIN_LOOK_M))
+    };
+    match picked {
+        Picked::Thing(i) => things(layout).get(i).map(fit),
+        Picked::Room(i) => rooms(layout).get(i).map(fit),
+        Picked::Building(i) => buildings(layout).get(i).map(fit),
+        Picked::Tree(id) => stems
+            .iter()
+            .find(|stem| stem.id == id)
+            .map(|stem| fit(&trunk_target(stem))),
+    }
+}
+
+/// The nearest the camera is brought to something it is asked to look at
+/// (m): close enough to read a desk, not so close that a small thing
+/// fills the view with one face of its box.
+pub const MIN_LOOK_M: f32 = 3.0;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -797,6 +828,25 @@ mod tests {
             pick(&layout, &[hidden], north_of_shed, north),
             Some(Picked::Tree(43))
         );
+    }
+
+    #[test]
+    fn looking_inside_a_room_frames_the_room_not_the_estate() {
+        let layout = layout();
+        let room = &rooms(&layout)[0];
+        let (focus, distance) = framing_of(&layout, &[], Picked::Room(0)).unwrap();
+        assert_eq!(focus, room.at);
+        // The 4 m room fits the 45-degree view, and is far closer than the
+        // whole estate's framing.
+        let across = 2.0 * distance * (std::f32::consts::FRAC_PI_8).tan();
+        assert!(across >= 4.0, "a {across} m view cannot hold the 4 m room");
+        assert!(distance < framing(&layout).unwrap().1);
+        // A small thing is not looked at from inside its own box.
+        let (_, near) = framing_of(&layout, &[], Picked::Thing(0)).unwrap();
+        assert_eq!(near, MIN_LOOK_M);
+        // A tree no longer drawn, or an index past the end, frames nothing.
+        assert_eq!(framing_of(&layout, &[], Picked::Tree(9)), None);
+        assert_eq!(framing_of(&layout, &[], Picked::Room(99)), None);
     }
 
     #[test]
