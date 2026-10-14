@@ -49,6 +49,8 @@ The newest work (merged 2026-10-12, PR #6):
 
 The session of 2026-10-13 (production readiness, the realism research and programme, water at
 home, soil carbon) is recorded in `docs/handoff/SESSION_2026-10-13.md`.
+The session of 2026-10-14 (three sessions in parallel; the open PRs, their merge order and the
+owner's decisions) is recorded in `docs/handoff/SESSION_2026-10-14.md`.
 
 ## Read in this order
 
