@@ -1,0 +1,1264 @@
+{
+  "id": "agriculture",
+  "domain": "industry",
+  "title": "New Zealand farming: dairy, sheep and beef, pigs, pasture, crops and Pukekohe area",
+  "retrieved": "2026-10-14",
+  "licence": "Numerical values cited as facts with attribution; no text, figures or datasets reproduced.",
+  "sources": [
+    {
+      "key": "dairynz2324",
+      "citation": "LIC and DairyNZ (2024). New Zealand Dairy Statistics 2023-24. Table 2.2 (summary of herd statistics), sections 1.2, 2.2.1, 2.3, 4.4 and Table 4.13 (retrieved from dairynz.co.nz, PDF dairy-statistics-2023-24.pdf).",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "blnz2025",
+      "citation": "Beef + Lamb New Zealand Insights (August 2026). Sheep and Beef Farm Survey, Taranaki/Rangitikei/Manawatu, 2026-27 New Season Forecast and Quintile Analysis of final 2024-25 survey data (P26007): Farm Classes Defined, Measures Used, and the Class 3, 4 and 5 quintile tables (mean column, 2024-25).",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "blnzfeed",
+      "citation": "Beef + Lamb New Zealand (reprinted 2012; first published by the New Zealand Sheep Council 1994). A Guide to Feed Planning for Sheep Farmers. Table 1.1, Appendix 1.2, the feed budget worked example, and Appendix 6 (pasture growth rates at sites throughout New Zealand, from NZ Farmer Guide to Grazing Management, Dec 1981).",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "faostat",
+      "citation": "FAO. FAOSTAT, Production: Crops and livestock products (QCL), bulk download Production_Crops_Livestock_E_All_Data_(Normalized).csv, area New Zealand, elements Yield, Yield/Carcass Weight, Producing Animals/Slaughtered; years 2021 to 2023; flag A = official, E = estimated (bulks-faostat.fao.org, retrieved 2026-10-14).",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "nzmeatboard",
+      "citation": "New Zealand Meat Board (2026). Provisional Export Livestock Processing Data, Week 51 2025-2026 (19 September 2026), table 'Provisional lamb average weight (kg hot weight)' (nzmeatboard.org/the-industry/production-data/).",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "williamson2021",
+      "citation": "Williamson, H. R. (2021). Growth and Carcass Characteristics of Beef-Cross-Dairy-Breed Cattle: Breed and Sex Effects. MSc thesis, Massey University, Palmerston North. Section 2.4.1 'Typical finishing ages and weights in New Zealand' (citing Morris 2012 and Beef + Lamb New Zealand 2017).",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "nzpork",
+      "citation": "New Zealand Pork. The story of New Zealand Born and Raised Pork (nzpork.co.nz/nz-pork/the-story-of-new-zealand-born-and-raised-pork), retrieved 2026-10-14.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "slh",
+      "citation": "Science Learning Hub, University of Waikato (Te Pokapū Akoranga Pūtaiao). Measuring pasture mass (sciencelearn.org.nz/resources/3027-measuring-pasture-mass), retrieved 2026-10-14.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "pierozan2016",
+      "citation": "Pierozan, C. R. et al. (2016). Factors affecting the daily feed intake and feed conversion ratio of pigs in grow-finishing units: the case of a company. Porcine Health Management 2:7. Table 1 (Brazilian commercial farms, 683 batches; not a New Zealand dataset).",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "tsimba2011",
+      "citation": "Tsimba, R. (2011). Development of a decision support system to determine the best maize (Zea mays L.) hybrid - planting date option under typical New Zealand management systems. PhD thesis, Massey University. Abstract and Table 4.4 (thermal time, base 8 C, emergence to silking).",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "dairynzlw",
+      "citation": "DairyNZ. Liveweight targets for heifers (dairynz.co.nz/animal/heifers/lw-targets/), retrieved 2026-10-14.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "statsnz_ur",
+      "citation": "Stats NZ. Urban Rural 2023 boundaries (Urban_Rural_Areas_2023 feature layer, field LAND_AREA_SQ_KM, area 'Pukekohe', class 'Medium urban area'; 2022 edition for the earlier value), retrieved 2026-10-14 from Stats NZ's ArcGIS service.",
+      "licence": "Facts cited with attribution"
+    }
+  ],
+  "items": [
+    {
+      "key": "dairy_stocking_rate_national",
+      "description": "National average dairy stocking rate, 2023/24 season",
+      "unit": "cows/ha effective",
+      "source": "dairynz2324",
+      "confidence": "high",
+      "value": {
+        "point": 2.76
+      },
+      "note": "Table 2.2 row: '2023/24  10,485  4,701,596  1,703,404  448  162  2.76' (Herds, Total cows, Total effective hectares, Average herd size, Average effective hectares, Average cows per hectare)."
+    },
+    {
+      "key": "dairy_stocking_rate_regional_range",
+      "description": "Regional range of mean dairy stocking rates (lowest region to highest region), 2023/24",
+      "unit": "cows/ha effective",
+      "source": "dairynz2324",
+      "confidence": "high",
+      "value": {
+        "range": {
+          "min": 2.15,
+          "max": 3.39,
+          "typical": 2.76
+        }
+      },
+      "note": "'Northland and the West Coast have the lowest stocking rates, at 2.15 and 2.21 cows per hectare' and 'highest in North Canterbury and South Canterbury, with averages of 3.39 and 3.18 cows per hectare'; typical is the national mean. North Island herds averaged 2.65 cows/ha."
+    },
+    {
+      "key": "dairy_herd_trend_2013_2024",
+      "description": "National dairy herd statistics by season",
+      "unit": "cows/ha; cows/herd; ha/farm",
+      "source": "dairynz2324",
+      "confidence": "high",
+      "value": {
+        "table": {
+          "row_label": "season",
+          "columns": [
+            "cows_per_ha",
+            "average_herd_size",
+            "effective_ha_per_farm"
+          ],
+          "rows": [
+            {
+              "label": "2013/14",
+              "values": [
+                2.87,
+                413,
+                144
+              ]
+            },
+            {
+              "label": "2014/15",
+              "values": [
+                2.87,
+                419,
+                146
+              ]
+            },
+            {
+              "label": "2015/16",
+              "values": [
+                2.85,
+                419,
+                147
+              ]
+            },
+            {
+              "label": "2016/17",
+              "values": [
+                2.81,
+                414,
+                147
+              ]
+            },
+            {
+              "label": "2017/18",
+              "values": [
+                2.84,
+                431,
+                151
+              ]
+            },
+            {
+              "label": "2018/19",
+              "values": [
+                2.84,
+                435,
+                153
+              ]
+            },
+            {
+              "label": "2019/20",
+              "values": [
+                2.84,
+                440,
+                155
+              ]
+            },
+            {
+              "label": "2020/21",
+              "values": [
+                2.86,
+                444,
+                155
+              ]
+            },
+            {
+              "label": "2021/22",
+              "values": [
+                2.85,
+                449,
+                158
+              ]
+            },
+            {
+              "label": "2022/23",
+              "values": [
+                2.82,
+                441,
+                157
+              ]
+            },
+            {
+              "label": "2023/24",
+              "values": [
+                2.76,
+                448,
+                162
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Table 2.2: Summary of herd statistics since 1975/76 (columns Average cows per hectare, Average herd size, Average effective hectares). Same table gives 1985/86: 2.30 cows/ha, 147 cows/herd, 64 ha."
+    },
+    {
+      "key": "dairy_milksolids_per_cow",
+      "description": "Average milksolids per cow, 2023/24",
+      "unit": "kg MS/cow/year",
+      "source": "dairynz2324",
+      "confidence": "high",
+      "value": {
+        "range": {
+          "min": 394,
+          "max": 400,
+          "typical": 400
+        }
+      },
+      "note": "'Average milk production per cow across the country was 400 kilograms of milksolids (made up of 225 kilograms milkfat and 176 kg protein)'; 5-year average 394 kg. Herds under 400 cows averaged 329 kg, 400-700 cows 409 kg, over 700 cows 420 kg."
+    },
+    {
+      "key": "dairy_milksolids_per_ha",
+      "description": "Average milksolids per effective hectare, 2023/24",
+      "unit": "kg MS/ha/year",
+      "source": "dairynz2324",
+      "confidence": "high",
+      "value": {
+        "point": 1105
+      },
+      "note": "'milksolids production per hectare was 1,105 kg, 0.7% below the 5-year average of 1,113 kg'."
+    },
+    {
+      "key": "dairy_days_in_milk",
+      "description": "Average days in milk (production), 2023/24",
+      "unit": "days",
+      "source": "dairynz2324",
+      "confidence": "high",
+      "value": {
+        "point": 277
+      },
+      "note": "'The average days in milk (production) was 277 in 2023/24, the highest on record.'"
+    },
+    {
+      "key": "dairy_milk_volume_per_cow_fao",
+      "description": "Raw cow milk per milking animal, New Zealand, FAOSTAT",
+      "unit": "kg milk/animal/year",
+      "source": "faostat",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "year",
+          "columns": [
+            "kg_milk_per_animal"
+          ],
+          "rows": [
+            {
+              "label": "2021",
+              "values": [
+                4555
+              ]
+            },
+            {
+              "label": "2022",
+              "values": [
+                4554
+              ]
+            },
+            {
+              "label": "2023",
+              "values": [
+                4593
+              ]
+            }
+          ]
+        }
+      },
+      "note": "FAOSTAT QCL, New Zealand, Raw milk of cattle, Yield/Carcass Weight, kg/An: 2021 4555, 2022 4554, 2023 4593 (flag A, official). Milk Animals 2023: 4,625,229."
+    },
+    {
+      "key": "dairy_calving_interval",
+      "description": "Mean calving interval, all breeds, 2022/23 (latest season in Table 4.13)",
+      "unit": "days",
+      "source": "dairynz2324",
+      "confidence": "high",
+      "value": {
+        "point": 369.0
+      },
+      "note": "Table 4.13: Trend in mean calving interval by breed, row '2022/23  369.0  2,940,868' (All breeds, average number of days, number of records)."
+    },
+    {
+      "key": "dairy_fertility_2023_24",
+      "description": "Mean herd reproductive performance 2023/24 (actual 6-week in-calf rate, 3-week submission rate, conception rate)",
+      "unit": "percent",
+      "source": "dairynz2324",
+      "confidence": "high",
+      "value": {
+        "table": {
+          "row_label": "measure",
+          "columns": [
+            "percent"
+          ],
+          "rows": [
+            {
+              "label": "six_week_in_calf_rate_actual",
+              "values": [
+                69.3
+              ]
+            },
+            {
+              "label": "three_week_submission_rate",
+              "values": [
+                79.0
+              ]
+            },
+            {
+              "label": "conception_rate",
+              "values": [
+                53.2
+              ]
+            }
+          ]
+        }
+      },
+      "note": "'the actual mean 6-week in-calf rate reached 69.3%, making it the highest on record ... The actual mean 3-week submission rate increased from 77.6% in 2022/23 to 79.0% in 2023/24 ... the mean conception rate (53.2%) was higher than the previous three seasons.'"
+    },
+    {
+      "key": "dairy_heifer_liveweight_targets",
+      "description": "DairyNZ heifer liveweight targets as percent of mature liveweight at age",
+      "unit": "months; percent of mature weight",
+      "source": "dairynzlw",
+      "confidence": "high",
+      "value": {
+        "table": {
+          "row_label": "age",
+          "columns": [
+            "age_months",
+            "percent_of_mature_liveweight"
+          ],
+          "rows": [
+            {
+              "label": "six_months",
+              "values": [
+                6,
+                30
+              ]
+            },
+            {
+              "label": "mating",
+              "values": [
+                15,
+                60
+              ]
+            },
+            {
+              "label": "pre_calving",
+              "values": [
+                22,
+                90
+              ]
+            }
+          ]
+        }
+      },
+      "note": "'30% of mature weight at 6 months of age; 60% of mature weight at 15 months (mating); 90% of mature weight at 22 months (pre-calving)'; heifers 'reach puberty at 12 months, and get in-calf at 15 months'."
+    },
+    {
+      "key": "sheep_beef_stocking_by_class",
+      "description": "Mean stocking rate, lambing % and calving % by North Island sheep and beef farm class, Taranaki-Manawatu, 2024-25 survey year",
+      "unit": "SU/ha; percent; percent",
+      "source": "blnz2025",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "farm_class",
+          "columns": [
+            "stocking_rate_su_per_ha",
+            "lambing_percent",
+            "calving_percent"
+          ],
+          "rows": [
+            {
+              "label": "class3_ni_hard_hill_country",
+              "values": [
+                8.3,
+                129.2,
+                78.7
+              ]
+            },
+            {
+              "label": "class4_ni_hill_country",
+              "values": [
+                9.0,
+                134.9,
+                83.1
+              ]
+            },
+            {
+              "label": "class5_ni_finishing",
+              "values": [
+                10.3,
+                140.3,
+                87.5
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Mean column 2024-25, rows 'Stocking rate SU/ha', 'Lambing %', 'Calving %' of the Class 3, 4 and 5 quintile tables. 'Lambing % - The number of lambs tailed from ewes as a percentage of ewes mated in the previous autumn'; 'Calving % - The number of calves marked as a percentage of cows mated'. One region (Taranaki-Manawatu); survey sample of about 500 farms nationally."
+    },
+    {
+      "key": "sheep_beef_stocking_class_ranges",
+      "description": "Typical carrying capacity by farm class as defined by Beef + Lamb NZ (lower and upper)",
+      "unit": "SU/ha",
+      "source": "blnz2025",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "farm_class",
+          "columns": [
+            "min_su_per_ha",
+            "max_su_per_ha"
+          ],
+          "rows": [
+            {
+              "label": "class3_ni_hard_hill",
+              "values": [
+                6,
+                10
+              ]
+            },
+            {
+              "label": "class4_ni_hill",
+              "values": [
+                7,
+                13
+              ]
+            },
+            {
+              "label": "class5_ni_finishing",
+              "values": [
+                8,
+                15
+              ]
+            },
+            {
+              "label": "class6_si_finishing_breeding_dryland",
+              "values": [
+                6,
+                11
+              ]
+            },
+            {
+              "label": "class7_si_finishing",
+              "values": [
+                9,
+                14
+              ]
+            }
+          ]
+        }
+      },
+      "note": "'Class 3 ... most farms carrying 6 to 10 stock units per hectare'; 'Class 4 ... Mostly carrying between 7 and 13 stock units per hectare'; 'Class 5 ... Mostly carrying between 8 and 15 stock units per hectare'; 'Class 6 ... capacity ranges from 6 to 11 stock units per hectare on dryland farms'; 'Class 7 ... about 9 to 14 stock units per hectare'. Class 1 high country: 'up to three stock units per hectare'."
+    },
+    {
+      "key": "carcass_weight_fao_per_animal",
+      "description": "Average carcass weight per animal slaughtered, New Zealand, FAOSTAT",
+      "unit": "kg/animal",
+      "source": "faostat",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "species",
+          "columns": [
+            "y2021",
+            "y2022",
+            "y2023"
+          ],
+          "rows": [
+            {
+              "label": "cattle_beef_with_bone",
+              "values": [
+                159,
+                157,
+                161
+              ]
+            },
+            {
+              "label": "sheep_meat",
+              "values": [
+                20,
+                20,
+                20
+              ]
+            },
+            {
+              "label": "pig_meat_with_bone",
+              "values": [
+                71,
+                71,
+                72
+              ]
+            }
+          ]
+        }
+      },
+      "note": "FAOSTAT QCL, New Zealand, Yield/Carcass Weight, kg/An, flag A: Meat of cattle with the bone 159/157/161; Meat of sheep 20/20/20; Meat of pig with the bone 71/71/72 (2021/2022/2023). Slaughter counts 2023: cattle 4,635,418; sheep 21,087,823; pigs 622,689. Sheep figure includes ewes, hoggets, mutton and lamb."
+    },
+    {
+      "key": "lamb_hot_carcass_weight_nz",
+      "description": "Provisional national average lamb carcass weight (hot weight), season to date and prior season",
+      "unit": "kg hot weight",
+      "source": "nzmeatboard",
+      "confidence": "high",
+      "value": {
+        "table": {
+          "row_label": "measure",
+          "columns": [
+            "kg_hot_weight"
+          ],
+          "rows": [
+            {
+              "label": "cumulative_2025_26_season_to_week_51",
+              "values": [
+                19.93
+              ]
+            },
+            {
+              "label": "cumulative_2024_25_season",
+              "values": [
+                19.51
+              ]
+            },
+            {
+              "label": "week_51_2025_26",
+              "values": [
+                23.05
+              ]
+            },
+            {
+              "label": "week_51_2024_25",
+              "values": [
+                22.4
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Table 'Provisional lamb average weight (kg hot weight)', row National: Week 51 last season 22.4, this season 23.05; Cumulative last season 19.51, this season 19.93 (provisional, subject to change)."
+    },
+    {
+      "key": "beef_carcass_weight_nz",
+      "description": "New Zealand export beef carcass weights and finishing target (as cited from Beef + Lamb NZ 2017)",
+      "unit": "kg carcass",
+      "source": "williamson2021",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "class",
+          "columns": [
+            "kg_carcass"
+          ],
+          "rows": [
+            {
+              "label": "average_steer_export",
+              "values": [
+                316
+              ]
+            },
+            {
+              "label": "average_bull_export",
+              "values": [
+                309
+              ]
+            },
+            {
+              "label": "steer_target",
+              "values": [
+                300
+              ]
+            },
+            {
+              "label": "heifer_low",
+              "values": [
+                220
+              ]
+            },
+            {
+              "label": "heifer_high",
+              "values": [
+                250
+              ]
+            }
+          ]
+        }
+      },
+      "note": "'Average steer carcass weight for export is 316kg, while average bull carcass weight is 309kg and average heifer carcass weight is between 220-250kg (Beef + Lamb New Zealand, 2017). Steers have a target carcass weight of 300kg'."
+    },
+    {
+      "key": "beef_slaughter_age",
+      "description": "Typical slaughter age of New Zealand beef steers and bulls",
+      "unit": "months",
+      "source": "williamson2021",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "system",
+          "columns": [
+            "min_months",
+            "max_months"
+          ],
+          "rows": [
+            {
+              "label": "ideal_finish_before_second_winter",
+              "values": [
+                18,
+                22
+              ]
+            },
+            {
+              "label": "carry_through_second_winter",
+              "values": [
+                27,
+                34
+              ]
+            }
+          ]
+        }
+      },
+      "note": "'Ideally, cattle are finished before their second winter, at 18-22 months of age ... many farmers \"carry-through\" steers and bulls past a second winter, sending them to slaughter between 27 and 34 months of age (Morris, 2012)'; 'the traditional slaughter age of around 24 months'."
+    },
+    {
+      "key": "pig_slaughter_age",
+      "description": "Typical age of New Zealand pigs at processing",
+      "unit": "months",
+      "source": "nzpork",
+      "confidence": "medium",
+      "value": {
+        "range": {
+          "min": 5,
+          "max": 6
+        }
+      },
+      "note": "'Once the desired weight is achieved, the pigs are transported for processing. This is typically around five to six months of age.' Weaning at about 3-4 weeks."
+    },
+    {
+      "key": "dairy_cow_peak_dm_intake",
+      "description": "Dry-matter intake of a dairy cow at peak production",
+      "unit": "kg DM/cow/day",
+      "source": "slh",
+      "confidence": "low",
+      "value": {
+        "point": 18
+      },
+      "note": "'A dairy cow at the peak of her production consumes around 18 kg of dry matter (around 100 kg of fresh pasture weight) per day.' Secondary educational source."
+    },
+    {
+      "key": "ewe_lactation_dm_intake",
+      "description": "Dry-matter intake of a ewe with a single lamb",
+      "unit": "kg DM/ewe/day",
+      "source": "slh",
+      "confidence": "low",
+      "value": {
+        "range": {
+          "min": 2,
+          "max": 3
+        }
+      },
+      "note": "'A ewe with a single lamb consumes 2-3 kg of dry matter per day.' Secondary educational source."
+    },
+    {
+      "key": "sheep_dm_intake_by_stage",
+      "description": "Minimum feed intake targets for sheep by production stage",
+      "unit": "kg DM/head/day",
+      "source": "blnzfeed",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "stage",
+          "columns": [
+            "kg_dm_per_day"
+          ],
+          "rows": [
+            {
+              "label": "ewe_mid_pregnancy_maintenance",
+              "values": [
+                1.0
+              ]
+            },
+            {
+              "label": "ewe_6_weeks_pre_lamb",
+              "values": [
+                1.3
+              ]
+            },
+            {
+              "label": "ewes_and_lambs",
+              "values": [
+                1.8
+              ]
+            },
+            {
+              "label": "ewe_summer_maintenance",
+              "values": [
+                1.0
+              ]
+            },
+            {
+              "label": "ewe_mating",
+              "values": [
+                1.4
+              ]
+            },
+            {
+              "label": "lamb_weaned_spring",
+              "values": [
+                0.8
+              ]
+            },
+            {
+              "label": "lamb_weaned_summer",
+              "values": [
+                1.0
+              ]
+            },
+            {
+              "label": "lamb_weaned_autumn",
+              "values": [
+                1.2
+              ]
+            },
+            {
+              "label": "lamb_weaned_winter_spring",
+              "values": [
+                1.2
+              ]
+            },
+            {
+              "label": "hogget_summer",
+              "values": [
+                1.3
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Table 1.1: Minimum pasture length and dry matter quantities for different sheep production levels during the year, column 'Feed intake (kg DM/d)'. Appendix 1.2: maintenance of a 50 kg ewe 8.0 MJ ME/day, 70 kg ewe 11.0 MJ ME/day."
+    },
+    {
+      "key": "beef_cattle_dm_intake_example",
+      "description": "Cattle dry-matter intake per head per day in the Beef + Lamb NZ worked feed budget (breeding cows, R2 heifers and R1 heifers across four periods)",
+      "unit": "kg DM/head/day",
+      "source": "blnzfeed",
+      "confidence": "low",
+      "value": {
+        "range": {
+          "min": 3.0,
+          "max": 13.0
+        }
+      },
+      "note": "Worked feed budget, 'CATTLE INTAKE (kg DM/head/d)': 'No. Cows 168 ... Intake/Head/Day 6.0 6.0 9.0 13.0'; 'No. R2yr Hfrs 44 ... 4.0 4.0 4.0 8.0'; 'No. R1yr Hfs 45 ... 3.0 3.0 6.0 6.0'. An illustrative example, not a survey. Range spans heifers (min 3.0) to cows (max 13.0)."
+    },
+    {
+      "key": "pig_grow_finish_feed_intake",
+      "description": "Daily feed intake of grow-finishing pigs on Brazilian commercial farms (as-fed feed, not dry matter; no NZ figure found)",
+      "unit": "kg feed/pig/day",
+      "source": "pierozan2016",
+      "confidence": "low",
+      "value": {
+        "range": {
+          "min": 1.82,
+          "max": 2.48,
+          "typical": 2.15
+        }
+      },
+      "note": "Table 1: 'DFI (kg/pig) 682 batches, mean 2.15, SD 0.10, minimum 1.82 ... maximum 2.48'; 'FCR (kg/kg) mean 2.45'; 'IW (kg) 22.7', 'FW (kg) 117', 'DGF (day) 107'."
+    },
+    {
+      "key": "pasture_annual_yield_by_site",
+      "description": "Mean annual pasture yield at sites throughout New Zealand (mean of recorded years, highest year, lowest year)",
+      "unit": "kg DM/ha/year",
+      "source": "blnzfeed",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "site",
+          "columns": [
+            "mean_annual",
+            "highest_year",
+            "lowest_year"
+          ],
+          "rows": [
+            {
+              "label": "helensville_red_hill_sand",
+              "values": [
+                12760,
+                17110,
+                9470
+              ]
+            },
+            {
+              "label": "dargaville_kaipara_clay",
+              "values": [
+                17160,
+                21460,
+                12260
+              ]
+            },
+            {
+              "label": "rukuhia_hamilton_clay_loam",
+              "values": [
+                10220,
+                15580,
+                5090
+              ]
+            },
+            {
+              "label": "manutuke_recent_alluvial",
+              "values": [
+                11730,
+                16300,
+                7240
+              ]
+            },
+            {
+              "label": "wairakei_flat_atiamuri_sand",
+              "values": [
+                5740,
+                7900,
+                4320
+              ]
+            },
+            {
+              "label": "wairakei_hill_oruanui",
+              "values": [
+                9000,
+                11050,
+                6970
+              ]
+            },
+            {
+              "label": "marton_silt_loam",
+              "values": [
+                10850,
+                15550,
+                8550
+              ]
+            },
+            {
+              "label": "flock_house_rangitikei_loamy_sand",
+              "values": [
+                6270,
+                7680,
+                5480
+              ]
+            },
+            {
+              "label": "masterton_kotatau_silt_loam",
+              "values": [
+                10880,
+                14970,
+                8970
+              ]
+            },
+            {
+              "label": "maraekakaho_takapau_silt_loam",
+              "values": [
+                6740,
+                7800,
+                4970
+              ]
+            },
+            {
+              "label": "westport_pakihi",
+              "values": [
+                10920,
+                11660,
+                9970
+              ]
+            },
+            {
+              "label": "motueka_rosedale_hill_soil",
+              "values": [
+                11560,
+                13280,
+                8080
+              ]
+            },
+            {
+              "label": "winchmore_dryland",
+              "values": [
+                5870,
+                7750,
+                4240
+              ]
+            },
+            {
+              "label": "winchmore_irrigated",
+              "values": [
+                10160,
+                12020,
+                9050
+              ]
+            },
+            {
+              "label": "invermay_flat_alluvial",
+              "values": [
+                10390,
+                12760,
+                7520
+              ]
+            },
+            {
+              "label": "invermay_hill_warepa",
+              "values": [
+                8890,
+                13500,
+                3240
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Appendix 6.1 and 6.2 rows 'An. yield', 'Highest', 'Lowest', e.g. Rukuhia 10 220 / 15 580 / 5 090 and Helensville 12 760 / 17 110 / 9 470. 'these pasture growth rates should be used as a general guide only.' Data originate from the 1981 NZ Farmer Guide to Grazing Management; Rukuhia (Waikato) is the nearest site to Pukekohe in the table. Monthly growth rates (kg DM/ha/day) are tabulated in the same appendix, e.g. Rukuhia Jun 8, Jul 12, Aug 32, Sep 50, Oct 53, Nov 44, Dec 42, Jan 17, Feb 21, Mar 21, Apr 23, May 13."
+    },
+    {
+      "key": "rukuhia_monthly_pasture_growth",
+      "description": "Monthly pasture growth rate at Rukuhia (Hamilton clay loam), June to May",
+      "unit": "kg DM/ha/day",
+      "source": "blnzfeed",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "month",
+          "columns": [
+            "kg_dm_per_ha_per_day"
+          ],
+          "rows": [
+            {
+              "label": "jun",
+              "values": [
+                8
+              ]
+            },
+            {
+              "label": "jul",
+              "values": [
+                12
+              ]
+            },
+            {
+              "label": "aug",
+              "values": [
+                32
+              ]
+            },
+            {
+              "label": "sep",
+              "values": [
+                50
+              ]
+            },
+            {
+              "label": "oct",
+              "values": [
+                53
+              ]
+            },
+            {
+              "label": "nov",
+              "values": [
+                44
+              ]
+            },
+            {
+              "label": "dec",
+              "values": [
+                42
+              ]
+            },
+            {
+              "label": "jan",
+              "values": [
+                17
+              ]
+            },
+            {
+              "label": "feb",
+              "values": [
+                21
+              ]
+            },
+            {
+              "label": "mar",
+              "values": [
+                21
+              ]
+            },
+            {
+              "label": "apr",
+              "values": [
+                23
+              ]
+            },
+            {
+              "label": "may",
+              "values": [
+                13
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Appendix 6.1 Pasture Growth Rates (kg DM/ha/day) - North Island Sites, column Rukuhia / Hamilton Clay Loam: 8, 12, 32, 50, 53, 44, 42, 17, 21, 21, 23, 13; 'An. yield 10 220', 16 years recorded."
+    },
+    {
+      "key": "crop_yield_official_fao",
+      "description": "Crop yields per hectare, New Zealand, FAOSTAT official (flag A) series",
+      "unit": "kg/ha",
+      "source": "faostat",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "crop",
+          "columns": [
+            "y2021",
+            "y2022",
+            "y2023"
+          ],
+          "rows": [
+            {
+              "label": "wheat",
+              "values": [
+                9712.2,
+                9390.0,
+                9668.1
+              ]
+            },
+            {
+              "label": "barley",
+              "values": [
+                7354.2,
+                6844.9,
+                7149.9
+              ]
+            },
+            {
+              "label": "maize_grain",
+              "values": [
+                11400.0,
+                11531.3,
+                10185.4
+              ]
+            },
+            {
+              "label": "oats",
+              "values": [
+                5392.4,
+                5998.4,
+                7145.0
+              ]
+            }
+          ]
+        }
+      },
+      "note": "FAOSTAT QCL, New Zealand, Yield, kg/ha, flag A: 'Wheat Yield 2023 9668.1', 'Barley Yield 2023 7149.9', 'Maize (corn) Yield 2023 10185.4', 'Oats Yield 2023 7145.0'. National averages of modern cultivars on Canterbury-dominant land; a simulation of earlier technology should scale down."
+    },
+    {
+      "key": "vegetable_yield_fao_estimated",
+      "description": "Vegetable yields per hectare, New Zealand, FAOSTAT estimated (flag E) series",
+      "unit": "kg/ha",
+      "source": "faostat",
+      "confidence": "low",
+      "value": {
+        "table": {
+          "row_label": "crop",
+          "columns": [
+            "y2021",
+            "y2022",
+            "y2023"
+          ],
+          "rows": [
+            {
+              "label": "potatoes",
+              "values": [
+                51138.2,
+                50855.2,
+                51080.7
+              ]
+            },
+            {
+              "label": "onions_and_shallots_green",
+              "values": [
+                44951.9,
+                44890.1,
+                45023.1
+              ]
+            },
+            {
+              "label": "pumpkins_squash_and_gourds",
+              "values": [
+                19213.3,
+                19280.4,
+                19282.5
+              ]
+            },
+            {
+              "label": "cabbages",
+              "values": [
+                75958.1,
+                75481.4,
+                76430.9
+              ]
+            },
+            {
+              "label": "carrots_and_turnips",
+              "values": [
+                45565.4,
+                45450.2,
+                45667.7
+              ]
+            }
+          ]
+        }
+      },
+      "note": "FAOSTAT QCL, New Zealand, Yield, kg/ha, flag E (FAO estimate, not official): 'Potatoes Yield 2023 51080.7', 'Onions and shallots, green Yield 2023 45023.1', 'Pumpkins, squash and gourds Yield 2023 19282.5'. Onions entry is the green-onion item name in FAOSTAT; treat as an estimate."
+    },
+    {
+      "key": "maize_base_temperature",
+      "description": "Base temperatures for maize thermal time in New Zealand field trials (Waikato and Manawatu, 2006-07)",
+      "unit": "degrees C",
+      "source": "tsimba2011",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "phase",
+          "columns": [
+            "base_temperature_c"
+          ],
+          "rows": [
+            {
+              "label": "emergence_to_silking",
+              "values": [
+                8
+              ]
+            },
+            {
+              "label": "grain_filling",
+              "values": [
+                0
+              ]
+            }
+          ]
+        }
+      },
+      "note": "'A base temperature of 8 C (Tb8) led to adequate estimates of thermal durations for the pre-flowering phase while Tb0 was more satisfactory during grain filling.'"
+    },
+    {
+      "key": "maize_thermal_time_emergence_silking",
+      "description": "Thermal time (base 8 C) from emergence to silking by planting date, Ruakura 2006-07 (RUK07) and Ngarua 2007-08 (NGA08), all hybrids",
+      "unit": "degree-days (C d)",
+      "source": "tsimba2011",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "site_planting_date",
+          "columns": [
+            "tt_c_days_base8"
+          ],
+          "rows": [
+            {
+              "label": "RUK07_PD1",
+              "values": [
+                860
+              ]
+            },
+            {
+              "label": "RUK07_PD2",
+              "values": [
+                862
+              ]
+            },
+            {
+              "label": "RUK07_PD3",
+              "values": [
+                837
+              ]
+            },
+            {
+              "label": "RUK07_PD4",
+              "values": [
+                820
+              ]
+            },
+            {
+              "label": "RUK07_PD5",
+              "values": [
+                773
+              ]
+            },
+            {
+              "label": "NGA08_PD1",
+              "values": [
+                881
+              ]
+            },
+            {
+              "label": "NGA08_PD2",
+              "values": [
+                866
+              ]
+            },
+            {
+              "label": "NGA08_PD3",
+              "values": [
+                838
+              ]
+            },
+            {
+              "label": "NGA08_PD4",
+              "values": [
+                813
+              ]
+            },
+            {
+              "label": "NGA08_PD5",
+              "values": [
+                868
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Table 4.4: Thermal time (Tb8) requirement from emergence to silking ... 'PD 1 881 860 ...' (NGA08 and RUK07 columns, all hybrids, units 0Cd). Planting between 20 September and 13 October (Waikato) maximised grain yield."
+    },
+    {
+      "key": "pukekohe_urban_area_land_area",
+      "description": "Land area of the Pukekohe urban area (Stats NZ Urban Rural 2023 boundary)",
+      "unit": "km2",
+      "source": "statsnz_ur",
+      "confidence": "high",
+      "value": {
+        "table": {
+          "row_label": "edition",
+          "columns": [
+            "land_area_km2"
+          ],
+          "rows": [
+            {
+              "label": "urban_rural_2023",
+              "values": [
+                31.02793379
+              ]
+            },
+            {
+              "label": "urban_rural_2022",
+              "values": [
+                32.06530245
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Urban_Rural_Areas_2023, feature 'Pukekohe' (Medium urban area): LAND_AREA_SQ_KM 31.02793379 = 3,103 ha; the 2022 edition gives 32.06530245. This is the built-up urban area, not the surrounding market-garden district."
+    }
+  ]
+}

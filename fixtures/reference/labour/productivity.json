@@ -79,6 +79,21 @@
       "key": "bs8206_2",
       "citation": "BSI (2008). BS 8206-2:2008 Lighting for buildings. Code of practice for daylighting. British Standards Institution, London.",
       "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "fao_koegel_1985",
+      "citation": "Koegel, R. G. (1985). Self-help wells. FAO Irrigation and Drainage Paper 30, FAO, Rome, chapter 5 'Large diameter wells' (fao.org/3/x5567e/x5567e06.htm), sections 5.2 Dimensions and 5.4 Lining the excavation; retrieved 2026-10-14. Hand-dug well, used as an analogue for hand-dug shafts.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "nmjd_kpcsc_2021",
+      "citation": "Network Movement for Justice and Development (NMJD) / Kimberley Process Civil Society Coalition (December 2021). The challenges characterizing Sierra Leone's artisanal diamond mining sector and why the sector should be formalized. Grassroots research on local diamond mining impact (kpcivilsociety.org/wp-content/uploads/2022/04/KPCSC_Grassroots_Research_Sierra-Leone.pdf), survey of 21 sites, PDF p. 12; retrieved 2026-10-14.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "rupprecht_shaft",
+      "citation": "Rupprecht, S. (n.d.). Shaft Sinking for Small-Scale Mining in Africa. University of Johannesburg (ujcontent.uj.ac.za, conference-style paper; year not stated in the text), Introduction, 'Artisanal shafts' and 'Design Characteristics' sections; retrieved 2026-10-14.",
+      "licence": "Facts cited with attribution"
     }
   ],
   "items": [
@@ -595,6 +610,103 @@
         }
       },
       "note": "Average daylight factor: indoor horizontal illuminance as a fraction of the simultaneous unobstructed outdoor illuminance under an overcast sky."
+    },
+    {
+      "key": "asm_alluvial_pit_depth_m",
+      "description": "Depth of hand-dug artisanal alluvial diamond/gold pits and overburden, Sierra Leone, and of hand-sunk artisanal vertical shafts; columns are low and high ends",
+      "unit": "m",
+      "source": "nmjd_kpcsc_2021",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "case",
+          "columns": [
+            "min_m",
+            "max_m"
+          ],
+          "rows": [
+            {
+              "label": "gola_pits_three_shovels_deep",
+              "values": [
+                3,
+                4
+              ]
+            },
+            {
+              "label": "kenema_overburden",
+              "values": [
+                3,
+                3
+              ]
+            },
+            {
+              "label": "kono_overburden",
+              "values": [
+                5,
+                5
+              ]
+            },
+            {
+              "label": "survey_21_sites_typical_excavation",
+              "values": [
+                5,
+                5
+              ]
+            },
+            {
+              "label": "legal_artisanal_maximum_sierra_leone",
+              "values": [
+                10,
+                10
+              ]
+            },
+            {
+              "label": "hand_sunk_vertical_shaft",
+              "values": [
+                10,
+                20
+              ]
+            }
+          ]
+        }
+      },
+      "note": "nmjd_kpcsc_2021, PDF p. 12: 'In 9 out of 21 sites an average excavation depth of 5 metres was reached, while pits in 4 sites have reached or exceeded the government stipulated 10 metre maximum depth for artisanal mining.' levin_gola_2013 (rows 1-3): 'Diggers estimate most pits are three-shovels deep, or about 3-4 metres' (p. 34); 'the typical three metres (or more) at other sites in the region and five metres in Kono' (p. 7); 'the average depth of overburden appears to be less in Kenema than in Kono (3 metres compared to 5 metres, respectively)' (p. 41). rupprecht_shaft (last row, Introduction): 'Artisanal miners are well experienced in manually digging vertical shafts of 10 m to 20 m in depth. Beyond this depth, it beocomes difficult for artisanal miners to access the deposit due to the depth, ventilation, and ground water.'"
+    },
+    {
+      "key": "hand_dug_shaft_diameter_m",
+      "description": "Excavated or inside diameter of a hand-dug circular shaft (hand-dug well; no artisanal mining source with a diameter was found)",
+      "unit": "m",
+      "source": "fao_koegel_1985",
+      "confidence": "medium",
+      "value": {
+        "range": {
+          "min": 1.2,
+          "max": 1.5
+        }
+      },
+      "note": "fao_koegel_1985, sec. 5.2: 'The inside diameter of hand dug wells normally ranges between one and two metres.' ... 'the vast majority of dug wells are found to have diameters in the range of 1.2 to 1. 5 metres (4 to 5 feet).' wateraid_2013, p. 2: 'an excavation of about 1.5 metres in diameter provides adequate working space for the diggers and will allow a final internal diameter of about 1.2 metres after the well has been lined.' Water-well analogue, not mining. Rupprecht's proposed small-mine shaft is rectangular 1.8 m x 2.4 m."
+    },
+    {
+      "key": "hand_dug_shaft_sinking_rate_m_per_crew_day",
+      "description": "Hand excavation and lining rate of a vertical shaft by an organised crew (hand-dug well analogue), relatively loose non-caving soil",
+      "unit": "m of depth per crew-day (five diggers plus hoisting hands)",
+      "source": "fao_koegel_1985",
+      "confidence": "low",
+      "value": {
+        "point": 1
+      },
+      "note": "fao_koegel_1985, sec. 5.4: 'An organized and experienced construction team consisting of five workers plus enough people to lower and raise loads in the well can dig and line 1 meter per day in relatively loose soil that does not cave in. However, the bottom section is likely to take 2 or 3 days per meter because of the difficulty in working while water continually enters the well.' Also: 'While one metre per day could theoretically be excavated and lined, this is difficult to achieve consistently, especially at greater depths.' Crew rate, not per worker; no artisanal mining digging-rate source found."
+    },
+    {
+      "key": "small_mine_shaft_advance_drill_blast",
+      "description": "Designed advance of a small-scale (drill-and-blast, timbered) rectangular shaft; contrast to hand digging",
+      "unit": "m per day",
+      "source": "rupprecht_shaft",
+      "confidence": "low",
+      "value": {
+        "point": 0.8
+      },
+      "note": "Design Characteristics: 'a 1.8 m x 2.4 m rectangular shaft advance 0.8 m per day will produce 3.5 m3 or 9.3 t of broken rock per advance.' Labour: 'Overall advance, including platform installation is approximately 20 metres per month.' Timbered cycle: 'This equates to approximately 10 m advance per month.' Proposed design, not a survey of artisanal practice."
     }
   ]
 }
