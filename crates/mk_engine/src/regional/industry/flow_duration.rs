@@ -100,6 +100,17 @@ impl RiverFlowRecord {
     pub fn get(&self, cell: usize) -> Option<&FlowDuration> {
         self.cells.get(&(cell as u32))
     }
+
+    /// Whether a river runs through medium cell `cell` all year: it is
+    /// perennial in the record and its mean flow reaches the hydrology's
+    /// river threshold. A property of the island's year, not of whichever
+    /// step it is asked on, so what is built on it -- habitats, deposits --
+    /// does not change with the weather.
+    pub fn is_river(&self, cell: usize) -> bool {
+        self.get(cell).is_some_and(|flow| {
+            f64::from(flow.mean_m3_s) >= crate::regional::hydrology::RIVER_MIN_DISCHARGE_M3_S
+        })
+    }
 }
 
 #[cfg(test)]

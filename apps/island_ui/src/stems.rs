@@ -116,6 +116,7 @@ mod tests {
             buildings: vec![],
             spaces: vec![],
             items: vec![],
+            doors: vec![],
         }
     }
 
