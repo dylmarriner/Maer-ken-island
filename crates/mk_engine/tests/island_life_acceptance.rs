@@ -181,7 +181,17 @@ const DAY: u64 = 86_400;
 /// carbon 13.0 of 13.0 and 10.4 of 10.4 kg, eating 48 and 43 minutes a
 /// day, drinking 2.37 and 1.75 L a day (gathering costs water),
 /// temperate-forest NPP 471 g C/m2/yr (reference 400-900).
-const WEEK_DIGEST: &str = "844ccde7d7ef6c6a8d3aa5036238958cc3d6706bf7c7e8b6f71589abc81006a0";
+///
+/// And for formal predictive processing steering decisions (the owner's
+/// call, 2026-10-15, `UPSTREAM.md` production item 6): what its critic has
+/// learned each action is worth is added to the mind's choice while awake,
+/// and the critic learns from the action actually taken. Read from a local
+/// release run (which matches CI's) on top of R3's foraging time: 20,578
+/// audits closed, no food or water shortfalls, body carbon 12.9 of 13.0 and
+/// 10.4 of 10.4 kg, eating 48 and 43 minutes a day, drinking 2.36 and 1.77
+/// L a day, asleep at home 41 of 57 and 41 of 56 hours, temperate-forest
+/// NPP 471 g C/m2/yr (reference 400-900).
+const WEEK_DIGEST: &str = "f6699166ee3f342f86dd3a900d95660291b9064a84302d83f355b19f4d019c81";
 
 fn repo(path: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))

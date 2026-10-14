@@ -542,6 +542,9 @@ pub fn step_lifecycle(
         observation,
         &human.needs,
         &human.core_systems,
+        super::formal_predictive_processing::FormalAction::from_action_kind(
+            human.economy_action.kind,
+        ),
         rng_registry,
         dt_years,
     );

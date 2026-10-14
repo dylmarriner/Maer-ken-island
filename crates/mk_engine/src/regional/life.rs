@@ -2036,6 +2036,12 @@ impl IslandLife {
                             life.lost_since_drink
                                 .insert(id.clone(), (owed - kg).max(0.0));
                         }
+                        // The source dried while they walked to it (a
+                        // rain pool, most often). Not a shortfall yet: they
+                        // stand at it (below) still owing the drink, and
+                        // the next drink looks for water from there, where
+                        // finding none within reach is the shortfall.
+                        Err(MaterialError::DryCell) => {}
                         _ => life.shortfalls.water += 1,
                     }
                     let filled = if carry > 0.0 {
