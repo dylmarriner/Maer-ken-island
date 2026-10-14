@@ -12,7 +12,9 @@ use mk_engine::regional::climate::{
     land_air_range_k, step_regional_climate, DiurnalForcing, DiurnalSurface,
     CLEAR_SKY_TRANSMITTANCE, LAND_ALBEDO,
 };
-use mk_engine::regional::weather::{apply_orographic_precipitation, step_regional_weather};
+use mk_engine::regional::weather::{
+    apply_orographic_precipitation, relative_humidity_at, step_regional_weather,
+};
 use mk_engine::regional::zonal::{ZonalBackgroundState, DEFAULT_BAND_COUNT};
 use mk_island::{DomainLevel, IslandDomain, IslandProfile, RegionalBoundaryState};
 
@@ -385,7 +387,7 @@ fn a_ridge_in_westerlies_wets_its_west_flank_and_dries_the_air_beyond_it() {
         &run.boundaries.atmosphere,
     );
     let plain = weather.clone();
-    apply_orographic_precipitation(&mut weather, &run.elevation, &run.domain);
+    let remaining = apply_orographic_precipitation(&mut weather, &run.elevation, &run.domain);
 
     // Nothing changes over the sea, and nothing is taken from it: the rain
     // the ridge wrings out is vapour that would have passed on, so the
@@ -433,6 +435,31 @@ fn a_ridge_in_westerlies_wets_its_west_flank_and_dries_the_air_beyond_it() {
         east < flank(&plain, 101..105),
         "the lee is not in a shadow: {east:.3} against {:.3}",
         flank(&plain, 101..105)
+    );
+
+    // The air in the lee is as dry as the rain says it is: its humidity is
+    // read from the vapour left after the ridge, not from the undepleted
+    // column, and the sea's air is untouched.
+    let (row, lee, sea) = (80, 102, 20);
+    let t = *run.climate.surface_temperature.get(row, lee);
+    let rh =
+        |f: Option<&Grid2<f64>>, c: usize| relative_humidity_at(&run.canon, &weather, f, t, row, c);
+    assert!(*remaining.get(row, lee) < 1.0);
+    assert!(
+        rh(Some(&remaining), lee) < rh(None, lee),
+        "lee {:.3} against undepleted {:.3}",
+        rh(Some(&remaining), lee),
+        rh(None, lee)
+    );
+    assert_eq!(*remaining.get(row, sea), 1.0);
+    assert_eq!(rh(Some(&remaining), sea), rh(None, sea));
+    // The same vapour is drier air when it is warmer.
+    let at = |t: f64| relative_humidity_at(&run.canon, &weather, Some(&remaining), t, row, lee);
+    assert!(
+        at(t + 5.0) < at(t),
+        "{:.3} at +5 K, {:.3}",
+        at(t + 5.0),
+        at(t)
     );
 }
 
