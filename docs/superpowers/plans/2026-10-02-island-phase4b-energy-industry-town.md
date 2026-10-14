@@ -116,7 +116,7 @@
 - Produced gas not used is flared (CO₂) or, by default, not vented; a small leak fraction from reference data goes to `AtmosCH4`.
 - Spills and blowouts at reference frequencies; a spill releases oil to land or sea cells and harms ecology (Phase-3 ecology mortality hook).
 
-> **Status (2026-10-14):** fields, decline and carbon done (`regional/industry/petroleum.rs`, `tests/petroleum_field.rs`, D57); the reference tables of Task 1 are in `fixtures/reference/industry/`. Wells, water cut, spills and methane forcing are open (`WORK_REMAINING.md` §4b).
+> **Status (2026-10-14):** fields, decline and carbon done (`regional/industry/petroleum.rs`, `tests/petroleum_field.rs`, D58); the reference tables of Task 1 are in `fixtures/reference/industry/`. Wells, water cut, spills and methane forcing are open (`WORK_REMAINING.md` §4b).
 
 - [ ] **Step 1:** Tests: cumulative production never exceeds recoverable volume; production follows the Arps curve within tolerance; carbon moves `CrustCarbon → MaterialCarbon`; flaring books CO₂, leaks book CH₄ and methane raises radiative forcing; a spill kills exposed shellfish beds; deterministic per seed.
 - [ ] **Step 2:** Implement; run `cargo test -p mk_engine --test petroleum_field`; expect PASS.

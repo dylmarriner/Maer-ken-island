@@ -43,7 +43,7 @@ this list holds the current state. The evidence for what is *done* is in
 | Living world | D31: NPP ignores soil nutrients | Open | Regional soils model and data |
 | Runtime | Phase 4 Task 2b: deep-time spin-up | **Done** (2026-10-14) | — |
 | Industry | Phase 4b Task 1 remainder: reference tables | Done 2026-10-14 (nine packs); gaps listed in §4a | A few items (see §4a) |
-| Industry | Phase 4b Task 4: oil and gas field (D14, D19) | Fields, decline and carbon done 2026-10-14 (D57); wells, water cut, spills open | Per-well rate, water-cut series |
+| Industry | Phase 4b Task 4: oil and gas field (D14, D19) | Fields, decline and carbon done 2026-10-14 (D58); wells, water cut, spills open | Per-well rate, water-cut series |
 | Industry | Phase 4b Task 5: refinery, gas plant, fuel depot (D16) | Topping refinery done 2026-10-14; gas plant, reformer, depot open | Reformate yield; gas-plant own use |
 | Industry | Phase 4b Task 6: jobs, trades, maintenance (D39) | Open | Upstream human-runtime change first |
 | Industry | Phase 4b Task 7: money, enterprises, payroll | Open | Owner: ownership split, policies |
@@ -51,9 +51,9 @@ this list holds the current state. The evidence for what is *done* is in
 | Industry | Phase 4b Task 8: town and workforce | Open | Demographic tables; owner: town size |
 | Industry | Phase 4b Task 9: dashboard pages, year acceptance | Open | Tasks 4-8 |
 | Climate | D3 rest: sea/land breezes, katabatic winds | Open | A diurnal wind solver |
-| Climate | D25: SST season lags too long | Open | Owner: change regionally or re-pin planet |
+| Climate | D25: SST season lags too long | Diagnosed 2026-10-14: 0.281 of the year against 0.18-0.21 observed | A prognostic marine boundary layer (with D29) |
 | Climate | D4: parametric weather systems | Open | Structural; large |
-| Climate | D38: driest tenth too dry | Open | Diagnosis |
+| Climate | D38: a quarter of the land too dry | Diagnosed; specific humidity carried (2026-10-14) | A flux-driven rain-out (with D4) |
 | Climate | D29: energy audited per module | Open | End-to-end energy ledger |
 | App | Phase 5 Tasks 3-8 | Partly done | See below; one owner pick (portraits) |
 | Gates | Gate 1, 2, 3 owner reviews | **Closed** (owner, 2026-10-13) | — |
@@ -217,7 +217,7 @@ trade, a 2-3 bedroom cottage's floor area (Task 6 and 7b); the Pukekohe growing 
   Grassmere solar salt and hand-dug shaft depth and sinking rate (a well analogue, low).
 - **Next:** carry `IndustryChain` in `IslandLife` (state, snapshot, the audited material stock) and
   let a depot top the estate's diesel up from the store, burning island diesel as material carbon.
-- **Left (D57):** a plateau, reservoir pressure and water cut; wells, workover crews and blowouts
+- **Left (D58):** a plateau, reservoir pressure and water cut; wells, workover crews and blowouts
   (the frequencies are in the pack, but there is no per-well rate to count wells by); spills and their
   harm to shellfish; methane warming (negligible at island scale, Etminan et al. 2016);
   who runs the field (Task 6). D19 (drill rigs cannot be made on the island) stays the owner's call;
@@ -323,10 +323,10 @@ trade, a 2-3 bedroom cottage's floor area (Task 6 and 7b); the Pukekohe growing 
 
 | Item | What is needed |
 |---|---|
-| **D3 (rest)**: sea and land breezes, katabatic winds | A diurnal wind solver on the coarse grid (land-sea temperature contrast driving an onshore/offshore flow; cold-air drainage downslope at night). The coastal damping of the day-night range is still the observed coastal/inland ratio; the land's range itself is already physical (Panwar & Kleidon 2022). |
-| **D25**: the SST season lags 1-2 months too long | Turbulent air-sea heat exchange in the mixed layer would shorten it. The ocean physics is shared with the planetary run, whose topology digest is pinned (`e4ece246…73e2`). **Owner decision:** change it regionally only, or change it in the shared code and re-pin the planet. |
+| **D3 (rest)**: sea and land breezes, katabatic winds | A diurnal wind solver on the coarse grid (land-sea temperature contrast driving an onshore/offshore flow; cold-air drainage downslope at night), which would also let the coastal damping of the day-night range come from air carried off the sea instead of the observed coastal/inland ratio. The land's range itself is already physical (Panwar & Kleidon 2022). **Sources gathered 2026-10-14** (to be transcribed into the climate pack when used): poleward of 30° the linear response is coast-trapped with scale `l = N h / sqrt(f^2 - omega^2)` (Rotunno 1983, as printed in Crosman & Horel 2010, BLM 137, eq. 2b, p. 12); typical sea-breeze surface winds 6-7 m/s (Simpson 1994 via Miller et al. 2003, Rev. Geophys. 41, para 20); inflow depth 300-2500 m, ~700 m in Britain (Miller et al. 2003, para 44); New Zealand sea breezes "usually extend from the coast inland for 20 miles or more" in settled summer weather (Te Ara 1966, Winds); a land breeze "rarely achieves half of sea breeze wind speed" (Thompson 1998 via Khan 2010). **The difficulty:** with the island's own N (7 K/km) and a 0.5-1 km layer, `l` is 190-370 km, five to ten times the observed reach, because friction limits real breezes; and no amplitude scaling that includes rotation was verified. A solver needs a sourced friction or a calibration against the 6-7 m/s and ~30 km observations, stated as such. |
+| **D25**: the SST season peaks 0.281 of the year after the solstice against 0.179-0.205 observed (ERSSTv5, derived 2026-10-14) | Diagnosed 2026-10-14: coupling the mixed layer to the air by bulk sensible and latent conductance shortens the lag to 0.145 but swells the annual range from 4.8 to 42.8 K, because it pulls the sea toward the energy balance's radiative equilibrium, which swings tens of kelvin. The owner question (regional or shared) does not decide it: either way the fix is a prognostic marine boundary layer whose air has its own heat capacity and is carried from upwind, which belongs with D29. The year test now measures the lag and holds it within 0.08 of the observed range. |
 | **D4**: weather systems are parametric | No occlusion, no warm-front structure. A structural change to `synoptic.rs`; large. |
-| **D38**: the driest tenth gets ~320 mm/yr against NZ's driest basin at ~360 | Diagnose first: the vapour budget, the rain-shadow strength or the evaporation. |
+| **D38**: a quarter of the land gets under 460 mm/yr where most of NZ gets 600-1600 (NIWA) | Diagnosed 2026-10-14 (`tests/regional_rain_budget.rs`): before orography land gets 58% of the sea's rain, because upstream's rain-out weight follows the local column's vapour and relative humidity. The wind now carries specific humidity (median 533 → 657 mm, highlands 340 → 668). What is left needs rain driven by the vapour flux of the systems crossing the land, which belongs with D4. |
 | **D29**: energy is audited per module | An end-to-end energy ledger across the coupled tick. |
 
 ---
@@ -342,15 +342,14 @@ dashboard; the desktop panels).
 | Task | Remaining | Needs |
 |---|---|---|
 | 3 | Individual stems in 3D around the yard are drawn (2026-10-14, `stems.rs`: up to 3,000 trunks within 250 m, at their own height and diameter); left of 2a: stand cover and instanced trees beyond the patch from biomass. Interiors (2b), industry and town (2d, after Phase 4b), resource visuals and inventory icons (2c, after Phase 3 Task 2), tests for every building kind and vehicle | Engineering |
-| 4 | Human detail view, inspector, foundry panel; portraits | **Owner picks the two portraits** from upstream `apps/mk_ui/assets/portraits/`, and confirms their provenance before any distribution |
-| 5 | Done 2026-10-14 for the clock, controls and terrain cell (`apps/island_ui/src/inspectors.rs`): six speeds with requested and achieved, Save, the local date (year, day of 288, time of a 36-hour day) with Earth time elapsed, and the cell under the view with its biome, climate and production. A click on the estate picks a building, room or item and the right panel describes it (`estate.rs` `pick`). Left: picking a tree, once the stems are drawn | Engineering |
-| 6 | `island_bench`, the allocation-bound test (`construction-counters` feature), the resolution gate | **Owner confirms targets** (default: headless one simulated day per real minute; real time with the UI open) and **decides on formal predictive processing** (wire it into decisions upstream, or stop running it) |
+| 4 | Person inspector done 2026-10-14 (the backend's sections, now with what they are doing and thinking, and family). The foundry (create somebody from the desktop) done the same day. Left: portraits | **Owner picks the two portraits** from upstream `apps/mk_ui/assets/portraits/`, and confirms their provenance before any distribution |
+| 5 | Done 2026-10-14 for the clock, controls and terrain cell (`apps/island_ui/src/inspectors.rs`): six speeds with requested and achieved, Save, the local date (year, day of 288, time of a 36-hour day) with Earth time elapsed, and the cell under the view with its biome, climate and production. A click on the estate picks a building, room, item or tree and the right panel describes it (`estate.rs` `pick`, `stems.rs` `describe`). Nothing left | — |
+| 6 | Done except the owner's word on the targets: `island_bench` and `benchmarks/2026-10-08-regional-baseline.json` (12.9 simulated days per real minute headless against a default target of one, so no fallback profile), the allocation-bound test (`tests/island_allocation_bounds.rs`, `construction-counters`), and formal predictive processing measured at 0.9% of the human step (`tests/island_dead_compute.rs`), so keeping it running costs little. The plan's Task 6 status has the detail | **Owner confirms the targets** (default: headless one simulated day per real minute; real time with the UI open) and **decides on formal predictive processing**: its `selected_action` is read by nothing, so wire it into decisions upstream or stop running it (the measurement prices the choice, it does not make it) |
 | 7 | The sync script is done (2026-10-14, `scripts/sync_maerken_upstream.py`, `UPSTREAM.md` § Sync procedure). The creator moved into `apps/island` (`island::population`) and `apps/island_humans` is retired. Pruning is the owner's call (the inventory recommends not to) | Engineering |
 | 8 | Final acceptance: every design criterion run and recorded | All of the above |
 
 Also: **a GPU frame-rate figure** for `island-ui` (every frame so far was rasterised on the CPU,
-0.6 frames/s for the island view and 10.8 for the estate), and other window sizes. The Creator
-page does not yet use the map.
+0.6 frames/s for the island view and 10.8 for the estate), and other window sizes.
 
 ---
 
@@ -401,7 +400,7 @@ Ordered by what most changes the founders' daily life:
 | R0 | Honest register: deviation rows for every mind and sense gap; book grazer faeces and deaths to detritus; remove or wire dead code | humans §1.11, earth §4 Step 0 | Done: D44-D54 record the mind and sense gaps; litter, faeces and carcasses feed RothC soil carbon (`regional/soil.rs`, D43); the unused sparse plant view is gone |
 | R1 | Water at home: a rainwater tank filled by simulated rain on the house roof, sized from the estate's own climate (ESR 2021 use, Harrison Grierson 2011 inflow model); people away from home drink where they find water; a dry tank means fetching by hand | work §3.2 | Tank done (PR #10, D42); R1b fetching by hand with two 20 L jerrycans when dry done (PR #12) |
 | R2 | Mass-based carrying and real containers: load limits by body mass, pace and energy by load | work §3.1, §2.2 | Open |
-| R3 | An edible food base: edible fractions, foraging with a food store at home, seasonal and soil-limited plant production (D31) | earth Steps 1-2, work §3.3 | Open |
+| R3 | An edible food base: edible fractions, foraging with a food store at home, seasonal and soil-limited plant production (D31) | earth Steps 1-2, work §3.3 | Started, (#42, D57): people eat only a forest's fruit and seed, grown at NPP times Ward et al. 2025's reproductive allocation, not its wood. Left: foraging time at a sourced return rate (Kelly 2013 Table 3-4 is read), a food store at home, bracken and raupo once their extent per cell is sourced, seasonality, soil limits (D31) |
 | R4 | Firewood, drying (D40), fire and cooking | work §3.4, §2.5-2.6 | Open |
 | R5 | Every action takes its real time (D9): gather, mine, build with delivered materials and visible progress, craft chains; skill improves with practice (power law) | work §3.5-3.8 | Open |
 | R6 | Senses and perception as things (sight, hearing, smell, taste, touch and pain from injury), memory of places, and choices that use memory, emotion, goals and personality | humans ranks 1, 3 | Open |
@@ -434,5 +433,5 @@ invertebrate densities, fire danger indices (see each report's "unsourced" secti
   push; the `dependency audit` CI job replaced it.
 - **Firecrawl credits ran out** on 2026-10-12. WebSearch and the TinyFish fetcher still work for
   sources; the container's own network blocks most hosts.
-- **Persist digests.** `WEEK_DIGEST` is `54b48e5b…bb18`; the planetary topology pin is
+- **Persist digests.** `WEEK_DIGEST` is `5b01ed92…6d13`; the planetary topology pin is
   `e4ece246…73e2`. Any change that moves either is a behaviour change and must say so.

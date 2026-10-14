@@ -235,16 +235,26 @@ fn the_application_reads_an_island_and_has_enough_to_draw_it() {
         let (lx, lz) = (dx * cos - dz * sin, dx * sin + dz * cos);
         lx.abs() <= b.size_m.0 / 2.0 + 1e-3 && lz.abs() <= b.size_m.2 / 2.0 + 1e-3
     };
+    // The floor's four corners as drawn, turned with it: its footprint, not
+    // only its centre, so a width and depth swapped about a centre that
+    // stays put is caught too.
+    let corners = |f: &island_ui::estate::Placed| {
+        let (sin, cos) = f.rotation_deg.to_radians().sin_cos();
+        let (hx, hz) = (f.size_m.0 / 2.0, f.size_m.2 / 2.0);
+        [(-hx, -hz), (-hx, hz), (hx, -hz), (hx, hz)]
+            .map(|(lx, lz)| (f.at.x + lx * cos + lz * sin, f.at.z - lx * sin + lz * cos))
+    };
     for (space, floor) in layout.spaces.iter().zip(&floors) {
         assert_eq!((&floor.name, &floor.kind), (&space.label, &space.kind));
         assert!(
             drawn_buildings
                 .iter()
-                .any(|b| on(b, floor.at.x, floor.at.z)),
-            "the floor of {} ({}) is drawn at {:?}, in no drawn building",
+                .any(|b| corners(floor).iter().all(|&(x, z)| on(b, x, z))),
+            "the floor of {} ({}) is drawn at {:?}, {:?} across, not wholly in any drawn building",
             space.label,
             space.kind,
-            floor.at
+            floor.at,
+            floor.size_m
         );
     }
     // And the wood around the yard arrives stem by stem, each standing
@@ -287,6 +297,62 @@ fn the_application_reads_an_island_and_has_enough_to_draw_it() {
             far.z
         );
     }
+
+    // And a founder, read the way the person inspector reads them (Phase 5
+    // Task 4): every section the backend builds, what they are doing and
+    // thinking, their family, and where they are on the running island.
+    let reply = island
+        .client()
+        .human("Gem-D")
+        .expect("the backend serves a founder");
+    let gem_d = island_ui::human_inspector::read(&reply).expect("the inspector reads them");
+    let ids: Vec<&str> = gem_d.sections.iter().map(|s| s.id.as_str()).collect();
+    for wanted in [
+        "identity", "vitals", "needs", "feeling", "choosing", "family",
+    ] {
+        assert!(ids.contains(&wanted), "no {wanted} section in {ids:?}");
+    }
+    let family = gem_d.sections.iter().find(|s| s.id == "family").unwrap();
+    assert!(
+        family.readings.iter().any(|r| r.label == "Father"),
+        "{family:?}"
+    );
+    assert!(
+        gem_d.whereabouts.is_some(),
+        "a running island knows where a founder is"
+    );
+    // And somebody new, made by the foundry (Phase 5 Task 4): the form
+    // filled from the creator's own options, sent down the creation
+    // route, followed to the island's answer, and then readable.
+    let options = island
+        .client()
+        .creator_options()
+        .expect("the creator's options");
+    let mut form = island_ui::foundry::Form::new(&options);
+    form.name = "Ata".to_string();
+    form.birth_local = "1999-09-09T09:09".to_string();
+    form.birth_offset = "+13:00".to_string();
+    let space = island.snapshot().world.estate.spaces[0].id;
+    form.place = Some(island_ui::foundry::Place::Space(space));
+    let request = form.request(&options).expect("a complete form");
+    let accepted = island
+        .client()
+        .create_human(&request)
+        .expect("the island takes it");
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    let agent_id = loop {
+        match island.client().outcome(accepted.command).unwrap() {
+            mk_island_api::Outcome::Created { agent_id, .. } => break agent_id,
+            mk_island_api::Outcome::Queued => {
+                assert!(std::time::Instant::now() < deadline, "never applied");
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
+            other => panic!("the foundry's request was not carried out: {other:?}"),
+        }
+    };
+    let made = island_ui::human_inspector::read(&island.client().human(&agent_id).unwrap())
+        .expect("the new person can be read at once");
+    assert!(made.sections.iter().any(|s| s.id == "identity"));
 }
 
 #[test]

@@ -34,7 +34,7 @@ document was wrong about whether rendering here was possible at all.
 | Island ecology fields: biomes, NPP, producer biomass (Phase 3 Task 1a), plus a first grazer pool (D41, assumed parameters) | Done | `regional/ecology.rs`, `tests/regional_ecology.rs` |
 | Upstream's species at island scale (Phase 3 Task 1b): 4,096 founding species on the island's habitats; plants and grazers as shares of the carbon fields, other guilds at upstream's density (D55) | Done; derived, not stored (digest unchanged) | `regional/species.rs`, `tests/island_species.rs` |
 | The island's mineral resource sites (Phase 3 Task 2, part): every primary deposit as a site; placer gold below each gold-bearing deposit where the river's gradient flattens (USGS model 39a, 0.2 g/t median, 1.1 Mt); titanomagnetite ironsand at the mouth of every river draining arc andesite (GNS 2024); sites only deplete; a day's panning with a pan or sluice moves the packs' gravel at the site's grade; deep ore and oil refused by name (D56). On the owner's island: 33 placers below 132 gold-bearing deposits, 25 ironsand mouths; rivers are those that run all year in the island's simulated year of flows (species' river habitat too, now 3,064 cells). The deposit models' medians and spreads were checked against the bulletin's figures (three medians corrected) | Done | `regional/resources.rs`, `tests/regional_resources.rs`, `regional/deposits.rs` tests, `fixtures/reference/geology/seismic_volcanic_mineral.json` |
-| Oil and gas fields (Phase 4b Task 4, core): one per petroleum deposit, sized like one of New Zealand's nine fields, exponential decline at 4.4%/yr (exact for any step), carbon out of the crust, 2.3% of the gas leaked as methane to `AtmosCH4` (D57); nine cited industry, farm, building and population packs for Tasks 4-8 | Done | `regional/industry/petroleum.rs`, `tests/petroleum_field.rs`, `fixtures/reference/industry/*.json`, `fixtures/reference/humans/demography.json` |
+| Oil and gas fields (Phase 4b Task 4, core): one per petroleum deposit, sized like one of New Zealand's nine fields, exponential decline at 4.4%/yr (exact for any step), carbon out of the crust, 2.3% of the gas leaked as methane to `AtmosCH4` (D58); nine cited industry, farm, building and population packs for Tasks 4-8 | Done | `regional/industry/petroleum.rs`, `tests/petroleum_field.rs`, `fixtures/reference/industry/*.json`, `fixtures/reference/humans/demography.json` |
 | A topping refinery (Phase 4b Task 5, core): crude distilled into the Troll assay's cuts, named against New Zealand's fuel specifications (refinery gas, naphtha, diesel-range distillate, residue); it burns its own gas and residue for 606 MJ a barrel, about 11% of the crude and 43 kg CO2 a barrel; mass and carbon close; no reformer, so no petrol (D16) | Done | `regional/industry/refinery.rs`, `tests/refinery.rs` |
 | Grid topology for human/organism movement, births and perception (Phase 3 Task 6) | Done; planetary results bit-identical | `topology.rs`, `tests/topology_hash_baseline.rs` |
 | Founders' estate laid out in metres (Phase 3 Task 5) | Done | `regional/estate_layout.rs`, `tests/island_estate_layout.rs` |
@@ -247,8 +247,8 @@ commit before launching a long run.
 ## Known fidelity limits
 
 Every known departure from reality is in `docs/island/DEVIATIONS.md` (D1-D40). The largest open
-ones: the driest tenth of the island gets ~320 mm of rain a year against New Zealand's driest
-basin's 360 (D38); no sea/land breezes, and the coastal damping of the day-night range is observed rather than carried (D3); storm structure is parametric (D4); river channels have no
+ones: a quarter of the island's land gets under 460 mm of rain a year where most of New Zealand
+gets 600-1600 (the median land cell, 657 mm, is in range; D38, diagnosed 2026-10-14); no sea/land breezes, and the coastal damping of the day-night range is observed rather than carried (D3); storm structure is parametric (D4); river channels have no
 in-channel storage (D28); the regional tick audits tidal heat only (D29); production ignores soil
 nutrients (D31); every human action but felling and hauling
 timber still takes exactly one tick (D9); felled wood never dries (D40); the hydro plant never
@@ -322,8 +322,9 @@ cost the resting baseline (D22).
   cover is drawn paler because the stems' carbon has been taken out of it and put into the
   trees — the same carbon, counted once.
 
-  Still missing from a map proper: the Creator page does not use it yet, only the intervention
-  form.
+  The Creator page uses it too (2026-10-14): choosing "somewhere else on the island" shows the
+  island's elevation picture, and a click fills the row and column and says what the island
+  has there (land and its height, or sea and its depth, refused before it is sent).
 - Phase 4b: energy, industry, town, economy. **Hydro is built (Tasks 1-3); the rest is not.**
   The sources the 2026-10-08 entry here could not reach were fetched on 2026-10-12 through the
   Firecrawl connector and are in `fixtures/reference/industry/hydro.json`: ESHA 2004's turbine

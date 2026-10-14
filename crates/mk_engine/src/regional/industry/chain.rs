@@ -12,7 +12,7 @@
 //! barrels a day of nameplate capacity (the owner may change it), and the
 //! fields are choked back to what it can take, oil first from the largest
 //! field. The plant runs itself: nobody is employed to run it until Task
-//! 6's jobs (D57).
+//! 6's jobs (D58).
 
 use serde::{Deserialize, Serialize};
 

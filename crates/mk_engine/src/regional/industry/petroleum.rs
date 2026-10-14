@@ -24,7 +24,7 @@
 //! Leaked methane oxidises to CO₂ in the air with its perturbation lifetime,
 //! 11.8 years (IPCC AR6 WG1, Table 7.15; [`super::chain`]).
 //!
-//! Not modelled (D57): water cut, reservoir pressure, wells and their
+//! Not modelled (D58): water cut, reservoir pressure, wells and their
 //! blowouts (there is no per-well rate to count wells by), and the leaked
 //! methane's warming (the planet's air carries no methane to add it to,
 //! and an island's leaks would change a planet-wide concentration by far

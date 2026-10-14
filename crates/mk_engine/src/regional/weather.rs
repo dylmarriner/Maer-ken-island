@@ -110,15 +110,26 @@ pub fn step_regional_weather(
 
     // Humidity: upstream gives land a continental 0.62 against the sea's
     // 0.80, which over an island is the wrong air -- the air over its land
-    // came off the sea. The sea's humidity is carried inland on the wind
-    // and approaches the land's own over the same adjustment length as the
-    // sea's heat (deviation D38, as D37 for temperature).
+    // came off the sea. What the wind carries inland is the air's vapour,
+    // its specific humidity, which advection conserves; it approaches the
+    // land's own equilibrium over the same adjustment length as the sea's
+    // heat (deviation D38, as D37 for temperature). Relative humidity is
+    // what that vapour is at each cell's own temperature: air carried over
+    // colder, higher ground comes nearer saturation, never above it.
+    // Carrying relative humidity instead, as this once did, lost the
+    // vapour of any air that cooled on its way inland without raining it.
     let land: Vec<bool> = elevation_m.data().iter().map(|&h| h > 0.0).collect();
-    let equilibrium_rh: Vec<f64> = (0..rows * cols)
-        .map(|idx| relative_humidity(latitudes[idx / cols], !land[idx]))
+    let saturation: Vec<f64> = climate
+        .surface_temperature
+        .data()
+        .iter()
+        .map(|&t| saturation_specific_humidity(t, pressure_hpa))
         .collect();
-    let carried_rh = carry_from_sea(
-        &equilibrium_rh,
+    let equilibrium_q: Vec<f64> = (0..rows * cols)
+        .map(|idx| relative_humidity(latitudes[idx / cols], !land[idx]) * saturation[idx])
+        .collect();
+    let carried_q = carry_from_sea(
+        &equilibrium_q,
         &land,
         &wind,
         rows,
@@ -128,16 +139,16 @@ pub fn step_regional_weather(
 
     let mut moisture = vec![0.0; rows * cols];
     let mut weight = vec![0.0; rows * cols];
-    for row in 0..rows {
-        for col in 0..cols {
-            let idx = row * cols + col;
-            let temp = *climate.surface_temperature.get(row, col);
-            let rh = carried_rh[idx];
-            let q = saturation_specific_humidity(temp, pressure_hpa) * rh;
-            let precipitable_water = q * air_column_kg_m2 * VAPOUR_COLUMN_FRACTION;
-            moisture[idx] = precipitable_water;
-            weight[idx] = rainout_weight(precipitable_water, rh);
-        }
+    for idx in 0..rows * cols {
+        let q = carried_q[idx].clamp(0.0, saturation[idx]);
+        let rh = if saturation[idx] > 0.0 {
+            q / saturation[idx]
+        } else {
+            0.0
+        };
+        let precipitable_water = q * air_column_kg_m2 * VAPOUR_COLUMN_FRACTION;
+        moisture[idx] = precipitable_water;
+        weight[idx] = rainout_weight(precipitable_water, rh);
     }
 
     // Each row's mean rain is the background's rate at that latitude.

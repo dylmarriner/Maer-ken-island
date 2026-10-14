@@ -6,7 +6,9 @@ import {
   mountServerChrome,
   clearOffline,
   el,
+  explain,
   fillChrome,
+  getImage,
   getJson,
   postJson,
   rememberToken,
@@ -73,6 +75,15 @@ const colField = document.getElementById("col-field");
 const rowEl = document.getElementById("row");
 const colEl = document.getElementById("col");
 const cellHint = document.getElementById("cell-hint");
+const cellMapFigure = document.getElementById("cell-map-figure");
+const cellMap = document.getElementById("cell-map");
+const cellMapMark = document.getElementById("cell-map-mark");
+const cellMapRead = document.getElementById("cell-map-read");
+
+// The grid the map covers: the whole domain, north up, `rows` by `cols`
+// cells. Set from the world, never assumed.
+const grid = { rows: 0, cols: 0 };
+let mapAsked = false;
 
 /// Whether a world is running, and which rooms it offers. Decided once at
 /// load: a dashboard does not gain or lose its island while a form is open.
@@ -106,6 +117,8 @@ function offerPlaces(w) {
   // estate's own cell is offered as a starting point because it is the one
   // cell anybody can name without a map.
   const land = world.land || {};
+  grid.rows = land.rows || 0;
+  grid.cols = land.cols || 0;
   rowEl.max = Math.max(0, (land.rows || 1) - 1);
   colEl.max = Math.max(0, (land.cols || 1) - 1);
   const estate = world.estate && world.estate.cell;
@@ -132,7 +145,81 @@ function showPlaceMode() {
   rowField.hidden = onEstate;
   colField.hidden = onEstate;
   cellHint.hidden = onEstate;
+  cellMapFigure.hidden = onEstate;
+  if (!onEstate) loadCellMap();
 }
+
+// The island's elevation picture, the same one the island page draws:
+// fetched rather than assigned to `src`, because a browser sends no
+// `Authorization` header with an image and a server with a read token
+// would answer 401.
+async function loadCellMap() {
+  if (mapAsked) return;
+  mapAsked = true;
+  try {
+    const url = await getImage("/api/map.png");
+    cellMap.addEventListener("load", () => {
+      URL.revokeObjectURL(url);
+      markCell();
+    }, { once: true });
+    cellMap.src = url;
+  } catch (error) {
+    mapAsked = false;
+    cellMapRead.textContent = `The map could not be loaded: ${explain(error)} The row and column can still be typed.`;
+  }
+}
+
+// The picture covers the whole domain north up, so its top row of pixels
+// is the grid's last row: a click's fraction across and down is a column,
+// and a row counted from the bottom.
+function cellAt(event) {
+  // Inside the image's border, which the bounding box would count.
+  const fx = event.offsetX / cellMap.clientWidth;
+  const fy = event.offsetY / cellMap.clientHeight;
+  if (!(fx >= 0 && fx < 1 && fy >= 0 && fy < 1) || !grid.rows || !grid.cols) return null;
+  return { row: grid.rows - 1 - Math.floor(fy * grid.rows), col: Math.floor(fx * grid.cols) };
+}
+
+// Put the mark on the cell the row and column fields name, at its centre.
+function markCell() {
+  const row = Number(rowEl.value);
+  const col = Number(colEl.value);
+  const known = grid.rows && grid.cols && Number.isInteger(row) && Number.isInteger(col) &&
+    row >= 0 && col >= 0 && row < grid.rows && col < grid.cols && cellMap.naturalWidth;
+  cellMapMark.hidden = !known;
+  if (!known) return;
+  cellMapMark.style.left = `${((col + 0.5) / grid.cols) * 100}%`;
+  cellMapMark.style.top = `${((grid.rows - row - 0.5) / grid.rows) * 100}%`;
+}
+
+// Say what the chosen cell is, from the island itself, so the sea is
+// seen to be sea before the creation is refused for it.
+async function readCell() {
+  markCell();
+  const row = Number(rowEl.value);
+  const col = Number(colEl.value);
+  if (!Number.isInteger(row) || !Number.isInteger(col)) return;
+  try {
+    const c = (await getJson(`/api/cell/${row}/${col}`)).cell;
+    cellMapRead.textContent =
+      `Row ${c.row}, column ${c.col}: ` +
+      (c.land
+        ? `land, ${c.elevation_m.toFixed(0)} m above sea level.`
+        : `sea, ${(-c.elevation_m).toFixed(0)} m deep. Nobody can be created here.`);
+  } catch (error) {
+    cellMapRead.textContent = explain(error);
+  }
+}
+
+cellMap.addEventListener("click", (event) => {
+  const cell = cellAt(event);
+  if (!cell) return;
+  rowEl.value = String(cell.row);
+  colEl.value = String(cell.col);
+  readCell();
+});
+rowEl.addEventListener("change", readCell);
+colEl.addEventListener("change", readCell);
 
 whereEl.addEventListener("change", showPlaceMode);
 

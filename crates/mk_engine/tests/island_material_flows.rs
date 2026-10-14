@@ -571,3 +571,64 @@ fn the_material_ledger_round_trips_through_a_snapshot() {
         );
     }
 }
+
+#[test]
+fn plant_food_is_only_the_forests_fruit_and_seed_and_grassland_feeds_nobody() {
+    use mk_engine::regional::edible::ReproductiveShares;
+    use mk_engine::validation::{default_reference_dir, ReferenceLibrary};
+    let b = base();
+    let area = b.domain.cell_area_m2(M);
+    let mut ecology = b.ecology.clone();
+    let library = ReferenceLibrary::load(&default_reference_dir()).unwrap();
+    ecology.install_edible(&ReproductiveShares::from_reference(&library).unwrap());
+    let cell = b.forest_cell;
+    let i = ecology.biomass_kgc_m2.grid_to_linear_index(cell.0, cell.1);
+    let (mut m, mut ledger) = (MaterialLedger::new(), Ledger::new());
+    let audit = Audit::start(&m);
+
+    // A year's fruit and seed: the source's temperate share of NPP, far
+    // less than the forest standing on the cell.
+    let edible = ecology.edible.as_ref().unwrap().at(i);
+    let npp = *ecology.npp_kgc_m2_yr.get(cell.0, cell.1);
+    assert!((edible - 0.116 * npp).abs() < 1e-12, "{edible} of {npp}");
+    let biomass = *ecology.biomass_kgc_m2.get(cell.0, cell.1);
+    assert!(
+        edible < biomass / 10.0,
+        "food {edible} of a forest of {biomass}"
+    );
+
+    // Asking for more than the crop takes the crop and no wood: the
+    // carbon leaves the edible stock and the biomass together.
+    let carbon_per_kg = composition(Material::PlantFood).carbon_per_kg;
+    let got = m
+        .gather_edible(1.0e12, &mut ecology, cell, area, &mut ledger)
+        .unwrap();
+    assert!((got * carbon_per_kg - edible * area).abs() < 1e-3 * edible * area);
+    assert!(ecology.edible.as_ref().unwrap().at(i) < 1e-12);
+    let lost = biomass - *ecology.biomass_kgc_m2.get(cell.0, cell.1);
+    assert!(
+        (lost - edible).abs() < 1e-9,
+        "the forest lost {lost}, not {edible}"
+    );
+    assert_eq!(
+        m.gather_edible(1.0, &mut ecology, cell, area, &mut ledger),
+        Err(MaterialError::NothingToHarvest),
+        "the wood that is left is not food"
+    );
+    audit.close(&m, &ledger);
+
+    // Grass, however much of it, is not food for people.
+    let (rows, cols) = (b.domain.rows(M), b.domain.cols(M));
+    if let Some(grass) = (0..rows)
+        .flat_map(|r| (0..cols).map(move |c| (r, c)))
+        .find(|&(r, c)| {
+            *ecology.biome_grid.get(r, c) == BiomeType::Grassland
+                && *ecology.biomass_kgc_m2.get(r, c) > 0.0
+        })
+    {
+        assert_eq!(
+            m.gather_edible(1.0, &mut ecology, grass, area, &mut ledger),
+            Err(MaterialError::NothingToHarvest)
+        );
+    }
+}
