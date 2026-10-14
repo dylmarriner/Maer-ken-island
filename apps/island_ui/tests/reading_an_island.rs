@@ -235,16 +235,26 @@ fn the_application_reads_an_island_and_has_enough_to_draw_it() {
         let (lx, lz) = (dx * cos - dz * sin, dx * sin + dz * cos);
         lx.abs() <= b.size_m.0 / 2.0 + 1e-3 && lz.abs() <= b.size_m.2 / 2.0 + 1e-3
     };
+    // The floor's four corners as drawn, turned with it: its footprint, not
+    // only its centre, so a width and depth swapped about a centre that
+    // stays put is caught too.
+    let corners = |f: &island_ui::estate::Placed| {
+        let (sin, cos) = f.rotation_deg.to_radians().sin_cos();
+        let (hx, hz) = (f.size_m.0 / 2.0, f.size_m.2 / 2.0);
+        [(-hx, -hz), (-hx, hz), (hx, -hz), (hx, hz)]
+            .map(|(lx, lz)| (f.at.x + lx * cos + lz * sin, f.at.z - lx * sin + lz * cos))
+    };
     for (space, floor) in layout.spaces.iter().zip(&floors) {
         assert_eq!((&floor.name, &floor.kind), (&space.label, &space.kind));
         assert!(
             drawn_buildings
                 .iter()
-                .any(|b| on(b, floor.at.x, floor.at.z)),
-            "the floor of {} ({}) is drawn at {:?}, in no drawn building",
+                .any(|b| corners(floor).iter().all(|&(x, z)| on(b, x, z))),
+            "the floor of {} ({}) is drawn at {:?}, {:?} across, not wholly in any drawn building",
             space.label,
             space.kind,
-            floor.at
+            floor.at,
+            floor.size_m
         );
     }
     // And the wood around the yard arrives stem by stem, each standing
