@@ -46,9 +46,9 @@ this list holds the current state. The evidence for what is *done* is in
 | Industry | Phase 4b Task 4: oil and gas field (D14, D19) | Fields, decline and carbon done 2026-10-14 (D58); wells, water cut, spills open | Per-well rate, water-cut series |
 | Industry | Phase 4b Task 5: refinery, gas plant, fuel depot (D16) | Topping refinery done 2026-10-14; gas plant, reformer, depot open | Reformate yield; gas-plant own use |
 | Industry | Phase 4b Task 6: jobs, trades, maintenance (D39) | Open | Upstream human-runtime change first |
-| Industry | Phase 4b Task 7: money, enterprises, payroll | Open | Owner: ownership split, policies |
+| Industry | Phase 4b Task 7: money, enterprises, payroll | Open; the owner's decisions are made (2026-10-15, §4e) | Engineering; a sourced NZ lending rate |
 | Industry | Phase 4b Task 7b: food and timber chains | Open | Task 2 catalogue; crop/livestock data |
-| Industry | Phase 4b Task 8: town and workforce | Open | Demographic tables; owner: town size |
+| Industry | Phase 4b Task 8: town and workforce | Open; the owner decided the town starts at each enterprise's smallest staff and grows (2026-10-15, §4g) | Demographic tables; a sourced minimum staff per enterprise |
 | Industry | Phase 4b Task 9: dashboard pages, year acceptance | Open | Tasks 4-8 |
 | Climate | D3 rest: sea/land breezes, katabatic winds | Open | A diurnal wind solver |
 | Climate | D25: SST season lags too long | Diagnosed 2026-10-14: 0.281 of the year against 0.18-0.21 observed | A prognostic marine boundary layer (with D29) |
@@ -269,9 +269,11 @@ trade, a 2-3 bedroom cottage's floor area (Task 6 and 7b); the Pukekohe growing 
   themselves** whether to offer homes and businesses for sale to villagers, and a villager who
   can afford one decides whether to buy (upstream first: buying and selling in the human mind).
   Wages come with benefits appropriate to the job and workplace, from a cited source.
-- **Owner decisions still open:** the ownership split per enterprise (default 50/50), the exact
-  payout share, initial balances, the disconnection grace period, and what the bank does
-  (deposits only, or loans too).
+- **Decided (owner, 2026-10-15):** every enterprise is owned **50/50** by Gem-D and Gem-K;
+  **50%** of each month's profit is paid out and the other half kept by the business to grow;
+  the **bank takes deposits and lends** (to villagers buying homes or businesses, at a sourced NZ
+  rate); each founder starts with **NZ median household net worth** (sourced, from Stats NZ).
+- **Owner decision still open:** the disconnection grace period for unpaid bills.
 - **Files:** create `regional/economy/{money.rs,enterprise.rs,market.rs}`; upstream first for
   `ActionKind::Buy` and money in human decisions.
 - **Tests:** `tests/island_economy.rs` (money conserved, bills from meters, payroll every 14
@@ -297,8 +299,11 @@ trade, a 2-3 bedroom cottage's floor area (Task 6 and 7b); the Pukekohe growing 
 
 ### 4g. Task 8: town and workforce
 
-- **Owner decision:** the founding town's size (the plan offers a smaller one if performance
-  misses its targets).
+- **Size (owner, 2026-10-15):** there is no target size. The town starts **tiny**: each
+  enterprise opens with the smallest staff that can run it (two doctors for the whole town, for
+  example, sourced per enterprise, not invented), plus their households. It grows as the
+  businesses do: a business that needs more hands hires, and pays builders to renovate and expand
+  its premises, so the town's size is an outcome, not a setting.
 - **Residence (owner, 2026-10-13):** everyone who is not a founder, a founder's child or estate
   staff lives in the town. The town's homes and businesses, its doctors and hospital, its bank
   and its power company all belong to Gem-D and Gem-K.
