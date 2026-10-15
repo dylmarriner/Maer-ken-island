@@ -273,7 +273,11 @@ trade, a 2-3 bedroom cottage's floor area (Task 6 and 7b); the Pukekohe growing 
   **50%** of each month's profit is paid out and the other half kept by the business to grow;
   the **bank takes deposits and lends** (to villagers buying homes or businesses, at a sourced NZ
   rate); each founder starts with **NZ median household net worth** (sourced, from Stats NZ).
-- **Owner decision still open:** the disconnection grace period for unpaid bills.
+- **Disconnection (owner, 2026-10-15):** a household whose power and water bills have gone a
+  **month** unpaid is cut off from both, **unless** it is still making regular payments and
+  trying to keep up, in which case the supply stays on. So the test is the payment record over
+  the month, not the balance owed: a household paying something each billing period keeps its
+  supply while it catches up; one that has stopped paying for a month loses it.
 - **Files:** create `regional/economy/{money.rs,enterprise.rs,market.rs}`; upstream first for
   `ActionKind::Buy` and money in human decisions.
 - **Tests:** `tests/island_economy.rs` (money conserved, bills from meters, payroll every 14
