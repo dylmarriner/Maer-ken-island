@@ -445,6 +445,11 @@ impl RegionalPhysicalState {
             dt,
             &self.diversions,
         );
+        // The step's water goes into the ledger (D29): rain from the air,
+        // infiltration, evaporation back to it, deep drainage, and what
+        // reaches the sea, so the island can audit its soil and standing
+        // water against what was booked.
+        crate::conservation::book_hydrology_step(&mut self.ledger, &self.hydrology.budget);
         // Every outlet's water reaches a sea column, even where the outlet
         // sits in a coarse cell that is mostly land.
         let river_kg = route_to_coarse_sea(
