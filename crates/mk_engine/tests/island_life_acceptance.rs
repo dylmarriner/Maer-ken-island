@@ -344,8 +344,10 @@ fn slow_a_week_on_the_island_matches_the_reference_packs() {
     println!("digest {}", hex(w.state_digest()));
     let deferred_digest = hex(w.state_digest());
     println!(
-        "audits {}, shortfalls food {} water {}, economy events {}, patch trees {}",
+        "audits {} (water hourly {}), shortfalls food {} water {}, economy events {}, \
+         patch trees {}",
         w.audits_closed,
+        w.water_audits_closed,
         w.shortfalls.food,
         w.shortfalls.water,
         w.economy.events.len(),
@@ -364,6 +366,13 @@ fn slow_a_week_on_the_island_matches_the_reference_packs() {
         logs.len()
     );
     assert!(w.audits_closed >= 7 * 24 + 7 * 4);
+    // The island's soil and standing water closed against the ledger every
+    // hour after the first (D29).
+    assert!(
+        w.water_audits_closed >= 7 * 24 - 1,
+        "{} water audits",
+        w.water_audits_closed
+    );
     for id in ["Gem-D", "Gem-K"] {
         assert!(matches!(
             w.humans.registry.get_human(id).unwrap().profile.status,

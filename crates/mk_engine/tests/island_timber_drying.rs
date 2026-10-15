@@ -38,7 +38,17 @@ fn a_stored_green_log_dries_toward_the_air_and_the_books_close() {
     // A 30 cm, 4 m hardwood log, green at the packs' 0.82.
     let mut log = felled_log(0, (0.0, 0.0), 0.0, 0.3, 4.0, 160.0, 80.0, 0.82, 0.6);
     log.place = LogPlace::Stored;
-    let id = life.materials.receive_felled_log(log, &mut Ledger::new());
+    let (cell, area) = (
+        life.placed.location,
+        life.domain.cell_area_m2(mk_island::DomainLevel::Medium),
+    );
+    let id = life.materials.receive_felled_log(
+        log,
+        &mut life.physical.hydrology,
+        cell,
+        area,
+        &mut Ledger::new(),
+    );
     let start = life.materials.log(id).unwrap().clone();
     let audits = life.audits_closed;
 
@@ -83,8 +93,24 @@ fn a_seasoned_stored_log_joins_the_wood_stock() {
     seasoned.place = LogPlace::Stored;
     let mut on_ground = seasoned.clone();
     on_ground.place = LogPlace::Ground;
-    let stored = life.materials.receive_felled_log(seasoned, &mut ledger);
-    let ground = life.materials.receive_felled_log(on_ground, &mut ledger);
+    let (cell, area) = (
+        life.placed.location,
+        life.domain.cell_area_m2(mk_island::DomainLevel::Medium),
+    );
+    let stored = life.materials.receive_felled_log(
+        seasoned,
+        &mut life.physical.hydrology,
+        cell,
+        area,
+        &mut ledger,
+    );
+    let ground = life.materials.receive_felled_log(
+        on_ground,
+        &mut life.physical.hydrology,
+        cell,
+        area,
+        &mut ledger,
+    );
     let wood_before = life.materials.stock_kg(Material::Wood);
     let audits = life.audits_closed;
 

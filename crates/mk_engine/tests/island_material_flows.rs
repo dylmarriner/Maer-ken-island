@@ -354,7 +354,23 @@ fn a_human_eating_and_living_a_day_moves_food_carbon_through_the_body_to_the_air
 
     // Death returns the body's carbon to the detritus.
     let remaining = m.stock_of(R::HumanCarbon);
-    m.on_death("Gem-D", &mut ledger).unwrap();
+    // The body's water goes into the soil where it lies, and is booked.
+    let mut soil = HydrologyState::new(&b.domain.storage_spec(M), 0.5);
+    let cell = b.forest_cell;
+    let before = soil.soil_water.get(cell.0, cell.1).storage_mm;
+    let body_water = m.stock_of(R::MaterialWater);
+    let soil_booked = net(&ledger, R::SoilWater, FluxKind::Water);
+    m.on_death("Gem-D", &mut soil, cell, area, &mut ledger)
+        .unwrap();
+    let gained = (soil.soil_water.get(cell.0, cell.1).storage_mm - before) * area;
+    assert!(
+        (gained - body_water).abs() < 1e-6,
+        "{gained} kg of {body_water}"
+    );
+    assert!(
+        (net(&ledger, R::SoilWater, FluxKind::Water) - soil_booked - gained).abs() < 1e-6,
+        "the soil's gain is what the ledger booked"
+    );
     assert_eq!(m.stock_of(R::HumanCarbon), 0.0);
     // Detritus holds the hunted carcass (0.025 animals x 40 kg x 18% C less
     // the 0.075 kg C of meat) and the body's remaining carbon.
@@ -414,8 +430,14 @@ fn drinking_needs_water_in_the_cell_and_returns_it_to_the_air_and_soil() {
     // Drink, then lose it by breath, sweat and excretion: the body's water is bounded.
     m.drink("Gem-K", 2.0).unwrap();
     assert!(m.drink("Gem-K", 1.0e6).is_err());
-    let lost = m.lose_water("Gem-K", 5.0, 0.6, &mut ledger).unwrap();
+    let before = puddle.soil_water.get(cell.0, cell.1).storage_mm;
+    let lost = m
+        .lose_water("Gem-K", 5.0, 0.6, &mut puddle, cell, area, &mut ledger)
+        .unwrap();
     assert_eq!(lost, 2.0, "only what the body holds is lost");
+    // The excreted share is in that cell's soil, not just in the books.
+    let gained = (puddle.soil_water.get(cell.0, cell.1).storage_mm - before) * area;
+    assert!((gained - 1.2).abs() < 1e-6, "{gained}");
     assert!((net(&ledger, R::SoilWater, FluxKind::Water) - 1.2).abs() < 1e-12);
     assert!((net(&ledger, R::Atmosphere, FluxKind::Water) - 0.8).abs() < 1e-12);
     audit.close(&m, &ledger);
