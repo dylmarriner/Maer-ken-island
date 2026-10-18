@@ -46,7 +46,7 @@ this list holds the current state. The evidence for what is *done* is in
 | Industry | Phase 4b Task 4: oil and gas field (D14, D19) | Fields, decline and carbon done 2026-10-14 (D58); wells, water cut, spills open | Per-well rate, water-cut series |
 | Industry | Phase 4b Task 5: refinery, gas plant, fuel depot (D16) | Topping refinery done 2026-10-14; gas plant, reformer, depot open | Reformate yield; gas-plant own use |
 | Industry | Phase 4b Task 6: jobs, trades, maintenance (D39) | Open | Upstream human-runtime change first |
-| Industry | Phase 4b Task 7: money, enterprises, payroll | Open; the owner's decisions are made (2026-10-15, §4e) | Engineering; a sourced NZ lending rate |
+| Industry | Phase 4b Task 7: money, enterprises, payroll | Money started 2026-10-15 (`regional/economy/money.rs`, D61): accounts, the bank's deposits and loans, monthly bills with the owner's disconnection rule, dividends. Not yet in `IslandLife`; enterprises, prices, payroll and buying are next | Engineering |
 | Industry | Phase 4b Task 7b: food and timber chains | Open | Task 2 catalogue; crop/livestock data |
 | Industry | Phase 4b Task 8: town and workforce | Open; the owner decided the town starts at each enterprise's smallest staff and grows (2026-10-15, §4g) | Demographic tables; a sourced minimum staff per enterprise |
 | Industry | Phase 4b Task 9: dashboard pages, year acceptance | Open | Tasks 4-8 |

@@ -10,6 +10,7 @@ pub mod deep_time;
 pub mod deposits;
 pub mod drying;
 pub mod ecology;
+pub mod economy;
 pub mod edge;
 pub mod edible;
 pub mod energy;
