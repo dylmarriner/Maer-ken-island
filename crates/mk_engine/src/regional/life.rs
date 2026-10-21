@@ -331,6 +331,12 @@ pub struct IslandLife {
     pub sim_time_s: u64,
     pub tick: u64,
     pub audits_closed: u64,
+    /// Hourly audits of the island's soil and standing water (D29), and
+    /// what they are measured against: the stocks when the last one closed
+    /// and every water flow booked since. Neither is kept in a snapshot: a
+    /// restored island opens a new window at its first hour.
+    pub water_audits_closed: u64,
+    water_window: WaterWindow,
     pub shortfalls: Shortfalls,
     /// Carbon each founder has respired since their last meal (kg), which is
     /// what the next meal has to put back.
@@ -484,6 +490,62 @@ fn spin_up_cached(
         }
     }
     Ok(report)
+}
+
+/// The island's soil and standing water (mm on each medium cell) when the
+/// last hourly water audit closed, and the water flows booked since (D29).
+#[derive(Debug, Clone, Default)]
+struct WaterWindow {
+    soil_mm: Vec<f64>,
+    standing_mm: Vec<f64>,
+    ledger: Ledger,
+}
+
+impl WaterWindow {
+    fn open(hydrology: &crate::hydrology::HydrologyState) -> Self {
+        Self {
+            soil_mm: hydrology
+                .soil_water
+                .data()
+                .iter()
+                .map(|s| s.storage_mm)
+                .collect(),
+            standing_mm: hydrology.surface_water.data().to_vec(),
+            ledger: Ledger::new(),
+        }
+    }
+
+    /// How much the soil water and the standing water changed since the
+    /// window opened (kg), each summed cell by cell with Neumaier's
+    /// compensation.
+    fn changes_kg(&self, hydrology: &crate::hydrology::HydrologyState, area_m2: f64) -> (f64, f64) {
+        let sum = |deltas: &mut dyn Iterator<Item = f64>| {
+            let (mut total, mut carry) = (0.0_f64, 0.0_f64);
+            for d in deltas {
+                let t = total + d;
+                carry += if total.abs() >= d.abs() {
+                    (total - t) + d
+                } else {
+                    (d - t) + total
+                };
+                total = t;
+            }
+            (total + carry) * area_m2
+        };
+        let soil = sum(&mut hydrology
+            .soil_water
+            .data()
+            .iter()
+            .zip(&self.soil_mm)
+            .map(|(now, was)| now.storage_mm - was));
+        let standing = sum(&mut hydrology
+            .surface_water
+            .data()
+            .iter()
+            .zip(&self.standing_mm)
+            .map(|(now, was)| now - was));
+        (soil, standing)
+    }
 }
 
 fn net(ledger: &Ledger, reservoir: Reservoir, kind: FluxKind) -> f64 {
@@ -641,6 +703,8 @@ impl IslandLife {
             sim_time_s: 0,
             tick: 0,
             audits_closed: 0,
+            water_audits_closed: 0,
+            water_window: WaterWindow::default(),
             shortfalls: Shortfalls::default(),
             respired_since_meal: BTreeMap::new(),
             lost_since_drink: BTreeMap::new(),
@@ -803,6 +867,8 @@ impl IslandLife {
             sim_time_s: snapshot.sim_time_s,
             tick: snapshot.tick,
             audits_closed: snapshot.audits_closed,
+            water_audits_closed: 0,
+            water_window: WaterWindow::default(),
             shortfalls: snapshot.shortfalls,
             respired_since_meal: snapshot.respired_since_meal,
             lost_since_drink: snapshot.lost_since_drink,
@@ -998,6 +1064,52 @@ impl IslandLife {
             }
         }
         self.audits_closed += 1;
+        self.water_window.ledger.entries.extend(
+            ledger
+                .entries
+                .into_iter()
+                .filter(|e| e.kind == FluxKind::Water),
+        );
+        Ok(())
+    }
+
+    /// Close the hour's water audit (D29): the change in the island's soil
+    /// water and standing water since the last one must be what the ledger
+    /// booked for them, the hydrology's own budget and every household flow
+    /// together. The change is summed cell by cell, so the island's whole
+    /// store does not drown the rounding. A window not yet opened (a new or
+    /// restored island) is opened instead.
+    fn audit_water(&mut self) -> Result<(), IslandLifeError> {
+        self.water_window.ledger.entries.extend(
+            self.physical
+                .ledger
+                .entries
+                .iter()
+                .filter(|e| e.kind == FluxKind::Water)
+                .cloned(),
+        );
+        let hydrology = &self.physical.hydrology;
+        let window = std::mem::replace(&mut self.water_window, WaterWindow::open(hydrology));
+        if window.soil_mm.len() != hydrology.soil_water.data().len() {
+            return Ok(());
+        }
+        let area = self.domain.cell_area_m2(DomainLevel::Medium);
+        let (soil, standing) = window.changes_kg(hydrology, area);
+        let gross: f64 = window.ledger.entries.iter().map(|e| e.amount.abs()).sum();
+        for (reservoir, changed) in [
+            (Reservoir::SoilWater, soil),
+            (Reservoir::SurfaceWater, standing),
+        ] {
+            let booked = net(&window.ledger, reservoir, FluxKind::Water);
+            if (changed - booked).abs() > 1e-9 * gross + 1e-6 {
+                return Err(IslandLifeError::Audit(format!(
+                    "{reservoir:?} over the hour to t={} s: the island's water changed \
+                     {changed} kg, the ledger booked {booked} kg",
+                    self.sim_time_s
+                )));
+            }
+        }
+        self.water_audits_closed += 1;
         Ok(())
     }
 
@@ -1157,7 +1269,8 @@ impl IslandLife {
                 }
                 *life.lost_since_drink.entry(id.clone()).or_insert(0.0) += kcal * WATER_KG_PER_KCAL;
             }
-        })
+        })?;
+        self.audit_water()
     }
 
     /// Run the labour founders have chosen. A founder who chooses to gather
@@ -1300,6 +1413,11 @@ impl IslandLife {
         if felled.is_empty() && done_tasks.is_empty() {
             return Ok(());
         }
+        let (rows, cols) = (
+            self.domain.rows(DomainLevel::Medium),
+            self.domain.cols(DomainLevel::Medium),
+        );
+        let area = self.domain.cell_area_m2(DomainLevel::Medium);
         self.audited(|life, ledger| {
             for (id, tree_id) in &felled {
                 life.felling.remove(id);
@@ -1339,7 +1457,18 @@ impl IslandLife {
                         mc,
                         sg,
                     );
-                    life.materials.receive_felled_log(log, ledger);
+                    let at = super::humans::medium_cell_of(&life.domain, tree.position_m);
+                    let cell = (
+                        (at.row.max(0) as usize).min(rows - 1),
+                        (at.col.max(0) as usize).min(cols - 1),
+                    );
+                    life.materials.receive_felled_log(
+                        log,
+                        &mut life.physical.hydrology,
+                        cell,
+                        area,
+                        ledger,
+                    );
                 }
             }
             for (id, task) in &done_tasks {
@@ -1635,6 +1764,9 @@ impl IslandLife {
                                 id,
                                 kg,
                                 EXCRETION_TO_SOIL_FRACTION,
+                                &mut life.physical.hydrology,
+                                stands,
+                                area,
                                 ledger,
                             );
                             *life.water_drunk_kg.entry(id.clone()).or_insert(0.0) += kg;
@@ -1691,6 +1823,9 @@ impl IslandLife {
                                 id,
                                 kg,
                                 EXCRETION_TO_SOIL_FRACTION,
+                                &mut life.physical.hydrology,
+                                stands,
+                                area,
                                 ledger,
                             );
                             *life.water_drunk_kg.entry(id.clone()).or_insert(0.0) += kg;
@@ -2030,6 +2165,9 @@ impl IslandLife {
                                 &id,
                                 kg,
                                 EXCRETION_TO_SOIL_FRACTION,
+                                &mut life.physical.hydrology,
+                                source,
+                                area,
                                 ledger,
                             );
                             *life.water_drunk_kg.entry(id.clone()).or_insert(0.0) += kg;
@@ -2620,9 +2758,17 @@ impl IslandLife {
         if dead.is_empty() {
             return Ok(());
         }
+        let (rows, cols) = (
+            self.domain.rows(DomainLevel::Medium),
+            self.domain.cols(DomainLevel::Medium),
+        );
+        let area = self.domain.cell_area_m2(DomainLevel::Medium);
         self.audited(|life, ledger| {
             for id in &dead {
-                let _ = life.materials.on_death(id, ledger);
+                let lies = life.standing_cell(id, rows, cols);
+                let _ =
+                    life.materials
+                        .on_death(id, &mut life.physical.hydrology, lies, area, ledger);
             }
         })?;
         for id in &dead {

@@ -54,7 +54,7 @@ this list holds the current state. The evidence for what is *done* is in
 | Climate | D25: SST season lags too long | Diagnosed 2026-10-14: 0.281 of the year against 0.18-0.21 observed | A prognostic marine boundary layer (with D29) |
 | Climate | D4: parametric weather systems | Open | Structural; large |
 | Climate | D38: a quarter of the land too dry | Diagnosed; specific humidity carried (2026-10-14) | A flux-driven rain-out (with D4) |
-| Climate | D29: energy audited per module | Open | End-to-end energy ledger |
+| Climate | D29: energy audited per module | Water audited end to end every hour (2026-10-15); energy open | End-to-end energy ledger (with D3's prognostic surface energy balance) |
 | App | Phase 5 Tasks 3-8 | Partly done | See below; one owner pick (portraits) |
 | Gates | Gate 1, 2, 3 owner reviews | **Closed** (owner, 2026-10-13) | — |
 | Upstream | PRs for every divergence in `UPSTREAM.md` | Open | Owner's upstream access |

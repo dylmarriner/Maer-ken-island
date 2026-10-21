@@ -614,9 +614,19 @@ impl MaterialLedger {
 
     /// Take in a felled stem's log (`regional::timber::felled_log`) where
     /// it lies: its carbon leaves living biomass and the water in its wood,
-    /// which the tree drew up from the soil it grew in, leaves the soil.
+    /// which the tree drew up from the soil it grew in, leaves the soil of
+    /// `cell`. The model keeps no water in living plants, so any part of the
+    /// wood's water the soil no longer holds is booked from the atmosphere,
+    /// whose rain the tree took up over its life (D29).
     /// The log is given the next log id; returns it.
-    pub fn receive_felled_log(&mut self, mut log: Log, ledger: &mut Ledger) -> u64 {
+    pub fn receive_felled_log(
+        &mut self,
+        mut log: Log,
+        hydrology: &mut HydrologyState,
+        cell: (usize, usize),
+        cell_area_m2: f64,
+        ledger: &mut Ledger,
+    ) -> u64 {
         log.id = self.reserve_log_ids(1);
         flow(
             ledger,
@@ -625,12 +635,23 @@ impl MaterialLedger {
             Reservoir::MaterialCarbon,
             log.carbon_kgc,
         );
+        let water = log.water_kg.max(0.0);
+        let held = hydrology.soil_water.get(cell.0, cell.1).storage_mm.max(0.0);
+        let from_soil = water.min(held * cell_area_m2);
+        set_soil_storage(hydrology, cell, held - from_soil / cell_area_m2);
         flow(
             ledger,
             FluxKind::Water,
             Reservoir::SoilWater,
             Reservoir::MaterialWater,
-            log.water_kg,
+            from_soil,
+        );
+        flow(
+            ledger,
+            FluxKind::Water,
+            Reservoir::Atmosphere,
+            Reservoir::MaterialWater,
+            water - from_soil,
         );
         let id = log.id;
         self.logs.insert(id, log);
@@ -1133,19 +1154,25 @@ impl MaterialLedger {
         Ok(())
     }
 
-    /// Lose body water: `to_soil_fraction` as excretion to the soil, the
-    /// rest as breath and sweat to the air.
+    /// Lose body water: `to_soil_fraction` as excretion to the soil of
+    /// `cell`, the rest as breath and sweat to the air.
+    #[allow(clippy::too_many_arguments)]
     pub fn lose_water(
         &mut self,
         id: &str,
         kg: f64,
         to_soil_fraction: f64,
+        hydrology: &mut HydrologyState,
+        cell: (usize, usize),
+        cell_area_m2: f64,
         ledger: &mut Ledger,
     ) -> Result<f64, MaterialError> {
         let body = self.body_mut(id)?;
         let lost = kg.max(0.0).min(body.water_kg);
         body.water_kg -= lost;
         let soil = lost * to_soil_fraction.clamp(0.0, 1.0);
+        let held = hydrology.soil_water.get(cell.0, cell.1).storage_mm;
+        set_soil_storage(hydrology, cell, held + soil / cell_area_m2);
         flow(
             ledger,
             FluxKind::Water,
@@ -1164,11 +1191,24 @@ impl MaterialLedger {
     }
 
     /// A body dies: its carbon goes to detritus, its water to the soil.
-    pub fn on_death(&mut self, id: &str, ledger: &mut Ledger) -> Result<(), MaterialError> {
+    pub fn on_death(
+        &mut self,
+        id: &str,
+        hydrology: &mut HydrologyState,
+        cell: (usize, usize),
+        cell_area_m2: f64,
+        ledger: &mut Ledger,
+    ) -> Result<(), MaterialError> {
         let body = self
             .bodies
             .remove(id)
             .ok_or_else(|| MaterialError::NoSuchHuman(id.into()))?;
+        let held = hydrology.soil_water.get(cell.0, cell.1).storage_mm;
+        set_soil_storage(
+            hydrology,
+            cell,
+            held + body.water_kg.max(0.0) / cell_area_m2,
+        );
         flow(
             ledger,
             FluxKind::Carbon,
