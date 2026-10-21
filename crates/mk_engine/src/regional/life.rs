@@ -1944,7 +1944,8 @@ impl IslandLife {
     /// Plan `id`'s trip from `stands` to gather `owed_kgc` of plant carbon
     /// on `cell`: the walk there and back at the packs' pace, and the food
     /// energy over Kelly's (2013) return rate for acorns, the nearest
-    /// temperate tree seed with a measured rate.
+    /// temperate tree seed with a measured rate, plus the time spent finding
+    /// it: O'Connell and Hawkes's (1984) search per hour of handling fruit.
     fn plan_forage(
         &mut self,
         id: &str,
@@ -1986,27 +1987,26 @@ impl IslandLife {
                 .walking_time_s(&body, distance_m, self.climb_m(there, here), load_kg)
                 .map_err(IslandLifeError::Labour)?;
         }
-        let rate_kcal_h = self
-            .labour
-            .library()
-            .item(
-                crate::validation::ReferenceDomain::Ecology,
-                "forage_return_rate_acorns",
-            )
-            .and_then(|i| i.central())
-            .ok_or_else(|| {
-                IslandLifeError::Labour(LabourError::MissingReference(
-                    "forage_return_rate_acorns".into(),
-                ))
-            })?;
+        let ecology = |key: &str| {
+            self.labour
+                .library()
+                .item(crate::validation::ReferenceDomain::Ecology, key)
+                .and_then(|i| i.central())
+                .ok_or_else(|| {
+                    IslandLifeError::Labour(LabourError::MissingReference(key.into()))
+                })
+        };
+        let rate_kcal_h = ecology("forage_return_rate_acorns")?;
+        let search_per_handling = ecology("forage_search_per_handling_fruit")?;
         let kcal = owed_kgc / super::materials::respired_carbon_kg_per_kcal();
+        let handling_s = kcal / rate_kcal_h.max(f64::MIN_POSITIVE) * 3_600.0;
         self.foraging.insert(
             id.to_string(),
             ForageTrip {
                 cell,
                 kgc: owed_kgc,
                 out_s,
-                forage_s: kcal / rate_kcal_h.max(f64::MIN_POSITIVE) * 3_600.0,
+                forage_s: handling_s * (1.0 + search_per_handling),
                 back_s,
                 worked_s: 0.0,
                 from_home,
@@ -3590,7 +3590,8 @@ mod tests {
 
     /// A founder who goes to eat first gathers the meal (R3): nothing is
     /// eaten when they set out, the trip takes the meal's food energy over
-    /// the pack's return rate at the foraging MET, and the meal is eaten
+    /// the pack's return rate plus the search for it at the foraging MET,
+    /// and the meal is eaten
     /// when the work is done.
     #[test]
     fn a_meal_is_gathered_at_the_packs_return_rate_before_it_is_eaten() {
@@ -3628,7 +3629,18 @@ mod tests {
             .and_then(|i| i.central())
             .unwrap();
         assert_eq!(rate, 821.0, "Kelly's acorns, collecting, shelling, boiling");
-        assert!((trip.forage_s - kcal / rate * 3_600.0).abs() < 1e-6 * trip.forage_s);
+        let search = life
+            .labour
+            .library()
+            .item(
+                crate::validation::ReferenceDomain::Ecology,
+                "forage_search_per_handling_fruit",
+            )
+            .and_then(|i| i.central())
+            .unwrap();
+        assert_eq!(search, 0.5, "O'Connell and Hawkes's Solanum fruit trips");
+        let handling_s = kcal / rate * 3_600.0;
+        assert!((trip.forage_s - handling_s * 1.5).abs() < 1e-6 * trip.forage_s);
         // Choosing to eat again while out does not start a second trip.
         life.meals().unwrap();
         assert_eq!(life.foraging["Gem-D"], trip);
