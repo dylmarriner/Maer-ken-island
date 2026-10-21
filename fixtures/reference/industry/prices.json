@@ -1,0 +1,76 @@
+{
+  "id": "prices",
+  "domain": "industry",
+  "title": "New Zealand household electricity, water and wastewater prices",
+  "retrieved": "2026-10-18",
+  "licence": "Numerical values cited as facts with attribution; no text, figures or datasets reproduced.",
+  "sources": [
+    {
+      "key": "mbie_qsdep_2026_08",
+      "citation": "Ministry of Business, Innovation and Employment (2026). Quarterly Survey of Domestic Electricity Prices, nominal indicators on 15 August 2026, mbie.govt.nz/assets/Data-Files/Energy/nz-energy-quarterly-and-energy-in-nz/qsdep-report-15Aug2026.pdf, retrieved 2026-10-18.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "watercare_2026_27",
+      "citation": "Watercare Services Ltd (2026). Residential water services and wastewater charges, infrastructure growth charges and other charges 2026-2027, effective 1 July 2026, assets.watercare.co.nz/media/Residential_Water_Ww_IGC_Charges_Other_Charges_2026_2027_rev_0aa42cb042.pdf, retrieved 2026-10-18.",
+      "licence": "Facts cited with attribution"
+    }
+  ],
+  "items": [
+    {
+      "key": "electricity_retail_nz_2026_08",
+      "description": "Retail electricity price for the modelled household (8,000 kWh a year, cheapest low-user plan without a fixed term), New Zealand row, 15 August 2026, including GST",
+      "unit": "NZD/kWh",
+      "source": "mbie_qsdep_2026_08",
+      "confidence": "high",
+      "value": {
+        "point": 0.421
+      },
+      "note": "Table row \"New Zealand | New Zealand | 42.1 | 16.8 | 25.3\" (retail, lines component, energy and other, c/kWh). The figure folds the plan's fixed daily charge into a price per kWh for the 22 kWh/day model household. Pukekohe (Counties Power), the estate's analogue, is 45.70 c/kWh."
+    },
+    {
+      "key": "water_volumetric_2026_27",
+      "description": "Watercare residential water volumetric charge, 2026-27, including GST",
+      "unit": "NZD/m3",
+      "source": "watercare_2026_27",
+      "confidence": "high",
+      "value": {
+        "point": 2.46
+      },
+      "note": "\"Volumetric charges, per 1000 litres: $2.46, including GST\"."
+    },
+    {
+      "key": "wastewater_volumetric_2026_27",
+      "description": "Watercare residential wastewater volumetric charge for metered customers, 2026-27, including GST",
+      "unit": "NZD/m3",
+      "source": "watercare_2026_27",
+      "confidence": "high",
+      "value": {
+        "point": 4.28
+      },
+      "note": "\"Volumetric charge: $4.28 per 1000 litres, including GST\", charged on the wastewater volume below."
+    },
+    {
+      "key": "wastewater_share_of_water_2026_27",
+      "description": "Share of a metered home's incoming water charged as wastewater",
+      "unit": "fraction",
+      "source": "watercare_2026_27",
+      "confidence": "high",
+      "value": {
+        "point": 0.785
+      },
+      "note": "\"Residential wastewater volume is calculated at 78.5 per cent of the incoming water volume, as measured by the water meter.\""
+    },
+    {
+      "key": "wastewater_fixed_2026_27",
+      "description": "Watercare residential wastewater fixed charge per water meter, 2026-27, including GST",
+      "unit": "NZD/year",
+      "source": "watercare_2026_27",
+      "confidence": "high",
+      "value": {
+        "point": 355.9
+      },
+      "note": "\"Fixed charge per meter: $355.90 per year, including GST\"."
+    }
+  ]
+}

@@ -56,6 +56,9 @@ pub enum Holder {
     Enterprise(String),
     /// The bank's own account: its interest income.
     Bank,
+    /// A person's KiwiSaver: retirement savings in their name that they
+    /// cannot spend, which the employer contributes to with each pay.
+    KiwiSaver(String),
 }
 
 /// Why money moved, or appeared, or left.
