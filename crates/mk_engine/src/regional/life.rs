@@ -199,6 +199,12 @@ pub struct ForageTrip {
     pub forage_s: f64,
     pub back_s: f64,
     pub worked_s: f64,
+    /// A trip from home gathers for the household and carries it back to
+    /// the store (R3, R2): the food's mass (kg) on the way home.
+    #[serde(default)]
+    pub from_home: bool,
+    #[serde(default)]
+    pub load_kg: f64,
 }
 
 /// A tree a founder is felling: which, and the seconds of work put in.
@@ -1732,15 +1738,52 @@ impl IslandLife {
         // A meal has to be gathered first (R3): a trip to the nearest cell
         // with food in reach, the hours its picking takes, and the meal at
         // the end of it (`foraging_step`).
+        //
+        // At home the household eats from its store first, and when the
+        // store is empty one of them goes out for everyone at home: foragers
+        // "collect food for their family each day" (Kelly 2013, p.96), so
+        // the trip gathers what the household owes, carries it back and
+        // puts it in the store. While it is out, the others at home wait.
+        let carbon_per_kg = composition(Material::PlantFood).carbon_per_kg;
         for (id, owed_kgc) in &eaters {
             let stands = self.standing_cell(id, rows, cols);
+            let mut owed_kgc = *owed_kgc;
+            let at_home = self.at_home(stands);
+            if at_home && self.materials.stock_kg(Material::PlantFood) > 0.0 {
+                let kg =
+                    (owed_kgc / carbon_per_kg).min(self.materials.stock_kg(Material::PlantFood));
+                let mut eaten = 0.0;
+                self.audited(|life, ledger| {
+                    if life
+                        .materials
+                        .eat(id, Material::PlantFood, kg, ledger)
+                        .is_ok()
+                    {
+                        eaten = kg;
+                    }
+                })?;
+                owed_kgc = (owed_kgc - eaten * carbon_per_kg).max(0.0);
+                self.respired_since_meal.insert(id.clone(), owed_kgc);
+                if owed_kgc <= 0.0 {
+                    continue;
+                }
+            }
+            if at_home && self.foraging.values().any(|t| t.from_home) {
+                continue;
+            }
             let cell = cells_around(stands, FORAGE_RADIUS_CELLS, rows, cols)
                 .into_iter()
                 .find(|c| self.edible_kgc_m2(*c) > 0.0);
-            match cell {
-                Some(cell) => self.plan_forage(id, stands, cell, *owed_kgc)?,
-                None => self.shortfalls.food += 1,
-            }
+            let Some(cell) = cell else {
+                self.shortfalls.food += 1;
+                continue;
+            };
+            let wanted = if at_home {
+                self.household_owed_kgc(rows, cols)
+            } else {
+                owed_kgc
+            };
+            self.plan_forage(id, stands, cell, wanted)?;
         }
         if drinkers.is_empty() {
             return Ok(());
@@ -1887,6 +1930,17 @@ impl IslandLife {
         }
     }
 
+    /// Plant carbon everyone alive at home owes their next meal (kg C).
+    fn household_owed_kgc(&self, rows: usize, cols: usize) -> f64 {
+        self.humans
+            .registry
+            .iter()
+            .filter(|h| matches!(h.profile.status, mk_core::human::HumanStatus::Alive))
+            .filter(|h| self.at_home(self.standing_cell(h.agent_id(), rows, cols)))
+            .filter_map(|h| self.respired_since_meal.get(h.agent_id()))
+            .sum()
+    }
+
     /// Plan `id`'s trip from `stands` to gather `owed_kgc` of plant carbon
     /// on `cell`: the walk there and back at the packs' pace, and the food
     /// energy over Kelly's (2013) return rate for acorns, the nearest
@@ -1902,18 +1956,36 @@ impl IslandLife {
             return Ok(());
         };
         let body = LabourBody::from_human(human);
-        let out_s = if cell == stands {
-            0.0
+        let from_home = self.at_home(stands);
+        let here = self.place_m(stands);
+        let there = if cell == stands {
+            here
         } else {
-            let here = self.place_m(stands);
-            let there = self
-                .domain
-                .cell_center_m(DomainLevel::Medium, cell.0, cell.1);
-            let distance_m = (there.0 - here.0).hypot(there.1 - here.1);
-            self.labour
-                .walking_time_s(&body, distance_m, 0.0, 0.0)
-                .map_err(IslandLifeError::Labour)?
+            self.domain
+                .cell_center_m(DomainLevel::Medium, cell.0, cell.1)
         };
+        let distance_m = (there.0 - here.0).hypot(there.1 - here.1);
+        let out_s = self
+            .labour
+            .walking_time_s(&body, distance_m, self.climb_m(here, there), 0.0)
+            .map_err(IslandLifeError::Labour)?;
+        // From home the food comes back to the store, no more of it than the
+        // forager can carry for a day (R2), at the pace that load allows.
+        let carbon_per_kg = composition(Material::PlantFood).carbon_per_kg;
+        let mut owed_kgc = owed_kgc;
+        let (mut back_s, mut load_kg) = (0.0, 0.0);
+        if from_home {
+            load_kg = (owed_kgc / carbon_per_kg).min(
+                self.labour
+                    .sustainable_load_kg(&body)
+                    .map_err(IslandLifeError::Labour)?,
+            );
+            owed_kgc = load_kg * carbon_per_kg;
+            back_s = self
+                .labour
+                .walking_time_s(&body, distance_m, self.climb_m(there, here), load_kg)
+                .map_err(IslandLifeError::Labour)?;
+        }
         let rate_kcal_h = self
             .labour
             .library()
@@ -1935,8 +2007,10 @@ impl IslandLife {
                 kgc: owed_kgc,
                 out_s,
                 forage_s: kcal / rate_kcal_h.max(f64::MIN_POSITIVE) * 3_600.0,
-                back_s: if self.at_home(stands) { out_s } else { 0.0 },
+                back_s,
                 worked_s: 0.0,
+                from_home,
+                load_kg,
             },
         );
         Ok(())
@@ -1971,7 +2045,17 @@ impl IslandLife {
             let body = LabourBody::from_human(human);
             let trip = self.foraging.get_mut(&id).expect("listed");
             let picking = (trip.out_s..trip.out_s + trip.forage_s).contains(&trip.worked_s);
-            let met = if picking { foraging_met } else { WALKING_MET };
+            let home_with_food = trip.worked_s >= trip.out_s + trip.forage_s;
+            let met = if picking {
+                foraging_met
+            } else if home_with_food && trip.load_kg > 0.0 {
+                self.labour
+                    .loaded_walking_met(&body, trip.load_kg, WALKING_MET)
+                    .map_err(IslandLifeError::Labour)?
+            } else {
+                WALKING_MET
+            };
+            let trip = self.foraging.get_mut(&id).expect("listed");
             trip.worked_s += dt_s;
             if trip.worked_s >= trip.out_s + trip.forage_s + trip.back_s {
                 fed.push((id.clone(), self.foraging.remove(&id).expect("listed")));
@@ -2004,7 +2088,7 @@ impl IslandLife {
         let fed: Vec<(String, ForageTrip)> = fed
             .into_iter()
             .map(|(id, mut trip)| {
-                if trip.back_s <= 0.0 {
+                if !trip.from_home {
                     let stands = self.standing_cell(&id, rows, cols);
                     match cells_around(stands, FORAGE_RADIUS_CELLS, rows, cols)
                         .into_iter()
@@ -2025,7 +2109,8 @@ impl IslandLife {
         self.audited(|life, ledger| {
             for (id, trip) in &fed {
                 // What they gathered is eaten; what was eaten off the cell
-                // while they worked is simply not there.
+                // while they worked is simply not there. Brought home, it
+                // goes into the store and the forager eats their share of it.
                 match life.materials.gather_edible(
                     trip.kgc / carbon_per_kg,
                     &mut life.ecology,
@@ -2033,12 +2118,21 @@ impl IslandLife {
                     area,
                     ledger,
                 ) {
-                    Ok(kg)
+                    Ok(gathered) => {
+                        let owed = life.respired_since_meal.get(id).copied().unwrap_or(0.0);
+                        let kg = if trip.from_home {
+                            gathered.min(owed / carbon_per_kg)
+                        } else {
+                            gathered
+                        };
                         if life
                             .materials
                             .eat(id, Material::PlantFood, kg, ledger)
-                            .is_ok() =>
-                    {
+                            .is_err()
+                        {
+                            life.shortfalls.food += 1;
+                            continue;
+                        }
                         let owed = life.respired_since_meal.get(id).copied().unwrap_or(0.0);
                         life.respired_since_meal
                             .insert(id.clone(), (owed - kg * carbon_per_kg).max(0.0));
@@ -3564,6 +3658,92 @@ mod tests {
             "{kcal} kcal gathered in {:.1} h of foraging and {:.1} h walking",
             trip.forage_s / 3_600.0,
             (trip.out_s + trip.back_s) / 3_600.0
+        );
+    }
+
+    /// At home the household shares a food store (R3, R2): one founder's
+    /// trip gathers what everyone at home owes and carries it back, the
+    /// other waits for it rather than setting out too, and then eats from
+    /// the store without a trip. A trip carries no more than the
+    /// forager's sustainable load.
+    #[test]
+    fn a_trip_from_home_fills_the_store_and_the_household_eats_from_it() {
+        let mut scenario =
+            IslandScenario::load(&repo("fixtures/island/default_scenario.json")).unwrap();
+        scenario.estate_patch.tree_cap = 200;
+        let canon = Arc::new(CanonLocked::load(&repo("fixtures/island/canon.json")).unwrap());
+        let mut life = IslandLife::bootstrap(scenario, canon).expect("the island bootstraps");
+        let (rows, cols) = (
+            life.domain.rows(DomainLevel::Medium),
+            life.domain.cols(DomainLevel::Medium),
+        );
+        for id in ["Gem-D", "Gem-K"] {
+            assert!(
+                life.at_home(life.standing_cell(id, rows, cols)),
+                "{id} at home"
+            );
+        }
+        let per_kcal = super::super::materials::respired_carbon_kg_per_kcal();
+        let (d_owes, k_owes) = (2_000.0 * per_kcal, 1_500.0 * per_kcal);
+        life.respired_since_meal.insert("Gem-D".into(), d_owes);
+        life.respired_since_meal.insert("Gem-K".into(), k_owes);
+        let eat = |life: &mut IslandLife, id: &str, choice: crate::humans::ActionKind| {
+            life.humans
+                .registry
+                .get_human_mut(id)
+                .unwrap()
+                .economy_action
+                .kind = choice;
+        };
+        eat(&mut life, "Gem-D", crate::humans::ActionKind::SeekFood);
+        eat(&mut life, "Gem-K", crate::humans::ActionKind::Rest);
+        assert_eq!(life.materials.stock_kg(Material::PlantFood), 0.0);
+        life.meals().unwrap();
+        let trip = life.foraging.get("Gem-D").expect("Gem-D goes out").clone();
+        assert!(trip.from_home);
+        assert!(
+            (trip.kgc - (d_owes + k_owes)).abs() < 1e-12,
+            "for both of them"
+        );
+        let carbon_per_kg = composition(Material::PlantFood).carbon_per_kg;
+        assert!((trip.load_kg - trip.kgc / carbon_per_kg).abs() < 1e-9);
+        assert!(trip.back_s >= trip.out_s, "the way home is carried");
+
+        // Gem-K, hungry while Gem-D is out, waits for the food.
+        eat(&mut life, "Gem-K", crate::humans::ActionKind::SeekFood);
+        life.meals().unwrap();
+        assert!(!life.foraging.contains_key("Gem-K"), "a second trip");
+        let shortfalls = life.shortfalls.food;
+
+        while life.foraging.contains_key("Gem-D") {
+            life.foraging_step(600.0).unwrap();
+        }
+        assert!(life.respired_since_meal["Gem-D"] < 1e-12, "Gem-D ate");
+        let stored = life.materials.stock_kg(Material::PlantFood);
+        assert!(
+            (stored - k_owes / carbon_per_kg).abs() < 1e-9,
+            "the store holds Gem-K's share: {stored} kg"
+        );
+
+        // Gem-K eats from the store: no trip, nothing left over.
+        life.meals().unwrap();
+        assert!(!life.foraging.contains_key("Gem-K"));
+        assert!(life.respired_since_meal["Gem-K"] < 1e-12, "Gem-K ate");
+        assert!(life.materials.stock_kg(Material::PlantFood) < 1e-9);
+        assert_eq!(life.shortfalls.food, shortfalls);
+
+        // A household owing more than one person can carry gets one load.
+        life.respired_since_meal
+            .insert("Gem-D".into(), 1.0e6 * per_kcal);
+        eat(&mut life, "Gem-K", crate::humans::ActionKind::Rest);
+        life.meals().unwrap();
+        let trip = life.foraging.get("Gem-D").expect("out again").clone();
+        let body = LabourBody::from_human(life.humans.registry.get_human("Gem-D").unwrap());
+        let most = life.labour.sustainable_load_kg(&body).unwrap();
+        assert!(
+            (trip.load_kg - most).abs() < 1e-9,
+            "{} kg of {most}",
+            trip.load_kg
         );
     }
 
