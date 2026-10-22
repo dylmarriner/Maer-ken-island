@@ -170,10 +170,13 @@ animal and fish resource nodes (done 2026-10-23, §2b).
 
 ### 2c. D9: most actions still take one tick
 
-- **Now:** felling, hauling and panning a placer for gold (2026-10-14: walk there, the packs'
-  working day at the pan, walk home, the gold to the store) are timed and costed; everything
-  else completes in one tick. Foraging food (R3, with session 38's Kelly 2013 return rates) is
-  next.
+- **Now (2026-10-23):** felling (axe or two-person crosscut saw), hauling (ute or excavator with
+  rigging), splitting firewood, building the shed, panning a placer for gold, foraging (R3, Kelly
+  2013 return rates) and water trips (R1b) are timed and costed, and each is slowed for a
+  beginner and quickened by practice (R11, D64). Still one tick: Craft (upstream's instant
+  recipes: planks, masonry, rope, fuel, ingots, tools; on the island nobody carries their inputs
+  yet, since timber and gold go to the estate's store), Explore and SocialApproach (moves paced by
+  the cell crossing only), Transfer, Harm and Intimacy.
 - **Needs:** a cited duration for each action (`fixtures/reference/labour/productivity.json`
   holds some already), and the same task machinery felling uses (`life.rs` `work`) extended to
   them. Actions with no Compendium row cost the resting baseline (D22, accepted).
