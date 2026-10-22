@@ -1,0 +1,43 @@
+{
+  "id": "finance",
+  "domain": "industry",
+  "title": "New Zealand household net worth and mortgage interest rates",
+  "retrieved": "2026-10-15",
+  "licence": "Numerical values cited as facts with attribution; no text, figures or datasets reproduced.",
+  "sources": [
+    {
+      "key": "statsnz_hnw2024",
+      "citation": "Stats NZ (26 Sep 2025). Household net worth statistics: Year ended June 2024 (Household Economic Survey), Key facts, stats.govt.nz/information-releases/household-net-worth-statistics-year-ended-june-2024/, retrieved 2026-10-15 (rendered page).",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "rbnz_b30",
+      "citation": "Reserve Bank of New Zealand, statistics series B30, New residential mortgage weighted average interest rates (simple average of the month's new lending), rbnz.govt.nz/statistics/series/exchange-and-interest-rates/new-residential-mortgage-weighted-average-interest-rates, April 2026 column, retrieved 2026-10-15. The bank's site refuses automated readers, so the table was read from a search engine's indexed copy of the page.",
+      "licence": "Facts cited with attribution"
+    }
+  ],
+  "items": [
+    {
+      "key": "median_household_net_worth_2024",
+      "description": "Median net worth of New Zealand households, year ended June 2024",
+      "unit": "NZD",
+      "source": "statsnz_hnw2024",
+      "confidence": "high",
+      "value": {
+        "point": 529000
+      },
+      "note": "\"the median net worth of New Zealand households was $529,000, up 33 percent from $399,000 in the year ended June 2021\"; largely owner-occupied dwellings and other real estate, so as money in the bank it is a deviation (D61)."
+    },
+    {
+      "key": "new_mortgage_rate_2y_fixed_2026_04",
+      "description": "Weighted average interest rate on new residential mortgage lending, two-year fixed, April 2026",
+      "unit": "fraction per year",
+      "source": "rbnz_b30",
+      "confidence": "medium",
+      "value": {
+        "point": 0.0482
+      },
+      "note": "B30 April 2026: floating 5.54%, one year 4.52%, two years 4.82% (up from 4.54% in January 2026). Medium because read from an indexed copy, not the bank's own page."
+    }
+  ]
+}
