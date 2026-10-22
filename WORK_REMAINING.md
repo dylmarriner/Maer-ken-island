@@ -43,10 +43,10 @@ this list holds the current state. The evidence for what is *done* is in
 | Living world | D31: NPP ignores soil nutrients | Open | Regional soils model and data |
 | Runtime | Phase 4 Task 2b: deep-time spin-up | **Done** (2026-10-14) | — |
 | Industry | Phase 4b Task 1 remainder: reference tables | Done 2026-10-14 (nine packs); gaps listed in §4a | A few items (see §4a) |
-| Industry | Phase 4b Task 4: oil and gas field (D14, D19) | Fields, decline and carbon done 2026-10-14 (D58); wells, water cut, spills open | Per-well rate, water-cut series |
+| Industry | Phase 4b Task 4: oil and gas field (D14, D19) | Fields, decline and carbon done 2026-10-14 (D58); in `IslandLife` with the diesel depot 2026-10-22; wells, water cut, spills open | Per-well rate, water-cut series |
 | Industry | Phase 4b Task 5: refinery, gas plant, fuel depot (D16) | Topping refinery done 2026-10-14; gas plant, reformer, depot open | Reformate yield; gas-plant own use |
 | Industry | Phase 4b Task 6: jobs, trades, maintenance (D39) | Open | Upstream human-runtime change first |
-| Industry | Phase 4b Task 7: money, enterprises, payroll | Money, payroll and metered bills done 2026-10-18 (`regional/economy/`, D61, D62; `tests/island_economy.rs`). Not yet in `IslandLife`; payslips in the person's folder, buying and selling homes (upstream `ActionKind::Buy`) open | `IslandLife` wiring after Task 4's chain lands; upstream buying |
+| Industry | Phase 4b Task 7: money, enterprises, payroll | Money, payroll and metered bills done 2026-10-18 (`regional/economy/`, D61, D62; `tests/island_economy.rs`). In `IslandLife` 2026-10-22 (`economy/island.rs`: deposits, Gem Petroleum selling the depot's diesel, monthly loans, closes, dividends, money audit); the petroleum business's staff and payslips, household bills, buying and selling homes open | Task 6 staff; upstream buying |
 | Industry | Phase 4b Task 7b: food and timber chains | Open | Task 2 catalogue; crop/livestock data |
 | Industry | Phase 4b Task 8: town and workforce | Open; the owner decided the town starts at each enterprise's smallest staff and grows (2026-10-15, §4g) | Demographic tables; a sourced minimum staff per enterprise |
 | Industry | Phase 4b Task 9: dashboard pages, year acceptance | Open | Tasks 4-8 |
@@ -219,8 +219,11 @@ trade, a 2-3 bedroom cottage's floor area (Task 6 and 7b); the Pukekohe growing 
   methane oxidises with its 11.8-year lifetime (IPCC AR6). Packs gained reformate yields (Speight),
   gas-plant fuel and shrinkage (EIA), methane lifetimes, alluvial diamond grades (low), Lake
   Grassmere solar salt and hand-dug shaft depth and sinking rate (a well analogue, low).
-- **Next:** carry `IndustryChain` in `IslandLife` (state, snapshot, the audited material stock) and
-  let a depot top the estate's diesel up from the store, burning island diesel as material carbon.
+- **Done 2026-10-22:** `IslandLife` carries `IndustryChain` (state, snapshot, digest), stepping it
+  inside the material audit, which now counts the chain's tanks and products and island-refined
+  fuel; a depot fills the estate's diesel back to the scenario's opening stock from the refinery's
+  distillate, and generators and vehicles burn that share as material carbon
+  (`energy::IslandFuel`, `book_island_burn`).
 - **Left (D58):** a plateau, reservoir pressure and water cut; wells, workover crews and blowouts
   (the frequencies are in the pack, but there is no per-well rate to count wells by); spills and their
   harm to shellfish; methane warming (negligible at island scale, Etminan et al. 2016);
@@ -289,9 +292,16 @@ trade, a 2-3 bedroom cottage's floor area (Task 6 and 7b); the Pukekohe growing 
   charges, `industry/prices.json`). `tests/island_economy.rs` runs a local year: money conserved
   every day, payroll every 14 roster days, dividends equal profit x payout x share, a household
   that stops paying is cut off.
-- **Left:** carry the ledger, enterprises and billing accounts in `IslandLife` (state, snapshot,
-  the money audit beside the material ones), reading meters from `regional/energy.rs` and the
-  household water supply, and writing payslips to the person's folder; Gem-D and Gem-K offering
+- **Done 2026-10-22:** `IslandLife` carries `IslandEconomy` (`regional/economy/island.rs`) in its
+  state, snapshot and digest. The books open with each founder's sourced deposit and a Gem
+  Petroleum business, owned 50/50, when the island has oil. Each local month the bank takes its
+  instalments, every business closes its month and pays dividends, and the money audit must close.
+  The estate pays Gem Petroleum for each depot delivery at MBIE's weekly adjusted retail diesel
+  price (16 October 2026, 321.7 c/L, `industry/prices.json`), the founders half each; the depot
+  delivers only what they can pay for.
+- **Left:** the petroleum business hires and pays staff (Task 6), and writes payslips to the person's folder;
+  household billing once the town has households that buy power and water (the founders' estate
+  makes its own, Task 8); Gem-D and Gem-K offering
   homes and businesses for sale and villagers deciding to buy (upstream first).
 - **Tests:** `tests/island_economy.rs` (money conserved, bills from meters, payroll every 14
   roster days with payslips in the person's folder, dividends equal profit × payout × share).
@@ -459,5 +469,5 @@ invertebrate densities, fire danger indices (see each report's "unsourced" secti
   push; the `dependency audit` CI job replaced it.
 - **Firecrawl credits ran out** on 2026-10-12. WebSearch and the TinyFish fetcher still work for
   sources; the container's own network blocks most hosts.
-- **Persist digests.** `WEEK_DIGEST` is `f6699166…9c81`; the planetary topology pin is
+- **Persist digests.** `WEEK_DIGEST` is `679abc7e…8322`; the planetary topology pin is
   `e4ece246…73e2`. Any change that moves either is a behaviour change and must say so.

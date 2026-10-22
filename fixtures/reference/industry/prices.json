@@ -2,7 +2,7 @@
   "id": "prices",
   "domain": "industry",
   "title": "New Zealand household electricity, water and wastewater prices",
-  "retrieved": "2026-10-18",
+  "retrieved": "2026-10-22",
   "licence": "Numerical values cited as facts with attribution; no text, figures or datasets reproduced.",
   "sources": [
     {
@@ -13,6 +13,11 @@
     {
       "key": "watercare_2026_27",
       "citation": "Watercare Services Ltd (2026). Residential water services and wastewater charges, infrastructure growth charges and other charges 2026-2027, effective 1 July 2026, assets.watercare.co.nz/media/Residential_Water_Ww_IGC_Charges_Other_Charges_2026_2027_rev_0aa42cb042.pdf, retrieved 2026-10-18.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "mbie_weekly_fuel_2026_10",
+      "citation": "Ministry of Business, Innovation and Employment (2026). Weekly fuel price monitoring, adjusted retail prices, week of 16 October 2026, via Figure.NZ, Weekly adjusted retail fuel prices in New Zealand, figure.nz/chart/lSYJzICrinllOY7p, retrieved 2026-10-22.",
       "licence": "Facts cited with attribution"
     }
   ],
@@ -71,6 +76,17 @@
         "point": 355.9
       },
       "note": "\"Fixed charge per meter: $355.90 per year, including GST\"."
+    },
+    {
+      "key": "diesel_retail_nz_2026_10_16",
+      "description": "Adjusted retail price of diesel in New Zealand, week of 16 October 2026, including GST",
+      "unit": "NZD/L",
+      "source": "mbie_weekly_fuel_2026_10",
+      "confidence": "high",
+      "value": {
+        "point": 3.217
+      },
+      "note": "Table row \"16 Oct 2026 | Diesel | 321.7\" (NZ cents per litre). Prices rose from 187 c/L in February with the 2026 Middle East conflict, peaked at 381 c/L in April and stood at 267-322 c/L from August to October; the latest week is used."
     }
   ]
 }

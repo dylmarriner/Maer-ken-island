@@ -186,13 +186,13 @@ const DAY: u64 = 86_400;
 /// call, 2026-10-15, `UPSTREAM.md` production item 6): what its critic has
 /// learned each action is worth is added to the mind's choice while awake,
 /// and the critic learns from the action actually taken. Read from a local
-/// release run (which matches CI's) on top of R3's foraging time and its
-/// search (O'Connell and Hawkes 1984, 2026-10-22): 20,569 audits closed, no
-/// food or water shortfalls, body carbon 12.9 of 13.0 and 10.4 of 10.4 kg,
-/// eating 48 and 44 minutes a day, drinking 2.58 and 1.93 L a day, asleep
-/// at home 40 of 56 and 40 of 55 hours, temperate-forest NPP 471 g C/m2/yr
-/// (reference 400-900).
-const WEEK_DIGEST: &str = "158e923c8e06b8fb6f6b09ba8b132f30faf361090488951392c215d5e4c15887";
+/// release run (which matches CI's) on top of R3's foraging search, with the
+/// oil chain and depot in the hourly step (Task 4, D58) and the founders'
+/// books, monthly closes and diesel sales (Task 7, 2026-10-22): 30,649 audits
+/// closed (the chain's hourly audits added), no food or water shortfalls,
+/// body carbon 12.9 of 13.0 and 10.4 of 10.4 kg, eating 48 and 44 minutes a
+/// day, asleep at home 40 of 56 and 40 of 55 hours.
+const WEEK_DIGEST: &str = "679abc7eb001bfe60562d7ef576b7b8f3a88ff7ed35f6b439a33851f9be88322";
 
 fn repo(path: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
