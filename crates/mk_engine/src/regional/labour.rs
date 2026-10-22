@@ -274,6 +274,16 @@ impl LabourTable {
         )
     }
 
+    /// The radius the excavator's lift ratings are given at (m): how far
+    /// from the machine a log it lifts lies.
+    pub fn excavator_lift_radius_m(&self) -> Result<f64, LabourError> {
+        self.scalar(
+            ReferenceDomain::Labour,
+            "excavator_cat330",
+            "lift_rating_radius_m",
+        )
+    }
+
     /// One loader-crane cycle (s): `operation` is `loading` or `unloading`.
     pub fn crane_cycle_s(&self, operation: &str) -> Result<f64, LabourError> {
         Ok(self.cell(
@@ -282,6 +292,17 @@ impl LabourTable {
             operation,
             "minutes",
         )? * 60.0)
+    }
+
+    /// Rigging one log by hand (s): `operation` is `hook` (the line put
+    /// round it where it lies) or `unhook` (taken off at the machine).
+    pub fn log_rigging_s(&self, operation: &str) -> Result<f64, LabourError> {
+        self.cell(
+            ReferenceDomain::Labour,
+            "log_rigging_time",
+            operation,
+            "seconds",
+        )
     }
 
     /// Middle of an activity's MET range (Compendium of Physical Activities).

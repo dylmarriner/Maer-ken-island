@@ -21,6 +21,11 @@
       "licence": "Facts cited with attribution"
     },
     {
+      "key": "borz_mititelu2022",
+      "citation": "Borz, S. A. and Mititelu, V.-B. (2022). Productivity and Fuel Consumption in Skidding Roundwood on Flat Terrains by a Zetor Farm Tractor in Group Shelterwood Cutting of Mixed Oak Forests. Forests 13(8), 1294, doi:10.3390/f13081294.",
+      "licence": "Facts cited with attribution"
+    },
+    {
       "key": "manner2013_piskunov2021",
       "citation": "Manner, J., Nordfjell, T. and Lindroos, O. (2013). Effects of the number of assortments and log concentration on time consumption for forwarding. Silva Fennica 47(4); as summarised by Piskunov, M. (2021). Investigation of structure of technology cycle time of hydraulic manipulators in the process of loading forwarders with logs. Croatian Journal of Forest Engineering 42(3), doi:10.5552/crojfe.2021.863.",
       "licence": "Facts cited with attribution"
@@ -48,6 +53,11 @@
     {
       "key": "vanhoutte2019",
       "citation": "van Houtte, A. and Parker, J. (2019). NZ Wood Design Guides. New Zealand Journal of Forestry 64(2): 'The size of the residential market for structural timber is estimated at 450,000 m3 per annum, which equates to approximately 14 m3 of structural timber per house', against 'residential dwellings consented grew in 2019 to 33,000'. Read from https://nzif.org.nz/nzif-journal/publications/downloadfulltext/23013.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "hoeldrich2007",
+      "citation": "Höldrich, A., Hartmann, H. and Schardt, M. (2007). Work Time Requirements for Wood Log Production. Landtechnik 62(1): 50-51. REFA time studies (40 in all, 32 of processing, including splitting with the axe or splitting hammer); set-up, sharpening, repairs and longer waits not counted. Table 1: mean labour hours per solid cubic metre of 33 cm logs, spruce and beech, 'Splitter small 2,33'; text: 'For a short time, manual splitting (axe, splitting hammer) allows a degree of productivity to be achieved which is almost comparable with that of the small vertical splitter. Here, however, tiredness sets in earlier.' Read from https://web.archive.org/web/2020/https://www.agricultural-engineering.eu/landtechnik/article/download/2007-62-1-050-051/2007-62-1-050-051-en-pdf/1364.",
       "licence": "Facts cited with attribution"
     },
     {
@@ -162,6 +172,12 @@
               "values": [
                 9100.0
               ]
+            },
+            {
+              "label": "lift_rating_radius_m",
+              "values": [
+                6.0
+              ]
             }
           ]
         }
@@ -196,6 +212,36 @@
         }
       },
       "note": "Forwarder cranes with grapples; more assortments per load lengthen the cycle (two: 0.27/0.34 min, five: 0.35/0.60 min)."
+    },
+    {
+      "key": "log_rigging_time",
+      "description": "Time for a worker to attach one log to a winch cable by hand (hook), and to detach it at the machine (unhook), mean of 278 logs",
+      "unit": "seconds",
+      "source": "borz_mititelu2022",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "operation",
+          "columns": [
+            "seconds"
+          ],
+          "rows": [
+            {
+              "label": "hook",
+              "values": [
+                13.59
+              ]
+            },
+            {
+              "label": "unhook",
+              "values": [
+                9.3
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Table 4, log-based winching by a Zetor farm tractor's winch in mixed oak: hook 13.59 +/- 8.90 s (3-65), unhook 9.30 +/- 4.74 s (3-24), logs 0.03-0.93 m3 (mean 0.37), about 1-15 m long."
     },
     {
       "key": "emc_equation_celsius",
@@ -663,6 +709,15 @@
       "confidence": "low",
       "value": { "point": 0.0875 },
       "note": "Derived: 14 / 160. The 14 m3 is the residential market's 450,000 m3 a year over about 33,000 dwellings consented in 2019, so it averages detached houses and multi-unit homes, as Stats NZ's 160 m2 does. Floor area includes attached garages. A shed has no internal walls or floor joists over a slab, so this overstates its framing."
+    },
+    {
+      "key": "firewood_splitting_labour_per_solid_volume",
+      "description": "Labour to split firewood, 33 cm logs of spruce and beech, with a small vertical splitter, which manual splitting with the axe or splitting hammer nearly matches for a short time (Höldrich et al. 2007, Table 1)",
+      "unit": "h / m3",
+      "source": "hoeldrich2007",
+      "confidence": "low",
+      "value": { "point": 2.33 },
+      "note": "Per solid cubic metre, labour hours, technical work time without set-up or breaks. Used for the axe, which the authors say tires its user sooner, so this overstates a long day's splitting. Mean log diameters across the study's methods were 12-26 cm."
     }
   ]
 }

@@ -1,0 +1,74 @@
+{
+  "id": "fishery",
+  "domain": "industry",
+  "title": "Fish stock dynamics: the Schaefer surplus-production model and its prior growth rates",
+  "retrieved": "2026-10-23",
+  "licence": "Facts cited with attribution",
+  "sources": [
+    {
+      "key": "froese2017",
+      "citation": "Froese, R., Demirel, N., Coro, G., Kleisner, K. M. and Winker, H. (2017). Estimating fisheries reference points from catch and resilience. Fish and Fisheries 18(3):506-526, doi:10.1111/faf.12190. Author manuscript, NOAA Institutional Repository (repository.library.noaa.gov/view/noaa/63055): Equations 1-2 (lines 139-150), MSY = r k / 4 (symbol list), Table 2.",
+      "licence": "Facts cited with attribution"
+    }
+  ],
+  "items": [
+    {
+      "key": "fish_intrinsic_growth_rate_by_resilience",
+      "description": "Prior range of a fish stock's maximum intrinsic rate of population increase r, by its FishBase resilience class",
+      "unit": "per year",
+      "source": "froese2017",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "resilience",
+          "columns": [
+            "r_min",
+            "r_max"
+          ],
+          "rows": [
+            {
+              "label": "high",
+              "values": [
+                0.6,
+                1.5
+              ]
+            },
+            {
+              "label": "medium",
+              "values": [
+                0.2,
+                0.8
+              ]
+            },
+            {
+              "label": "low",
+              "values": [
+                0.05,
+                0.5
+              ]
+            },
+            {
+              "label": "very_low",
+              "values": [
+                0.015,
+                0.1
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Table 2, 'Prior ranges for parameter r, based on classification of resilience in FishBase (Froese and Pauly 2015)'. These are priors for fitting a stock, not a stock's measured r; the model takes the middle of the range."
+    },
+    {
+      "key": "schaefer_depensation_threshold_of_k",
+      "description": "Share of unexploited biomass k below which the Schaefer model's surplus production declines linearly (depensation)",
+      "unit": "fraction of k",
+      "source": "froese2017",
+      "confidence": "medium",
+      "value": {
+        "point": 0.25
+      },
+      "note": "Equation 2: below 0.25 k the surplus r(1 - B/k)B is multiplied by 4 B/k, 'a linear decline of recruitment below half of the biomass that is capable of producing MSY'."
+    }
+  ]
+}

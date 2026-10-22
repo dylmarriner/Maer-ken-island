@@ -40,6 +40,7 @@ pub mod resources;
 pub mod scheduler;
 pub mod seismicity;
 pub mod shape;
+pub mod skills;
 pub mod soil;
 pub mod species;
 pub mod synoptic;

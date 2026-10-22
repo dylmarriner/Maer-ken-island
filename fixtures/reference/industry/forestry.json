@@ -1,0 +1,73 @@
+{
+  "id": "forestry",
+  "domain": "industry",
+  "title": "New Zealand radiata pine plantation rotation, clearfell yield, wood density and carbon fraction",
+  "retrieved": "2026-10-23",
+  "licence": "Numerical values cited as facts with attribution; no text, figures or datasets reproduced.",
+  "sources": [
+    {
+      "key": "lane2007",
+      "citation": "Lane, P. (2007). A snapshot of plantation forests as at 1 April 2006. NZ Journal of Forestry, May 2007, p. 40 (National Exotic Forest Description 2006 summary table). https://nzif.org.nz/nzif-journal/publications/downloadfulltext/22404",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "ipcc2006_v4_ch4",
+      "citation": "IPCC (2006). 2006 IPCC Guidelines for National Greenhouse Gas Inventories, Volume 4, Chapter 4 Forest Land. Table 4.3 (carbon fraction of aboveground forest biomass, p. 4.48) and Table 4.14 (basic wood density of selected temperate and boreal taxa). https://www.ipcc-nggip.iges.or.jp/public/2006gl/pdf/4_Volume4/V4_04_Ch4_Forest_Land.pdf",
+      "licence": "Facts cited with attribution"
+    }
+  ],
+  "items": [
+    {
+      "key": "radiata_clearfell_age_years",
+      "description": "Area-weighted average clearfell age of radiata pine, New Zealand, year ended 31 March 2006",
+      "unit": "years",
+      "source": "lane2007",
+      "confidence": "high",
+      "value": {
+        "point": 28.2
+      },
+      "note": "Table row 'Area-weighted average clear fell age for radiata pine (years)': 27.9 (2005), 28.2 (2006). Text: typically harvested between 26 and 32 years old."
+    },
+    {
+      "key": "radiata_clearfell_yield_m3_ha",
+      "description": "Average clearfell yield of radiata pine, New Zealand, year ended 31 March 2006 (total recoverable volume inside bark)",
+      "unit": "m3/ha",
+      "source": "lane2007",
+      "confidence": "high",
+      "value": {
+        "point": 486.0
+      },
+      "note": "Table row 'Average clear fell yield - radiata pine (m3/ha)': 462 (2005), 486 (2006); volumes are TRVIB."
+    },
+    {
+      "key": "radiata_basic_density_t_m3",
+      "description": "Basic wood density of Pinus radiata: oven-dry tonnes per m3 of moist (green) wood",
+      "unit": "t/m3",
+      "source": "ipcc2006_v4_ch4",
+      "confidence": "medium",
+      "value": {
+        "range": {
+          "min": 0.33,
+          "max": 0.45,
+          "typical": 0.38
+        }
+      },
+      "note": "Table 4.14 row 'Pinus radiata 0.38 (0.33 - 0.45)'."
+    },
+    {
+      "key": "conifer_wood_carbon_fraction",
+      "description": "Carbon fraction of aboveground biomass, temperate and boreal conifers",
+      "unit": "t C / t dry matter",
+      "source": "ipcc2006_v4_ch4",
+      "confidence": "medium",
+      "value": {
+        "range": {
+          "min": 0.47,
+          "max": 0.55,
+          "typical": 0.51
+        }
+      },
+      "note": "Table 4.3 row 'Temperate and Boreal, conifers 0.51 (0.47 - 0.55)', Lamlom and Savidge 2003."
+    }
+  ]
+}

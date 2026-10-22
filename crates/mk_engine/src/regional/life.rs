@@ -53,6 +53,7 @@ use super::materials::{
 use super::physical::{RegionalPhysicalError, RegionalPhysicalState};
 use super::property::{place_regional_estate, PlaceEstateError, PlacedEstate};
 use super::scheduler::IslandScheduler;
+use super::skills::{LearningRates, Skills, Task};
 use super::timber::{self, HaulJob, HaulTask};
 use crate::humans::lifecycle::WALKING_MET;
 use crate::humans::HumanSystem;
@@ -148,6 +149,8 @@ pub enum IslandLifeError {
     DeepTime(super::deep_time::DeepTimeError),
     /// The money did not balance, or a business could not pay out.
     Economy(IslandEconomyError),
+    /// The learning pack is missing or out of bounds (R11).
+    Skills(super::skills::SkillsError),
 }
 
 impl std::fmt::Display for IslandLifeError {
@@ -262,10 +265,12 @@ impl ShedBuild {
 /// which draws on the estate's electricity (D13) while anyone builds.
 pub const BUILDING_SAW: &str = "Circular Saw";
 
-/// The shed tool a founder fells with: the estate's axe, at the felling
-/// pack's steel-axe times. The two-person crosscut saw needs a second
-/// person on the other end, which nothing here arranges yet.
+/// The shed tool a founder fells with alone: the estate's axe, at the
+/// felling pack's steel-axe times.
 pub const FELLING_TOOL: &str = "Felling Axe";
+/// The shed tool two founders fell with together, one at each end: the
+/// estate's crosscut saw, at the felling pack's two-person times.
+pub const FELLING_SAW: &str = "Crosscut Saw";
 /// The estate's road vehicle that carries cut timber: the ute.
 pub const HAUL_UTE: &str = "Ford Raptor 4x4 Ute";
 /// The estate's machine that lifts whole logs: the excavator.
@@ -308,9 +313,13 @@ pub struct IslandLifeSnapshot {
     #[serde(default)]
     pub firewood_shed: Option<ShedBuild>,
     #[serde(default)]
+    pub split_wood_kg: f64,
+    #[serde(default)]
     pub hauling: BTreeMap<String, HaulJob>,
     #[serde(default)]
     pub labour_kcal: BTreeMap<String, f64>,
+    #[serde(default)]
+    pub skills: Skills,
     #[serde(default)]
     pub water_drunk_kg: BTreeMap<String, f64>,
     pub sleep_seconds: BTreeMap<String, (f64, f64)>,
@@ -374,12 +383,18 @@ pub struct IslandLife {
     mining: BTreeMap<String, MiningJob>,
     /// The firewood shed, once its building has begun (D9, R5).
     pub firewood_shed: Option<ShedBuild>,
+    /// How much of the store's air-dry wood has been split into firewood
+    /// (kg, D63): the cooking fire burns only this.
+    pub split_wood_kg: f64,
     /// The log each founder is moving to the store and the tasks they
     /// still have to do (`regional::timber`).
     hauling: BTreeMap<String, HaulJob>,
     /// Energy (kcal) each founder's labour has cost since their respiration
     /// was last charged, above what the same time awake at home costs.
     labour_kcal: BTreeMap<String, f64>,
+    /// What every person has learnt by doing (R11): each task they have
+    /// done, how much, and when they last did it.
+    pub skills: Skills,
     /// Water each founder has drunk since the island began (kg): the record
     /// the intake checks read.
     pub water_drunk_kg: BTreeMap<String, f64>,
@@ -390,6 +405,8 @@ pub struct IslandLife {
     sleep_seconds: BTreeMap<String, (f64, f64)>,
     pub scheduler: IslandScheduler,
     labour: LabourTable,
+    /// How fast people learn a task and forget it (R11).
+    learning: LearningRates,
     /// The world's keyed streams. Readable because creating a person in the
     /// world draws from them (`create_human`), and a creation keyed on
     /// anything else would not replay.
@@ -631,6 +648,8 @@ impl IslandLife {
         let mut ecology = RegionalEcologyState::bootstrap(&domain, &physical)
             .map_err(IslandLifeError::Ecology)?;
         let labour = LabourTable::load_default().map_err(IslandLifeError::Labour)?;
+        let learning =
+            LearningRates::from_library(labour.library()).map_err(IslandLifeError::Skills)?;
         let (params, factor) = soil_for(&domain, &physical, &ecology, &labour)?;
         ecology.install_soil(params, factor);
         let spin_up = if scenario.spin_up_years > 0 {
@@ -739,12 +758,15 @@ impl IslandLife {
             resources: None,
             mining: BTreeMap::new(),
             firewood_shed: None,
+            split_wood_kg: 0.0,
             hauling: BTreeMap::new(),
             labour_kcal: BTreeMap::new(),
+            skills: Skills::default(),
             water_drunk_kg: BTreeMap::new(),
             sleep_seconds: BTreeMap::new(),
             scheduler: IslandScheduler::new(scenario_cadences),
             labour,
+            learning,
             computer_bridge: None,
             human_store: None,
             // Filled in below: the digest needs the built island.
@@ -850,8 +872,10 @@ impl IslandLife {
             resources: self.resources.clone(),
             mining: self.mining.clone(),
             firewood_shed: self.firewood_shed,
+            split_wood_kg: self.split_wood_kg,
             hauling: self.hauling.clone(),
             labour_kcal: self.labour_kcal.clone(),
+            skills: self.skills.clone(),
             water_drunk_kg: self.water_drunk_kg.clone(),
             sleep_seconds: self.sleep_seconds.clone(),
             food_cell: self.food_cell,
@@ -886,6 +910,9 @@ impl IslandLife {
         let domain = IslandDomain::from_profile(snapshot.scenario.profile.clone())
             .map_err(IslandLifeError::Domain)?;
         let topology = GridTopology::regional(&domain, DomainLevel::Medium);
+        let labour = LabourTable::load_default().map_err(IslandLifeError::Labour)?;
+        let learning =
+            LearningRates::from_library(labour.library()).map_err(IslandLifeError::Skills)?;
         let mut life = Self {
             canon,
             domain,
@@ -913,11 +940,14 @@ impl IslandLife {
             resources: snapshot.resources,
             mining: snapshot.mining,
             firewood_shed: snapshot.firewood_shed,
+            split_wood_kg: snapshot.split_wood_kg,
             hauling: snapshot.hauling,
             labour_kcal: snapshot.labour_kcal,
+            skills: snapshot.skills,
             water_drunk_kg: snapshot.water_drunk_kg,
             sleep_seconds: snapshot.sleep_seconds,
-            labour: LabourTable::load_default().map_err(IslandLifeError::Labour)?,
+            labour,
+            learning,
             // A restored island keeps no records until someone attaches
             // some: the folders belong to the run that wrote them, and a
             // reload is a new run.
@@ -1189,6 +1219,7 @@ impl IslandLife {
         self.labour_kcal.remove(id);
         self.water_drunk_kg.remove(id);
         self.sleep_seconds.remove(id);
+        self.skills.0.remove(id);
     }
 
     /// Every living human, with the body the labour model costs work against
@@ -1345,13 +1376,18 @@ impl IslandLife {
     ///   steps until the felling pack's time for that trunk is met
     ///   (`LabourTable::fell_tree`), and the stem comes down as a green log
     ///   lying where it fell, its carbon and water booked through the
-    ///   ledger.
+    ///   ledger. With the shed's crosscut saw, a founder with no tree of
+    ///   their own takes the other end of the saw at a tree one other
+    ///   founder is felling, and while two work one tree it comes down at
+    ///   the pack's two-person crosscut time rather than the axe's. Time
+    ///   already worked carries over when the second sawyer arrives.
     ///
     /// While they work their needs drain at the MET of what they are doing
     /// (`HumanBeing::labour_met`, read by the next step's lifecycle) and
     /// their respiration is charged for it.
     fn work(&mut self, dt_s: f64) -> Result<(), IslandLifeError> {
         let has_axe = self.estate_has_tool(FELLING_TOOL);
+        let has_saw = self.estate_has_tool(FELLING_SAW);
         let awake_met = self
             .labour
             .met(AWAKE_AT_HOME_ACTIVITY)
@@ -1407,7 +1443,37 @@ impl IslandLife {
                 met
             } else {
                 // Fell: back to the tree already started, if it still
-                // stands; otherwise the nearest.
+                // stands; otherwise, with the saw, the other end of it at
+                // the nearest tree one founder is felling alone; otherwise
+                // the nearest tree.
+                let alone_at = |tree_id: u64| {
+                    self.felling
+                        .iter()
+                        .filter(|(who, job)| **who != id && job.tree_id == tree_id)
+                        .count()
+                        == 1
+                };
+                let partner = || {
+                    if !has_saw {
+                        return None;
+                    }
+                    self.felling
+                        .iter()
+                        .filter(|(who, _)| **who != id)
+                        .filter(|(_, job)| alone_at(job.tree_id))
+                        .filter_map(|(_, job)| {
+                            self.vegetation
+                                .trees
+                                .iter()
+                                .find(|t| t.id == job.tree_id && t.alive)
+                        })
+                        .min_by(|a, b| {
+                            let d = |t: &&super::local_vegetation::TreeInstance| {
+                                (t.position_m.0 - at.0).powi(2) + (t.position_m.1 - at.1).powi(2)
+                            };
+                            d(a).total_cmp(&d(b)).then(a.id.cmp(&b.id))
+                        })
+                };
                 let tree = self
                     .felling
                     .get(&id)
@@ -1417,6 +1483,7 @@ impl IslandLife {
                             .iter()
                             .find(|t| t.id == job.tree_id && t.alive)
                     })
+                    .or_else(partner)
                     .or_else(|| self.vegetation.nearest_tree(at))
                     .map(|t| (t.id, t.stem_diameter_m, t.position_m));
                 let Some((tree_id, diameter_m, tree_at)) = tree else {
@@ -1425,9 +1492,21 @@ impl IslandLife {
                     }
                     continue;
                 };
+                // Two at one tree with the saw: the crosscut's time, else
+                // the axe's.
+                let sawyers = 1 + self
+                    .felling
+                    .iter()
+                    .filter(|(who, job)| **who != id && job.tree_id == tree_id)
+                    .count();
+                let tool = if has_saw && sawyers >= 2 {
+                    LabourTool::CrosscutSaw
+                } else {
+                    LabourTool::SteelAxe
+                };
                 let spec = self
                     .labour
-                    .fell_tree(LabourTool::SteelAxe, diameter_m * 100.0)
+                    .fell_tree(tool, diameter_m * 100.0)
                     .map_err(IslandLifeError::Labour)?;
                 // The tree is where it stands: the job starts with the walk
                 // to it from wherever the founder is, at the packs' pace.
@@ -1452,7 +1531,17 @@ impl IslandLife {
                     spec.met
                 };
                 job.worked_s += dt_s;
-                if job.worked_s >= walk_s + spec.duration_s {
+                // A beginner fells slower than the packs' practised hand
+                // (R11).
+                let felling_s = spec.duration_s
+                    * self.skills.time_factor(
+                        &self.learning,
+                        &id,
+                        Task::Felling,
+                        self.sim_time_s as f64,
+                    );
+                let job = self.felling.get(&id).expect("inserted above");
+                if job.worked_s >= walk_s + felling_s {
                     felled.push((id.clone(), tree_id));
                 }
                 met
@@ -1481,6 +1570,21 @@ impl IslandLife {
         self.audited(|life, ledger| {
             for (id, tree_id) in &felled {
                 life.felling.remove(id);
+                // Whoever was on the other end of the saw is done too, and
+                // everyone at the tree has felled one more (R11).
+                let mut fellers = vec![id.clone()];
+                fellers.extend(
+                    life.felling
+                        .iter()
+                        .filter(|(_, job)| job.tree_id == *tree_id)
+                        .map(|(who, _)| who.clone()),
+                );
+                life.felling.retain(|_, job| job.tree_id != *tree_id);
+                let now_s = life.sim_time_s as f64;
+                for who in &fellers {
+                    life.skills
+                        .practise(&life.learning, who, Task::Felling, 1.0, now_s);
+                }
                 let Some(tree) = life
                     .vegetation
                     .trees
@@ -1635,9 +1739,11 @@ impl IslandLife {
                 litres_per_hour: self.energy.litres_per_hour(v.item_id)?,
             })
         };
+        // A vehicle another founder is hauling with is not in the garage.
+        let in_use = |method: timber::HaulMethod| self.hauling.values().any(|j| j.method == method);
         let fleet = timber::Fleet {
-            ute: road(HAUL_UTE),
-            excavator: tracked(HAUL_EXCAVATOR),
+            ute: road(HAUL_UTE).filter(|_| !in_use(timber::HaulMethod::Ute)),
+            excavator: tracked(HAUL_EXCAVATOR).filter(|_| !in_use(timber::HaulMethod::Excavator)),
         };
         // Pieces cut from this log take ids reserved now, so a plan names
         // them before they exist: as many as the most pieces any plan cuts.
@@ -2051,7 +2157,12 @@ impl IslandLife {
         let rate_kcal_h = ecology("forage_return_rate_acorns")?;
         let search_per_handling = ecology("forage_search_per_handling_fruit")?;
         let kcal = owed_kgc / super::materials::respired_carbon_kg_per_kcal();
-        let handling_s = kcal / rate_kcal_h.max(f64::MIN_POSITIVE) * 3_600.0;
+        // Kelly's return rates are practised foragers'; a beginner takes
+        // longer (R11).
+        let skill =
+            self.skills
+                .time_factor(&self.learning, id, Task::Foraging, self.sim_time_s as f64);
+        let handling_s = kcal / rate_kcal_h.max(f64::MIN_POSITIVE) * 3_600.0 * skill;
         self.foraging.insert(
             id.to_string(),
             ForageTrip {
@@ -2171,6 +2282,9 @@ impl IslandLife {
                     ledger,
                 ) {
                     Ok(gathered) => {
+                        let now_s = life.sim_time_s as f64;
+                        life.skills
+                            .practise(&life.learning, id, Task::Foraging, 1.0, now_s);
                         let owed = life.respired_since_meal.get(id).copied().unwrap_or(0.0);
                         let kg = if trip.from_home {
                             gathered.min(owed / carbon_per_kg)
@@ -2460,12 +2574,16 @@ impl IslandLife {
                 return;
             }
             let wanted = gas.firewood_wanted_kg(people, short_s);
-            let have = life.materials.stock_kg(Material::Wood);
+            // Only wood someone has split will burn (D63).
+            let have = life
+                .split_wood_kg
+                .min(life.materials.stock_kg(Material::Wood));
             let burned = wanted.min(have);
             if burned > 0.0 {
                 life.materials
                     .burn(Material::Wood, burned, ledger)
                     .expect("no more than the store holds");
+                life.split_wood_kg = (have - burned).max(0.0);
             }
             if let Some(gas) = life.household_gas.as_mut() {
                 gas.record_fire(wanted, burned, short_s);
@@ -2653,11 +2771,19 @@ impl IslandLife {
                     },
                 );
             }
+            // A beginner takes longer over the packs' day of gravel (R11).
+            let pan_s = panning.duration_s
+                * self.skills.time_factor(
+                    &self.learning,
+                    &id,
+                    Task::Panning,
+                    self.sim_time_s as f64,
+                );
             let job = self.mining.get_mut(&id).expect("planned above");
-            let at_pan = (job.walk_s..job.walk_s + panning.duration_s).contains(&job.worked_s);
+            let at_pan = (job.walk_s..job.walk_s + pan_s).contains(&job.worked_s);
             let met = if at_pan { panning.met } else { WALKING_MET };
             job.worked_s += dt_s;
-            let done = job.worked_s >= 2.0 * job.walk_s + panning.duration_s;
+            let done = job.worked_s >= 2.0 * job.walk_s + pan_s;
             let site_id = job.site_id;
             let extra = self
                 .labour
@@ -2673,6 +2799,9 @@ impl IslandLife {
             }
             if done {
                 self.mining.remove(&id);
+                let now_s = self.sim_time_s as f64;
+                self.skills
+                    .practise(&self.learning, &id, Task::Panning, 1.0, now_s);
                 let models =
                     super::resources::SecondaryModels::from_reference(self.labour.library())
                         .map_err(|e| {
@@ -2702,37 +2831,22 @@ impl IslandLife {
     /// estate's circular saw, which only cuts while it has power; each
     /// builder's second counts once, at the carpentry MET.
     fn build(&mut self, dt_s: f64) -> Result<(), IslandLifeError> {
-        let Some(saw) = self
+        let saw = self
             .energy
             .loads
             .iter()
             .find(|l| l.name == BUILDING_SAW)
-            .map(|l| l.item_id)
-        else {
+            .map(|l| l.item_id);
+        if self.firewood_shed.is_some_and(|b| b.is_finished()) {
+            if let Some(saw) = saw {
+                self.energy.set_in_use(saw, false);
+            }
+            return self.split_firewood(dt_s);
+        }
+        let Some(saw) = saw else {
             return Ok(());
         };
-        if self.firewood_shed.is_some_and(|b| b.is_finished()) {
-            self.energy.set_in_use(saw, false);
-            return Ok(());
-        }
-        let (rows, cols) = (
-            self.domain.rows(DomainLevel::Medium),
-            self.domain.cols(DomainLevel::Medium),
-        );
-        let builders: Vec<(String, LabourBody)> = self
-            .humans
-            .registry
-            .iter()
-            .filter(|h| matches!(h.profile.status, mk_core::human::HumanStatus::Alive))
-            .filter(|h| h.economy_action.kind == crate::humans::ActionKind::Build)
-            .filter(|h| {
-                matches!(
-                    self.positions.0.get(h.agent_id()).map(|p| p.space),
-                    Some(Space::Outdoors)
-                ) && self.at_home(self.standing_cell(h.agent_id(), rows, cols))
-            })
-            .map(|h| (h.agent_id().to_string(), LabourBody::from_human(h)))
-            .collect();
+        let builders = self.builders_at_home();
         self.energy.set_in_use(saw, !builders.is_empty());
         if builders.is_empty() {
             return Ok(());
@@ -2792,10 +2906,118 @@ impl IslandLife {
             .labour
             .met("carpentry_general")
             .map_err(IslandLifeError::Labour)?;
+        let now_s = self.sim_time_s as f64;
+        let ids: Vec<String> = builders.iter().map(|(id, _)| id.clone()).collect();
         for (id, body) in builders {
+            // The pack's hours are a practised carpenter's and splitter's (R11).
+            let skill = self
+                .skills
+                .time_factor(&self.learning, &id, Task::Building, now_s);
             if let Some(shed) = self.firewood_shed.as_mut() {
-                shed.worked_s += dt_s;
+                shed.worked_s += dt_s / skill;
             }
+            let extra = self
+                .labour
+                .energy_kcal(&body, met, dt_s)
+                .map_err(IslandLifeError::Labour)?
+                - self
+                    .labour
+                    .energy_kcal(&body, awake_met, dt_s)
+                    .map_err(IslandLifeError::Labour)?;
+            *self.labour_kcal.entry(id.clone()).or_insert(0.0) += extra.max(0.0);
+            if let Some(h) = self.humans.registry.get_human_mut(&id) {
+                h.labour_met = Some(met);
+            }
+        }
+        // A building finished is one of experience for each who built it.
+        if self.firewood_shed.is_some_and(|b| b.is_finished()) {
+            for id in ids {
+                self.skills
+                    .practise(&self.learning, &id, Task::Building, 1.0, now_s);
+            }
+        }
+        Ok(())
+    }
+
+    /// The living founders whose choice is to build and who are outdoors at
+    /// the estate, with their bodies for the labour's energy.
+    fn builders_at_home(&self) -> Vec<(String, LabourBody)> {
+        let (rows, cols) = (
+            self.domain.rows(DomainLevel::Medium),
+            self.domain.cols(DomainLevel::Medium),
+        );
+        self.humans
+            .registry
+            .iter()
+            .filter(|h| matches!(h.profile.status, mk_core::human::HumanStatus::Alive))
+            .filter(|h| h.economy_action.kind == crate::humans::ActionKind::Build)
+            .filter(|h| {
+                matches!(
+                    self.positions.0.get(h.agent_id()).map(|p| p.space),
+                    Some(Space::Outdoors)
+                ) && self.at_home(self.standing_cell(h.agent_id(), rows, cols))
+            })
+            .map(|h| (h.agent_id().to_string(), LabourBody::from_human(h)))
+            .collect()
+    }
+
+    /// With the shed up, everyone whose choice is to build splits the
+    /// store's air-dry wood into firewood by the house (D63), at the packs'
+    /// labour hours per solid cubic metre (Höldrich et al. 2007, a small
+    /// splitter's, which the axe nearly matches) and the Compendium's
+    /// chopping and splitting MET. Only split wood feeds the cooking fire;
+    /// splitting stops when all the store's wood is split.
+    fn split_firewood(&mut self, dt_s: f64) -> Result<(), IslandLifeError> {
+        let unsplit = self.materials.stock_kg(Material::Wood) - self.split_wood_kg;
+        if unsplit <= 0.0 {
+            return Ok(());
+        }
+        let builders = self.builders_at_home();
+        if builders.is_empty() {
+            return Ok(());
+        }
+        let missing =
+            |key: &str| IslandLifeError::Labour(LabourError::MissingReference(key.to_string()));
+        let library = self.labour.library();
+        let h_per_m3 = library
+            .item(
+                crate::validation::ReferenceDomain::Labour,
+                "firewood_splitting_labour_per_solid_volume",
+            )
+            .and_then(|i| i.central())
+            .ok_or_else(|| missing("firewood_splitting_labour_per_solid_volume"))?;
+        let density = library
+            .item(
+                crate::validation::ReferenceDomain::Geology,
+                "material_density_intrinsic",
+            )
+            .and_then(|i| i.table())
+            .and_then(|t| t.get("wood", "density_kg_m3"))
+            .ok_or_else(|| missing("material_density_intrinsic/wood"))?;
+        let kg_per_s = density / (h_per_m3 * 3600.0);
+        let awake_met = self
+            .labour
+            .met(AWAKE_AT_HOME_ACTIVITY)
+            .map_err(IslandLifeError::Labour)?;
+        let met = self
+            .labour
+            .met("chopping_splitting_wood")
+            .map_err(IslandLifeError::Labour)?;
+        let mut left = unsplit;
+        let now_s = self.sim_time_s as f64;
+        for (id, body) in builders {
+            if left <= 0.0 {
+                break;
+            }
+            // A beginner splits slower than the packs' rate (R11).
+            let factor = self
+                .skills
+                .time_factor(&self.learning, &id, Task::Splitting, now_s);
+            let kg = (kg_per_s / factor * dt_s).min(left);
+            left -= kg;
+            self.split_wood_kg += kg;
+            self.skills
+                .practise(&self.learning, &id, Task::Splitting, kg / density, now_s);
             let extra = self
                 .labour
                 .energy_kcal(&body, met, dt_s)
@@ -3160,6 +3382,7 @@ impl IslandLife {
                         || self.felling.contains_key(human.agent_id())
                         || self.hauling.contains_key(human.agent_id())
                         || self.labour_kcal.contains_key(human.agent_id())
+                        || self.skills.0.contains_key(human.agent_id())
                     {
                         forget.push(human.agent_id().to_string());
                     }
@@ -3192,6 +3415,7 @@ impl IslandLife {
                 self.water_trips.remove(&id);
                 self.foraging.remove(&id);
                 self.labour_kcal.remove(&id);
+                self.skills.0.remove(&id);
             }
             self.work(human_s as f64)?;
             self.mine(human_s as f64)?;
@@ -3300,8 +3524,10 @@ impl IslandLife {
         h.update(canonical(&self.resources).as_bytes());
         h.update(canonical(&self.mining).as_bytes());
         h.update(canonical(&self.firewood_shed).as_bytes());
+        h.update(canonical(&self.split_wood_kg).as_bytes());
         h.update(canonical(&self.hauling).as_bytes());
         h.update(canonical(&self.labour_kcal).as_bytes());
+        h.update(canonical(&self.skills).as_bytes());
         h.update(canonical(&self.water_drunk_kg).as_bytes());
         h.update(canonical(&self.household_water).as_bytes());
         h.update(canonical(&self.household_gas).as_bytes());
@@ -3369,6 +3595,23 @@ mod tests {
     /// the nearest placer, pans the packs' working day and walks home
     /// (D9): the job takes exactly that long, it is labour throughout, the
     /// day's gold lands in the store and the gravel leaves the site.
+    /// Gives every living person enough practice at `task` to work at the
+    /// packs' time (R11).
+    fn practise_everyone(life: &mut IslandLife, task: Task) {
+        let ids: Vec<String> = life
+            .humans
+            .registry
+            .iter()
+            .map(|h| h.agent_id().to_string())
+            .collect();
+        let units = life.learning.practised_units().ceil();
+        let now_s = life.sim_time_s as f64;
+        for id in ids {
+            life.skills
+                .practise(&life.learning, &id, task, units, now_s);
+        }
+    }
+
     #[test]
     fn a_founder_with_the_pan_works_the_nearest_placer_for_a_day() {
         let mut scenario =
@@ -3376,6 +3619,8 @@ mod tests {
         scenario.estate_patch.tree_cap = 200;
         let canon = Arc::new(CanonLocked::load(&repo("fixtures/island/canon.json")).unwrap());
         let mut life = IslandLife::bootstrap(scenario, canon).expect("the island bootstraps");
+        // The packs' times are a practised hand's (R11).
+        practise_everyone(&mut life, Task::Panning);
         assert!(
             life.estate_has_tool(PANNING_TOOL),
             "the shed has the gold pan"
@@ -3475,10 +3720,148 @@ mod tests {
         assert_eq!(life.snapshot().mining, life.mining);
     }
 
+    /// Two founders who gather outdoors together take the shed's crosscut
+    /// saw to one tree, one at each end, and it comes down after the walk
+    /// plus the felling pack's two-person time for that trunk, sooner than
+    /// the axe alone; both are then free.
+    #[test]
+    fn two_founders_fell_one_tree_with_the_crosscut_saw_in_the_packs_time() {
+        let mut scenario =
+            IslandScenario::load(&repo("fixtures/island/default_scenario.json")).unwrap();
+        scenario.estate_patch.tree_cap = 200;
+        let canon = Arc::new(CanonLocked::load(&repo("fixtures/island/canon.json")).unwrap());
+        let mut life = IslandLife::bootstrap(scenario, canon).expect("the island bootstraps");
+        // The packs' times are a practised hand's (R11).
+        practise_everyone(&mut life, Task::Felling);
+        assert!(life.estate_has_tool(FELLING_SAW), "the shed has the saw");
+
+        let at = life.vegetation.centre_m();
+        for who in ["Gem-D", "Gem-K"] {
+            life.positions.0.insert(
+                who.into(),
+                super::super::humans::EstatePosition {
+                    space: Space::Outdoors,
+                    position_m: at,
+                },
+            );
+            life.humans
+                .registry
+                .get_human_mut(who)
+                .unwrap()
+                .economy_action
+                .kind = crate::humans::ActionKind::Gather;
+        }
+        let tree = life.vegetation.nearest_tree(at).expect("a tree").clone();
+        let distance =
+            ((tree.position_m.0 - at.0).powi(2) + (tree.position_m.1 - at.1).powi(2)).sqrt();
+        let walk = |who: &str| {
+            let body = LabourBody::from_human(life.humans.registry.get_human(who).unwrap());
+            life.labour
+                .walking_time_s(&body, distance, life.climb_m(at, tree.position_m), 0.0)
+                .unwrap()
+        };
+        let slowest_walk = walk("Gem-D").max(walk("Gem-K"));
+        let saw = life
+            .labour
+            .fell_tree(LabourTool::CrosscutSaw, tree.stem_diameter_m * 100.0)
+            .unwrap()
+            .duration_s;
+        let axe = life
+            .labour
+            .fell_tree(LabourTool::SteelAxe, tree.stem_diameter_m * 100.0)
+            .unwrap()
+            .duration_s;
+        assert!(saw < axe, "the saw is quicker than the axe");
+
+        let minute = 60.0;
+        life.work(minute).unwrap();
+        let on: Vec<u64> = life.felling.values().map(|job| job.tree_id).collect();
+        assert_eq!(on, vec![tree.id, tree.id], "both on the one tree");
+        let mut worked = minute;
+        while life.vegetation.trees.iter().any(|t| t.id == tree.id) {
+            assert!(
+                worked < slowest_walk + saw + minute,
+                "still standing after {worked} s; the saw needs {saw} s after the walk"
+            );
+            life.work(minute).unwrap();
+            worked += minute;
+        }
+        assert!(
+            worked >= saw,
+            "felled after {worked} s, before the saw's {saw}"
+        );
+        assert!(life.felling.is_empty(), "both sawyers are done");
+        assert_eq!(life.materials.logs().count(), 1, "one log came down");
+    }
+
     /// A founder who gathers outdoors with the shed's axe walks to the
     /// nearest tree and fells it after exactly the walk plus the felling
     /// pack's time for that trunk; its usable wood lands in the estate's
     /// stock and the books close.
+    #[test]
+    fn a_beginner_fells_slower_than_the_pack_and_learns_from_it() {
+        let mut scenario =
+            IslandScenario::load(&repo("fixtures/island/default_scenario.json")).unwrap();
+        scenario.estate_patch.tree_cap = 200;
+        let canon = Arc::new(CanonLocked::load(&repo("fixtures/island/canon.json")).unwrap());
+        let mut life = IslandLife::bootstrap(scenario, canon).expect("the island bootstraps");
+        let at = life.vegetation.centre_m();
+        life.positions.0.insert(
+            "Gem-D".into(),
+            super::super::humans::EstatePosition {
+                space: Space::Outdoors,
+                position_m: at,
+            },
+        );
+        life.humans
+            .registry
+            .get_human_mut("Gem-D")
+            .unwrap()
+            .economy_action
+            .kind = crate::humans::ActionKind::Gather;
+        let tree = life.vegetation.nearest_tree(at).expect("a tree").clone();
+        let body = LabourBody::from_human(life.humans.registry.get_human("Gem-D").unwrap());
+        let distance =
+            ((tree.position_m.0 - at.0).powi(2) + (tree.position_m.1 - at.1).powi(2)).sqrt();
+        let walk = life
+            .labour
+            .walking_time_s(&body, distance, life.climb_m(at, tree.position_m), 0.0)
+            .unwrap();
+        let axe = life
+            .labour
+            .fell_tree(LabourTool::SteelAxe, tree.stem_diameter_m * 100.0)
+            .unwrap()
+            .duration_s;
+        // Never having felled a tree, the first takes the packs' time over
+        // a beginner's share of a practised hand's pace.
+        let needed = walk + axe / life.learning.novice_fraction;
+        let minute = 60.0;
+        let mut worked = 0.0;
+        while life.vegetation.trees.iter().any(|t| t.id == tree.id) {
+            assert!(
+                worked < needed + minute,
+                "still standing after {worked} s of {needed}"
+            );
+            life.work(minute).unwrap();
+            worked += minute;
+        }
+        assert!(
+            worked >= needed,
+            "felled after {worked} s, before a beginner's {needed}"
+        );
+        // One tree felled is one tree of experience: the next goes quicker.
+        let skill = life.skills.0["Gem-D"][&Task::Felling];
+        assert_eq!(skill.units, 1.0);
+        let now_s = life.sim_time_s as f64;
+        let next = life
+            .skills
+            .time_factor(&life.learning, "Gem-D", Task::Felling, now_s);
+        assert!(
+            next < 1.0 / life.learning.novice_fraction && next > 1.0,
+            "{next}"
+        );
+    }
+
     #[test]
     fn a_founder_with_the_axe_fells_the_nearest_tree_in_the_packs_time() {
         let mut scenario =
@@ -3486,6 +3869,8 @@ mod tests {
         scenario.estate_patch.tree_cap = 200;
         let canon = Arc::new(CanonLocked::load(&repo("fixtures/island/canon.json")).unwrap());
         let mut life = IslandLife::bootstrap(scenario, canon).expect("the island bootstraps");
+        // The packs' times are a practised hand's (R11).
+        practise_everyone(&mut life, Task::Felling);
         assert!(life.estate_has_tool(FELLING_TOOL), "the shed has the axe");
 
         // Gem-D outdoors at the patch's centre, choosing to gather.
@@ -3562,6 +3947,17 @@ mod tests {
             *life.labour_kcal.get("Gem-D").unwrap() > 0.0,
             "the work cost energy"
         );
+
+        // A vehicle another founder is hauling with is not in the garage.
+        let quickest = life.plan_haul(at, &body).unwrap().expect("a plan");
+        if quickest.method != timber::HaulMethod::OnFoot {
+            let mut elsewhere = quickest.clone();
+            elsewhere.log_id = u64::MAX;
+            life.hauling.insert("Elsewhere".into(), elsewhere);
+            let next = life.plan_haul(at, &body).unwrap().expect("another plan");
+            assert_ne!(next.method, quickest.method, "the vehicle is out");
+            life.hauling.remove("Elsewhere");
+        }
 
         // Keep working: Gem-D moves the log to the store, the quickest way.
         let (carbon, water) = (log.carbon_kgc, log.water_kg);
@@ -3726,8 +4122,9 @@ mod tests {
 
     /// With the bottles empty the household cooks on a wood fire (R4): it
     /// burns the packs' firewood per person at home from the store's
-    /// air-dry wood, its carbon to the air through an audit, and with no
-    /// wood either the time without any cooking fuel is counted.
+    /// air-dry wood once it has been split (D63), its carbon to the air
+    /// through an audit, and with no split wood the time without any
+    /// cooking fuel is counted.
     #[test]
     fn with_the_gas_gone_the_kitchen_burns_stored_wood_at_the_measured_rate() {
         let mut scenario =
@@ -3749,8 +4146,16 @@ mod tests {
         })
         .unwrap();
         let wood = life.materials.stock_kg(Material::Wood);
-        let audits = life.audits_closed;
 
+        // Logs nobody has split will not burn.
+        life.household_gas_step(3_600.0).unwrap();
+        assert_eq!(life.materials.stock_kg(Material::Wood), wood, "unsplit");
+        let gas = life.household_gas.clone().unwrap();
+        assert!((gas.without_fuel_s - 3_600.0).abs() < 1e-9);
+        life.household_gas.as_mut().unwrap().without_fuel_s = 0.0;
+
+        life.split_wood_kg = wood;
+        let audits = life.audits_closed;
         life.household_gas_step(3_600.0).unwrap();
         let gas = life.household_gas.clone().unwrap();
         let rate = gas.spec.firewood_kg_per_person_day;
@@ -3761,6 +4166,7 @@ mod tests {
             "burned {burned} kg of {wanted}"
         );
         assert!((gas.wood_burned_kg - burned).abs() < 1e-9);
+        assert!((life.split_wood_kg - (wood - burned)).abs() < 1e-9);
         assert_eq!(gas.without_fuel_s, 0.0, "there was wood");
         assert_eq!(life.audits_closed, audits + 1, "the fire closed its books");
 
@@ -3787,6 +4193,9 @@ mod tests {
         scenario.estate_patch.tree_cap = 200;
         let canon = Arc::new(CanonLocked::load(&repo("fixtures/island/canon.json")).unwrap());
         let mut life = IslandLife::bootstrap(scenario, canon).expect("the island bootstraps");
+        // The pack's hours are a practised carpenter's and splitter's (R11).
+        practise_everyone(&mut life, Task::Building);
+        practise_everyone(&mut life, Task::Splitting);
         let at = life.vegetation.centre_m();
         life.positions.0.insert(
             "Gem-D".into(),
@@ -3860,10 +4269,35 @@ mod tests {
             .find(|l| l.name == BUILDING_SAW)
             .unwrap();
         assert!(!saw.in_use);
+        // With the shed up the builder splits the rest into firewood (D63):
+        // 500 kg/m³ over 2.33 labour-hours per solid m³, about 215 kg/h.
+        let per_hour: f64 = 500.0 / 2.33;
+        assert!(
+            (life.split_wood_kg - per_hour.min(left)).abs() < 1e-6,
+            "{} kg split",
+            life.split_wood_kg
+        );
+        assert_eq!(
+            life.humans.registry.get_human("Gem-D").unwrap().labour_met,
+            Some(life.labour.met("chopping_splitting_wood").unwrap())
+        );
+        for _ in 0..(left / per_hour).ceil() as usize {
+            life.build(3_600.0).unwrap();
+        }
+        assert!((life.split_wood_kg - left).abs() < 1e-6, "all split");
+        life.build(3_600.0).unwrap();
+        assert!(
+            (life.split_wood_kg - left).abs() < 1e-6,
+            "no more than the store"
+        );
         // Kept and hashed.
         assert_eq!(life.snapshot().firewood_shed, life.firewood_shed);
+        assert_eq!(life.snapshot().split_wood_kg, life.split_wood_kg);
         let digest = life.state_digest();
         life.firewood_shed.as_mut().unwrap().worked_s += 1.0;
+        assert_ne!(life.state_digest(), digest);
+        let digest = life.state_digest();
+        life.split_wood_kg -= 1.0;
         assert_ne!(life.state_digest(), digest);
     }
 
@@ -3879,6 +4313,8 @@ mod tests {
         scenario.estate_patch.tree_cap = 200;
         let canon = Arc::new(CanonLocked::load(&repo("fixtures/island/canon.json")).unwrap());
         let mut life = IslandLife::bootstrap(scenario, canon).expect("the island bootstraps");
+        // The packs' rates are a practised hand's (R11).
+        practise_everyone(&mut life, Task::Foraging);
         life.humans
             .registry
             .get_human_mut("Gem-D")
@@ -3964,6 +4400,8 @@ mod tests {
         scenario.estate_patch.tree_cap = 200;
         let canon = Arc::new(CanonLocked::load(&repo("fixtures/island/canon.json")).unwrap());
         let mut life = IslandLife::bootstrap(scenario, canon).expect("the island bootstraps");
+        // The packs' rates are a practised hand's (R11).
+        practise_everyone(&mut life, Task::Foraging);
         let (rows, cols) = (
             life.domain.rows(DomainLevel::Medium),
             life.domain.cols(DomainLevel::Medium),

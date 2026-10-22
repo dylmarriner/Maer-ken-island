@@ -192,7 +192,7 @@ const DAY: u64 = 86_400;
 /// closed (the chain's hourly audits added), no food or water shortfalls,
 /// body carbon 12.9 of 13.0 and 10.4 of 10.4 kg, eating 48 and 44 minutes a
 /// day, asleep at home 40 of 56 and 40 of 55 hours.
-const WEEK_DIGEST: &str = "679abc7eb001bfe60562d7ef576b7b8f3a88ff7ed35f6b439a33851f9be88322";
+const WEEK_DIGEST: &str = "c32897c47a10fcb5fed2671df781949b3d924cdd9ed1a62103127cf552647054";
 
 fn repo(path: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))

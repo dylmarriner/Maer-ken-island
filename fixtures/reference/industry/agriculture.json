@@ -64,6 +64,21 @@
       "key": "statsnz_ur",
       "citation": "Stats NZ. Urban Rural 2023 boundaries (Urban_Rural_Areas_2023 feature layer, field LAND_AREA_SQ_KM, area 'Pukekohe', class 'Medium urban area'; 2022 edition for the earlier value), retrieved 2026-10-14 from Stats NZ's ArcGIS service.",
       "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "dairynz_ff2021",
+      "citation": "DairyNZ (2021). Facts and Figures: a quick reference guide for New Zealand dairy farmers (DNZ30-001, updated 2021), p. 113, Herd replacement rate (dairynz.co.nz/media/2xucxamj/facts-and-figures-dnz30-001-updated-2021-web-optimised.pdf).",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "countrywide2019",
+      "citation": "Maciver, A. (2019, 1 October). Ewe wastage a missed opportunity. Country-Wide (country-wide.co.nz/317618-2/), reporting Dr Anne Ridler's Massey University ewe wastage study of 38 farms, funded by Beef + Lamb NZ, the C Alma Baker Trust and the Massey University Research Fund.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "nzpork_ar2022",
+      "citation": "New Zealand Pork Industry Board (2022). Annual Report 2022, 'Our industry' (p.2): 632,784 pigs produced per year, 71.1 kg average carcass weight, average sow produces over 1.7 metric tonnes of pork each year (total carcass weight); 55% of sows indoors, 45% outdoors. Retrieved from nzpork's webflow CDN (Annual Report 2023_UPDATED.pdf, whose content is the 2022 report).",
+      "licence": "Facts cited with attribution"
     }
   ],
   "items": [
@@ -1259,6 +1274,62 @@
         }
       },
       "note": "Urban_Rural_Areas_2023, feature 'Pukekohe' (Medium urban area): LAND_AREA_SQ_KM 31.02793379 = 3,103 ha; the 2022 edition gives 32.06530245. This is the built-up urban area, not the surrounding market-garden district."
+    },
+    {
+      "key": "ewe_flock_replacement_rate",
+      "description": "Share of a New Zealand breeding ewe flock replaced each year by young ewes, making up for deaths and culls",
+      "unit": "percent of ewes per year",
+      "source": "countrywide2019",
+      "confidence": "low",
+      "value": {
+        "range": {
+          "min": 25,
+          "max": 35,
+          "typical": 30
+        }
+      },
+      "note": "Ridler, quoted: 'When you consider that some farmers have replacement rates of 25-35%, and even up to 40%, it becomes clearer.' Range across some farms, reported in trade press; typical is the midpoint, not a stated figure. No cattle equivalent found: Beef + Lamb RB35 p.18 gives in-calf heifers under two as 13% of the breeding herd (1 July 2013), which counts only heifers calving at two (about 30% of heifers), not the replacement rate."
+    },
+    {
+      "key": "dairy_herd_replacement_rate",
+      "description": "Share of a New Zealand dairy herd replaced each year by heifers entering the herd",
+      "unit": "percent of cows per year",
+      "source": "dairynz_ff2021",
+      "confidence": "medium",
+      "value": {
+        "point": 22
+      },
+      "note": "Quoted: 'New Zealand dairy cows have an average productive life of 4.5 lactations, thus requiring a replacement rate of 22% of heifers entering the herd. The optimal replacement rate for maximising profit has been estimated at 18%.' The rate covers the final not-in-calf rate, culls, all deaths on farm and planned herd growth, so in a herd of steady size the cows leaving equal it."
+    },
+    {
+      "key": "pig_production_per_sow",
+      "description": "New Zealand pig carcass weight and pork carcass produced per sow per year",
+      "unit": "kg carcass",
+      "source": "nzpork_ar2022",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "quantity",
+          "columns": [
+            "kg_carcass"
+          ],
+          "rows": [
+            {
+              "label": "average_carcass",
+              "values": [
+                71.1
+              ]
+            },
+            {
+              "label": "pork_per_sow_per_year",
+              "values": [
+                1700.0
+              ]
+            }
+          ]
+        }
+      },
+      "note": "'71.1kg average carcass weight'; 'average sow produces over 1.7 metric tonnes of pork each year (total carcass weight)'. 'Over' 1.7 t: the floor is taken. Indoor and outdoor herds together."
     }
   ]
 }

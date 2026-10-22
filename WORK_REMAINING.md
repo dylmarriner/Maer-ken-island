@@ -36,10 +36,10 @@ this list holds the current state. The evidence for what is *done* is in
 
 | Area | Item | State | Blocked on |
 |---|---|---|---|
-| Timber | Splitting, crosscut, rigging, routes (D40); drying and seasoning done 2026-10-14 | Open | Splitting and sawing rates |
+| Timber | Routes, sawing logs for the ute (D40); drying and seasoning done 2026-10-14, splitting, two-person crosscut felling and excavator rigging 2026-10-23 (D63) | Open | — |
 | Living world | Phase 3 Task 1b: species at island scale | Done (D55 open: upstream densities) | — |
-| Living world | Phase 3 Task 2: every resource and material, placers, recipes | Catalogue, mineral sites, gold placers, ironsand done (2026-10-14); biotic and animal nodes, gem placers, tools, recipes open | Cited diamond-placer grade, shaft depth and rate |
-| Living world | D9: actions take one tick | Open (felling, hauling done) | Cited durations per task |
+| Living world | Phase 3 Task 2: every resource and material, placers, recipes | Catalogue, mineral sites, gold placers, ironsand done (2026-10-14); diamond and platinum placers, animal, fish and plant nodes, salt works (2026-10-23); other gem and tin placers, tools, recipes open | Cited gem/tin placer models, shaft depth and rate |
+| Living world | D9: actions take one tick | In part: felling, hauling, splitting, shed, panning, foraging and water trips timed, learned by practice (R11); Craft, Explore and social actions one tick | Cited durations per task |
 | Living world | D31: NPP ignores soil nutrients | Open | Regional soils model and data |
 | Runtime | Phase 4 Task 2b: deep-time spin-up | **Done** (2026-10-14) | — |
 | Industry | Phase 4b Task 1 remainder: reference tables | Done 2026-10-14 (nine packs); gaps listed in §4a | A few items (see §4a) |
@@ -47,7 +47,7 @@ this list holds the current state. The evidence for what is *done* is in
 | Industry | Phase 4b Task 5: refinery, gas plant, fuel depot (D16) | Topping refinery done 2026-10-14; gas plant, reformer, depot open | Reformate yield; gas-plant own use |
 | Industry | Phase 4b Task 6: jobs, trades, maintenance (D39) | Open | Upstream human-runtime change first |
 | Industry | Phase 4b Task 7: money, enterprises, payroll | Money, payroll and metered bills done 2026-10-18 (`regional/economy/`, D61, D62; `tests/island_economy.rs`). In `IslandLife` 2026-10-22 (`economy/island.rs`: deposits, Gem Petroleum selling the depot's diesel, monthly loans, closes, dividends, money audit); the petroleum business's staff and payslips, household bills, buying and selling homes open | Task 6 staff; upstream buying |
-| Industry | Phase 4b Task 7b: food and timber chains | Open | Task 2 catalogue; crop/livestock data |
+| Industry | Phase 4b Task 7b: food and timber chains (forestry, sawmill, house framing, farm, livestock, food processing and fishery models 2026-10-23) | Models done; not yet on the map or wired into island life | Task 8 workforce: who works a farm, mill or salt works, chosen by the people themselves (R14), never assigned |
 | Industry | Phase 4b Task 8: town and workforce | Open; the owner decided the town starts at each enterprise's smallest staff and grows (2026-10-15, §4g) | Demographic tables; a sourced minimum staff per enterprise |
 | Industry | Phase 4b Task 9: dashboard pages, year acceptance | Industry panel done 2026-10-23; other pages open | Tasks 4-8 |
 | Climate | D3 rest: sea/land breezes, katabatic winds | Open | A diurnal wind solver |
@@ -58,7 +58,7 @@ this list holds the current state. The evidence for what is *done* is in
 | App | Phase 5 Tasks 3-8 | Partly done | See below; one owner pick (portraits) |
 | Gates | Gate 1, 2, 3 owner reviews | **Closed** (owner, 2026-10-13) | — |
 | Upstream | PRs for every divergence in `UPSTREAM.md` | Open | Owner's upstream access |
-| Realism | R0-R10: humans, work and the living world replicate Earth (section 8) | R0, R1 and R1b (fetching water by hand) done; R3 next | Engineering and sourcing |
+| Realism | R0-R10: humans, work and the living world replicate Earth (section 8) | R0, R1 and R1b (fetching water by hand) done; R8 in part and R11 (learning by doing) started 2026-10-23; R12-R14 with the other session; R3 next | Engineering and sourcing |
 | CI | Nightly slow job and dependency audit | Green after PR #15 | See Housekeeping |
 
 ---
@@ -91,16 +91,27 @@ the log's last water is booked to the air at that moment rather than when the wo
 
 ### 1c. Splitting, the crosscut saw, rigging and routes
 
-- **Splitting firewood:** the MET is already in `fixtures/reference/humans/physiology.json`
-  (the Compendium's `chopping_splitting_wood`); a cited splitting rate (kg or pieces per hour)
-  is needed for the duration.
-- **The two-person crosscut saw:** needs both founders at the log together, which is a
-  coordination change in `life.rs`, plus a cited two-person sawing rate.
-- **Excavator rigging:** the CAT 330 lifts with the shed's rope; attaching a sling is untimed
-  because no cited figure was found. Either source a rigging time or the owner adds a grapple.
+- **Splitting firewood (done 2026-10-23, D63):** once the shed stands, founders who choose to
+  build split the store's air-dry wood by the house at Höldrich et al. 2007's 2.33 labour-hours
+  per solid m³ (`labour/timber.json`), at the Compendium's chopping and splitting MET; the
+  cooking fire burns only split wood. Left: a split-only axe rate for a long day, and stacking.
+  (Checked 2026-10-23: the Finnish Work Efficiency Institute's comparison of five firewood
+  methods, ETDEWEB 5174992, gives 0.95 m³ per effective hour for chainsaw cross-cutting plus axe
+  splitting together, m³ not stated as solid or stacked, so it is not a split-only rate.)
+- **The two-person crosscut saw (felling done 2026-10-23, D40):** a founder gathering with no
+  tree of their own takes the other end of the shed's saw at a tree one other founder fells,
+  and two at one tree fell it at the pack's two-person crosscut time (`labour/productivity.json`, 8-25 min for
+  30 cm; FAO Forest Harvesting Case Study 18 measured two-cutter crosscut crews at 1.11-1.99
+  m³/h). Left: cross-cutting a log for the ute with the saw rather than the axe.
+- **Excavator rigging (done 2026-10-23, D40):** the CAT 330 has no grapple, so its operator
+  slings each log by hand before the pick-up and frees it after the set-down, at Borz & Mititelu
+  2022's measured hook and unhook times for hand-rigged winch logs (13.59 s and 9.30 s, 278 logs,
+  `labour/timber.json`), and the operator's walk from the cab to the log and back each time, the
+  log lying at the 6 m radius the CAT's lift is rated at (2026-10-23).
 - **Routes:** legs are straight lines. Walks climb the ground's rises along them (Naismith,
   `EstateLayout::ground_m`, 2026-10-14); obstacles are ignored, vehicle times ignore slope, and
-  vehicles have no position of their own. A route over the patch terrain with a
+  vehicles have no position of their own, though one a founder is hauling with is no longer
+  free for another (2026-10-23). A route over the patch terrain with a
   slope cost, and vehicles that stay where they were parked, would close this.
 - **Files:** `regional/timber.rs`, `regional/life.rs` (`work`, `plan_haul`,
   `finish_haul_task`), `regional/labour.rs`.
@@ -115,7 +126,7 @@ Done 2026-10-14 (`regional/species.rs`, D55): upstream's founding species placed
 habitats, plants and grazers as shares of the island's carbon fields, other guilds at upstream's
 density times the island's habitat area. **Left:** Earth-calibrated densities and a carbon pool
 for each consumer guild (realism R8, R10); serving the species to the map and the cell inspector;
-animal and fish resource nodes (§2b), which can now read the habitats.
+animal and fish resource nodes (done 2026-10-23, §2b).
 
 ### 2b. Phase 3 Task 2: every resource and material
 
@@ -128,12 +139,32 @@ animal and fish resource nodes (§2b), which can now read the habitats.
   50% Fe, phosphorite 330 Mt at 25% P2O5, placer gold 0.2 g/t were corrected), and a unit test
   holds them to the pack. D56 records what the sites leave out.
 - **Left:**
-  - Diamond and gem placers below kimberlite and gem deposits: the bulletin's model 39d is
-    descriptive only (no grade-tonnage), so a cited diamond-placer grade is needed.
+  - Diamond placers below kimberlites are sited (2026-10-23) from Bliss's (1992, USGS OFR 92-437)
+    model 39d grade and volume, inland only; working them needs a jig or a pan's concentrate sorted
+    by hand, with cited rates. Platinum placers are sited below ultramafic bodies (2026-10-23)
+    from Singer and Page's model 39b (USGS Bulletin 1693, 83 Urals placers), inland, platinum
+    only, and refused like the diamonds until a working rate is cited. Placer tin (39e) has only
+    a descriptive model, no grade or tonnage. Gem placers below the other gem deposits still need
+    a source.
   - Hand mining of primary ore: a cited artisanal shaft or adit depth and rate (refused by name
     until then).
-  - Biotic nodes as views of cell biomass, animal and fish nodes from `regional/species.rs`
-    populations, salt pans and water sources.
+  - Animal and fish nodes (2026-10-23): `IslandBiota::animal_nodes` gives each cell's animals
+    as views of their species' abundance there (a grazer's share of the cell's grazer carbon,
+    any other animal at upstream's density over the cell), adding up to the species on the
+    island; hunting and fishing them, and the fishery model on the sea's fish, are still to
+    come, and the densities stay upstream's (D55).
+  - Salt (2026-10-23): `industry/salt_works.rs` makes solar salt at Dominion Salt's Lake
+    Grassmere yield per hectare of production area (pack, 42.4-49.4 t/ha/yr); it ignores the
+    rain that swings Grassmere's harvest from nil to 130,000 t, and no works is sited yet (a
+    sourced siting rule for coastal flats and a dry climate is needed).
+  - Plant nodes (2026-10-23): `IslandBiota::plant_nodes` gives each plant species' share of a
+    cell's living biomass carbon, adding up to the species on the island.
+  - Water sources: already in the model, not as a separate node. `physical.river_flows`
+    (`industry/flow_duration.rs`) holds a flow-duration curve for every perennial medium cell,
+    and `RiverFlowRecord::is_river` marks those at the hydrology's 1 m³/s river threshold;
+    `FlowNetwork::lake_depth_m` gives the lakes, and each house has its roof tank
+    (`household_water.rs`). People already walk to the nearest liquid water, drink and carry
+    jerrycans home for the tank (`WaterTrip`, R1b).
   - The new tools in `resource_economy.rs`, smelting and the other recipes, mass-balanced through
     the material ledger.
   - Serving the sites to the map and the founders' choices.
@@ -142,10 +173,13 @@ animal and fish resource nodes (§2b), which can now read the habitats.
 
 ### 2c. D9: most actions still take one tick
 
-- **Now:** felling, hauling and panning a placer for gold (2026-10-14: walk there, the packs'
-  working day at the pan, walk home, the gold to the store) are timed and costed; everything
-  else completes in one tick. Foraging food (R3, with session 38's Kelly 2013 return rates) is
-  next.
+- **Now (2026-10-23):** felling (axe or two-person crosscut saw), hauling (ute or excavator with
+  rigging), splitting firewood, building the shed, panning a placer for gold, foraging (R3, Kelly
+  2013 return rates) and water trips (R1b) are timed and costed, and each is slowed for a
+  beginner and quickened by practice (R11, D64). Still one tick: Craft (upstream's instant
+  recipes: planks, masonry, rope, fuel, ingots, tools; on the island nobody carries their inputs
+  yet, since timber and gold go to the estate's store), Explore and SocialApproach (moves paced by
+  the cell crossing only), Transfer, Harm and Intimacy.
 - **Needs:** a cited duration for each action (`fixtures/reference/labour/productivity.json`
   holds some already), and the same task machinery felling uses (`life.rs` `work`) extended to
   them. Actions with no Compendium row cost the resting baseline (D22, accepted).
@@ -323,6 +357,45 @@ trade, a 2-3 bedroom cottage's floor area (Task 6 and 7b); the Pukekohe growing 
   forestry.rs,sawmill.rs,construction.rs}`.
 - **Tests:** `tests/food_chain.rs`, `tests/timber_chain.rs` (harvest never exceeds regrowth,
   carbon conserved from tree to house).
+- **Done 2026-10-23:**
+  - `forestry.rs`: even-aged radiata pine stands clearfelled at the NEFD's 28.2-year average age
+    for 486 m³/ha (Lane 2007) and replanted, so harvest never exceeds regrowth (unit tests).
+  - `sawmill.rs`: logs sawn at New Zealand's 1.81 m³ of roundwood per m³ of sawnwood (FAO/ITTO/UN
+    2020). The rest is shared in North America's residue proportions as a stand-in, since New
+    Zealand reports no material balance. The pack item had mislabelled those shares as New
+    Zealand's and is corrected.
+  - Carbon: wood carries radiata's basic density 0.38 t/m³ times a conifer's 0.51 carbon fraction
+    (IPCC 2006 Tables 4.14, 4.3). `tests/timber_chain.rs` checks a century of plantation and mill:
+    no overcut, and no carbon lost from felling to the mill's gate.
+  - `construction.rs`: the reference house's wall frames (thinkstep 2022: 325 m² of framed wall,
+    18% timber, 90 mm deep) built from the mill's timber, carbon kept from tree to house.
+  - `farm.rs`: dairy land at the national 2.76 cows/ha and 400 kg of milksolids a cow (LIC and
+    DairyNZ 2023-24, which checks against their 1,105 kg/ha), crops at FAOSTAT's 2023 New Zealand
+    yields per hectare (vegetables are FAO estimates).
+  - `livestock.rs`: ewes and cows at Beef + Lamb's Class 5 lambing (140.3%) and calving (87.5%);
+    ewe lambs replace the 30% of ewes lost each year (Ridler's 25-35%, Country-Wide 2019) and the
+    other lambs are killed the same season at 19.93 kg; calves at 20 months at the steer's 316 kg.
+    No cattle replacement rate has a source yet (RB35's 13% counts only heifers calving at two),
+    so every calf is finished and the cows are held constant; cull ewes' mutton is not counted.
+    Sows farrow all year at NZ Pork's 1.7 t of carcass per sow (2022 annual report) at 71.1 kg a
+    pig, killed at 5.5 months; the sow herd is held constant (no sow replacement rate read).
+  - `food_processing.rs`: the farms' wheat, barley and oats milled and malted, and their whole milk
+    (FAOSTAT 2023: 4,593 kg a cow) made into cream, butter, cheese, powder and so on, at New
+    Zealand's extraction rates in FAO's Technical Conversion Factors (wheat 78% flour and 22%
+    bran, butter 6.1% of milk). `tests/food_chain.rs` follows wheat to flour and milk to butter.
+  - `fishery.rs`: a stock in Schaefer surplus production with depensation below a quarter of
+    unexploited biomass, `r` the middle of Froese et al. (2017) Table 2's prior for its FishBase
+    resilience class; the catch is capped at the surplus, so the fishery never takes more than
+    grows. Not yet fed by the island's fish: their densities are upstream's (D55) and no species
+    carries a resilience class.
+  - The reference house's floor is a concrete slab on grade (thinkstep 2022 Table 2-2), so it has
+    no floor timber. Its roof is "timber roof trusses (70x45mm SG8 H1.2 treated purlins)" over
+    263 m², but the report gives the roof only as kg CO2e per m² (Table 6-7), not a timber volume.
+  - Still open: roof truss and other timber in the house (no volume source found), the plantation and
+    farms on the map fed by the existing felling and hauling, a beef herd's replacement rate (the
+    dairy herd's is DairyNZ's 22% a year; the ewe flock's Ridler's 25-35%; no beef-cow figure
+    found), the fishery on the island's own fish, bread and other second-stage foods (neither
+    FAO's conversion factors nor USDA AH-697 give a bread yield), the plants' energy use, and the supermarket.
 
 ### 4g. Task 8: town and workforce
 
@@ -378,7 +451,7 @@ dashboard; the desktop panels).
 
 | Task | Remaining | Needs |
 |---|---|---|
-| 3 | Individual stems in 3D around the yard are drawn (2026-10-14, `stems.rs`: up to 3,000 trunks within 250 m, at their own height and diameter); left of 2a: stand cover and instanced trees beyond the patch from biomass. Interiors (2b), industry and town (2d, after Phase 4b), resource visuals and inventory icons (2c, after Phase 3 Task 2), tests for every building kind and vehicle | Engineering |
+| 3 | Individual stems in 3D around the yard are drawn (2026-10-14, `stems.rs`: up to 3,000 trunks within 250 m, at their own height and diameter); left of 2a: stand cover and instanced trees beyond the patch from biomass. Interiors (2b), industry and town (2d, after Phase 4b), resource visuals and inventory icons (2c, after Phase 3 Task 2). Every building kind and vehicle is tested (2026-10-23): `property.rs` holds its kind lists to the founders' estate and checks each vehicle's model, and `tests/reading_an_island.rs` draws every building and item from a running island | Engineering |
 | 4 | Done 2026-10-14: the person inspector (the backend's sections, with what they are doing and thinking, and family), the foundry (create somebody from the desktop), and the founders' portraits (the owner chose upstream's `new-gem-d` and `new-gem-k` and confirmed their provenance; `assets/humans/portraits/`). Nothing left | — |
 | 5 | Done 2026-10-14 for the clock, controls and terrain cell (`apps/island_ui/src/inspectors.rs`): six speeds with requested and achieved, Save, the local date (year, day of 288, time of a 36-hour day) with Earth time elapsed, and the cell under the view with its biome, climate and production. A click on the estate picks a building, room, item or tree and the right panel describes it (`estate.rs` `pick`, `stems.rs` `describe`). Nothing left | — |
 | 6 | Done; the owner accepted the default targets on 2026-10-14: `island_bench` and `benchmarks/2026-10-08-regional-baseline.json` (12.9 simulated days per real minute headless against a default target of one, so no fallback profile), the allocation-bound test (`tests/island_allocation_bounds.rs`, `construction-counters`), and formal predictive processing measured at 0.9% of the human step (`tests/island_dead_compute.rs`), so keeping it running costs little. The plan's Task 6 status has the detail | Targets confirmed: headless one simulated day per real minute, real time with the UI open. Formal predictive processing: the owner decided on 2026-10-14 to wire it into decisions, and it is (2026-10-15, `UPSTREAM.md` production item 6): what its critic learned each action is worth steers `AutonomousMind::choose_action`, and its critic learns from the action actually taken |
@@ -439,13 +512,25 @@ Ordered by what most changes the founders' daily life:
 | R1 | Water at home: a rainwater tank filled by simulated rain on the house roof, sized from the estate's own climate (ESR 2021 use, Harrison Grierson 2011 inflow model); people away from home drink where they find water; a dry tank means fetching by hand | work §3.2 | Tank done (PR #10, D42); R1b fetching by hand with two 20 L jerrycans when dry done (PR #12) |
 | R2 | Mass-based carrying and real containers: load limits by body mass, pace and energy by load | work §3.1, §2.2 | In part (2026-10-14): load limits by body mass; pace under load from measured self-selected speeds; energy by load from Pandolf's equation for water fetched by hand. Open: a general mass inventory of what each person holds, and baskets, sacks and packs |
 | R3 | An edible food base: edible fractions, foraging with a food store at home, seasonal and soil-limited plant production (D31) | earth Steps 1-2, work §3.3 | Started (#42, D57): people eat only a forest's fruit and seed, grown at NPP times Ward et al. 2025's reproductive allocation, not its wood. A meal is now gathered before it is eaten: the walk to the food and back, and the meal's energy over Kelly's (2013, Table 3-4) acorn return rate, 821 kcal/h, at the Compendium's foraging MET. At home the household keeps a food store: one trip gathers what everyone at home owes, carried back within the forager's sustainable load (R2), and the others eat from the store (2026-10-15). Search time on top of Kelly's post-encounter rate: 0.5 h per hour of handling, from O'Connell and Hawkes's (1984) Alyawara fruit trips (2026-10-22). Left: search that slows as the cell's food runs low, spoilage, bracken and raupo once their extent per cell is sourced, seasonality, soil limits (D31) |
-| R4 | Firewood, drying (D40), fire and cooking | work §3.4, §2.5-2.6 | In part: logs dry (D40); the kitchen's gas stove burns the house's average cooking LPG from two bottles (D59, 2026-10-14); when the bottles are empty, a wood fire burns the store's air-dry wood at kitchen-performance-test rates (1.74-1.98 kg per adult equivalent per day). Open: meals cooked at times of day, fire tending and fetching time, splitting (no peer-reviewed split-only axe rate was found; Granqvist 1993's 0.95 m³/h includes chainsaw crosscutting) |
+| R4 | Firewood, drying (D40), fire and cooking | work §3.4, §2.5-2.6 | In part: logs dry (D40); the kitchen's gas stove burns the house's average cooking LPG from two bottles (D59, 2026-10-14); when the bottles are empty, a wood fire burns the store's air-dry wood at kitchen-performance-test rates (1.74-1.98 kg per adult equivalent per day). Open: meals cooked at times of day, fire tending and fetching time. Splitting done 2026-10-23 (D63): only split wood burns |
 | R5 | Every action takes its real time (D9): gather, mine, build with delivered materials and visible progress, craft chains; skill improves with practice (power law) | work §3.5-3.8 | Started (2026-10-14): mining a placer is timed (D9); the first building, a 10 m² firewood shed, takes its timber from the store's seasoned wood and the packs' timber-frame hours with the powered saw (D60); the starting estate counts as pre-built (D60, the owner's ruling). Open: gathering clay, sand, gravel and stone, a covered stack's drying, craft chains, skill |
 | R6 | Senses and perception as things (sight, hearing, smell, taste, touch and pain from injury), memory of places, and choices that use memory, emotion, goals and personality | humans ranks 1, 3 | Open |
 | R7 | Emotion by appraisal with mood; per-person bonds and cooperation; teaching; dependent children who learn and acquire language; invention from experience, not a timer | humans ranks 2, 4-6 | Open |
-| R8 | Game and hunting, fish and shellfish, farming and livestock | earth Steps 3-4, §2.5 | Open |
+| R8 | Game and hunting, fish and shellfish, farming and livestock | earth Steps 3-4, §2.5 | In part (2026-10-23): animal and fish nodes per cell from `regional/species.rs`, a Schaefer fish stock (`industry/fishery.rs`, Froese et al. 2017) and farm and livestock models (§4f), none worked by anyone yet. Hunting needs a choice to hunt from `humans/autonomy.rs` (no hunt action exists; R14), encounter rates from the nodes' densities, and post-encounter return rates, which Kelly (2013) Table 3-4 lists (deer 17,971-31,450 kcal/h, rabbit 8,983-9,800, trout by spear 17,700-24,400, shellfish 300-14,100) |
 | R9 | Thermoregulation from sources, clothing and shelter; injury, accident and illness by mechanism; sleep stages | humans ranks 7-9 | Open |
 | R10 | Disturbance and succession, fire, predators, pollinators, disease of plants and animals | earth Steps 5-7 | Open |
+| R11 | Everything is learnt (owner, 2026-10-23): no one is born able to do a task; each skill rises with every repetition (a learning curve), making the task faster and its result better, and fades with disuse; free will picks what to do from what a person needs and wants. Takes over R5's "skill improves with practice". Distinct from Task 6's `TradeQualification` (a credential, not a skill) | Needs sources: learning-curve exponents per kind of task (only crosscut felling found), quality with skill, teaching | Started 2026-10-23 (D64): everyone learns felling, splitting, panning, foraging and building by doing, from one sourced curve, and forgets with disuse. Open: per-task curves, quality, teaching, other tasks |
+| R12 | The body trains (owner, 2026-10-23): physical work builds stamina (aerobic capacity) and muscle; lifting raises the load a person can lift; inactivity and eating beyond need do the opposite (detraining, fat gain); body composition changes how a person looks. R2's load limits then follow each person's own strength | Needs sources: VO2max and strength gains with training load, detraining rates, muscle protein accretion and loss, energy surplus to fat mass | Open. Upstream first (human runtime) |
+| R13 | Genetics (owner, 2026-10-23): a DNA-like genome, half from each parent, sets each person's starting point and limits (height, build, trainability, predispositions) | Needs sources: heritabilities of the traits modelled; touches birth (`reproduction.rs`) and how the population is stored | Open. Upstream first |
+
+**Owner decision (2026-10-23), in the owner's words:** "the humans in this need to learn to do
+things and have free will to decide what they need and want to do. all things must be learnt and
+over time as they do something more often they get better and better. when they do physical
+activities that increases stamina and muscle mass which changes physical appearance and if they
+are lazy and do nothing but eat all day that does the opposite. if they lift things they get
+stronger and can lift heavier things everything needs to be trained essentially like humans on
+earth do. they also need to have a double helix like humans do." R11-R13 record it; each number
+they need is sourced into `fixtures/reference/` before it is used.
 
 Still unsourced and needing a second pass before use (not to be typed in): edible and carcass
 fractions, fruit and seed yields, foraging return rates, firewood per person per day, cordage

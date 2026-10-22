@@ -1,0 +1,57 @@
+{
+  "id": "learning",
+  "domain": "humans",
+  "title": "Learning by doing and forgetting with disuse",
+  "retrieved": "2026-10-23",
+  "licence": "Numerical values cited as facts with attribution; no text, figures or datasets reproduced.",
+  "sources": [
+    {
+      "key": "silayo2014",
+      "citation": "Silayo, D. S. A., Migunga, G. A. and Shemwetta, D. T. K. (2014). Determination of learning curves and forgetting factors of two-man crosscut saw operators during tree cutting operations in a 'learn by doing' experiment. American Journal of Environmental Engineering 4(5), 106-116. doi:10.5923/j.ajee.20140405.04",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "purfurst2010",
+      "citation": "Purfürst, F. T. (2010). Learning curves of harvester operators. Croatian Journal of Forest Engineering 31(2), 89-97. https://hrcak.srce.hr/63720",
+      "licence": "Facts cited with attribution"
+    }
+  ],
+  "items": [
+    {
+      "key": "learning_index_novice_manual_felling",
+      "description": "Learning index b of the unit learning curve T_n = T_1 n^b for crews new to tree cutting, n = trees cut",
+      "unit": "dimensionless (exponent)",
+      "source": "silayo2014",
+      "confidence": "low",
+      "value": { "point": -0.281 },
+      "note": "Sec. 3.1.2, Eq. 13: start-up two-man crosscut saw crews, Tanzanian plantation clear felling, before training: b = -0.281, a learning rate of 18% (each doubling of trees cut takes 1 - 2^b off the time per tree). The same crews after training: b = -0.223 (14%). Experienced crews: b = -0.08 (6%) before training, -0.4259 (24%) after. Crawford's unit model, which the authors find suits forest work better than Wright's cumulative-average model. One manual task; applied to other manual tasks only as a stand-in (DEVIATIONS D64)."
+    },
+    {
+      "key": "experience_forgotten_per_break",
+      "description": "Forgetting factor over a break from the task, by crew experience",
+      "unit": "fraction",
+      "source": "silayo2014",
+      "confidence": "low",
+      "value": {
+        "table": {
+          "row_label": "crew",
+          "columns": ["forgetting_factor", "break_months"],
+          "rows": [
+            { "label": "start_up", "values": [0.19, 3.0] },
+            { "label": "experienced", "values": [0.094, 3.0] }
+          ]
+        }
+      },
+      "note": "Sec. 3.2: after a three-month break the experienced crew had a forgetting factor of 9.4% and the start-up crew 19%, computed with Carlson and Rowe's learn-forget-learn model (Eq. 2), whose forgetting curve is in units of lost experience. The authors note other industries average about 25%. Read here as the share of accumulated experience lost per three months away from the task, compounding; that reading is ours (D64)."
+    },
+    {
+      "key": "novice_performance_fraction_of_mean",
+      "description": "A beginner's performance at the start of the learning phase, as a share of the mean operator's",
+      "unit": "fraction",
+      "source": "purfurst2010",
+      "confidence": "low",
+      "value": { "range": { "min": 0.5, "max": 0.6 } },
+      "note": "Abstract: 32 harvester operators over three years, 16 of them beginners; most begin at 50-60% of mean performance and double it by the end of the learning phase, which lasts 8 months on average, along a sigmoid curve. Mechanised harvesting, not hand work; used for hand tasks only as a stand-in (D64)."
+    }
+  ]
+}

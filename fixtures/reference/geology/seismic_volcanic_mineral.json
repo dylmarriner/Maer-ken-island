@@ -71,6 +71,16 @@
       "licence": "Public domain (U.S. Government work)"
     },
     {
+      "key": "bliss1992_39d",
+      "citation": "Bliss, J. D. (1992). Grade, volume, and deposit-specific models of diamond placers (model 39d). In Orris, G. J. and Bliss, J. D. (eds), Industrial-mineral deposit models: grade and tonnage models. U.S. Geological Survey Open-File Report 92-437, pp. 73-77, figs. 48-51 (pubs.usgs.gov/of/1992/ofr-92-0437/of92-0437.pdf).",
+      "licence": "Public domain (U.S. Government work)"
+    },
+    {
+      "key": "singer_page1986_39b",
+      "citation": "Singer, D. A. and Page, N. J (1986). Grade and tonnage model of placer PGE-Au (model 39b). In Cox, D. P. and Singer, D. A. (eds), Mineral deposit models. U.S. Geological Survey Bulletin 1693, p. 265, figs. 198-200 (pubs.usgs.gov/bul/b1693/html/bull8pth.htm). Data from Calkins and others (1978).",
+      "licence": "Public domain (U.S. Government work)"
+    },
+    {
       "key": "christie2024",
       "citation": "Christie, A. B., Barker, R. G., Brathwaite, R. L., Hill, M. P., Rooyakkers, S. M. and de Ronde, C. E. J. (2024). The mineral potential of New Zealand - Part 1: Overview of New Zealand's mineral deposits and their resources. GNS Science Consultancy Report 2024/62A, revised September 2024; section 4.2.1, Table 7.2 and section 8.",
       "licence": "Facts cited with attribution"
@@ -281,6 +291,42 @@
         }
       },
       "note": "Read from the bulletin's figs. 196 and 197 on 2026-10-14. The authors converted volumes to tonnes at 2.0 t/m3 (item placer_gravel_density). Gold grade correlates with tonnage (r = -0.35). The descriptive model sites placers where gradients flatten and river velocities lessen."
+    },
+    {
+      "key": "diamond_placer_grade_volume",
+      "description": "Volume and diamond grade of diamond placers (25 deposits, mostly alluvial, some residual over kimberlite pipes, beach placers excluded) at the 90th, 50th and 10th percentiles",
+      "unit": "volume million m3; grade carats per m3",
+      "source": "bliss1992_39d",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "quantity",
+          "columns": ["p90", "p50", "p10"],
+          "rows": [
+            { "label": "volume_mm3", "values": [0.023, 0.57, 14.0] },
+            { "label": "diamond_ct_m3", "values": [0.029, 0.37, 4.7] }
+          ]
+        }
+      },
+      "note": "Read from figs. 48 (size) and 49 (grade) on 2026-10-23. Workings within 1.5 km count as one deposit. The model gives volume, not tonnes; the island converts it at model 39a's 2.0 t/m3 for wet sand and gravel (placer_gravel_density), a stand-in (D56)."
+    },
+    {
+      "key": "placer_pge_au_grade_tonnage",
+      "description": "Tonnage and platinum grade of placer PGE-Au deposits (83 deposits, all in the Urals) at the 90th, 50th and 10th percentiles",
+      "unit": "tonnage million tonnes; platinum parts per billion",
+      "source": "singer_page1986_39b",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "quantity",
+          "columns": ["p90", "p50", "p10"],
+          "rows": [
+            { "label": "tonnage_mt", "values": [0.011, 0.11, 1.8] },
+            { "label": "pt_ppb", "values": [330.0, 2500.0, 6500.0] }
+          ]
+        }
+      },
+      "note": "Read from figs. 198 (tonnage) and 199A (platinum) on 2026-10-23. Gold is reported in only about a tenth of the deposits (fig. 199B, 10th percentile 0.048 g/t), so the island gives these sites platinum only. The authors note the platinum plot suggests three populations, dredged and conventional placers mixed."
     },
     {
       "key": "placer_gravel_density",

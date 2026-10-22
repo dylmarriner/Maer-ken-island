@@ -178,6 +178,24 @@ pub struct IslandSpecies {
     pub abundance: Abundance,
 }
 
+/// How much of a species a resource node holds.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum NodeStock {
+    /// Its carbon on the cell (kg C), for a grazer.
+    CarbonKgc(f64),
+    /// How many live on the cell, for an animal counted by density.
+    Head(f64),
+}
+
+/// One species' animals on one medium cell, as something to hunt or fish.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct AnimalNode {
+    pub cell: usize,
+    /// Index into [`IslandBiota::species`].
+    pub species: usize,
+    pub stock: NodeStock,
+}
+
 /// Upstream's species on the island's ground.
 #[derive(Debug, Clone)]
 pub struct IslandBiota {
@@ -393,6 +411,84 @@ impl IslandBiota {
         let s = self.species.get(index)?;
         (s.abundance == Abundance::UpstreamDensity)
             .then(|| s.upstream_density_per_m2 * self.habitat_area_m2(&s.affinity))
+    }
+
+    /// The animals (and fish) living in medium cell `cell`, as resource
+    /// nodes: views of the species' abundance on that cell, never a store
+    /// of their own. A grazer's node is its share of the cell's grazer
+    /// carbon, split among the grazers there by upstream population as
+    /// [`Self::carbon_kgc`] splits the island's; any other animal's is
+    /// upstream's density over the cell. Plants are left out: their
+    /// carbon is the cell's biomass, which felling and foraging already
+    /// work.
+    pub fn animal_nodes(&self, cell: usize, ecology: &RegionalEcologyState) -> Vec<AnimalNode> {
+        let mask = self.habitat.get(cell).copied().unwrap_or(0);
+        if mask == 0 {
+            return Vec::new();
+        }
+        let grazer_kgc = ecology
+            .herbivore_kgc_m2
+            .data()
+            .get(cell)
+            .map_or(0.0, |c| c * self.cell_area_m2);
+        let grazer_denominator: f64 = (0..AFFINITIES.len())
+            .filter(|i| mask & (1 << i) != 0)
+            .map(|i| self.grazer_weight[i])
+            .sum();
+        self.species
+            .iter()
+            .enumerate()
+            .filter(|(_, s)| mask & bit(&s.affinity) != 0)
+            .filter_map(|(index, s)| {
+                let stock = match s.abundance {
+                    Abundance::ProducerCarbon => return None,
+                    Abundance::GrazerCarbon if grazer_denominator > 0.0 => NodeStock::CarbonKgc(
+                        grazer_kgc * s.upstream_population as f64 / grazer_denominator,
+                    ),
+                    Abundance::GrazerCarbon => NodeStock::CarbonKgc(0.0),
+                    Abundance::UpstreamDensity => {
+                        NodeStock::Head(s.upstream_density_per_m2 * self.cell_area_m2)
+                    }
+                };
+                Some(AnimalNode {
+                    cell,
+                    species: index,
+                    stock,
+                })
+            })
+            .collect()
+    }
+
+    /// The plants on medium cell `cell`, as resource nodes: each plant
+    /// species' share of the cell's living biomass carbon, split among the
+    /// plants there by upstream population as [`Self::carbon_kgc`] splits
+    /// the island's. Views only: felling and foraging draw down the
+    /// biomass itself.
+    pub fn plant_nodes(&self, cell: usize, ecology: &RegionalEcologyState) -> Vec<AnimalNode> {
+        let mask = self.habitat.get(cell).copied().unwrap_or(0);
+        let carbon = ecology
+            .biomass_kgc_m2
+            .data()
+            .get(cell)
+            .map_or(0.0, |c| c * self.cell_area_m2);
+        let denominator: f64 = (0..AFFINITIES.len())
+            .filter(|i| mask & (1 << i) != 0)
+            .map(|i| self.producer_weight[i])
+            .sum();
+        if mask == 0 || denominator <= 0.0 {
+            return Vec::new();
+        }
+        self.species
+            .iter()
+            .enumerate()
+            .filter(|(_, s)| s.abundance == Abundance::ProducerCarbon)
+            .filter(|(_, s)| mask & bit(&s.affinity) != 0)
+            .map(|(index, s)| AnimalNode {
+                cell,
+                species: index,
+                stock: NodeStock::CarbonKgc(carbon * s.upstream_population as f64 / denominator),
+            })
+            .collect()
     }
 
     /// All the plant species' carbon (kg C).

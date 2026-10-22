@@ -1,0 +1,118 @@
+{
+  "id": "food_processing",
+  "domain": "industry",
+  "title": "First-stage food processing: extraction rates for New Zealand",
+  "retrieved": "2026-10-23",
+  "licence": "Facts cited with attribution",
+  "sources": [
+    {
+      "key": "fao_tcf",
+      "citation": "FAO Statistics Division. Technical Conversion Factors for Agricultural Commodities (undated; fao.org/fileadmin/templates/ess/documents/methodology/tcf.pdf), New Zealand, printed pages 694-697: crops and derived products, and milk.",
+      "licence": "Facts cited with attribution"
+    }
+  ],
+  "items": [
+    {
+      "key": "nz_cereal_extraction_rates",
+      "description": "Product obtained from milling or malting a New Zealand cereal, as a share of the grain processed",
+      "unit": "percent of parent by weight",
+      "source": "fao_tcf",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "product",
+          "columns": [
+            "extraction_percent"
+          ],
+          "rows": [
+            {
+              "label": "wheat_flour",
+              "values": [
+                78.0
+              ]
+            },
+            {
+              "label": "wheat_bran",
+              "values": [
+                22.0
+              ]
+            },
+            {
+              "label": "barley_malt",
+              "values": [
+                80.0
+              ]
+            },
+            {
+              "label": "oats_rolled",
+              "values": [
+                57.0
+              ]
+            },
+            {
+              "label": "oats_bran",
+              "values": [
+                25.0
+              ]
+            }
+          ]
+        }
+      },
+      "note": "NEW ZEALAND, CROPS AND DERIVED PRODUCTS, Extraction rates %: Flour of Wheat 78, Bran of Wheat 22; Malt of Barley 80; Oats, Rolled 57, Bran of Oats 25. Wheat's two add to 100; oats' to 82, the rest being hulls and loss."
+    },
+    {
+      "key": "nz_milk_extraction_rates",
+      "description": "Dairy product obtained from New Zealand whole cow milk, as a share of the milk processed into that product",
+      "unit": "percent of milk by weight",
+      "source": "fao_tcf",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "product",
+          "columns": [
+            "extraction_percent"
+          ],
+          "rows": [
+            {
+              "label": "cream",
+              "values": [
+                11.0
+              ]
+            },
+            {
+              "label": "butter",
+              "values": [
+                6.1
+              ]
+            },
+            {
+              "label": "condensed_whole_milk",
+              "values": [
+                20.0
+              ]
+            },
+            {
+              "label": "evaporated_whole_milk",
+              "values": [
+                45.0
+              ]
+            },
+            {
+              "label": "whole_milk_powder",
+              "values": [
+                14.0
+              ]
+            },
+            {
+              "label": "cheese",
+              "values": [
+                9.0
+              ]
+            }
+          ]
+        }
+      },
+      "note": "MILK, Extraction rates %: Cream, Fresh 11; Butter of Cow Milk 6.1; Whole Milk, Condensed 20; Whole Milk, Evaporated 45; Dry Whole Cow Milk 14; Cheese (Whole Cow Milk) 9. Each is a separate use of the milk, not shares of one stream. The same page gives 3,000 kg a milking animal, older than FAOSTAT's 4,593 kg (2023) used by the farm."
+    }
+  ]
+}

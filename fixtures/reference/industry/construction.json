@@ -7,7 +7,7 @@
   "sources": [
     {
       "key": "fao2020",
-      "citation": "FAO, ITTO and United Nations (2020). Forest product conversion factors. Rome. https://doi.org/10.4060/ca7952en. Chapter 4 Sawnwood, summary table by country (conifer; column New Zealand): 'Sawnwood all' m3 roundwood per m3 product, and 'Material balance' percentages.",
+      "citation": "FAO, ITTO and United Nations (2020). Forest product conversion factors. Rome. https://doi.org/10.4060/ca7952en. Section 4.4.1, p. 26, summary of country data on sawnwood (conifer): 'Sawnwood all' m3 roundwood per m3 product (New Zealand column) and 'Material balance' percentages (North America median/average column; New Zealand reports none).",
       "licence": "Facts cited with attribution"
     },
     {
@@ -32,18 +32,18 @@
       "description": "Roundwood input per m3 of sawnwood output, coniferous, New Zealand (national questionnaire factor, all sawnwood states)",
       "unit": "m3 roundwood / m3 sawnwood",
       "source": "fao2020",
-      "confidence": "low",
+      "confidence": "medium",
       "value": {
         "point": 1.81
       },
-      "note": "Table row 'CONIFER  Sawnwood all  m3rw/m3p ... 1.81' in the New Zealand (Oceania) column, the last value in the row; implies about 0.55 m3 sawnwood per m3 log (derived 1/1.81 = 0.552). The text quotes Germany 1.59 and the United States of America 2.04 m3 roundwood per m3 sawnwood for comparison. Position-based column assignment from a wide PDF table; verify. Read from a wide PDF table by column position; confirm against the PDF before any test gates on it."
+      "note": "FAO/ITTO/UN (2020) section 4.4.1, p. 26: CONIFER 'Sawnwood all' 1.81 m3rw/m3p in the New Zealand (Oceania) column, share 100% (checked on the rendered PDF page, 2026-10-23). Implies about 0.55 m3 sawnwood per m3 log (derived 1/1.81 = 0.552). New Zealand gives no other sawnwood rows."
     },
     {
-      "key": "softwood_sawmill_material_balance_nz",
-      "description": "Sawmill material balance, coniferous logs, New Zealand: shares of log volume going to sawnwood, chips/slabs, sawdust and shavings",
+      "key": "softwood_sawmill_material_balance_north_america",
+      "description": "Sawmill material balance, coniferous logs, North America (Canada and United States median/average): shares of log volume going to sawnwood, chips/slabs, sawdust, shavings and shrinkage",
       "unit": "percent of log input",
       "source": "fao2020",
-      "confidence": "low",
+      "confidence": "medium",
       "value": {
         "table": {
           "row_label": "product",
@@ -74,11 +74,17 @@
               "values": [
                 8
               ]
+            },
+            {
+              "label": "shrinkage_loss",
+              "values": [
+                3
+              ]
             }
           ]
         }
       },
-      "note": "Table 'Material balance' rows for conifer: Sawnwood 47, Chips/slabs 33, Sawdust 9, Shavings 8 (last value in each row, New Zealand column). Table was extracted from a wide PDF layout; the New Zealand column assignment is by position (last column) and should be checked against the PDF. Read from a wide PDF table by column position; confirm against the PDF before any test gates on it."
+      "note": "FAO/ITTO/UN (2020) section 4.4.1, p. 26, CONIFER 'Material balance' rows, North America Median/Average column: Sawnwood 47, Chips/slabs 33, Sawdust 9, Shavings 8, Shrinkage loss 3 (read from the rendered PDF page, 2026-10-23). New Zealand reports only 'Sawnwood all' 1.81 m3rw/m3p and no material balance, so an earlier version of this item mislabelled these North American shares as New Zealand's. Use as a stand-in for a New Zealand mill until a New Zealand balance is cited."
     },
     {
       "key": "reference_house_areas",
@@ -169,6 +175,17 @@
         "point": 0.18
       },
       "note": "Table 6-2: 'Timber-framed, cavity, 90 mm frame studs @ 400 mm centres, dwangs 800 mm centres (18% framing ratio)'; steel-framed assemblies use 14.4%. Framing volume per m2 of floor was not stated in any source read."
+    },
+    {
+      "key": "wall_frame_stud_depth_mm",
+      "description": "Depth of the timber wall frame of the reference house (90 x 45 mm studs)",
+      "unit": "mm",
+      "source": "thinkstep2022",
+      "confidence": "high",
+      "value": {
+        "point": 90
+      },
+      "note": "Table 6-2: 'Timber-framed, cavity, 90 mm frame studs @ 400 mm centres, dwangs 800 mm centres (18% framing ratio)'; Table 2-2 walls are '90x45mm' timber frame."
     },
     {
       "key": "plasterboard_lining_thickness",
