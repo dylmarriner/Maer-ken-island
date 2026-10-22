@@ -103,7 +103,9 @@ fn slow_a_year_of_industry_and_money_closes_every_ledger_and_resumes_exactly() {
     // Twelve months closed, and money was only ever issued at the opening:
     // what changed hands since was paid, not printed.
     let money = life.money.as_ref().unwrap();
-    assert!(money.next_month_s > start_s + 11 * money.month_s);
+    // The books opened at `start_s`; after twelve closes the next month
+    // ends thirteen months on.
+    assert!(money.next_month_s >= start_s + 13 * money.month_s);
     assert_eq!(money.ledger.issued(), issued_at_start);
 
     // The chain ran: where the island has petroleum it refined crude, and
