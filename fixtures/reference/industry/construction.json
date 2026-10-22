@@ -177,6 +177,17 @@
       "note": "Table 6-2: 'Timber-framed, cavity, 90 mm frame studs @ 400 mm centres, dwangs 800 mm centres (18% framing ratio)'; steel-framed assemblies use 14.4%. Framing volume per m2 of floor was not stated in any source read."
     },
     {
+      "key": "wall_frame_stud_depth_mm",
+      "description": "Depth of the timber wall frame of the reference house (90 x 45 mm studs)",
+      "unit": "mm",
+      "source": "thinkstep2022",
+      "confidence": "high",
+      "value": {
+        "point": 90
+      },
+      "note": "Table 6-2: 'Timber-framed, cavity, 90 mm frame studs @ 400 mm centres, dwangs 800 mm centres (18% framing ratio)'; Table 2-2 walls are '90x45mm' timber frame."
+    },
+    {
       "key": "plasterboard_lining_thickness",
       "description": "Plasterboard lining thickness specified in the reference house",
       "unit": "mm",

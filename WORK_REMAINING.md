@@ -342,8 +342,10 @@ trade, a 2-3 bedroom cottage's floor area (Task 6 and 7b); the Pukekohe growing 
   - Carbon: wood carries radiata's basic density 0.38 t/m³ times a conifer's 0.51 carbon fraction
     (IPCC 2006 Tables 4.14, 4.3). `tests/timber_chain.rs` checks a century of plantation and mill:
     no overcut, and no carbon lost from felling to the mill's gate.
-  - Still open: the plantation on the map, its wood from the existing felling and hauling, the
-    mill's gate to a house (`construction.rs`), and the whole food chain.
+  - `construction.rs`: the reference house's wall frames (thinkstep 2022: 325 m² of framed wall,
+    18% timber, 90 mm deep) built from the mill's timber, carbon kept from tree to house.
+  - Still open: roof, floor and other timber in the house (no source read yet), the plantation
+    on the map fed by the existing felling and hauling, and the whole food chain.
 
 ### 4g. Task 8: town and workforce
 

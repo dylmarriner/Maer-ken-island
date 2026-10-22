@@ -4,6 +4,8 @@
 //!   head, after the European Small Hydropower Association's guide and
 //!   RETScreen's turbine efficiency curves (`fixtures/reference/industry`).
 //! - [`chain`]: the fields and refinery run as one plant, its carbon auditable.
+//! - [`construction`]: the reference house's timber wall frames, built from
+//!   the mill's sawn timber with its carbon.
 //! - [`flow_duration`]: each perennial river cell's flow-duration curve from
 //!   a simulated year.
 //! - [`forestry`]: even-aged radiata pine stands clearfelled at New
@@ -18,6 +20,7 @@
 //!   shared as residues.
 
 pub mod chain;
+pub mod construction;
 pub mod flow_duration;
 pub mod forestry;
 pub mod grid;
