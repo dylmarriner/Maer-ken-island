@@ -138,7 +138,11 @@ animal and fish resource nodes (done 2026-10-23, §2b).
 - **Left:**
   - Diamond placers below kimberlites are sited (2026-10-23) from Bliss's (1992, USGS OFR 92-437)
     model 39d grade and volume, inland only; working them needs a jig or a pan's concentrate sorted
-    by hand, with cited rates. Gem placers below the other gem deposits still need a source.
+    by hand, with cited rates. Platinum placers are sited below ultramafic bodies (2026-10-23)
+    from Singer and Page's model 39b (USGS Bulletin 1693, 83 Urals placers), inland, platinum
+    only, and refused like the diamonds until a working rate is cited. Placer tin (39e) has only
+    a descriptive model, no grade or tonnage. Gem placers below the other gem deposits still need
+    a source.
   - Hand mining of primary ore: a cited artisanal shaft or adit depth and rate (refused by name
     until then).
   - Animal and fish nodes (2026-10-23): `IslandBiota::animal_nodes` gives each cell's animals

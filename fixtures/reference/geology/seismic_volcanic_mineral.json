@@ -76,6 +76,11 @@
       "licence": "Public domain (U.S. Government work)"
     },
     {
+      "key": "singer_page1986_39b",
+      "citation": "Singer, D. A. and Page, N. J (1986). Grade and tonnage model of placer PGE-Au (model 39b). In Cox, D. P. and Singer, D. A. (eds), Mineral deposit models. U.S. Geological Survey Bulletin 1693, p. 265, figs. 198-200 (pubs.usgs.gov/bul/b1693/html/bull8pth.htm). Data from Calkins and others (1978).",
+      "licence": "Public domain (U.S. Government work)"
+    },
+    {
       "key": "christie2024",
       "citation": "Christie, A. B., Barker, R. G., Brathwaite, R. L., Hill, M. P., Rooyakkers, S. M. and de Ronde, C. E. J. (2024). The mineral potential of New Zealand - Part 1: Overview of New Zealand's mineral deposits and their resources. GNS Science Consultancy Report 2024/62A, revised September 2024; section 4.2.1, Table 7.2 and section 8.",
       "licence": "Facts cited with attribution"
@@ -304,6 +309,24 @@
         }
       },
       "note": "Read from figs. 48 (size) and 49 (grade) on 2026-10-23. Workings within 1.5 km count as one deposit. The model gives volume, not tonnes; the island converts it at model 39a's 2.0 t/m3 for wet sand and gravel (placer_gravel_density), a stand-in (D56)."
+    },
+    {
+      "key": "placer_pge_au_grade_tonnage",
+      "description": "Tonnage and platinum grade of placer PGE-Au deposits (83 deposits, all in the Urals) at the 90th, 50th and 10th percentiles",
+      "unit": "tonnage million tonnes; platinum parts per billion",
+      "source": "singer_page1986_39b",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "quantity",
+          "columns": ["p90", "p50", "p10"],
+          "rows": [
+            { "label": "tonnage_mt", "values": [0.011, 0.11, 1.8] },
+            { "label": "pt_ppb", "values": [330.0, 2500.0, 6500.0] }
+          ]
+        }
+      },
+      "note": "Read from figs. 198 (tonnage) and 199A (platinum) on 2026-10-23. Gold is reported in only about a tenth of the deposits (fig. 199B, 10th percentile 0.048 g/t), so the island gives these sites platinum only. The authors note the platinum plot suggests three populations, dredged and conventional placers mixed."
     },
     {
       "key": "placer_gravel_density",

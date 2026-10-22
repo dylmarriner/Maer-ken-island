@@ -80,6 +80,11 @@ fn the_secondary_models_are_the_sources_numbers() {
     assert_eq!(m.diamond_median_ct_m3, 0.37);
     assert!((m.diamond_volume_log10_sd - 1.086).abs() < 1e-3);
     assert!((m.diamond_grade_log10_sd - 0.862).abs() < 1e-3);
+    // Singer & Page, model 39b, figs. 198 and 199A.
+    assert!((m.platinum_median_t - 110_000.0).abs() < 1e-6);
+    assert_eq!(m.platinum_median_ppb, 2500.0);
+    assert!((m.platinum_tonnage_log10_sd - 0.864).abs() < 1e-3);
+    assert!((m.platinum_grade_log10_sd - 0.505).abs() < 1e-3);
     assert!((m.placer_grade_log10_sd - 0.295).abs() < 1e-3);
     assert_eq!(m.placer_gravel_t_m3, 2.0);
     // 767.5 Mt of magnetics in 24 onshore deposits (GNS 2024, Table 7.2).
@@ -199,6 +204,36 @@ fn diamond_placers_lie_inland_below_a_kimberlite_and_cannot_be_panned_yet() {
         assert_eq!(p.depth_m, 0.0);
         assert!(p.grade > 0.0 && p.tonnage_t > 0.0);
         assert_eq!(p.kind.ore(), CatalogueItem::Diamond);
+    }
+}
+
+#[test]
+fn platinum_placers_lie_inland_below_an_ultramafic_body() {
+    let b = base();
+    let deposits = &b.physical.geophysics.deposits;
+    let bodies = deposits
+        .iter()
+        .filter(|d| d.kind == DepositKind::Ultramafic)
+        .count();
+    let placers: Vec<_> = b
+        .resources
+        .sites()
+        .iter()
+        .filter(|s| s.kind == SiteKind::PlacerPlatinum)
+        .collect();
+    println!(
+        "{} platinum placers from {bodies} ultramafic bodies",
+        placers.len()
+    );
+    assert!(placers.len() <= bodies);
+    let network = b.physical.flow_network();
+    for p in &placers {
+        let source = &deposits[p.source_deposit.expect("a placer has a source") as usize];
+        assert_eq!(source.kind, DepositKind::Ultramafic);
+        assert!(downstream_of(source.cell)[1..].contains(&p.cell));
+        assert!(network.receiver_of(p.cell.0, p.cell.1) != Receiver::Sea);
+        assert!(p.grade > 0.0 && p.tonnage_t > 0.0);
+        assert_eq!(p.kind.ore(), CatalogueItem::PlatinumGroupConcentrate);
     }
 }
 
