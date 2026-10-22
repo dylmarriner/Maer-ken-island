@@ -6,6 +6,8 @@
 //! - [`chain`]: the fields and refinery run as one plant, its carbon auditable.
 //! - [`construction`]: the reference house's timber wall frames, built from
 //!   the mill's sawn timber with its carbon.
+//! - [`farm`]: dairy and crop land yielding New Zealand's average per
+//!   hectare.
 //! - [`flow_duration`]: each perennial river cell's flow-duration curve from
 //!   a simulated year.
 //! - [`forestry`]: even-aged radiata pine stands clearfelled at New
@@ -21,6 +23,7 @@
 
 pub mod chain;
 pub mod construction;
+pub mod farm;
 pub mod flow_duration;
 pub mod forestry;
 pub mod grid;

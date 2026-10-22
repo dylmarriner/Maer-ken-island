@@ -47,7 +47,7 @@ this list holds the current state. The evidence for what is *done* is in
 | Industry | Phase 4b Task 5: refinery, gas plant, fuel depot (D16) | Topping refinery done 2026-10-14; gas plant, reformer, depot open | Reformate yield; gas-plant own use |
 | Industry | Phase 4b Task 6: jobs, trades, maintenance (D39) | Open | Upstream human-runtime change first |
 | Industry | Phase 4b Task 7: money, enterprises, payroll | Money, payroll and metered bills done 2026-10-18 (`regional/economy/`, D61, D62; `tests/island_economy.rs`). In `IslandLife` 2026-10-22 (`economy/island.rs`: deposits, Gem Petroleum selling the depot's diesel, monthly loans, closes, dividends, money audit); the petroleum business's staff and payslips, household bills, buying and selling homes open | Task 6 staff; upstream buying |
-| Industry | Phase 4b Task 7b: food and timber chains (forestry and sawmill models 2026-10-23) | Open | Task 2 catalogue; crop/livestock data |
+| Industry | Phase 4b Task 7b: food and timber chains (forestry, sawmill, house framing and farm models 2026-10-23) | Open | Task 2 catalogue; crop/livestock data |
 | Industry | Phase 4b Task 8: town and workforce | Open; the owner decided the town starts at each enterprise's smallest staff and grows (2026-10-15, §4g) | Demographic tables; a sourced minimum staff per enterprise |
 | Industry | Phase 4b Task 9: dashboard pages, year acceptance | Open | Tasks 4-8 |
 | Climate | D3 rest: sea/land breezes, katabatic winds | Open | A diurnal wind solver |
@@ -344,8 +344,12 @@ trade, a 2-3 bedroom cottage's floor area (Task 6 and 7b); the Pukekohe growing 
     no overcut, and no carbon lost from felling to the mill's gate.
   - `construction.rs`: the reference house's wall frames (thinkstep 2022: 325 m² of framed wall,
     18% timber, 90 mm deep) built from the mill's timber, carbon kept from tree to house.
-  - Still open: roof, floor and other timber in the house (no source read yet), the plantation
-    on the map fed by the existing felling and hauling, and the whole food chain.
+  - `farm.rs`: dairy land at the national 2.76 cows/ha and 400 kg of milksolids a cow (LIC and
+    DairyNZ 2023-24, which checks against their 1,105 kg/ha), crops at FAOSTAT's 2023 New Zealand
+    yields per hectare (vegetables are FAO estimates).
+  - Still open: roof, floor and other timber in the house (no source read yet), the plantation and
+    farms on the map fed by the existing felling and hauling, livestock herds and meat, fishery,
+    food processing and the supermarket.
 
 ### 4g. Task 8: town and workforce
 
