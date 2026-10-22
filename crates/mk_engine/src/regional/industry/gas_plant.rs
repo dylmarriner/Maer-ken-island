@@ -108,7 +108,12 @@ pub fn process(
     ledger: &mut Ledger,
 ) -> GasPlantRun {
     if raw_gj.is_nan() || raw_gj <= 0.0 {
-        return GasPlantRun::default();
+        // Carbon taken with no energy (a rounding remnant) stays in the
+        // sales gas, so the plant never loses carbon.
+        return GasPlantRun {
+            sales_kgc: raw_kgc.max(0.0),
+            ..GasPlantRun::default()
+        };
     }
     let fuel_gj = raw_gj * model.fuel_share;
     let rest = raw_gj - fuel_gj;
@@ -228,6 +233,16 @@ mod tests {
             .map(|e| e.amount)
             .sum();
         assert!((to_air - run.burned_kgc).abs() < 1e-12);
+    }
+
+    #[test]
+    fn carbon_with_no_energy_is_kept_in_the_sales_gas() {
+        let model = GasPlantModel::load_default().unwrap();
+        let mut ledger = Ledger::new();
+        let run = process(&model, 0.0, 2.5, &mut ledger);
+        assert_eq!(run.sales_kgc, 2.5);
+        assert_eq!(run.burned_kgc + run.lpg_kgc, 0.0);
+        assert!(ledger.entries().is_empty());
     }
 
     #[test]

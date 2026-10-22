@@ -145,7 +145,7 @@ impl IndustryChain {
             out.gas_gj += made.gas_gj;
             out.leaked_kgc += made.leaked_kgc;
             let (gas_gj, gas_kgc) = field.take_gas(f64::INFINITY, &models.petroleum);
-            if gas_gj > 0.0 {
+            if gas_gj > 0.0 || gas_kgc > 0.0 {
                 let plant = process(&models.gas_plant, gas_gj, gas_kgc, ledger);
                 self.gas.add(&plant);
                 out.plant_gas_gj += plant.raw_gj;
