@@ -95,6 +95,9 @@ the log's last water is booked to the air at that moment rather than when the wo
   build split the store's air-dry wood by the house at Höldrich et al. 2007's 2.33 labour-hours
   per solid m³ (`labour/timber.json`), at the Compendium's chopping and splitting MET; the
   cooking fire burns only split wood. Left: a split-only axe rate for a long day, and stacking.
+  (Checked 2026-10-23: the Finnish Work Efficiency Institute's comparison of five firewood
+  methods, ETDEWEB 5174992, gives 0.95 m³ per effective hour for chainsaw cross-cutting plus axe
+  splitting together, m³ not stated as solid or stacked, so it is not a split-only rate.)
 - **The two-person crosscut saw (felling done 2026-10-23, D40):** a founder gathering with no
   tree of their own takes the other end of the shed's saw at a tree one other founder fells,
   and two at one tree fell it at the pack's two-person crosscut time (`labour/productivity.json`, 8-25 min for
