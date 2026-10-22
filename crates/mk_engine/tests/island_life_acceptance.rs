@@ -190,8 +190,12 @@ const DAY: u64 = 86_400;
 /// audits closed, no food or water shortfalls, body carbon 12.9 of 13.0 and
 /// 10.4 of 10.4 kg, eating 48 and 43 minutes a day, drinking 2.36 and 1.77
 /// L a day, asleep at home 41 of 57 and 41 of 56 hours, temperate-forest
-/// NPP 471 g C/m2/yr (reference 400-900).
-const WEEK_DIGEST: &str = "f6699166ee3f342f86dd3a900d95660291b9064a84302d83f355b19f4d019c81";
+/// NPP 471 g C/m2/yr (reference 400-900). Re-read 2026-10-22 when the oil
+/// chain and its diesel depot joined the island (Task 4, D58): 30,686
+/// audits closed, no shortfalls, body carbon 12.9 of 13.0 and 10.4 of 10.4
+/// kg, eating 47 and 43 minutes a day, drinking 2.37 and 1.74 L a day,
+/// asleep at home 40 of 56 and 40 of 55 hours, NPP 471.
+const WEEK_DIGEST: &str = "1942a05268d6a19d4ae20fe7686dae236283b26b02589a7f45448fb863d21511";
 
 fn repo(path: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))

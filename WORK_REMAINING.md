@@ -43,7 +43,7 @@ this list holds the current state. The evidence for what is *done* is in
 | Living world | D31: NPP ignores soil nutrients | Open | Regional soils model and data |
 | Runtime | Phase 4 Task 2b: deep-time spin-up | **Done** (2026-10-14) | — |
 | Industry | Phase 4b Task 1 remainder: reference tables | Done 2026-10-14 (nine packs); gaps listed in §4a | A few items (see §4a) |
-| Industry | Phase 4b Task 4: oil and gas field (D14, D19) | Fields, decline and carbon done 2026-10-14 (D58); wells, water cut, spills open | Per-well rate, water-cut series |
+| Industry | Phase 4b Task 4: oil and gas field (D14, D19) | Fields, decline and carbon done 2026-10-14 (D58); in `IslandLife` with the diesel depot 2026-10-22; wells, water cut, spills open | Per-well rate, water-cut series |
 | Industry | Phase 4b Task 5: refinery, gas plant, fuel depot (D16) | Topping refinery done 2026-10-14; gas plant, reformer, depot open | Reformate yield; gas-plant own use |
 | Industry | Phase 4b Task 6: jobs, trades, maintenance (D39) | Open | Upstream human-runtime change first |
 | Industry | Phase 4b Task 7: money, enterprises, payroll | Open; the owner's decisions are made (2026-10-15, §4e) | Engineering; a sourced NZ lending rate |
@@ -219,8 +219,11 @@ trade, a 2-3 bedroom cottage's floor area (Task 6 and 7b); the Pukekohe growing 
   methane oxidises with its 11.8-year lifetime (IPCC AR6). Packs gained reformate yields (Speight),
   gas-plant fuel and shrinkage (EIA), methane lifetimes, alluvial diamond grades (low), Lake
   Grassmere solar salt and hand-dug shaft depth and sinking rate (a well analogue, low).
-- **Next:** carry `IndustryChain` in `IslandLife` (state, snapshot, the audited material stock) and
-  let a depot top the estate's diesel up from the store, burning island diesel as material carbon.
+- **Done 2026-10-22:** `IslandLife` carries `IndustryChain` (state, snapshot, digest), stepping it
+  inside the material audit, which now counts the chain's tanks and products and island-refined
+  fuel; a depot fills the estate's diesel back to the scenario's opening stock from the refinery's
+  distillate, and generators and vehicles burn that share as material carbon
+  (`energy::IslandFuel`, `book_island_burn`).
 - **Left (D58):** a plateau, reservoir pressure and water cut; wells, workover crews and blowouts
   (the frequencies are in the pack, but there is no per-well rate to count wells by); spills and their
   harm to shellfish; methane warming (negligible at island scale, Etminan et al. 2016);
@@ -446,5 +449,5 @@ invertebrate densities, fire danger indices (see each report's "unsourced" secti
   push; the `dependency audit` CI job replaced it.
 - **Firecrawl credits ran out** on 2026-10-12. WebSearch and the TinyFish fetcher still work for
   sources; the container's own network blocks most hosts.
-- **Persist digests.** `WEEK_DIGEST` is `f6699166…9c81`; the planetary topology pin is
+- **Persist digests.** `WEEK_DIGEST` is `1942a052…1511`; the planetary topology pin is
   `e4ece246…73e2`. Any change that moves either is a behaviour change and must say so.
