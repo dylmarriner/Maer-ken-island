@@ -376,7 +376,11 @@ impl PetroleumField {
                 ));
             }
         }
-        self.drill_for(oil_m3 / BARREL_M3 / (dt_years * DAYS_PER_YEAR), dt_years, model);
+        self.drill_for(
+            oil_m3 / BARREL_M3 / (dt_years * DAYS_PER_YEAR),
+            dt_years,
+            model,
+        );
         Production {
             oil_m3,
             gas_gj,

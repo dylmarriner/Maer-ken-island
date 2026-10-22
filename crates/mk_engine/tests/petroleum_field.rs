@@ -217,7 +217,10 @@ fn a_field_drills_the_wells_its_rate_needs_and_counts_their_blowouts() {
     // Bailey et al. 2000: three barrels of water for each of oil, sent
     // back down.
     assert_eq!(m.water_oil_ratio, 3.0);
-    assert!((field.produced_water_m3 - 3.0 * field.produced_oil_m3).abs() < 1e-6 * field.produced_water_m3);
+    assert!(
+        (field.produced_water_m3 - 3.0 * field.produced_oil_m3).abs()
+            < 1e-6 * field.produced_water_m3
+    );
     // A well is never abandoned, and the count only passes whole numbers.
     field.drill_for(0.0, 600.0, m);
     assert_eq!(field.wells, 18);

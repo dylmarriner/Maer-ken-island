@@ -44,7 +44,7 @@ this list holds the current state. The evidence for what is *done* is in
 | Runtime | Phase 4 Task 2b: deep-time spin-up | **Done** (2026-10-14) | — |
 | Industry | Phase 4b Task 1 remainder: reference tables | Done 2026-10-14 (nine packs); gaps listed in §4a | A few items (see §4a) |
 | Industry | Phase 4b Task 4: oil and gas field (D14, D19) | Fields, decline and carbon done 2026-10-14 (D58); in `IslandLife` with the diesel depot 2026-10-22; wells, blowouts and produced water 2026-10-23; rising water cut, spills open | Water-cut series; a blowout's spill volume |
-| Industry | Phase 4b Task 5: refinery, gas plant, fuel depot (D16) | Topping refinery done 2026-10-14; diesel depot 2026-10-22 (D58); gas plant 2026-10-23; reformer and LPG deliveries open | Reformate yield |
+| Industry | Phase 4b Task 5: refinery, gas plant, fuel depot (D16) | Topping refinery done 2026-10-14; diesel depot 2026-10-22 (D58); gas plant 2026-10-23; reformer open | Reformate yield |
 | Industry | Phase 4b Task 6: jobs, trades, maintenance (D39) | Open | Upstream human-runtime change first |
 | Industry | Phase 4b Task 7: money, enterprises, payroll | Money, payroll and metered bills done 2026-10-18 (`regional/economy/`, D61, D62; `tests/island_economy.rs`). In `IslandLife` 2026-10-22 (`economy/island.rs`: deposits, Gem Petroleum selling the depot's diesel, monthly loans, closes, dividends, money audit); the petroleum business's staff and payslips, household bills, buying and selling homes open | Task 6 staff; upstream buying |
 | Industry | Phase 4b Task 7b: food and timber chains (forestry, sawmill, house framing, farm, livestock, food processing and fishery models 2026-10-23) | Models done; not yet on the map or wired into island life | Task 8 workforce: who works a farm, mill or salt works, chosen by the people themselves (R14), never assigned |
@@ -281,9 +281,10 @@ trade, a 2-3 bedroom cottage's floor area (Task 6 and 7b); the Pukekohe growing 
   Annual 2024, `us_gas_plant_fuel_share_of_marketed`), and splits the rest into sales gas and LPG
   at Kupe's 90,000 t of LPG per 20 PJ of sales gas; carbon closes on IPCC contents, scaled once.
   The products wait in `IndustryChain::gas`. The diesel depot and its payment are done (D58, Task 7).
-- **Left:** a reformer for petrol (needs a cited reformate yield); delivering the plant's LPG to
-  the household's bottles (`regional/life.rs` household gas) and paying for it; campaigns that
-  stop on full tanks.
+- **Left:** a reformer for petrol (needs a cited reformate yield); campaigns that stop on full
+  tanks. The plant's LPG is a product for sale, never delivered to homes on its own (the owner,
+  2026-10-23: homes start with a log burner and wetback, and a villager who wants gas buys a stove
+  and bottles themselves, through upstream buying).
 
 ### 4d. Task 6: jobs, trades, shifts, maintenance (D39) — upstream first
 
