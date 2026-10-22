@@ -46,9 +46,11 @@
       "source": "ipcc2006_v4_ch4",
       "confidence": "medium",
       "value": {
-        "min": 0.33,
-        "max": 0.45,
-        "typical": 0.38
+        "range": {
+          "min": 0.33,
+          "max": 0.45,
+          "typical": 0.38
+        }
       },
       "note": "Table 4.14 row 'Pinus radiata 0.38 (0.33 - 0.45)'."
     },
@@ -59,9 +61,11 @@
       "source": "ipcc2006_v4_ch4",
       "confidence": "medium",
       "value": {
-        "min": 0.47,
-        "max": 0.55,
-        "typical": 0.51
+        "range": {
+          "min": 0.47,
+          "max": 0.55,
+          "typical": 0.51
+        }
       },
       "note": "Table 4.3 row 'Temperate and Boreal, conifers 0.51 (0.47 - 0.55)', Lamlom and Savidge 2003."
     }
