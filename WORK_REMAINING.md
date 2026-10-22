@@ -414,6 +414,16 @@ trade, a 2-3 bedroom cottage's floor area (Task 6 and 7b); the Pukekohe growing 
   from the original one by people's own choices. Upstream first: quitting, leaving and settling
   are decisions in the human mind. Once it exists, the Creator should offer the town (and, for staff,
   a cottage) as where a person lives, rather than only a spot on the estate.
+- **Founding households (done 2026-10-23):** `regional/town.rs` founds one household per
+  opening from the seed: the worker 20-64 by Stats NZ's 2018 ERP, the household's size by the
+  2023 Census, a partner from the worker's band and children under 18 weighted by natural
+  fertility at the mother's age (D67). `found_from_reference` adds the smallest general practice
+  (one GP, HTRHN 2024, and two nurses at the average rural practice's nurse-to-GP ratio, HTRHN
+  2023) and a school with a teacher per 25 children of school age (Ministry of Education's
+  small-school staffing). Tests in `regional::town` and `tests/island_town.rs`. **Left:** the
+  oil field's, gas plant's, depot's, bank's, store's and power company's smallest staff (no
+  headcount found: Kupe about 35 and Tongariro hydro 40-45 are unverified); the town's people
+  as humans in `IslandLife` with homes, hired through `Enterprise::hire`; growth by hiring.
 - **Files:** create `regional/town.rs`, `fixtures/island/workforce.json` (generated from the seed);
   generalise `regional/estate_layout.rs` to any high-detail site.
 - **Tests:** `tests/island_town.rs`.
