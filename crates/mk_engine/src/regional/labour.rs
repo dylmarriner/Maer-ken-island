@@ -284,6 +284,17 @@ impl LabourTable {
         )? * 60.0)
     }
 
+    /// Rigging one log by hand (s): `operation` is `hook` (the line put
+    /// round it where it lies) or `unhook` (taken off at the machine).
+    pub fn log_rigging_s(&self, operation: &str) -> Result<f64, LabourError> {
+        self.cell(
+            ReferenceDomain::Labour,
+            "log_rigging_time",
+            operation,
+            "seconds",
+        )
+    }
+
     /// Middle of an activity's MET range (Compendium of Physical Activities).
     pub fn met(&self, activity: &str) -> Result<f64, LabourError> {
         Ok(self
