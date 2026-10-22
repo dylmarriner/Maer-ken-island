@@ -150,7 +150,9 @@ animal and fish resource nodes (done 2026-10-23, §2b).
     Grassmere yield per hectare of production area (pack, 42.4-49.4 t/ha/yr); it ignores the
     rain that swings Grassmere's harvest from nil to 130,000 t, and no works is sited yet (a
     sourced siting rule for coastal flats and a dry climate is needed).
-  - Biotic nodes as views of cell plant biomass, and water sources.
+  - Plant nodes (2026-10-23): `IslandBiota::plant_nodes` gives each plant species' share of a
+    cell's living biomass carbon, adding up to the species on the island.
+  - Water sources.
   - The new tools in `resource_economy.rs`, smelting and the other recipes, mass-balanced through
     the material ledger.
   - Serving the sites to the map and the founders' choices.

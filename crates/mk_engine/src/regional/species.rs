@@ -459,6 +459,38 @@ impl IslandBiota {
             .collect()
     }
 
+    /// The plants on medium cell `cell`, as resource nodes: each plant
+    /// species' share of the cell's living biomass carbon, split among the
+    /// plants there by upstream population as [`Self::carbon_kgc`] splits
+    /// the island's. Views only: felling and foraging draw down the
+    /// biomass itself.
+    pub fn plant_nodes(&self, cell: usize, ecology: &RegionalEcologyState) -> Vec<AnimalNode> {
+        let mask = self.habitat.get(cell).copied().unwrap_or(0);
+        let carbon = ecology
+            .biomass_kgc_m2
+            .data()
+            .get(cell)
+            .map_or(0.0, |c| c * self.cell_area_m2);
+        let denominator: f64 = (0..AFFINITIES.len())
+            .filter(|i| mask & (1 << i) != 0)
+            .map(|i| self.producer_weight[i])
+            .sum();
+        if mask == 0 || denominator <= 0.0 {
+            return Vec::new();
+        }
+        self.species
+            .iter()
+            .enumerate()
+            .filter(|(_, s)| s.abundance == Abundance::ProducerCarbon)
+            .filter(|(_, s)| mask & bit(&s.affinity) != 0)
+            .map(|(index, s)| AnimalNode {
+                cell,
+                species: index,
+                stock: NodeStock::CarbonKgc(carbon * s.upstream_population as f64 / denominator),
+            })
+            .collect()
+    }
+
     /// All the plant species' carbon (kg C).
     pub fn producer_carbon_kgc(&self, ecology: &RegionalEcologyState) -> f64 {
         self.sum_of(Abundance::ProducerCarbon, ecology)

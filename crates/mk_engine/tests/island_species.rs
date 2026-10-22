@@ -258,6 +258,34 @@ fn the_animal_nodes_add_up_to_each_species_on_the_island() {
 }
 
 #[test]
+fn the_plant_nodes_add_up_to_each_plant_species_on_the_island() {
+    let b = base();
+    let cells = b.ecology.biomass_kgc_m2.data().len();
+    let mut carbon = vec![0.0; b.biota.species.len()];
+    for cell in 0..cells {
+        for node in b.biota.plant_nodes(cell, &b.ecology) {
+            match node.stock {
+                NodeStock::CarbonKgc(c) => carbon[node.species] += c,
+                NodeStock::Head(_) => panic!("plants are carbon, not head"),
+            }
+        }
+    }
+    for (i, s) in b.biota.species.iter().enumerate() {
+        if s.abundance == Abundance::ProducerCarbon {
+            let whole = b.biota.carbon_kgc(i, &b.ecology).unwrap();
+            assert!(
+                close(carbon[i], whole),
+                "{}: {} against {whole}",
+                s.name,
+                carbon[i]
+            );
+        } else {
+            assert_eq!(carbon[i], 0.0, "{}", s.name);
+        }
+    }
+}
+
+#[test]
 fn the_survey_is_the_same_every_time_for_the_same_seed() {
     let b = base();
     let again = IslandBiota::survey(b.canon.clone(), &b.seed, &b.domain, &b.ecology, &b.physical);
