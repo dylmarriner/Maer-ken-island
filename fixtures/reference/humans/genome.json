@@ -24,6 +24,16 @@
       "key": "jonsson2017",
       "citation": "Jonsson, H. et al. (2017). Parental influence on human germline de novo mutations in 1,548 trios from Iceland. Nature 549, 519-522. doi:10.1038/nature24018.",
       "licence": "Facts cited with attribution; no text, figures or datasets reproduced."
+    },
+    {
+      "key": "bouchard1998",
+      "citation": "Bouchard, C. et al. (1998). Familial resemblance for VO2max in the sedentary state: the HERITAGE Family Study. Medicine & Science in Sports & Exercise 30, 252-258.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "arden1997",
+      "citation": "Arden, N. K. and Spector, T. D. (1997). Genetic influences on muscle strength, lean body mass, and bone mineral density: a twin study. Journal of Bone and Mineral Research 12, 2076-2081. doi:10.1359/jbmr.1997.12.12.2076",
+      "licence": "Facts cited with attribution"
     }
   ],
   "items": [
@@ -260,6 +270,38 @@
               "label": "mother",
               "values": [
                 0.37
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "key": "trait_heritability",
+      "description": "Heritability of untrained traits and their spread (coefficient of variation): VO2max h2 at least 0.5 in sedentary families (Bouchard 1998), CV 11.3/47.6 from FRIEND men 20-29 (Kaminsky 2015 Table 2); grip strength h2 0.30 in twins (Arden & Spector 1997), CV 8.7/48.8 from Dodds 2014 Table 2 men at 25. Lean mass has no cited spread and follows strength (D66).",
+      "unit": "fraction",
+      "source": "bouchard1998",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "trait",
+          "columns": [
+            "heritability",
+            "cv"
+          ],
+          "rows": [
+            {
+              "label": "vo2max",
+              "values": [
+                0.5,
+                0.237
+              ]
+            },
+            {
+              "label": "strength",
+              "values": [
+                0.3,
+                0.178
               ]
             }
           ]

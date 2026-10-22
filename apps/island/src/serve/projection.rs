@@ -839,7 +839,7 @@ fn people(life: &IslandLife) -> Vec<Person> {
                         });
                     mk_island_api::Physique {
                         vo2max_ml_kg_min: f.vo2max_ml_kg_min,
-                        strength_1rm_kg: f.strength_1rm_kg,
+                        grip_strength_kg: f.strength_kg,
                         lean_kg: f.lean_kg,
                         fat_kg: f.fat_kg(mass_kg),
                     }

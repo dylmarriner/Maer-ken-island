@@ -241,8 +241,8 @@ pub fn physique_section(p: &mk_island_api::Physique) -> Section {
             ),
             noted(
                 "Strength",
-                format!("{:.0} kg", p.strength_1rm_kg),
-                "The heaviest load they can lift once.",
+                format!("{:.0} kg", p.grip_strength_kg),
+                "Grip strength, the population-normed measure of strength.",
             ),
             measure("Lean mass", p.lean_kg, 1, "kg"),
             noted(

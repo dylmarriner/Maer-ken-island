@@ -128,7 +128,7 @@ pub struct Person {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Physique {
     pub vo2max_ml_kg_min: f64,
-    pub strength_1rm_kg: f64,
+    pub grip_strength_kg: f64,
     pub lean_kg: f64,
     pub fat_kg: f64,
 }

@@ -1590,7 +1590,8 @@ impl IslandLife {
                     .energy_kcal(&body, awake_met, dt_s)
                     .map_err(IslandLifeError::Labour)?;
             *self.labour_kcal.entry(id.clone()).or_insert(0.0) += extra.max(0.0);
-            self.physiques.record(&self.physique_models, &id, met, dt_s, 0.0);
+            self.physiques
+                .record(&self.physique_models, &id, met, dt_s, 0.0);
             if let Some(h) = self.humans.registry.get_human_mut(&id) {
                 h.labour_met = Some(met);
             }
@@ -2268,7 +2269,8 @@ impl IslandLife {
                     .energy_kcal(&body, awake_met, dt_s)
                     .map_err(IslandLifeError::Labour)?;
             *self.labour_kcal.entry(id.clone()).or_insert(0.0) += extra.max(0.0);
-            self.physiques.record(&self.physique_models, &id, met, dt_s, 0.0);
+            self.physiques
+                .record(&self.physique_models, &id, met, dt_s, 0.0);
             if let Some(h) = self.humans.registry.get_human_mut(&id) {
                 h.labour_met = Some(met);
             }
@@ -2536,7 +2538,8 @@ impl IslandLife {
                     .labour
                     .energy_kcal(&body, awake_met, s)
                     .map_err(IslandLifeError::Labour)?;
-            self.physiques.record(&self.physique_models, &id, met, s, load_kg);
+            self.physiques
+                .record(&self.physique_models, &id, met, s, load_kg);
             *self.labour_kcal.entry(id).or_insert(0.0) += extra.max(0.0);
         }
         Ok(())
@@ -2832,7 +2835,8 @@ impl IslandLife {
                     .energy_kcal(&body, awake_met, dt_s)
                     .map_err(IslandLifeError::Labour)?;
             *self.labour_kcal.entry(id.clone()).or_insert(0.0) += extra.max(0.0);
-            self.physiques.record(&self.physique_models, &id, met, dt_s, 0.0);
+            self.physiques
+                .record(&self.physique_models, &id, met, dt_s, 0.0);
             if let Some(h) = self.humans.registry.get_human_mut(&id) {
                 h.labour_met = Some(met);
             }
@@ -2964,7 +2968,8 @@ impl IslandLife {
                     .energy_kcal(&body, awake_met, dt_s)
                     .map_err(IslandLifeError::Labour)?;
             *self.labour_kcal.entry(id.clone()).or_insert(0.0) += extra.max(0.0);
-            self.physiques.record(&self.physique_models, &id, met, dt_s, 0.0);
+            self.physiques
+                .record(&self.physique_models, &id, met, dt_s, 0.0);
             if let Some(h) = self.humans.registry.get_human_mut(&id) {
                 h.labour_met = Some(met);
             }
@@ -3325,7 +3330,8 @@ impl IslandLife {
         if self.physiques.genomes.is_empty() {
             self.physiques.day = self.sim_time_s / 86_400;
         }
-        let newcomers: Vec<(String, bool, f64, Option<(String, String)>)> = self
+        type Newcomer = (String, bool, f64, f64, Option<(String, String)>);
+        let newcomers: Vec<Newcomer> = self
             .humans
             .registry
             .iter()
@@ -3336,16 +3342,24 @@ impl IslandLife {
             .map(|h| {
                 let male = matches!(h.biological_sex(), mk_core::human::BiologicalSex::Male);
                 let parents = mother_of(h).zip(father_of(h));
-                (h.agent_id().to_string(), male, self.body_mass_kg(h), parents)
+                let age = h.development.age_years;
+                (
+                    h.agent_id().to_string(),
+                    male,
+                    age,
+                    self.body_mass_kg(h),
+                    parents,
+                )
             })
             .collect();
-        for (id, male, mass_kg, parents) in newcomers {
+        for (id, male, age_years, mass_kg, parents) in newcomers {
             let parents = parents.as_ref().map(|(m, f)| (m.as_str(), f.as_str()));
             self.physiques.admit(
                 &self.physique_models,
                 &self.scenario.seed,
                 &id,
                 male,
+                age_years,
                 mass_kg,
                 parents,
             );
@@ -3368,14 +3382,15 @@ impl IslandLife {
         if day <= self.physiques.day {
             return;
         }
-        let bodies: Vec<(String, bool, f64)> = self
+        let bodies: Vec<(String, bool, f64, f64)> = self
             .humans
             .registry
             .iter()
             .filter(|h| matches!(h.profile.status, mk_core::human::HumanStatus::Alive))
             .map(|h| {
                 let male = matches!(h.biological_sex(), mk_core::human::BiologicalSex::Male);
-                (h.agent_id().to_string(), male, self.body_mass_kg(h))
+                let age = h.development.age_years;
+                (h.agent_id().to_string(), male, age, self.body_mass_kg(h))
             })
             .collect();
         self.physiques

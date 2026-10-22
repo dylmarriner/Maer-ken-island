@@ -1,0 +1,415 @@
+{
+  "id": "training",
+  "domain": "humans",
+  "title": "Human aerobic and strength training, detraining and untrained norms",
+  "retrieved": "2026-10-23",
+  "licence": "Numerical values cited as facts with attribution; no text, figures or datasets reproduced.",
+  "sources": [
+    {
+      "key": "jette1990",
+      "citation": "Jetté, M., Sidney, K. and Blümchen, G. (1990). Metabolic equivalents (METS) in exercise testing, exercise prescription, and evaluation of functional capacity. Clinical Cardiology 13, 555-565. doi:10.1002/clc.4960130809",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "heritage2022",
+      "citation": "HERITAGE Family Study (2022). Training protocol and VO2max responses, British Journal of Sports Medicine; PMC8380259, Methods and Table 2.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "bouchard1999",
+      "citation": "Bouchard, C. et al. (1999). Familial aggregation of VO2max response to exercise training: results from the HERITAGE Family Study. Journal of Applied Physiology 87, 1003-1008. doi:10.1152/jappl.1999.87.3.1003",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "coyle1984",
+      "citation": "Coyle, E. F. et al. (1984). Time course of loss of adaptations after stopping prolonged intense endurance training. Journal of Applied Physiology 57, 1857-1864. doi:10.1152/jappl.1984.57.6.1857",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "narici1989",
+      "citation": "Narici, M. V., Roi, G. S., Landoni, L., Minetti, A. E. and Cerretelli, P. (1989). Changes in force, cross-sectional area and neural activation during strength training and detraining of the human quadriceps. European Journal of Applied Physiology 59, 310-319. doi:10.1007/BF02388334",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "rhea2003",
+      "citation": "Rhea, M. R., Alvar, B. A., Burkett, L. N. and Ball, S. D. (2003). A meta-analysis to determine the dose response for strength development. Medicine & Science in Sports & Exercise 35, 456-464. doi:10.1249/01.MSS.0000053727.63505.D4",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "kaminsky2015",
+      "citation": "Kaminsky, L. A., Arena, R. and Myers, J. (2015). Reference standards for cardiorespiratory fitness measured with cardiopulmonary exercise testing: data from FRIEND. Mayo Clinic Proceedings 90, 1515-1523. doi:10.1016/j.mayocp.2015.07.026, Table 2.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "dodds2014",
+      "citation": "Dodds, R. M. et al. (2014). Grip strength across the life course: normative data from twelve British studies. PLoS ONE 9, e113637. doi:10.1371/journal.pone.0113637, Table 2.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "kelly2009",
+      "citation": "Kelly, T. L., Wilson, K. E. and Heymsfield, S. B. (2009). Dual energy X-ray absorptiometry body composition reference values from NHANES. PLoS ONE 4, e7038. doi:10.1371/journal.pone.0007038",
+      "licence": "Facts cited with attribution"
+    }
+  ],
+  "items": [
+    {
+      "key": "met_oxygen_cost",
+      "description": "Oxygen consumed sitting at rest: one MET",
+      "unit": "ml O2/kg/min",
+      "source": "jette1990",
+      "confidence": "high",
+      "value": {
+        "table": {
+          "row_label": "term",
+          "columns": [
+            "value"
+          ],
+          "rows": [
+            {
+              "label": "one_met",
+              "values": [
+                3.5
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "key": "aerobic_training",
+      "description": "HERITAGE: 3 sessions a week for 20 weeks, from 55% of the heart rate at baseline VO2max for 30 min to 75% for 50 min (reference week = the final 3 x 50 min); mean VO2max response about 400 ml/min on a baseline of 2373.4 ml/min (0.1685) over 140 days. Detraining: VO2max fell 16% below trained and stabilised by day 56 (Coyle 1984).",
+      "unit": "fraction, days, hours",
+      "source": "heritage2022",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "term",
+          "columns": [
+            "value"
+          ],
+          "rows": [
+            {
+              "label": "intensity_fraction_of_vo2max",
+              "values": [
+                0.55
+              ]
+            },
+            {
+              "label": "reference_hours_per_week",
+              "values": [
+                2.5
+              ]
+            },
+            {
+              "label": "gain_fraction",
+              "values": [
+                0.1685
+              ]
+            },
+            {
+              "label": "gain_days",
+              "values": [
+                140.0
+              ]
+            },
+            {
+              "label": "loss_fraction",
+              "values": [
+                0.16
+              ]
+            },
+            {
+              "label": "loss_days",
+              "values": [
+                56.0
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "key": "strength_training",
+      "description": "Narici 1989: 60 days of maximal training 4 times a week raised MVC 20.8%; 40 days of detraining lost it with a similar time course (0.208/1.208 of the trained value over 40 days). A session trains when the load reaches 60% of maximum (Rhea 2003, untrained optimum, abstract-level).",
+      "unit": "fraction, days, sessions",
+      "source": "narici1989",
+      "confidence": "low",
+      "value": {
+        "table": {
+          "row_label": "term",
+          "columns": [
+            "value"
+          ],
+          "rows": [
+            {
+              "label": "load_fraction_of_strength",
+              "values": [
+                0.6
+              ]
+            },
+            {
+              "label": "reference_sessions_per_week",
+              "values": [
+                4.0
+              ]
+            },
+            {
+              "label": "gain_fraction",
+              "values": [
+                0.208
+              ]
+            },
+            {
+              "label": "gain_days",
+              "values": [
+                60.0
+              ]
+            },
+            {
+              "label": "loss_fraction",
+              "values": [
+                0.172
+              ]
+            },
+            {
+              "label": "loss_days",
+              "values": [
+                40.0
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Narici 1989 measured four men on one isokinetic leg exercise; the 60% of 1RM threshold is Rhea 2003's meta-analytic optimum for the untrained, read from the abstract only. Strength here stands in for whole-body strength, so it is not fit for a tight test."
+    },
+    {
+      "key": "lean_mass_training",
+      "description": "Narici 1989: quadriceps cross-sectional area +8.5% over 60 days of training, lost with a similar time course over 40 days of detraining (0.085/1.085 over 40 days)",
+      "unit": "fraction, days",
+      "source": "narici1989",
+      "confidence": "low",
+      "value": {
+        "table": {
+          "row_label": "term",
+          "columns": [
+            "value"
+          ],
+          "rows": [
+            {
+              "label": "gain_fraction",
+              "values": [
+                0.085
+              ]
+            },
+            {
+              "label": "gain_days",
+              "values": [
+                60.0
+              ]
+            },
+            {
+              "label": "loss_fraction",
+              "values": [
+                0.078
+              ]
+            },
+            {
+              "label": "loss_days",
+              "values": [
+                40.0
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Quadriceps cross-sectional area in four men (Narici 1989), applied to the whole body's lean mass; not fit for a tight test."
+    },
+    {
+      "key": "untrained_vo2max",
+      "description": "Treadmill VO2max by age decade (labelled at mid-decade), FRIEND registry means",
+      "unit": "ml O2/kg/min",
+      "source": "kaminsky2015",
+      "confidence": "high",
+      "value": {
+        "table": {
+          "row_label": "age_years",
+          "columns": [
+            "male",
+            "female"
+          ],
+          "rows": [
+            {
+              "label": "25",
+              "values": [
+                47.6,
+                37.6
+              ]
+            },
+            {
+              "label": "35",
+              "values": [
+                43.0,
+                30.9
+              ]
+            },
+            {
+              "label": "45",
+              "values": [
+                38.8,
+                27.9
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "key": "grip_strength_by_age",
+      "description": "Mean grip strength by age, twelve British studies",
+      "unit": "kg",
+      "source": "dodds2014",
+      "confidence": "high",
+      "value": {
+        "table": {
+          "row_label": "age_years",
+          "columns": [
+            "male",
+            "female"
+          ],
+          "rows": [
+            {
+              "label": "5",
+              "values": [
+                7.7,
+                8.0
+              ]
+            },
+            {
+              "label": "10",
+              "values": [
+                17.2,
+                16.7
+              ]
+            },
+            {
+              "label": "15",
+              "values": [
+                29.6,
+                23.9
+              ]
+            },
+            {
+              "label": "20",
+              "values": [
+                41.5,
+                28.4
+              ]
+            },
+            {
+              "label": "25",
+              "values": [
+                48.8,
+                30.6
+              ]
+            },
+            {
+              "label": "30",
+              "values": [
+                51.6,
+                31.4
+              ]
+            },
+            {
+              "label": "35",
+              "values": [
+                51.6,
+                31.3
+              ]
+            },
+            {
+              "label": "40",
+              "values": [
+                50.3,
+                30.7
+              ]
+            },
+            {
+              "label": "45",
+              "values": [
+                48.8,
+                29.9
+              ]
+            },
+            {
+              "label": "50",
+              "values": [
+                47.6,
+                28.7
+              ]
+            },
+            {
+              "label": "55",
+              "values": [
+                46.2,
+                27.5
+              ]
+            },
+            {
+              "label": "60",
+              "values": [
+                44.6,
+                26.5
+              ]
+            },
+            {
+              "label": "65",
+              "values": [
+                42.3,
+                25.3
+              ]
+            },
+            {
+              "label": "70",
+              "values": [
+                39.1,
+                23.5
+              ]
+            },
+            {
+              "label": "75",
+              "values": [
+                35.6,
+                21.4
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "key": "fat_free_fraction",
+      "description": "Fat-free share of body mass at age 25: 1 minus the DXA body fat of about 24% (men) and 38% (women)",
+      "unit": "fraction",
+      "source": "kelly2009",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "group",
+          "columns": [
+            "male",
+            "female"
+          ],
+          "rows": [
+            {
+              "label": "adult",
+              "values": [
+                0.76,
+                0.62
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

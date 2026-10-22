@@ -158,7 +158,12 @@ impl GenomeMap {
         let bps = lengths
             .rows
             .iter()
-            .map(|r| Ok((r.label.clone(), need(lengths.get(&r.label, "bp"), "bp")? as u64)))
+            .map(|r| {
+                Ok((
+                    r.label.clone(),
+                    need(lengths.get(&r.label, "bp"), "bp")? as u64,
+                ))
+            })
             .collect::<Result<Vec<_>, String>>()?;
         // The map length of each autosome is its share by length of the
         // sex's crossovers per meiosis (D66: no per-chromosome map).
@@ -242,11 +247,20 @@ impl GenomeMap {
     /// One gamete of `parent`: recombined on the parent's map and mutated.
     /// `female` says which map; `y` asks a father for his Y. Returns the
     /// copy and the mutations it carries.
-    pub fn gamete(&self, parent: &Genome, female: bool, y: bool, s: &mut Stream) -> (Haplotype, u32) {
+    pub fn gamete(
+        &self,
+        parent: &Genome,
+        female: bool,
+        y: bool,
+        s: &mut Stream,
+    ) -> (Haplotype, u32) {
         let mut mutations = 0;
         let mut chromosomes = Vec::with_capacity(X + 1);
         for c in 0..=X {
-            let (a, b) = (&parent.maternal.chromosomes[c], &parent.paternal.chromosomes[c]);
+            let (a, b) = (
+                &parent.maternal.chromosomes[c],
+                &parent.paternal.chromosomes[c],
+            );
             let mut copy: Vec<Base> = if c < X || female {
                 // Autosomes, and a mother's two X: recombine.
                 let ch = &self.chromosomes[c];
@@ -388,8 +402,14 @@ mod tests {
         let loci: usize = woman.maternal.chromosomes.iter().map(Vec::len).sum();
         let haploid: u64 = m.chromosomes[..23].iter().map(|c| c.bp).sum();
         let whole = haploid / m.locus_spacing_bp;
-        assert!(whole - loci as u64 <= 23, "one locus a megabase: {loci} of {whole}");
-        assert!(m.diploid_bp(&woman) > m.diploid_bp(&man), "an X is longer than a Y");
+        assert!(
+            whole - loci as u64 <= 23,
+            "one locus a megabase: {loci} of {whole}"
+        );
+        assert!(
+            m.diploid_bp(&woman) > m.diploid_bp(&man),
+            "an X is longer than a Y"
+        );
     }
 
     #[test]
@@ -430,7 +450,10 @@ mod tests {
         let total = |f: fn(&Chromosome) -> f64| m.chromosomes[..22].iter().map(f).sum::<f64>();
         // Two crossovers between neighbouring loci undo each other, so the
         // counted map runs a little short of the drawn one.
-        assert!((female / total(|c| c.cm_female) - 1.0).abs() < 0.08, "{female}");
+        assert!(
+            (female / total(|c| c.cm_female) - 1.0).abs() < 0.08,
+            "{female}"
+        );
         assert!((male / total(|c| c.cm_male) - 1.0).abs() < 0.08, "{male}");
         assert!(female > male, "the female map is longer");
     }
@@ -442,7 +465,9 @@ mod tests {
         let mum = m.founder(false, &mut s);
         let dad = m.founder(true, &mut s);
         let n = 200;
-        let total: u32 = (0..n).map(|_| m.conceive(&mum, &dad, n % 2 == 0, &mut s).de_novo).sum();
+        let total: u32 = (0..n)
+            .map(|_| m.conceive(&mum, &dad, n % 2 == 0, &mut s).de_novo)
+            .sum();
         let mean = f64::from(total) / f64::from(n);
         let loci: usize = mum.maternal.chromosomes.iter().map(Vec::len).sum::<usize>() * 2;
         let expected = loci as f64 * m.mutation_rate_per_bp * m.locus_spacing_bp as f64;
@@ -458,7 +483,11 @@ mod tests {
         let son = m.conceive(&mum, &dad, true, &mut s);
         let daughter = m.conceive(&mum, &dad, false, &mut s);
         assert!(son.male() && !daughter.male());
-        assert_eq!(son.paternal.chromosomes[22].len(), m.loci(23), "a son has his father's Y");
+        assert_eq!(
+            son.paternal.chromosomes[22].len(),
+            m.loci(23),
+            "a son has his father's Y"
+        );
         assert_eq!(daughter.paternal.chromosomes[22].len(), m.loci(22));
         // Every autosomal locus of the child's maternal copy is one of the
         // mother's two bases, mutations aside.
@@ -492,7 +521,12 @@ mod tests {
         }
         let n = xs.len() as f64;
         let (mx, my) = (xs.iter().sum::<f64>() / n, ys.iter().sum::<f64>() / n);
-        let cov: f64 = xs.iter().zip(&ys).map(|(x, y)| (x - mx) * (y - my)).sum::<f64>() / n;
+        let cov: f64 = xs
+            .iter()
+            .zip(&ys)
+            .map(|(x, y)| (x - mx) * (y - my))
+            .sum::<f64>()
+            / n;
         let var: f64 = xs.iter().map(|x| (x - mx).powi(2)).sum::<f64>() / n;
         let slope = cov / var;
         assert!((slope - h2).abs() < 0.2, "slope {slope} against h2 {h2}");
