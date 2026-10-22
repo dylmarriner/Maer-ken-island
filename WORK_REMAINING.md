@@ -348,8 +348,10 @@ trade, a 2-3 bedroom cottage's floor area (Task 6 and 7b); the Pukekohe growing 
     DairyNZ 2023-24, which checks against their 1,105 kg/ha), crops at FAOSTAT's 2023 New Zealand
     yields per hectare (vegetables are FAO estimates).
   - `livestock.rs`: ewes and cows at Beef + Lamb's Class 5 lambing (140.3%) and calving (87.5%);
-    lambs killed the same season at 19.93 kg, calves at 20 months at the steer's 316 kg. Every
-    young animal is sold: no replacement rate or breeding-stock death rate has a source yet.
+    ewe lambs replace the 30% of ewes lost each year (Ridler's 25-35%, Country-Wide 2019) and the
+    other lambs are killed the same season at 19.93 kg; calves at 20 months at the steer's 316 kg.
+    No cattle replacement rate has a source yet (RB35's 13% counts only heifers calving at two),
+    so every calf is finished and the cows are held constant; cull ewes' mutton is not counted.
   - Still open: roof, floor and other timber in the house (no source read yet), the plantation and
     farms on the map fed by the existing felling and hauling, livestock replacements, fishery,
     food processing and the supermarket.

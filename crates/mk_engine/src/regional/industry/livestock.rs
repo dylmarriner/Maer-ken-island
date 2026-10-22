@@ -5,10 +5,12 @@
 //! Lambs go to slaughter in their first season at the national average
 //! carcass, 19.93 kg (provisional 2025-26); steers before their second
 //! winter at 18-22 months, at the export steer's 316 kg (Williamson 2021;
-//! heifers, 220-250 kg, are not told apart yet). Every lamb and calf
-//! is sold for now: no source read gives a replacement rate, so the
-//! breeding stock is held constant and its own deaths and culls are not
-//! modelled (D-register Task 7b note).
+//! heifers, 220-250 kg, are not told apart yet). The flock keeps itself:
+//! each season ewe lambs replace the 25-35% of ewes lost to deaths and
+//! culls (Ridler, Massey, in Country-Wide 2019) and the rest of the lambs
+//! are killed. No cattle replacement rate has been read yet, so every calf
+//! is finished and the cows are held constant. Cull ewes' mutton is not
+//! counted.
 
 use serde::{Deserialize, Serialize};
 
@@ -21,6 +23,8 @@ const MONTH_S: f64 = 365.25 * 86_400.0 / 12.0;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LivestockModel {
     pub lambs_per_ewe: f64,
+    /// Share of the ewes replaced by ewe lambs each season.
+    pub ewe_replacement: f64,
     pub calves_per_cow: f64,
     pub lamb_carcass_kg: f64,
     pub steer_carcass_kg: f64,
@@ -42,6 +46,11 @@ impl LivestockModel {
         let ideal = "ideal_finish_before_second_winter";
         Ok(Self {
             lambs_per_ewe: cell(stock, CLASS, "lambing_percent")? / 100.0,
+            ewe_replacement: library
+                .item(ReferenceDomain::Industry, "ewe_flock_replacement_rate")
+                .and_then(|i| i.central())
+                .ok_or_else(|| MissingReference("ewe_flock_replacement_rate".into()))?
+                / 100.0,
             calves_per_cow: cell(stock, CLASS, "calving_percent")? / 100.0,
             lamb_carcass_kg: cell(
                 "lamb_hot_carcass_weight_nz",
@@ -88,10 +97,13 @@ pub struct Meat {
 }
 
 impl Stock {
-    /// The year's lambing and calving at `now_s`. Lambs are finished the
-    /// same season, so they go straight to slaughter; calves join a cohort.
+    /// The year's lambing and calving at `now_s`. Ewe lambs kept as
+    /// replacements take the places of the ewes lost this year, so the
+    /// flock holds; the other lambs are finished the same season and go
+    /// straight to slaughter. Calves join a cohort.
     pub fn birth_season(&mut self, model: &LivestockModel, now_s: f64) -> Meat {
-        let lambs = self.ewes * model.lambs_per_ewe;
+        let kept = self.ewes * model.ewe_replacement;
+        let lambs = (self.ewes * model.lambs_per_ewe - kept).max(0.0);
         let calves = self.cows * model.calves_per_cow;
         if calves > 0.0 {
             self.calves.push(Cohort {
@@ -133,6 +145,7 @@ mod tests {
     fn the_flock_and_herd_rates_are_the_packs() {
         let m = LivestockModel::load_default().expect("the pack loads");
         assert!((m.lambs_per_ewe - 1.403).abs() < 1e-12);
+        assert!((m.ewe_replacement - 0.30).abs() < 1e-12);
         assert_eq!(m.calves_per_cow, 0.875);
         assert_eq!(m.lamb_carcass_kg, 19.93);
         assert_eq!(m.steer_carcass_kg, 316.0);
@@ -148,7 +161,8 @@ mod tests {
             calves: vec![],
         };
         let lamb = stock.birth_season(&m, 0.0);
-        assert!((lamb.lamb_kg - 1_403.0 * 19.93).abs() < 1e-6);
+        assert!((lamb.lamb_kg - (1_403.0 - 300.0) * 19.93).abs() < 1e-6);
+        assert_eq!(stock.ewes, 1_000.0, "replacements keep the flock");
         assert_eq!(stock.finish(&m, YEAR_S).beef_kg, 0.0);
         stock.birth_season(&m, YEAR_S);
         let beef = stock.finish(&m, 2.0 * YEAR_S);
