@@ -29,7 +29,11 @@
 //! blowouts from BOEM's (2014) frequencies per development well drilled
 //! and per oil-producing well-year ([`PetroleumField::drill_for`]).
 //!
-//! Not modelled (D58): water cut, reservoir pressure, what a blowout
+//! Formation water comes up with the oil at the world's average three
+//! barrels for each barrel of oil (Bailey et al. 2000) and is injected
+//! back into the formation, so it never joins the island's surface water.
+//!
+//! Not modelled (D58): a water cut that rises as the field ages, reservoir pressure, what a blowout
 //! spills or stops (no source gives an onshore blowout's volume), and the leaked
 //! methane's warming (the planet's air carries no methane to add it to,
 //! and an island's leaks would change a planet-wide concentration by far
@@ -85,6 +89,9 @@ pub struct PetroleumModel {
     pub blowout_per_well_drilled: f64,
     /// Blowouts per oil-producing well-year (BOEM 2014, same record).
     pub blowout_per_well_year: f64,
+    /// Water produced per barrel of oil: the world's average from depleting
+    /// reservoirs, 3 (Bailey et al. 2000).
+    pub water_oil_ratio: f64,
 }
 
 /// Why the model could not be read.
@@ -162,6 +169,7 @@ impl PetroleumModel {
             methane_loss_fraction: point("methane_loss_us_supply_chain")? / 100.0,
             methane_lifetime_years: point("methane_perturbation_lifetime_yr")?,
             well_bbl_per_day: point("us_average_oil_well_rate")?,
+            water_oil_ratio: point("world_average_water_oil_ratio")?,
             blowout_per_well_drilled: hazard("blowout_per_well_drilled", "development")?,
             blowout_per_well_year: hazard("blowout_per_well_year_production", "oil_production")?,
         })
@@ -208,6 +216,10 @@ pub struct PetroleumField {
     /// Blowouts so far: each time the expectation passes a whole number.
     #[serde(default)]
     pub blowouts: u32,
+    /// Formation water produced with the oil (m3), separated and injected
+    /// back into the formation it came from.
+    #[serde(default)]
+    pub produced_water_m3: f64,
 }
 
 /// What one step of production gave.
@@ -254,6 +266,7 @@ impl PetroleumField {
             wells: 0,
             blowout_expectation: 0.0,
             blowouts: 0,
+            produced_water_m3: 0.0,
         })
     }
 
@@ -342,6 +355,7 @@ impl PetroleumField {
         let leaked_gj = gas_gj * model.methane_loss_fraction;
         let kept_gj = gas_gj - leaked_gj;
         self.produced_oil_m3 += oil_m3;
+        self.produced_water_m3 += oil_m3 * model.water_oil_ratio;
         self.produced_gas_gj += gas_gj;
         self.tank_oil_m3 += oil_m3;
         self.tank_gas_gj += kept_gj;

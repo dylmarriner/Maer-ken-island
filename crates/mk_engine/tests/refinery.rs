@@ -126,6 +126,7 @@ fn crude_from_a_field_is_refined_with_its_carbon_accounted() {
         wells: 0,
         blowout_expectation: 0.0,
         blowouts: 0,
+        produced_water_m3: 0.0,
     };
     let mut ledger = Ledger::new();
     field.produce(1.0, &petroleum, &mut ledger);
@@ -175,6 +176,7 @@ fn the_chain_s_carbon_changes_by_what_the_ledger_says() {
         wells: 0,
         blowout_expectation: 0.0,
         blowouts: 0,
+        produced_water_m3: 0.0,
     });
     let day = 86_400.0;
     for _ in 0..30 {
