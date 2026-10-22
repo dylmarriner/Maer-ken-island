@@ -288,6 +288,32 @@ mod tests {
         }
     }
 
+    /// The two lists above are written out by hand, so this holds them to
+    /// the estate the island really builds: a building or item kind the
+    /// engine adds there and nobody adds here fails, rather than the
+    /// exhaustive test passing over a list that has fallen behind.
+    #[test]
+    fn the_kind_lists_cover_every_kind_on_the_founders_estate() {
+        use mk_engine::organisms::property::StarterProperty;
+        let estate = StarterProperty::founders_estate((0, 0));
+        for building in &estate.buildings {
+            let kind = format!("{:?}", building.kind);
+            assert!(
+                BUILDING_KINDS.contains(&kind.as_str()),
+                "{} is a {kind}, which BUILDING_KINDS leaves out",
+                building.name
+            );
+        }
+        for item in &estate.items {
+            let kind = format!("{:?}", item.kind);
+            assert!(
+                ITEM_KINDS.contains(&kind.as_str()),
+                "{} is a {kind}, which ITEM_KINDS leaves out",
+                item.name
+            );
+        }
+    }
+
     #[test]
     fn every_model_this_table_names_is_a_file_that_exists() {
         // The failure this prevents is the worst kind: a renderer that
