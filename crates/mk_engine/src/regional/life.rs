@@ -1992,9 +1992,7 @@ impl IslandLife {
                 .library()
                 .item(crate::validation::ReferenceDomain::Ecology, key)
                 .and_then(|i| i.central())
-                .ok_or_else(|| {
-                    IslandLifeError::Labour(LabourError::MissingReference(key.into()))
-                })
+                .ok_or_else(|| IslandLifeError::Labour(LabourError::MissingReference(key.into())))
         };
         let rate_kcal_h = ecology("forage_return_rate_acorns")?;
         let search_per_handling = ecology("forage_search_per_handling_fruit")?;
