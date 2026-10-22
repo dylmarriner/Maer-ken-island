@@ -1509,6 +1509,43 @@ async fn properties_economy_and_timeline_serve_what_the_island_really_holds() {
     if industry["money"] == true {
         assert_eq!(industry["money_closes"], true, "{body}");
     }
+    assert!(industry["payslips"].is_array(), "{body}");
+
+    // Power: the estate's batteries hold no more than they can.
+    let (status, response) = get(port, "/api/power").await;
+    assert_eq!(status, 200, "{response}");
+    let body: serde_json::Value = serde_json::from_str(body_of(&response)).unwrap();
+    let power = &body["power"];
+    let charge = power["battery_charge_kwh"].as_f64().unwrap();
+    let capacity = power["battery_capacity_kwh"].as_f64().unwrap();
+    assert!(charge >= 0.0 && charge <= capacity + 1e-9, "{body}");
+    assert!(
+        power["generators"].is_array() && power["vehicles"].is_array(),
+        "{body}"
+    );
+
+    // Timber: the patch's trees stand, and every log is somewhere.
+    let (status, response) = get(port, "/api/timber").await;
+    assert_eq!(status, 200, "{response}");
+    let body: serde_json::Value = serde_json::from_str(body_of(&response)).unwrap();
+    let timber = &body["timber"];
+    assert!(timber["standing_trees"].as_u64().unwrap() > 0, "{body}");
+    for place in ["ground", "on_vehicles", "stored"] {
+        assert!(timber[place]["count"].is_u64(), "{place}: {body}");
+    }
+
+    // Food: the store holds no negative food, and the tank no more than it can.
+    let (status, response) = get(port, "/api/food").await;
+    assert_eq!(status, 200, "{response}");
+    let body: serde_json::Value = serde_json::from_str(body_of(&response)).unwrap();
+    let food = &body["food"];
+    assert!(food["plant_food_kg"].as_f64().unwrap() >= 0.0, "{body}");
+    if let (Some(stored), Some(capacity)) = (
+        food["tank_stored_kg"].as_f64(),
+        food["tank_capacity_kg"].as_f64(),
+    ) {
+        assert!(stored >= 0.0 && stored <= capacity + 1e-9, "{body}");
+    }
 
     // Now build something and look again. Both views have to move, and
     // promptly — not at the next hourly refresh.
@@ -1696,6 +1733,9 @@ async fn the_three_views_need_an_island() {
         "/api/properties",
         "/api/economy",
         "/api/industry",
+        "/api/power",
+        "/api/timber",
+        "/api/food",
         "/api/timeline",
     ] {
         let (status, response) = get(port, path).await;

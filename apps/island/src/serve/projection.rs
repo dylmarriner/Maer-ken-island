@@ -135,6 +135,15 @@ pub struct IslandProjection {
     /// dozen numbers; skipped from the status body, `/api/industry` serves it.
     #[serde(skip)]
     pub industry: Arc<Industry>,
+    /// The estate's power and its timber; skipped from the status body,
+    /// `/api/power` and `/api/timber` serve them.
+    #[serde(skip)]
+    pub power: Arc<Power>,
+    #[serde(skip)]
+    pub timber: Arc<Timber>,
+    /// The household's food and water; `/api/food` serves it.
+    #[serde(skip)]
+    pub food: Arc<Food>,
     /// The canonical state digest, and the tick it was taken at.
     ///
     /// Two islands showing the same digest at the same tick are the same
@@ -519,6 +528,9 @@ impl IslandProjection {
             conversations,
             trees,
             industry: Arc::new(industry(life)),
+            power: Arc::new(power(life)),
+            timber: Arc::new(timber(life)),
+            food: Arc::new(food(life)),
             // Current only if it was taken at this tick *and* nothing has
             // changed the island since: a command applies without moving
             // the clock, so the tick alone cannot tell (`run_island` clears
@@ -909,6 +921,157 @@ fn land(life: &IslandLife) -> Land {
     }
 }
 
+/// The estate's power plant, fuel, loads and vehicles, for the power page.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct Power {
+    /// Every fuel store: its fuel ("Diesel" or "Petrol") and litres left.
+    pub fuel_stores: Vec<(String, f64)>,
+    /// Every generator: rated kW, fuel and litres burned per kWh.
+    pub generators: Vec<(f64, String, f64)>,
+    pub solar_rated_kw: f64,
+    pub battery_charge_kwh: f64,
+    pub battery_capacity_kwh: f64,
+    /// Rivers feeding a hydro line.
+    pub hydro_lines: usize,
+    /// Every appliance and whether it is running now.
+    pub loads: Vec<PowerLoad>,
+    /// The lights on now, and the kW they draw.
+    pub lights_on: usize,
+    pub lights_kw: f64,
+    pub vehicles: Vec<Vehicle>,
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct PowerLoad {
+    pub name: String,
+    pub kw: f64,
+    pub in_use: bool,
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct Vehicle {
+    pub name: String,
+    pub fuel: String,
+    pub litres: f64,
+    pub tank_litres: f64,
+}
+
+fn power(life: &IslandLife) -> Power {
+    let e = &life.energy;
+    let lights_on: Vec<_> = e.lighting.iter().filter(|l| l.in_use).collect();
+    Power {
+        fuel_stores: e
+            .fuel_stores
+            .iter()
+            .map(|s| (format!("{:?}", s.fuel), s.litres))
+            .collect(),
+        generators: e
+            .generators
+            .iter()
+            .map(|g| (g.rated_kw, format!("{:?}", g.fuel), g.litres_per_kwh))
+            .collect(),
+        solar_rated_kw: e.solar.iter().map(|a| a.rated_kw).sum(),
+        battery_charge_kwh: e.batteries.iter().map(|b| b.charge_kwh).sum(),
+        battery_capacity_kwh: e.batteries.iter().map(|b| b.capacity_kwh).sum(),
+        hydro_lines: e.hydro.len(),
+        loads: e
+            .loads
+            .iter()
+            .map(|l| PowerLoad {
+                name: l.name.clone(),
+                kw: l.kw,
+                in_use: l.in_use,
+            })
+            .collect(),
+        lights_on: lights_on.len(),
+        lights_kw: lights_on.iter().map(|l| l.kw).sum(),
+        vehicles: e
+            .vehicles
+            .iter()
+            .map(|v| Vehicle {
+                name: v.name.clone(),
+                fuel: format!("{:?}", v.fuel),
+                litres: v.litres,
+                tank_litres: v.tank_litres,
+            })
+            .collect(),
+    }
+}
+
+/// The estate's timber, for the timber page: logs by where they lie, and
+/// the seasoned wood in the stock.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct Timber {
+    pub standing_trees: usize,
+    /// Logs and pieces on the ground, on a vehicle and in the store.
+    pub ground: LogTally,
+    pub on_vehicles: LogTally,
+    pub stored: LogTally,
+    /// Seasoned wood in the stock (kg), ready to burn or build with.
+    pub seasoned_wood_kg: f64,
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct LogTally {
+    pub count: usize,
+    pub dry_kg: f64,
+    /// Water still in the wood (kg).
+    pub water_kg: f64,
+}
+
+fn timber(life: &IslandLife) -> Timber {
+    use mk_engine::regional::timber::LogPlace;
+    let mut out = Timber {
+        standing_trees: life.vegetation.trees.len(),
+        seasoned_wood_kg: life
+            .materials
+            .stock_kg(mk_engine::regional::materials::Material::Wood),
+        ..Timber::default()
+    };
+    for log in life.materials.logs() {
+        let tally = match log.place {
+            LogPlace::Ground => &mut out.ground,
+            LogPlace::Vehicle(_) => &mut out.on_vehicles,
+            LogPlace::Stored => &mut out.stored,
+        };
+        tally.count += 1;
+        tally.dry_kg += log.dry_kg;
+        tally.water_kg += log.water_kg;
+    }
+    out
+}
+
+/// The household's food and water, for the food page.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct Food {
+    /// Food in the store (kg).
+    pub plant_food_kg: f64,
+    pub meat_kg: f64,
+    /// The rainwater tank, if the house has one.
+    pub tank_capacity_kg: Option<f64>,
+    pub tank_stored_kg: Option<f64>,
+    /// Times someone wanted food or water and found none.
+    pub food_shortfalls: u64,
+    pub water_shortfalls: u64,
+    /// Who is out gathering food, and who is fetching water.
+    pub foraging: Vec<String>,
+    pub fetching_water: Vec<String>,
+}
+
+fn food(life: &IslandLife) -> Food {
+    use mk_engine::regional::materials::Material;
+    Food {
+        plant_food_kg: life.materials.stock_kg(Material::PlantFood),
+        meat_kg: life.materials.stock_kg(Material::Meat),
+        tank_capacity_kg: life.household_water.as_ref().map(|w| w.capacity_kg),
+        tank_stored_kg: life.household_water.as_ref().map(|w| w.stored_kg),
+        food_shortfalls: life.shortfalls.food,
+        water_shortfalls: life.shortfalls.water,
+        foraging: life.foraging.keys().cloned().collect(),
+        fetching_water: life.water_trips.keys().cloned().collect(),
+    }
+}
+
 /// The oil chain and the money, for the industry page.
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct Industry {
@@ -930,6 +1093,8 @@ pub struct Industry {
     /// Whether money held equals money issued and lent.
     pub money_closes: bool,
     pub enterprises: Vec<Business>,
+    /// The latest pay runs across every business, newest first.
+    pub payslips: Vec<mk_engine::regional::economy::enterprise::Payslip>,
 }
 
 #[derive(Debug, Clone, Default, Serialize)]
@@ -1026,9 +1191,24 @@ fn industry(life: &IslandLife) -> Industry {
                 payslips: e.payslips.len(),
             })
             .collect();
+        let mut slips: Vec<_> = money
+            .enterprises
+            .iter()
+            .flat_map(|e| e.payslips.iter().cloned())
+            .collect();
+        slips.sort_by(|a, b| {
+            b.period_end_s
+                .cmp(&a.period_end_s)
+                .then(a.person.cmp(&b.person))
+        });
+        slips.truncate(PAYSLIPS_SHOWN);
+        out.payslips = slips;
     }
     out
 }
+
+/// How many of the latest payslips the industry page lists.
+const PAYSLIPS_SHOWN: usize = 50;
 
 fn stocks(life: &IslandLife) -> Stocks {
     use mk_core::flux::Reservoir;
