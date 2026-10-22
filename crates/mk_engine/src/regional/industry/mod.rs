@@ -6,6 +6,8 @@
 //! - [`chain`]: the fields and refinery run as one plant, its carbon auditable.
 //! - [`flow_duration`]: each perennial river cell's flow-duration curve from
 //!   a simulated year.
+//! - [`forestry`]: even-aged radiata pine stands clearfelled at New
+//!   Zealand's average age and yield, never cutting more than they grow.
 //! - [`hydro_sites`]: run-of-river sites that support a plant.
 //! - [`grid`]: overhead lines, their losses and a radial grid's dispatch.
 //! - [`petroleum`]: oil and gas fields sized from New Zealand's own, in
@@ -17,6 +19,7 @@
 
 pub mod chain;
 pub mod flow_duration;
+pub mod forestry;
 pub mod grid;
 pub mod hydro;
 pub mod hydro_sites;

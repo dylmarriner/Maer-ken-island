@@ -47,7 +47,7 @@ this list holds the current state. The evidence for what is *done* is in
 | Industry | Phase 4b Task 5: refinery, gas plant, fuel depot (D16) | Topping refinery done 2026-10-14; gas plant, reformer, depot open | Reformate yield; gas-plant own use |
 | Industry | Phase 4b Task 6: jobs, trades, maintenance (D39) | Open | Upstream human-runtime change first |
 | Industry | Phase 4b Task 7: money, enterprises, payroll | Money, payroll and metered bills done 2026-10-18 (`regional/economy/`, D61, D62; `tests/island_economy.rs`). In `IslandLife` 2026-10-22 (`economy/island.rs`: deposits, Gem Petroleum selling the depot's diesel, monthly loans, closes, dividends, money audit); the petroleum business's staff and payslips, household bills, buying and selling homes open | Task 6 staff; upstream buying |
-| Industry | Phase 4b Task 7b: food and timber chains | Open | Task 2 catalogue; crop/livestock data |
+| Industry | Phase 4b Task 7b: food and timber chains (forestry and sawmill models 2026-10-23) | Open | Task 2 catalogue; crop/livestock data |
 | Industry | Phase 4b Task 8: town and workforce | Open; the owner decided the town starts at each enterprise's smallest staff and grows (2026-10-15, §4g) | Demographic tables; a sourced minimum staff per enterprise |
 | Industry | Phase 4b Task 9: dashboard pages, year acceptance | Open | Tasks 4-8 |
 | Climate | D3 rest: sea/land breezes, katabatic winds | Open | A diurnal wind solver |
@@ -332,6 +332,16 @@ trade, a 2-3 bedroom cottage's floor area (Task 6 and 7b); the Pukekohe growing 
   forestry.rs,sawmill.rs,construction.rs}`.
 - **Tests:** `tests/food_chain.rs`, `tests/timber_chain.rs` (harvest never exceeds regrowth,
   carbon conserved from tree to house).
+- **Done 2026-10-23:**
+  - `forestry.rs`: even-aged radiata pine stands clearfelled at the NEFD's 28.2-year average age
+    for 486 m³/ha (Lane 2007) and replanted, so harvest never exceeds regrowth (unit tests).
+  - `sawmill.rs`: logs sawn at New Zealand's 1.81 m³ of roundwood per m³ of sawnwood (FAO/ITTO/UN
+    2020). The rest is shared in North America's residue proportions as a stand-in, since New
+    Zealand reports no material balance. The pack item had mislabelled those shares as New
+    Zealand's and is corrected.
+  - Still open: the plantation on the map, its wood from the existing felling and hauling,
+    carbon from tree to house (needs a radiata density and carbon fraction with sources),
+    `construction.rs`, and all the food chain.
 
 ### 4g. Task 8: town and workforce
 

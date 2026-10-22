@@ -1,0 +1,38 @@
+{
+  "id": "forestry",
+  "domain": "industry",
+  "title": "New Zealand radiata pine plantation rotation and clearfell yield",
+  "retrieved": "2026-10-23",
+  "licence": "Numerical values cited as facts with attribution; no text, figures or datasets reproduced.",
+  "sources": [
+    {
+      "key": "lane2007",
+      "citation": "Lane, P. (2007). A snapshot of plantation forests as at 1 April 2006. NZ Journal of Forestry, May 2007, p. 40 (National Exotic Forest Description 2006 summary table). https://nzif.org.nz/nzif-journal/publications/downloadfulltext/22404",
+      "licence": "Facts cited with attribution"
+    }
+  ],
+  "items": [
+    {
+      "key": "radiata_clearfell_age_years",
+      "description": "Area-weighted average clearfell age of radiata pine, New Zealand, year ended 31 March 2006",
+      "unit": "years",
+      "source": "lane2007",
+      "confidence": "high",
+      "value": {
+        "point": 28.2
+      },
+      "note": "Table row 'Area-weighted average clear fell age for radiata pine (years)': 27.9 (2005), 28.2 (2006). Text: typically harvested between 26 and 32 years old."
+    },
+    {
+      "key": "radiata_clearfell_yield_m3_ha",
+      "description": "Average clearfell yield of radiata pine, New Zealand, year ended 31 March 2006 (total recoverable volume inside bark)",
+      "unit": "m3/ha",
+      "source": "lane2007",
+      "confidence": "high",
+      "value": {
+        "point": 486.0
+      },
+      "note": "Table row 'Average clear fell yield - radiata pine (m3/ha)': 462 (2005), 486 (2006); volumes are TRVIB."
+    }
+  ]
+}
