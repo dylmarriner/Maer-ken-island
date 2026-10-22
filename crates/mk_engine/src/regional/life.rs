@@ -2909,7 +2909,7 @@ impl IslandLife {
         let now_s = self.sim_time_s as f64;
         let ids: Vec<String> = builders.iter().map(|(id, _)| id.clone()).collect();
         for (id, body) in builders {
-            // The pack's hours are a practised carpenter's (R11).
+            // The pack's hours are a practised carpenter's and splitter's (R11).
             let skill = self
                 .skills
                 .time_factor(&self.learning, &id, Task::Building, now_s);
@@ -4193,8 +4193,9 @@ mod tests {
         scenario.estate_patch.tree_cap = 200;
         let canon = Arc::new(CanonLocked::load(&repo("fixtures/island/canon.json")).unwrap());
         let mut life = IslandLife::bootstrap(scenario, canon).expect("the island bootstraps");
-        // The pack's hours are a practised carpenter's (R11).
+        // The pack's hours are a practised carpenter's and splitter's (R11).
         practise_everyone(&mut life, Task::Building);
+        practise_everyone(&mut life, Task::Splitting);
         let at = life.vegetation.centre_m();
         life.positions.0.insert(
             "Gem-D".into(),

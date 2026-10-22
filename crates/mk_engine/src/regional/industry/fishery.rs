@@ -184,6 +184,6 @@ mod tests {
             assert!(landed <= stock.msy_t(&m) * day / YEAR_S + 1e-9);
         }
         assert!(stock.landed_t > 0.0);
-        assert!(stock.landed_t <= stock.msy_t(&m) * 10.0 + 1e-6);
+        assert!(stock.landed_t <= stock.msy_t(&m) * 3_653.0 * day / YEAR_S + 1e-6);
     }
 }
