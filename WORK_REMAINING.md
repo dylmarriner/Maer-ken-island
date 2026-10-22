@@ -152,7 +152,12 @@ animal and fish resource nodes (done 2026-10-23, §2b).
     sourced siting rule for coastal flats and a dry climate is needed).
   - Plant nodes (2026-10-23): `IslandBiota::plant_nodes` gives each plant species' share of a
     cell's living biomass carbon, adding up to the species on the island.
-  - Water sources.
+  - Water sources: already in the model, not as a separate node. `physical.river_flows`
+    (`industry/flow_duration.rs`) holds a flow-duration curve for every perennial medium cell,
+    and `RiverFlowRecord::is_river` marks those at the hydrology's 1 m³/s river threshold;
+    `FlowNetwork::lake_depth_m` gives the lakes, and each house has its roof tank
+    (`household_water.rs`). Still open: people drawing from a river or lake (SeekWater is one
+    tick, D9).
   - The new tools in `resource_economy.rs`, smelting and the other recipes, mass-balanced through
     the material ledger.
   - Serving the sites to the map and the founders' choices.
