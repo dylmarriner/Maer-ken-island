@@ -51,6 +51,11 @@
       "licence": "Facts cited with attribution"
     },
     {
+      "key": "hoeldrich2007",
+      "citation": "Höldrich, A., Hartmann, H. and Schardt, M. (2007). Work Time Requirements for Wood Log Production. Landtechnik 62(1): 50-51. REFA time studies (40 in all, 32 of processing, including splitting with the axe or splitting hammer); set-up, sharpening, repairs and longer waits not counted. Table 1: mean labour hours per solid cubic metre of 33 cm logs, spruce and beech, 'Splitter small 2,33'; text: 'For a short time, manual splitting (axe, splitting hammer) allows a degree of productivity to be achieved which is almost comparable with that of the small vertical splitter. Here, however, tiredness sets in earlier.' Read from https://web.archive.org/web/2020/https://www.agricultural-engineering.eu/landtechnik/article/download/2007-62-1-050-051/2007-62-1-050-051-en-pdf/1364.",
+      "licence": "Facts cited with attribution"
+    },
+    {
       "key": "statsnz2020_floor",
       "citation": "Stats NZ (12 February 2020). New homes around 20 percent smaller (media release, December 2019 year building consents): the average floor area of new homes consented 'compared with around 160 square metres in 2019'; median 148 m2. Read from the release as reproduced at https://www.scoop.co.nz/stories/BU2002/S00145.htm.",
       "licence": "Facts cited with attribution"
@@ -663,6 +668,15 @@
       "confidence": "low",
       "value": { "point": 0.0875 },
       "note": "Derived: 14 / 160. The 14 m3 is the residential market's 450,000 m3 a year over about 33,000 dwellings consented in 2019, so it averages detached houses and multi-unit homes, as Stats NZ's 160 m2 does. Floor area includes attached garages. A shed has no internal walls or floor joists over a slab, so this overstates its framing."
+    },
+    {
+      "key": "firewood_splitting_labour_per_solid_volume",
+      "description": "Labour to split firewood, 33 cm logs of spruce and beech, with a small vertical splitter, which manual splitting with the axe or splitting hammer nearly matches for a short time (Höldrich et al. 2007, Table 1)",
+      "unit": "h / m3",
+      "source": "hoeldrich2007",
+      "confidence": "low",
+      "value": { "point": 2.33 },
+      "note": "Per solid cubic metre, labour hours, technical work time without set-up or breaks. Used for the axe, which the authors say tires its user sooner, so this overstates a long day's splitting. Mean log diameters across the study's methods were 12-26 cm."
     }
   ]
 }

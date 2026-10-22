@@ -308,6 +308,8 @@ pub struct IslandLifeSnapshot {
     #[serde(default)]
     pub firewood_shed: Option<ShedBuild>,
     #[serde(default)]
+    pub split_wood_kg: f64,
+    #[serde(default)]
     pub hauling: BTreeMap<String, HaulJob>,
     #[serde(default)]
     pub labour_kcal: BTreeMap<String, f64>,
@@ -374,6 +376,9 @@ pub struct IslandLife {
     mining: BTreeMap<String, MiningJob>,
     /// The firewood shed, once its building has begun (D9, R5).
     pub firewood_shed: Option<ShedBuild>,
+    /// How much of the store's air-dry wood has been split into firewood
+    /// (kg, D63): the cooking fire burns only this.
+    pub split_wood_kg: f64,
     /// The log each founder is moving to the store and the tasks they
     /// still have to do (`regional::timber`).
     hauling: BTreeMap<String, HaulJob>,
@@ -739,6 +744,7 @@ impl IslandLife {
             resources: None,
             mining: BTreeMap::new(),
             firewood_shed: None,
+            split_wood_kg: 0.0,
             hauling: BTreeMap::new(),
             labour_kcal: BTreeMap::new(),
             water_drunk_kg: BTreeMap::new(),
@@ -850,6 +856,7 @@ impl IslandLife {
             resources: self.resources.clone(),
             mining: self.mining.clone(),
             firewood_shed: self.firewood_shed,
+            split_wood_kg: self.split_wood_kg,
             hauling: self.hauling.clone(),
             labour_kcal: self.labour_kcal.clone(),
             water_drunk_kg: self.water_drunk_kg.clone(),
@@ -913,6 +920,7 @@ impl IslandLife {
             resources: snapshot.resources,
             mining: snapshot.mining,
             firewood_shed: snapshot.firewood_shed,
+            split_wood_kg: snapshot.split_wood_kg,
             hauling: snapshot.hauling,
             labour_kcal: snapshot.labour_kcal,
             water_drunk_kg: snapshot.water_drunk_kg,
@@ -2460,12 +2468,16 @@ impl IslandLife {
                 return;
             }
             let wanted = gas.firewood_wanted_kg(people, short_s);
-            let have = life.materials.stock_kg(Material::Wood);
+            // Only wood someone has split will burn (D63).
+            let have = life
+                .split_wood_kg
+                .min(life.materials.stock_kg(Material::Wood));
             let burned = wanted.min(have);
             if burned > 0.0 {
                 life.materials
                     .burn(Material::Wood, burned, ledger)
                     .expect("no more than the store holds");
+                life.split_wood_kg = (have - burned).max(0.0);
             }
             if let Some(gas) = life.household_gas.as_mut() {
                 gas.record_fire(wanted, burned, short_s);
@@ -2702,37 +2714,22 @@ impl IslandLife {
     /// estate's circular saw, which only cuts while it has power; each
     /// builder's second counts once, at the carpentry MET.
     fn build(&mut self, dt_s: f64) -> Result<(), IslandLifeError> {
-        let Some(saw) = self
+        let saw = self
             .energy
             .loads
             .iter()
             .find(|l| l.name == BUILDING_SAW)
-            .map(|l| l.item_id)
-        else {
+            .map(|l| l.item_id);
+        if self.firewood_shed.is_some_and(|b| b.is_finished()) {
+            if let Some(saw) = saw {
+                self.energy.set_in_use(saw, false);
+            }
+            return self.split_firewood(dt_s);
+        }
+        let Some(saw) = saw else {
             return Ok(());
         };
-        if self.firewood_shed.is_some_and(|b| b.is_finished()) {
-            self.energy.set_in_use(saw, false);
-            return Ok(());
-        }
-        let (rows, cols) = (
-            self.domain.rows(DomainLevel::Medium),
-            self.domain.cols(DomainLevel::Medium),
-        );
-        let builders: Vec<(String, LabourBody)> = self
-            .humans
-            .registry
-            .iter()
-            .filter(|h| matches!(h.profile.status, mk_core::human::HumanStatus::Alive))
-            .filter(|h| h.economy_action.kind == crate::humans::ActionKind::Build)
-            .filter(|h| {
-                matches!(
-                    self.positions.0.get(h.agent_id()).map(|p| p.space),
-                    Some(Space::Outdoors)
-                ) && self.at_home(self.standing_cell(h.agent_id(), rows, cols))
-            })
-            .map(|h| (h.agent_id().to_string(), LabourBody::from_human(h)))
-            .collect();
+        let builders = self.builders_at_home();
         self.energy.set_in_use(saw, !builders.is_empty());
         if builders.is_empty() {
             return Ok(());
@@ -2796,6 +2793,94 @@ impl IslandLife {
             if let Some(shed) = self.firewood_shed.as_mut() {
                 shed.worked_s += dt_s;
             }
+            let extra = self
+                .labour
+                .energy_kcal(&body, met, dt_s)
+                .map_err(IslandLifeError::Labour)?
+                - self
+                    .labour
+                    .energy_kcal(&body, awake_met, dt_s)
+                    .map_err(IslandLifeError::Labour)?;
+            *self.labour_kcal.entry(id.clone()).or_insert(0.0) += extra.max(0.0);
+            if let Some(h) = self.humans.registry.get_human_mut(&id) {
+                h.labour_met = Some(met);
+            }
+        }
+        Ok(())
+    }
+
+    /// The living founders whose choice is to build and who are outdoors at
+    /// the estate, with their bodies for the labour's energy.
+    fn builders_at_home(&self) -> Vec<(String, LabourBody)> {
+        let (rows, cols) = (
+            self.domain.rows(DomainLevel::Medium),
+            self.domain.cols(DomainLevel::Medium),
+        );
+        self.humans
+            .registry
+            .iter()
+            .filter(|h| matches!(h.profile.status, mk_core::human::HumanStatus::Alive))
+            .filter(|h| h.economy_action.kind == crate::humans::ActionKind::Build)
+            .filter(|h| {
+                matches!(
+                    self.positions.0.get(h.agent_id()).map(|p| p.space),
+                    Some(Space::Outdoors)
+                ) && self.at_home(self.standing_cell(h.agent_id(), rows, cols))
+            })
+            .map(|h| (h.agent_id().to_string(), LabourBody::from_human(h)))
+            .collect()
+    }
+
+    /// With the shed up, everyone whose choice is to build splits the
+    /// store's air-dry wood into firewood by the house (D63), at the packs'
+    /// labour hours per solid cubic metre (Höldrich et al. 2007, a small
+    /// splitter's, which the axe nearly matches) and the Compendium's
+    /// chopping and splitting MET. Only split wood feeds the cooking fire;
+    /// splitting stops when all the store's wood is split.
+    fn split_firewood(&mut self, dt_s: f64) -> Result<(), IslandLifeError> {
+        let unsplit = self.materials.stock_kg(Material::Wood) - self.split_wood_kg;
+        if unsplit <= 0.0 {
+            return Ok(());
+        }
+        let builders = self.builders_at_home();
+        if builders.is_empty() {
+            return Ok(());
+        }
+        let missing =
+            |key: &str| IslandLifeError::Labour(LabourError::MissingReference(key.to_string()));
+        let library = self.labour.library();
+        let h_per_m3 = library
+            .item(
+                crate::validation::ReferenceDomain::Labour,
+                "firewood_splitting_labour_per_solid_volume",
+            )
+            .and_then(|i| i.central())
+            .ok_or_else(|| missing("firewood_splitting_labour_per_solid_volume"))?;
+        let density = library
+            .item(
+                crate::validation::ReferenceDomain::Geology,
+                "material_density_intrinsic",
+            )
+            .and_then(|i| i.table())
+            .and_then(|t| t.get("wood", "density_kg_m3"))
+            .ok_or_else(|| missing("material_density_intrinsic/wood"))?;
+        let kg_per_s = density / (h_per_m3 * 3600.0);
+        let awake_met = self
+            .labour
+            .met(AWAKE_AT_HOME_ACTIVITY)
+            .map_err(IslandLifeError::Labour)?;
+        let met = self
+            .labour
+            .met("chopping_splitting_wood")
+            .map_err(IslandLifeError::Labour)?;
+        let mut left = unsplit;
+        for (id, body) in builders {
+            if left <= 0.0 {
+                break;
+            }
+            let kg = (kg_per_s * dt_s).min(left);
+            left -= kg;
+            self.split_wood_kg += kg;
             let extra = self
                 .labour
                 .energy_kcal(&body, met, dt_s)
@@ -3300,6 +3385,7 @@ impl IslandLife {
         h.update(canonical(&self.resources).as_bytes());
         h.update(canonical(&self.mining).as_bytes());
         h.update(canonical(&self.firewood_shed).as_bytes());
+        h.update(canonical(&self.split_wood_kg).as_bytes());
         h.update(canonical(&self.hauling).as_bytes());
         h.update(canonical(&self.labour_kcal).as_bytes());
         h.update(canonical(&self.water_drunk_kg).as_bytes());
@@ -3726,8 +3812,9 @@ mod tests {
 
     /// With the bottles empty the household cooks on a wood fire (R4): it
     /// burns the packs' firewood per person at home from the store's
-    /// air-dry wood, its carbon to the air through an audit, and with no
-    /// wood either the time without any cooking fuel is counted.
+    /// air-dry wood once it has been split (D63), its carbon to the air
+    /// through an audit, and with no split wood the time without any
+    /// cooking fuel is counted.
     #[test]
     fn with_the_gas_gone_the_kitchen_burns_stored_wood_at_the_measured_rate() {
         let mut scenario =
@@ -3749,8 +3836,16 @@ mod tests {
         })
         .unwrap();
         let wood = life.materials.stock_kg(Material::Wood);
-        let audits = life.audits_closed;
 
+        // Logs nobody has split will not burn.
+        life.household_gas_step(3_600.0).unwrap();
+        assert_eq!(life.materials.stock_kg(Material::Wood), wood, "unsplit");
+        let gas = life.household_gas.clone().unwrap();
+        assert!((gas.without_fuel_s - 3_600.0).abs() < 1e-9);
+        life.household_gas.as_mut().unwrap().without_fuel_s = 0.0;
+
+        life.split_wood_kg = wood;
+        let audits = life.audits_closed;
         life.household_gas_step(3_600.0).unwrap();
         let gas = life.household_gas.clone().unwrap();
         let rate = gas.spec.firewood_kg_per_person_day;
@@ -3761,6 +3856,7 @@ mod tests {
             "burned {burned} kg of {wanted}"
         );
         assert!((gas.wood_burned_kg - burned).abs() < 1e-9);
+        assert!((life.split_wood_kg - (wood - burned)).abs() < 1e-9);
         assert_eq!(gas.without_fuel_s, 0.0, "there was wood");
         assert_eq!(life.audits_closed, audits + 1, "the fire closed its books");
 
@@ -3860,10 +3956,35 @@ mod tests {
             .find(|l| l.name == BUILDING_SAW)
             .unwrap();
         assert!(!saw.in_use);
+        // With the shed up the builder splits the rest into firewood (D63):
+        // 500 kg/m³ over 2.33 labour-hours per solid m³, about 215 kg/h.
+        let per_hour: f64 = 500.0 / 2.33;
+        assert!(
+            (life.split_wood_kg - per_hour.min(left)).abs() < 1e-6,
+            "{} kg split",
+            life.split_wood_kg
+        );
+        assert_eq!(
+            life.humans.registry.get_human("Gem-D").unwrap().labour_met,
+            Some(life.labour.met("chopping_splitting_wood").unwrap())
+        );
+        for _ in 0..(left / per_hour).ceil() as usize {
+            life.build(3_600.0).unwrap();
+        }
+        assert!((life.split_wood_kg - left).abs() < 1e-6, "all split");
+        life.build(3_600.0).unwrap();
+        assert!(
+            (life.split_wood_kg - left).abs() < 1e-6,
+            "no more than the store"
+        );
         // Kept and hashed.
         assert_eq!(life.snapshot().firewood_shed, life.firewood_shed);
+        assert_eq!(life.snapshot().split_wood_kg, life.split_wood_kg);
         let digest = life.state_digest();
         life.firewood_shed.as_mut().unwrap().worked_s += 1.0;
+        assert_ne!(life.state_digest(), digest);
+        let digest = life.state_digest();
+        life.split_wood_kg -= 1.0;
         assert_ne!(life.state_digest(), digest);
     }
 
