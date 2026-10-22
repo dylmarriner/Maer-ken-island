@@ -423,8 +423,10 @@ trade, a 2-3 bedroom cottage's floor area (Task 6 and 7b); the Pukekohe growing 
 - **Pages:** an Industry panel (2026-10-23: `GET /api/industry`, the fields, the plant's store,
   the accounts, loans and each business's last month close, with the money audit) is served;
   so are Power, Timber and Food panels and the latest payslips (2026-10-23: `/api/power`,
-  `/api/timber`, `/api/food`, `payslips` in `/api/industry`). The Town page (Task 8) and owner
-  controls as replayable commands remain.
+  `/api/timber`, `/api/food`, `payslips` in `/api/industry`). The owner's controls (pause,
+  resume, step, snapshot, speed) already reach the island only as `IslandCommand::Control`,
+  which the replay log records (Phase 4 Task 4). The Town page (Task 8) remains, and so does any
+  industry control the owner wants (a price, opening a business) as a new recorded command.
 - **Acceptance:** `tests/island_industry_acceptance.rs` (slow tier): one local year, every ledger
   closes (water, carbon, oxygen, methane, money), snapshot mid-year and resume to the same hash.
 - **Benchmark** the full town and record it in the Phase 5 baseline.
