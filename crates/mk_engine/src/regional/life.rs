@@ -1739,9 +1739,11 @@ impl IslandLife {
                 litres_per_hour: self.energy.litres_per_hour(v.item_id)?,
             })
         };
+        // A vehicle another founder is hauling with is not in the garage.
+        let in_use = |method: timber::HaulMethod| self.hauling.values().any(|j| j.method == method);
         let fleet = timber::Fleet {
-            ute: road(HAUL_UTE),
-            excavator: tracked(HAUL_EXCAVATOR),
+            ute: road(HAUL_UTE).filter(|_| !in_use(timber::HaulMethod::Ute)),
+            excavator: tracked(HAUL_EXCAVATOR).filter(|_| !in_use(timber::HaulMethod::Excavator)),
         };
         // Pieces cut from this log take ids reserved now, so a plan names
         // them before they exist: as many as the most pieces any plan cuts.
@@ -3932,6 +3934,17 @@ mod tests {
             *life.labour_kcal.get("Gem-D").unwrap() > 0.0,
             "the work cost energy"
         );
+
+        // A vehicle another founder is hauling with is not in the garage.
+        let quickest = life.plan_haul(at, &body).unwrap().expect("a plan");
+        if quickest.method != timber::HaulMethod::OnFoot {
+            let mut elsewhere = quickest.clone();
+            elsewhere.log_id = u64::MAX;
+            life.hauling.insert("Elsewhere".into(), elsewhere);
+            let next = life.plan_haul(at, &body).unwrap().expect("another plan");
+            assert_ne!(next.method, quickest.method, "the vehicle is out");
+            life.hauling.remove("Elsewhere");
+        }
 
         // Keep working: Gem-D moves the log to the store, the quickest way.
         let (carbon, water) = (log.carbon_kgc, log.water_kg);

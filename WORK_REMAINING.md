@@ -107,7 +107,8 @@ the log's last water is booked to the air at that moment rather than when the wo
   log lying at the 6 m radius the CAT's lift is rated at (2026-10-23).
 - **Routes:** legs are straight lines. Walks climb the ground's rises along them (Naismith,
   `EstateLayout::ground_m`, 2026-10-14); obstacles are ignored, vehicle times ignore slope, and
-  vehicles have no position of their own. A route over the patch terrain with a
+  vehicles have no position of their own, though one a founder is hauling with is no longer
+  free for another (2026-10-23). A route over the patch terrain with a
   slope cost, and vehicles that stay where they were parked, would close this.
 - **Files:** `regional/timber.rs`, `regional/life.rs` (`work`, `plan_haul`,
   `finish_haul_task`), `regional/labour.rs`.
