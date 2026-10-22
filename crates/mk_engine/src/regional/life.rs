@@ -33,7 +33,6 @@ use super::economy::market::Tariffs;
 use super::economy::money::FinanceReference;
 use super::energy::{solar_output_kw, EstateEnergy, FuelKind, ROOM_LIGHT_LUX};
 use super::estate_layout::{Space, SpaceId};
-use super::wood_burner::{WoodBurner, WoodBurnerSpec};
 use super::household_water::{
     installed_capacity_kg, storage_needed_kg, HouseholdWater, HouseholdWaterSpec,
 };
@@ -55,6 +54,7 @@ use super::property::{place_regional_estate, PlaceEstateError, PlacedEstate};
 use super::scheduler::IslandScheduler;
 use super::skills::{LearningRates, Skills, Task};
 use super::timber::{self, HaulJob, HaulTask};
+use super::wood_burner::{WoodBurner, WoodBurnerSpec};
 use crate::humans::lifecycle::WALKING_MET;
 use crate::humans::HumanSystem;
 use crate::resource_economy::ResourceEconomyState;
