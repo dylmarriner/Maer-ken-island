@@ -50,7 +50,7 @@
       "unit": "fraction",
       "source": "purfurst2010",
       "confidence": "low",
-      "value": { "min": 0.5, "max": 0.6 },
+      "value": { "range": { "min": 0.5, "max": 0.6 } },
       "note": "Abstract: 32 harvester operators over three years, 16 of them beginners; most begin at 50-60% of mean performance and double it by the end of the learning phase, which lasts 8 months on average, along a sigmoid curve. Mechanised harvesting, not hand work; used for hand tasks only as a stand-in (D64)."
     }
   ]
