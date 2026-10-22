@@ -358,9 +358,14 @@ trade, a 2-3 bedroom cottage's floor area (Task 6 and 7b); the Pukekohe growing 
     (FAOSTAT 2023: 4,593 kg a cow) made into cream, butter, cheese, powder and so on, at New
     Zealand's extraction rates in FAO's Technical Conversion Factors (wheat 78% flour and 22%
     bran, butter 6.1% of milk). `tests/food_chain.rs` follows wheat to flour and milk to butter.
+  - `fishery.rs`: a stock in Schaefer surplus production with depensation below a quarter of
+    unexploited biomass, `r` the middle of Froese et al. (2017) Table 2's prior for its FishBase
+    resilience class; the catch is capped at the surplus, so the fishery never takes more than
+    grows. Not yet fed by the island's fish: their densities are upstream's (D55) and no species
+    carries a resilience class.
   - Still open: roof, floor and other timber in the house (no source read yet), the plantation and
-    farms on the map fed by the existing felling and hauling, livestock replacements, fishery,
-    bread and other second-stage foods, the plants' energy use, and the supermarket.
+    farms on the map fed by the existing felling and hauling, livestock replacements, the fishery
+    on the island's own fish, bread and other second-stage foods, the plants' energy use, and the supermarket.
 
 ### 4g. Task 8: town and workforce
 

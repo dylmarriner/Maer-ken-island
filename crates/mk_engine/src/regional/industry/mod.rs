@@ -8,6 +8,8 @@
 //!   the mill's sawn timber with its carbon.
 //! - [`farm`]: dairy and crop land yielding New Zealand's average per
 //!   hectare.
+//! - [`fishery`]: a fish stock in Schaefer surplus production, fished no
+//!   faster than it grows.
 //! - [`flow_duration`]: each perennial river cell's flow-duration curve from
 //!   a simulated year.
 //! - [`food_processing`]: flour, malt, rolled oats and dairy products at
@@ -28,6 +30,7 @@
 pub mod chain;
 pub mod construction;
 pub mod farm;
+pub mod fishery;
 pub mod flow_duration;
 pub mod food_processing;
 pub mod forestry;
