@@ -47,7 +47,7 @@ this list holds the current state. The evidence for what is *done* is in
 | Industry | Phase 4b Task 5: refinery, gas plant, fuel depot (D16) | Topping refinery done 2026-10-14; gas plant, reformer, depot open | Reformate yield; gas-plant own use |
 | Industry | Phase 4b Task 6: jobs, trades, maintenance (D39) | Open | Upstream human-runtime change first |
 | Industry | Phase 4b Task 7: money, enterprises, payroll | Money, payroll and metered bills done 2026-10-18 (`regional/economy/`, D61, D62; `tests/island_economy.rs`). In `IslandLife` 2026-10-22 (`economy/island.rs`: deposits, Gem Petroleum selling the depot's diesel, monthly loans, closes, dividends, money audit); the petroleum business's staff and payslips, household bills, buying and selling homes open | Task 6 staff; upstream buying |
-| Industry | Phase 4b Task 7b: food and timber chains (forestry, sawmill, house framing, farm, livestock, food processing and fishery models 2026-10-23) | Models done; not yet on the map or wired into island life | Task 2 catalogue; crop/livestock data |
+| Industry | Phase 4b Task 7b: food and timber chains (forestry, sawmill, house framing, farm, livestock, food processing and fishery models 2026-10-23) | Models done; not yet on the map or wired into island life | Task 8 workforce: who works a farm, mill or salt works, chosen by the people themselves (R14), never assigned |
 | Industry | Phase 4b Task 8: town and workforce | Open; the owner decided the town starts at each enterprise's smallest staff and grows (2026-10-15, §4g) | Demographic tables; a sourced minimum staff per enterprise |
 | Industry | Phase 4b Task 9: dashboard pages, year acceptance | Open | Tasks 4-8 |
 | Climate | D3 rest: sea/land breezes, katabatic winds | Open | A diurnal wind solver |
