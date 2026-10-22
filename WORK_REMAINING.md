@@ -437,8 +437,16 @@ trade, a 2-3 bedroom cottage's floor area (Task 6 and 7b); the Pukekohe growing 
   as humans in `IslandLife` with homes, hired through `Enterprise::hire`; growth by hiring.
 - **Where (2026-10-23):** `property.rs` `town_site` puts the town on the dry cell nearest the
   town hydro plant's powerhouse, outside the estate's 2 x 2 block, the same cell for the same
-  island. The town follows its power; nobody chose the cell. Laying out its houses on that cell,
-  and putting the founded townspeople into island life there, are left.
+  island. The town follows its power; nobody chose the cell. Island life founds the town at
+  bootstrap (`install_town`, also on restoring an island saved without one): `town.rs`'s first
+  staff and households are sampled whole through upstream's spawn (`settle_in_town`, keyed by
+  their ids, born their age before the island's clock), stand on the town cell, have their
+  bodies on the material ledger, and live outside the founders' household (`townsfolk`). Gem
+  Health and Gem School open, Gem-D and Gem-K's, and hire their staff at the industry's ordinary
+  hourly rate (Stats NZ QES 2026 Q2: health care and social assistance, education and training).
+  Left: houses laid out on the town cell (the townsfolk sleep on its open ground until then),
+  hours worked at the practice and the school (nobody records any yet, so payroll pays nothing),
+  and the town's other enterprises' openings.
 - **Files:** create `regional/town.rs`, `fixtures/island/workforce.json` (generated from the seed);
   generalise `regional/estate_layout.rs` to any high-detail site.
 - **Tests:** `tests/island_town.rs`.

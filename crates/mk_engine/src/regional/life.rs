@@ -28,8 +28,10 @@ use mk_island::{
 };
 
 use super::ecology::{RegionalEcologyError, RegionalEcologyState};
+use super::economy::enterprise::{Enterprise, PayReference};
 use super::economy::island::{IslandEconomy, IslandEconomyError, PETROLEUM};
 use super::economy::market::Tariffs;
+use super::economy::money::founders_shares;
 use super::economy::money::FinanceReference;
 use super::energy::{solar_output_kw, EstateEnergy, FuelKind, ROOM_LIGHT_LUX};
 use super::estate_layout::{Space, SpaceId};
@@ -39,8 +41,8 @@ use super::household_water::{
 };
 use super::human_store::{open_run, HumanStore, HumanStoreError, RunId};
 use super::humans::{
-    bootstrap_regional_humans, step_regional_humans, HumanEstatePositions, RegionalHumanContext,
-    RegionalHumanError,
+    bootstrap_regional_humans, settle_in_town, step_regional_humans, HumanEstatePositions,
+    Newcomer, RegionalHumanContext, RegionalHumanError,
 };
 use super::hydrology::discharge_m3_s;
 use super::industry::chain::{ChainModels, IndustryChain};
@@ -51,10 +53,11 @@ use super::materials::{
     cells_around, composition, water_search_cells, Material, MaterialError, MaterialLedger,
 };
 use super::physical::{RegionalPhysicalError, RegionalPhysicalState};
-use super::property::{place_regional_estate, PlaceEstateError, PlacedEstate};
+use super::property::{place_regional_estate, town_site, PlaceEstateError, PlacedEstate};
 use super::scheduler::IslandScheduler;
 use super::skills::{LearningRates, Skills, Task};
 use super::timber::{self, HaulJob, HaulTask};
+use super::town;
 use crate::humans::lifecycle::WALKING_MET;
 use crate::humans::HumanSystem;
 use crate::resource_economy::ResourceEconomyState;
@@ -337,6 +340,12 @@ pub struct IslandLifeSnapshot {
     pub foraging: BTreeMap<String, ForageTrip>,
     #[serde(default)]
     pub industry: Option<IndustryChain>,
+    /// The town's medium cell (Task 8); none on an island without one yet.
+    #[serde(default)]
+    pub town_cell: Option<(usize, usize)>,
+    /// Who lives in the town rather than the founders' house.
+    #[serde(default)]
+    pub townsfolk: std::collections::BTreeSet<String>,
     #[serde(default)]
     pub money: Option<IslandEconomy>,
 }
@@ -454,6 +463,10 @@ pub struct IslandLife {
     /// not saved).
     pub industry: Option<IndustryChain>,
     chain_models: Option<ChainModels>,
+    /// Where the town stands (Task 8), once founded.
+    pub town_cell: Option<(usize, usize)>,
+    /// Who lives in the town rather than the founders' house.
+    pub townsfolk: std::collections::BTreeSet<String>,
     /// The founders' money, the bank and the businesses (Phase 4b Task 7,
     /// D61, D62).
     pub money: Option<IslandEconomy>,
@@ -779,6 +792,8 @@ impl IslandLife {
             household_gas: None,
             foraging: BTreeMap::new(),
             industry: None,
+            town_cell: None,
+            townsfolk: Default::default(),
             chain_models: None,
             money: None,
             tariffs: None,
@@ -822,6 +837,8 @@ impl IslandLife {
         life.install_industry()?;
         // Saved before the island kept money, or newly built.
         life.install_economy()?;
+        // Saved before the island had a town, or newly built.
+        life.install_town()?;
         if life.ecology.soil.is_none() {
             life.install_soil()?;
         }
@@ -885,6 +902,8 @@ impl IslandLife {
             household_gas: self.household_gas.clone(),
             foraging: self.foraging.clone(),
             industry: self.industry.clone(),
+            town_cell: self.town_cell,
+            townsfolk: self.townsfolk.clone(),
             money: self.money.clone(),
         }
     }
@@ -965,6 +984,8 @@ impl IslandLife {
             household_gas: snapshot.household_gas,
             foraging: snapshot.foraging,
             industry: snapshot.industry,
+            town_cell: snapshot.town_cell,
+            townsfolk: snapshot.townsfolk,
             chain_models: None,
             money: snapshot.money,
             tariffs: None,
@@ -988,6 +1009,8 @@ impl IslandLife {
         life.install_industry()?;
         // Saved before the island kept money, or newly built.
         life.install_economy()?;
+        // Saved before the island had a town, or newly built.
+        life.install_town()?;
         if life.ecology.soil.is_none() {
             // Saved before the island had soil carbon.
             life.install_soil()?;
@@ -1222,13 +1245,15 @@ impl IslandLife {
         self.skills.0.remove(id);
     }
 
-    /// Every living human, with the body the labour model costs work against
-    /// and whether they are asleep right now.
+    /// Every living human of the founders' household (everyone but the
+    /// townsfolk, who live in the town, owner 2026-10-13), with the body the
+    /// labour model costs work against and whether they are asleep right now.
     fn founders(&self) -> Vec<(String, LabourBody, bool)> {
         self.humans
             .registry
             .iter()
             .filter(|h| matches!(h.profile.status, mk_core::human::HumanStatus::Alive))
+            .filter(|h| !self.townsfolk.contains(h.agent_id()))
             .map(|h| {
                 (
                     h.agent_id().to_string(),
@@ -2618,6 +2643,106 @@ impl IslandLife {
         Ok(())
     }
 
+    /// Found the town if this island has none (Task 8): its cell beside the
+    /// town hydro plant (`town_site`), each opening's smallest staff and
+    /// their households from the packs and the seed (`town.rs`, D67),
+    /// sampled whole through upstream's spawn and standing on that cell,
+    /// and the health and school businesses, Gem-D and Gem-K's, employing
+    /// their staff at the industry's ordinary hourly rate (Stats NZ QES).
+    /// An island whose river has no town-sized plant has no town yet.
+    fn install_town(&mut self) -> Result<(), IslandLifeError> {
+        let Some(money) = self.money.as_ref() else {
+            return Ok(());
+        };
+        if money.enterprise(town::HEALTH).is_some() {
+            return Ok(());
+        }
+        let Some(hydro) = self.placed.hydro.as_ref() else {
+            return Ok(());
+        };
+        let Some(cell) = town_site(
+            &self.physical,
+            &self.ecology,
+            &self.domain,
+            hydro,
+            self.placed.location,
+        ) else {
+            return Ok(());
+        };
+        let missing = |e: String| IslandLifeError::Labour(LabourError::MissingReference(e));
+        let library = self.labour.library();
+        let founded =
+            town::found_from_reference(library, &[], &self.scenario.seed).map_err(missing)?;
+        let pay = PayReference::from_reference(library).map_err(|e| missing(format!("{e:?}")))?;
+        let newcomers: Vec<Newcomer> = founded
+            .people
+            .iter()
+            .map(|p| Newcomer {
+                agent_id: p.id.clone(),
+                sex: if p.male {
+                    mk_core::human::BiologicalSex::Male
+                } else {
+                    mk_core::human::BiologicalSex::Female
+                },
+                age_years: p.age_years,
+            })
+            .collect();
+        // The island keeps no calendar: its clock counts from the Unix epoch,
+        // as upstream's founders' own births do.
+        let now = chrono::DateTime::from_timestamp(self.sim_time_s as i64, 0)
+            .ok_or_else(|| missing("the island's clock is out of range".into()))?;
+        let profile = self.domain.profile();
+        let birthplace = mk_core::human::astrology::GeoCoordinates {
+            latitude: profile.reference_latitude_deg,
+            longitude: profile.reference_longitude_deg,
+        };
+        settle_in_town(
+            &mut self.humans,
+            &self.rng,
+            self.tick,
+            now,
+            birthplace,
+            cell,
+            &newcomers,
+        )
+        .map_err(IslandLifeError::Human)?;
+        for person in &newcomers {
+            if let Some(h) = self.humans.registry.get_human(&person.agent_id) {
+                self.materials
+                    .register_human(h.agent_id(), h.body.weight_kg);
+            }
+            self.townsfolk.insert(person.agent_id.clone());
+        }
+        let industry = |name: &str| match name {
+            town::HEALTH => Some("Health Care and Social Assistance"),
+            town::SCHOOL => Some("Education and Training"),
+            _ => None,
+        };
+        let money = self.money.as_mut().expect("checked above");
+        for name in [town::HEALTH, town::SCHOOL] {
+            money
+                .enterprises
+                .push(Enterprise::new(name, founders_shares()));
+        }
+        for person in &founded.people {
+            let Some((enterprise, _role)) = &person.job else {
+                continue;
+            };
+            let rate = industry(enterprise)
+                .and_then(|i| pay.industry_rate(i))
+                .ok_or_else(|| missing(format!("no wage for {enterprise}")))?;
+            money
+                .enterprises
+                .iter_mut()
+                .find(|e| &e.name == enterprise)
+                .ok_or_else(|| missing(format!("no business {enterprise}")))?
+                .hire(&pay, &person.id, rate)
+                .map_err(|e| missing(format!("{e:?}")))?;
+        }
+        self.town_cell = Some(cell);
+        Ok(())
+    }
+
     /// The month's money, once a month has ended: loan instalments, each
     /// business's close and dividends, and the money audit.
     fn economy_step(&mut self) -> Result<(), IslandLifeError> {
@@ -3535,6 +3660,8 @@ impl IslandLife {
         h.update(canonical(&self.foraging).as_bytes());
         h.update(canonical(&self.industry).as_bytes());
         h.update(canonical(&self.money).as_bytes());
+        h.update(canonical(&self.town_cell).as_bytes());
+        h.update(canonical(&self.townsfolk).as_bytes());
         h.update(canonical(&self.sleep_seconds).as_bytes());
         h.update(&self.sim_time_s.to_le_bytes());
         // Deliberately absent, and each for a reason that must stay true:
