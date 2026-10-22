@@ -172,6 +172,12 @@
               "values": [
                 9100.0
               ]
+            },
+            {
+              "label": "lift_rating_radius_m",
+              "values": [
+                6.0
+              ]
             }
           ]
         }

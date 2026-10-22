@@ -274,6 +274,16 @@ impl LabourTable {
         )
     }
 
+    /// The radius the excavator's lift ratings are given at (m): how far
+    /// from the machine a log it lifts lies.
+    pub fn excavator_lift_radius_m(&self) -> Result<f64, LabourError> {
+        self.scalar(
+            ReferenceDomain::Labour,
+            "excavator_cat330",
+            "lift_rating_radius_m",
+        )
+    }
+
     /// One loader-crane cycle (s): `operation` is `loading` or `unloading`.
     pub fn crane_cycle_s(&self, operation: &str) -> Result<f64, LabourError> {
         Ok(self.cell(

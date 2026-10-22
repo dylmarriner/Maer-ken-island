@@ -103,7 +103,8 @@ the log's last water is booked to the air at that moment rather than when the wo
 - **Excavator rigging (done 2026-10-23, D40):** the CAT 330 has no grapple, so its operator
   slings each log by hand before the pick-up and frees it after the set-down, at Borz & Mititelu
   2022's measured hook and unhook times for hand-rigged winch logs (13.59 s and 9.30 s, 278 logs,
-  `labour/timber.json`). Left: the walk from the cab to the log and back, untimed.
+  `labour/timber.json`), and the operator's walk from the cab to the log and back each time, the
+  log lying at the 6 m radius the CAT's lift is rated at (2026-10-23).
 - **Routes:** legs are straight lines. Walks climb the ground's rises along them (Naismith,
   `EstateLayout::ground_m`, 2026-10-14); obstacles are ignored, vehicle times ignore slope, and
   vehicles have no position of their own. A route over the patch terrain with a

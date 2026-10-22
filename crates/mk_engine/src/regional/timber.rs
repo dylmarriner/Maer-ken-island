@@ -503,9 +503,16 @@ pub fn haul_plans_over(
                 }
             };
             // The CAT has no grapple: the log is slung with the shed's
-            // rope before the lift and freed after it, by the operator.
-            let lift_s = labour.log_rigging_s("hook")? + labour.crane_cycle_s("loading")?;
-            let set_s = labour.crane_cycle_s("unloading")? + labour.log_rigging_s("unhook")?;
+            // rope before the lift and freed after it, by the operator, who
+            // walks from the cab to the log and back each time: the machine
+            // stands at the radius its lift is rated at.
+            let to_log_and_back = 2.0 * walk(labour.excavator_lift_radius_m()?)?;
+            let lift_s = to_log_and_back
+                + labour.log_rigging_s("hook")?
+                + labour.crane_cycle_s("loading")?;
+            let set_s = labour.crane_cycle_s("unloading")?
+                + labour.log_rigging_s("unhook")?
+                + to_log_and_back;
             let tasks: VecDeque<HaulTask> = [
                 HaulTask {
                     action: HaulAction::Walk,
@@ -741,19 +748,22 @@ mod tests {
         assert!((track.duration_s - d / (5.3 / 3.6)).abs() < 1e-9);
         // With no grapple the log is slung by hand before the crane's
         // pick-up and freed after its set-down: the measured hook and
-        // unhook on top of the loader cycles.
+        // unhook on top of the loader cycles, and the operator's walk to the
+        // log 6 m from the machine and back.
+        let walk = 2.0 * labour.walking_time_s(&body, 6.0, 0.0, 0.0).unwrap();
+        assert!(walk > 0.0);
         let lift = ex
             .tasks
             .iter()
             .find(|t| matches!(t.action, HaulAction::Lift { .. }))
             .unwrap();
-        assert!((lift.duration_s - (13.59 + 0.24 * 60.0)).abs() < 1e-9);
+        assert!((lift.duration_s - (walk + 13.59 + 0.24 * 60.0)).abs() < 1e-9);
         let set = ex
             .tasks
             .iter()
             .find(|t| matches!(t.action, HaulAction::SetDown { .. }))
             .unwrap();
-        assert!((set.duration_s - (0.27 * 60.0 + 9.3)).abs() < 1e-9);
+        assert!((set.duration_s - (0.27 * 60.0 + 9.3 + walk)).abs() < 1e-9);
         // Too heavy to lift: no excavator plan.
         let heavy = felled_log(3, (0.0, 0.0), 0.0, 1.2, 40.0, 6_000.0, 2_850.0, 0.82, 0.52);
         assert!(heavy.green_kg() > labour.excavator_lift_kg().unwrap());
