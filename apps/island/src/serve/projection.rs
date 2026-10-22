@@ -130,6 +130,11 @@ pub struct IslandProjection {
     /// thousand stems with it. `/api/trees` serves the ones inside a box.
     #[serde(skip)]
     pub trees: Arc<Vec<mk_engine::regional::local_vegetation::TreeInstance>>,
+    /// The oil chain and the money: fields, stores, accounts, loans and
+    /// each business's latest month. Rebuilt every step, since it is a few
+    /// dozen numbers; skipped from the status body, `/api/industry` serves it.
+    #[serde(skip)]
+    pub industry: Arc<Industry>,
     /// The canonical state digest, and the tick it was taken at.
     ///
     /// Two islands showing the same digest at the same tick are the same
@@ -513,6 +518,7 @@ impl IslandProjection {
             timeline,
             conversations,
             trees,
+            industry: Arc::new(industry(life)),
             // Current only if it was taken at this tick *and* nothing has
             // changed the island since: a command applies without moving
             // the clock, so the tick alone cannot tell (`run_island` clears
@@ -901,6 +907,127 @@ fn land(life: &IslandLife) -> Land {
             .count(),
         cell_size_m: life.domain.cell_size_m(Medium),
     }
+}
+
+/// The oil chain and the money, for the industry page.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct Industry {
+    /// False when the island has no petroleum: no chain runs.
+    pub chain: bool,
+    pub fields: Vec<Field>,
+    /// The refinery's products waiting in the store (tonnes), by product.
+    pub products_t: Vec<(String, f64)>,
+    pub refined_m3: f64,
+    /// Leaked methane still in the air (kg C).
+    pub atmos_ch4_kgc: f64,
+    /// False before the books open.
+    pub money: bool,
+    /// Every account, in cents.
+    pub accounts: Vec<Account>,
+    pub loans: Vec<Account>,
+    pub issued_cents: i64,
+    pub held_cents: i64,
+    /// Whether money held equals money issued and lent.
+    pub money_closes: bool,
+    pub enterprises: Vec<Business>,
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct Field {
+    pub analogue: String,
+    pub cell: (usize, usize),
+    pub remaining_oil_m3: f64,
+    pub remaining_gas_gj: f64,
+    pub produced_oil_m3: f64,
+    pub produced_gas_gj: f64,
+    pub leaked_kgc: f64,
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct Account {
+    /// "person", "enterprise", "bank" or "kiwisaver".
+    pub kind: String,
+    pub name: String,
+    pub cents: i64,
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct Business {
+    pub name: String,
+    pub staff: usize,
+    pub month_income_cents: i64,
+    pub month_costs_cents: i64,
+    /// The last month closed, if one has.
+    pub last_close: Option<mk_engine::regional::economy::enterprise::MonthClose>,
+    pub payslips: usize,
+}
+
+fn account(holder: &mk_engine::regional::economy::money::Holder, cents: i64) -> Account {
+    use mk_engine::regional::economy::money::Holder;
+    let (kind, name) = match holder {
+        Holder::Person(id) => ("person", id.clone()),
+        Holder::Enterprise(name) => ("enterprise", name.clone()),
+        Holder::Bank => ("bank", "The bank".to_string()),
+        Holder::KiwiSaver(id) => ("kiwisaver", id.clone()),
+    };
+    Account {
+        kind: kind.to_string(),
+        name,
+        cents,
+    }
+}
+
+fn industry(life: &IslandLife) -> Industry {
+    let mut out = Industry::default();
+    if let Some(chain) = &life.industry {
+        out.chain = !chain.fields.is_empty();
+        out.fields = chain
+            .fields
+            .iter()
+            .map(|f| Field {
+                analogue: f.analogue.clone(),
+                cell: f.cell,
+                remaining_oil_m3: f.remaining_oil_m3(),
+                remaining_gas_gj: f.remaining_gas_gj(),
+                produced_oil_m3: f.produced_oil_m3,
+                produced_gas_gj: f.produced_gas_gj,
+                leaked_kgc: f.leaked_kgc,
+            })
+            .collect();
+        out.products_t = mk_engine::regional::industry::refinery::PRODUCTS
+            .iter()
+            .zip(chain.store_t)
+            .map(|(p, t)| (format!("{p:?}"), t))
+            .collect();
+        out.refined_m3 = chain.refined_m3;
+        out.atmos_ch4_kgc = chain.atmos_ch4_kgc;
+    }
+    if let Some(money) = &life.money {
+        let ledger = &money.ledger;
+        out.money = true;
+        out.accounts = ledger.balances().map(|(h, c)| account(h, c)).collect();
+        out.loans = ledger
+            .loans()
+            .iter()
+            .map(|l| account(&l.borrower, l.outstanding))
+            .collect();
+        out.issued_cents = ledger.issued();
+        out.held_cents = ledger.total_held();
+        out.money_closes = ledger.audit().is_ok();
+        out.enterprises = money
+            .enterprises
+            .iter()
+            .map(|e| Business {
+                name: e.name.clone(),
+                staff: e.staff.len(),
+                month_income_cents: e.month_income,
+                month_costs_cents: e.month_costs,
+                last_close: e.closes.last().cloned(),
+                payslips: e.payslips.len(),
+            })
+            .collect();
+    }
+    out
 }
 
 fn stocks(life: &IslandLife) -> Stocks {
