@@ -2155,7 +2155,12 @@ impl IslandLife {
         let rate_kcal_h = ecology("forage_return_rate_acorns")?;
         let search_per_handling = ecology("forage_search_per_handling_fruit")?;
         let kcal = owed_kgc / super::materials::respired_carbon_kg_per_kcal();
-        let handling_s = kcal / rate_kcal_h.max(f64::MIN_POSITIVE) * 3_600.0;
+        // Kelly's return rates are practised foragers'; a beginner takes
+        // longer (R11).
+        let skill =
+            self.skills
+                .time_factor(&self.learning, id, Task::Foraging, self.sim_time_s as f64);
+        let handling_s = kcal / rate_kcal_h.max(f64::MIN_POSITIVE) * 3_600.0 * skill;
         self.foraging.insert(
             id.to_string(),
             ForageTrip {
@@ -2275,6 +2280,9 @@ impl IslandLife {
                     ledger,
                 ) {
                     Ok(gathered) => {
+                        let now_s = life.sim_time_s as f64;
+                        life.skills
+                            .practise(&life.learning, id, Task::Foraging, 1.0, now_s);
                         let owed = life.respired_since_meal.get(id).copied().unwrap_or(0.0);
                         let kg = if trip.from_home {
                             gathered.min(owed / carbon_per_kg)
@@ -4276,6 +4284,8 @@ mod tests {
         scenario.estate_patch.tree_cap = 200;
         let canon = Arc::new(CanonLocked::load(&repo("fixtures/island/canon.json")).unwrap());
         let mut life = IslandLife::bootstrap(scenario, canon).expect("the island bootstraps");
+        // The packs' rates are a practised hand's (R11).
+        practise_everyone(&mut life, Task::Foraging);
         life.humans
             .registry
             .get_human_mut("Gem-D")
@@ -4361,6 +4371,8 @@ mod tests {
         scenario.estate_patch.tree_cap = 200;
         let canon = Arc::new(CanonLocked::load(&repo("fixtures/island/canon.json")).unwrap());
         let mut life = IslandLife::bootstrap(scenario, canon).expect("the island bootstraps");
+        // The packs' rates are a practised hand's (R11).
+        practise_everyone(&mut life, Task::Foraging);
         let (rows, cols) = (
             life.domain.rows(DomainLevel::Medium),
             life.domain.cols(DomainLevel::Medium),
