@@ -22,6 +22,8 @@
 //!   finished at New Zealand's carcass weights.
 //! - [`petroleum`]: oil and gas fields sized from New Zealand's own, in
 //!   exponential decline, their carbon out of the crust.
+//! - [`salt_works`]: solar salt from evaporating ponds at Lake Grassmere's
+//!   yield per hectare.
 //! - [`refinery`]: a topping refinery that distils crude into the cuts of a
 //!   published assay and burns its own gas and residue.
 //! - [`sawmill`]: softwood logs sawn at New Zealand's recovery, the rest
@@ -40,4 +42,5 @@ pub mod hydro_sites;
 pub mod livestock;
 pub mod petroleum;
 pub mod refinery;
+pub mod salt_works;
 pub mod sawmill;

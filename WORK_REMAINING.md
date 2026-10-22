@@ -146,7 +146,11 @@ animal and fish resource nodes (done 2026-10-23, §2b).
     any other animal at upstream's density over the cell), adding up to the species on the
     island; hunting and fishing them, and the fishery model on the sea's fish, are still to
     come, and the densities stay upstream's (D55).
-  - Biotic nodes as views of cell plant biomass, salt pans and water sources.
+  - Salt (2026-10-23): `industry/salt_works.rs` makes solar salt at Dominion Salt's Lake
+    Grassmere yield per hectare of production area (pack, 42.4-49.4 t/ha/yr); it ignores the
+    rain that swings Grassmere's harvest from nil to 130,000 t, and no works is sited yet (a
+    sourced siting rule for coastal flats and a dry climate is needed).
+  - Biotic nodes as views of cell plant biomass, and water sources.
   - The new tools in `resource_economy.rs`, smelting and the other recipes, mass-balanced through
     the material ledger.
   - Serving the sites to the map and the founders' choices.
