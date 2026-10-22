@@ -156,8 +156,8 @@ animal and fish resource nodes (done 2026-10-23, §2b).
     (`industry/flow_duration.rs`) holds a flow-duration curve for every perennial medium cell,
     and `RiverFlowRecord::is_river` marks those at the hydrology's 1 m³/s river threshold;
     `FlowNetwork::lake_depth_m` gives the lakes, and each house has its roof tank
-    (`household_water.rs`). Still open: people drawing from a river or lake (SeekWater is one
-    tick, D9).
+    (`household_water.rs`). People already walk to the nearest liquid water, drink and carry
+    jerrycans home for the tank (`WaterTrip`, R1b).
   - The new tools in `resource_economy.rs`, smelting and the other recipes, mass-balanced through
     the material ledger.
   - Serving the sites to the map and the founders' choices.
