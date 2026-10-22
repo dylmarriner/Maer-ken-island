@@ -389,8 +389,10 @@ trade, a 2-3 bedroom cottage's floor area (Task 6 and 7b); the Pukekohe growing 
     no floor timber. Its roof is "timber roof trusses (70x45mm SG8 H1.2 treated purlins)" over
     263 m², but the report gives the roof only as kg CO2e per m² (Table 6-7), not a timber volume.
   - Still open: roof truss and other timber in the house (no volume source found), the plantation and
-    farms on the map fed by the existing felling and hauling, livestock replacements, the fishery
-    on the island's own fish, bread and other second-stage foods, the plants' energy use, and the supermarket.
+    farms on the map fed by the existing felling and hauling, a beef herd's replacement rate (the
+    dairy herd's is DairyNZ's 22% a year; the ewe flock's Ridler's 25-35%; no beef-cow figure
+    found), the fishery on the island's own fish, bread and other second-stage foods (neither
+    FAO's conversion factors nor USDA AH-697 give a bread yield), the plants' energy use, and the supermarket.
 
 ### 4g. Task 8: town and workforce
 

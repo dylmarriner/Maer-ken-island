@@ -66,6 +66,9 @@ pub struct FarmModel {
     pub milksolids_kg_per_cow: f64,
     /// Whole milk a cow gives a year (FAOSTAT's New Zealand yield).
     pub milk_kg_per_cow: f64,
+    /// Share of the herd replaced by heifers each year (DairyNZ); in a
+    /// herd of steady size as many cows leave, culled or dead.
+    pub replacement: f64,
     /// kg a hectare yields a year, in [`CROPS`] order.
     pub crop_kg_per_ha: [f64; 9],
 }
@@ -97,6 +100,7 @@ impl FarmModel {
                 .table()
                 .and_then(|t| t.get(MILK_YEAR, "kg_milk_per_animal"))
                 .ok_or_else(|| MissingReference("dairy_milk_volume_per_cow_fao".into()))?,
+            replacement: central("dairy_herd_replacement_rate")? / 100.0,
             crop_kg_per_ha,
         })
     }
@@ -125,6 +129,8 @@ pub struct Harvest {
     pub cows: f64,
     pub milksolids_kg: f64,
     pub milk_kg: f64,
+    /// Cows leaving the herd, replaced by as many heifers.
+    pub cows_out: f64,
     pub crops_kg: Vec<(Crop, f64)>,
 }
 
@@ -140,6 +146,7 @@ impl Farm {
             cows,
             milksolids_kg: cows * model.milksolids_kg_per_cow * fraction,
             milk_kg: cows * model.milk_kg_per_cow * fraction,
+            cows_out: cows * model.replacement * fraction,
             crops_kg: self
                 .crops_ha
                 .iter()
@@ -159,6 +166,7 @@ mod tests {
         assert_eq!(m.dairy_cows_per_ha, 2.76);
         assert_eq!(m.milksolids_kg_per_cow, 400.0);
         assert_eq!(m.milk_kg_per_cow, 4_593.0);
+        assert_eq!(m.replacement, 0.22);
         assert_eq!(m.crop_kg_per_ha(Crop::Wheat), 9668.1);
         assert_eq!(m.crop_kg_per_ha(Crop::Potatoes), 51080.7);
         assert!(m.crop_kg_per_ha.iter().all(|y| *y > 0.0));
@@ -175,6 +183,8 @@ mod tests {
         let year = farm.produce(&m, 1.0);
         assert!((year.cows - 276.0).abs() < 1e-9);
         assert!((year.milksolids_kg / 100.0 - 1_105.0).abs() < 5.0);
+        // 4.5 lactations a cow: about one cow in 4.5 leaves each year.
+        assert!((year.cows_out - 276.0 * 0.22).abs() < 1e-9);
         let half = farm.produce(&m, 0.5);
         assert!((half.crops_kg[0].1 - 0.5 * 96_681.0).abs() < 1e-6);
         assert_eq!(farm.area_ha(), 110.0);
