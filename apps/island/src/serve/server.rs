@@ -493,6 +493,41 @@ fn elevation_reply(bytes: Option<std::sync::Arc<Vec<u8>>>, gzip: bool) -> impl w
     )
 }
 
+/// The cover bytes, or a 404 when there is no island to describe.
+///
+/// As [`elevation_reply`], except that these are never cached: biomass
+/// grows and is cut, and the server redraws the grid on the stems'
+/// cadence, so a client asking again wants the forest as it is now.
+fn cover_reply(bytes: Option<std::sync::Arc<Vec<u8>>>, gzip: bool) -> impl warp::Reply {
+    const NO_ISLAND: &str = "{\"errors\":[\"No island is running, so it has no vegetation \
+                             cover. Start the server with --scenario.\"]}";
+    let (status, body, kind) = match bytes {
+        None => (
+            StatusCode::NOT_FOUND,
+            NO_ISLAND.as_bytes().to_vec(),
+            "application/json",
+        ),
+        Some(bytes) => (StatusCode::OK, bytes.to_vec(), "application/octet-stream"),
+    };
+    let encoding = if gzip && status == StatusCode::OK {
+        "gzip"
+    } else {
+        "identity"
+    };
+    warp::reply::with_status(
+        warp::reply::with_header(
+            warp::reply::with_header(
+                warp::reply::with_header(body, "content-type", kind),
+                "content-encoding",
+                encoding,
+            ),
+            "cache-control",
+            "no-store",
+        ),
+        status,
+    )
+}
+
 /// Said in `/api/world/estate/layout`, because a client should know it
 /// need not ask twice.
 const ESTATE_IS_FIXED: &str =
@@ -1456,7 +1491,7 @@ pub fn routes_with_config(
             }
             json(
                 StatusCode::NOT_FOUND,
-                &serde_json::json!({ "errors": ["No such endpoint. The dashboard serves /api/status, /api/world, /api/world/<estate|vegetation|materials|clock>, /api/world/estate/layout, /api/world/humans, /api/world/humans/<agent-id>, /api/world/interventions, /api/world/commands/<id>, /api/properties, /api/economy, /api/timeline, /api/conversations, /api/map.png, /api/vegetation.png, /api/patch.png, /api/cell/<row>/<col>, /api/trees, /api/control, /api/health, /api/humans, /api/humans/<agent-id>, /api/activity and /api/creator/options."] }),
+                &serde_json::json!({ "errors": ["No such endpoint. The dashboard serves /api/status, /api/world, /api/world/<estate|vegetation|materials|clock>, /api/world/estate/layout, /api/world/humans, /api/world/humans/<agent-id>, /api/world/interventions, /api/world/commands/<id>, /api/properties, /api/economy, /api/timeline, /api/conversations, /api/map.png, /api/vegetation.png, /api/patch.png, /api/elevation.bin, /api/cover.bin, /api/cell/<row>/<col>, /api/trees, /api/control, /api/health, /api/humans, /api/humans/<agent-id>, /api/activity and /api/creator/options."] }),
             )
         });
 
@@ -1522,6 +1557,23 @@ pub fn routes_with_config(
             elevation_reply(Some(world.elevation_bin(gzip)), gzip)
         });
 
+    // The standing biomass as numbers, for a client that tints its own
+    // ground or places stands of trees beyond the modelled patch. Live,
+    // unlike the terrain: redrawn with `/api/vegetation.png`.
+    let get_cover = warp::path!("api" / "cover.bin")
+        .and(read())
+        .and(warp::header::optional::<String>("accept-encoding"))
+        .and(with(world.clone()))
+        .map(|encodings: Option<String>, world: Option<SimHandle>| {
+            let Some(world) = world else {
+                return cover_reply(None, false);
+            };
+            let gzip = encodings
+                .as_deref()
+                .is_some_and(|value| value.to_ascii_lowercase().contains("gzip"));
+            cover_reply(Some(world.cover_bin(gzip)), gzip)
+        });
+
     // Two endpoints answer without a read token, and both for the same
     // reason: they are what a caller asks *before* it can have one. A
     // monitor needs to know whether this process is alive, and a client
@@ -1561,6 +1613,7 @@ pub fn routes_with_config(
         .or(get_vegetation)
         .or(get_patch)
         .or(get_elevation)
+        .or(get_cover)
         .or(get_world)
         .or(post_world_human)
         .or(post_world_intervention)
