@@ -136,8 +136,9 @@ animal and fish resource nodes (§2b), which can now read the habitats.
   50% Fe, phosphorite 330 Mt at 25% P2O5, placer gold 0.2 g/t were corrected), and a unit test
   holds them to the pack. D56 records what the sites leave out.
 - **Left:**
-  - Diamond and gem placers below kimberlite and gem deposits: the bulletin's model 39d is
-    descriptive only (no grade-tonnage), so a cited diamond-placer grade is needed.
+  - Diamond placers below kimberlites are sited (2026-10-23) from Bliss's (1992, USGS OFR 92-437)
+    model 39d grade and volume, inland only; working them needs a jig or a pan's concentrate sorted
+    by hand, with cited rates. Gem placers below the other gem deposits still need a source.
   - Hand mining of primary ore: a cited artisanal shaft or adit depth and rate (refused by name
     until then).
   - Biotic nodes as views of cell biomass, animal and fish nodes from `regional/species.rs`

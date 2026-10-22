@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, OnceLock};
 
 use mk_core::canon::CanonLocked;
+use mk_engine::materials::catalogue::CatalogueItem;
 use mk_engine::regional::deposits::DepositKind;
 use mk_engine::regional::geology::Lithology;
 use mk_engine::regional::hydrology::Receiver;
@@ -74,6 +75,11 @@ fn the_secondary_models_are_the_sources_numbers() {
     // Orris & Bliss: 0.022 to 50 Mt and 0.084 to 0.48 g/t between the 90th
     // and 10th percentiles.
     assert!((m.placer_tonnage_log10_sd - 1.310).abs() < 1e-3);
+    // Bliss 1992, model 39d, figs. 48 and 49.
+    assert!((m.diamond_median_m3 - 570_000.0).abs() < 1e-6);
+    assert_eq!(m.diamond_median_ct_m3, 0.37);
+    assert!((m.diamond_volume_log10_sd - 1.086).abs() < 1e-3);
+    assert!((m.diamond_grade_log10_sd - 0.862).abs() < 1e-3);
     assert!((m.placer_grade_log10_sd - 0.295).abs() < 1e-3);
     assert_eq!(m.placer_gravel_t_m3, 2.0);
     // 767.5 Mt of magnetics in 24 onshore deposits (GNS 2024, Table 7.2).
@@ -162,6 +168,37 @@ fn placer_gold_lies_downstream_of_a_gold_source_and_only_there() {
         );
         assert_eq!(p.depth_m, 0.0);
         assert!(p.grade > 0.0 && p.tonnage_t > 0.0);
+    }
+}
+
+#[test]
+fn diamond_placers_lie_inland_below_a_kimberlite_and_cannot_be_panned_yet() {
+    let b = base();
+    let deposits = &b.physical.geophysics.deposits;
+    let pipes = deposits
+        .iter()
+        .filter(|d| d.kind == DepositKind::Kimberlite)
+        .count();
+    let placers: Vec<_> = b
+        .resources
+        .sites()
+        .iter()
+        .filter(|s| s.kind == SiteKind::PlacerDiamond)
+        .collect();
+    println!("{} diamond placers from {pipes} kimberlites", placers.len());
+    assert!(placers.len() <= pipes);
+    let network = b.physical.flow_network();
+    for p in &placers {
+        let source = &deposits[p.source_deposit.expect("a placer has a source") as usize];
+        assert_eq!(source.kind, DepositKind::Kimberlite);
+        assert!(downstream_of(source.cell)[1..].contains(&p.cell));
+        assert!(
+            network.receiver_of(p.cell.0, p.cell.1) != Receiver::Sea,
+            "model 39d has no beach placers"
+        );
+        assert_eq!(p.depth_m, 0.0);
+        assert!(p.grade > 0.0 && p.tonnage_t > 0.0);
+        assert_eq!(p.kind.ore(), CatalogueItem::Diamond);
     }
 }
 

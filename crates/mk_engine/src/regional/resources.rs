@@ -60,6 +60,8 @@ pub enum SiteKind {
     Primary(DepositKind),
     /// Alluvial or beach placer gold below a gold-bearing deposit.
     PlacerGold,
+    /// Alluvial diamonds below a kimberlite pipe.
+    PlacerDiamond,
     /// Titanomagnetite beach sand at a river mouth.
     Ironsand,
 }
@@ -70,6 +72,7 @@ impl SiteKind {
         match self {
             Self::Primary(kind) => kind.yields()[0],
             Self::PlacerGold => CatalogueItem::PlacerGold,
+            Self::PlacerDiamond => CatalogueItem::Diamond,
             Self::Ironsand => CatalogueItem::Ironsand,
         }
     }
@@ -85,6 +88,7 @@ impl SiteKind {
                 .grade_unit
             }
             Self::PlacerGold => "g/t Au",
+            Self::PlacerDiamond => "ct/m³",
             Self::Ironsand => "% Fe in concentrate",
         }
     }
@@ -175,6 +179,12 @@ pub struct SecondaryModels {
     pub placer_grade_log10_sd: f64,
     /// Wet sand and gravel (t/m³) the placer model converts volume with.
     pub placer_gravel_t_m3: f64,
+    /// Diamond placers (Bliss 1992, model 39d): median volume (m³) and
+    /// grade (ct/m³), with their log10 spreads.
+    pub diamond_median_m3: f64,
+    pub diamond_volume_log10_sd: f64,
+    pub diamond_median_ct_m3: f64,
+    pub diamond_grade_log10_sd: f64,
     /// Mean onshore ironsand deposit (t of concentrate).
     pub ironsand_mean_t: f64,
     pub ironsand_concentrate_fe_pct: f64,
@@ -199,12 +209,11 @@ impl SecondaryModels {
                 .ok_or_else(|| ResourceError::MissingReference(key.into()))
         };
         const PLACER: &str = "placer_gold_grade_tonnage";
-        let spread = |row: &str| -> Result<f64, ResourceError> {
-            Ok(
-                (cell(PLACER, row, "p10")?.log10() - cell(PLACER, row, "p90")?.log10())
-                    / P90_TO_P10_SD,
-            )
+        const DIAMOND: &str = "diamond_placer_grade_volume";
+        let spread_of = |key: &str, row: &str| -> Result<f64, ResourceError> {
+            Ok((cell(key, row, "p10")?.log10() - cell(key, row, "p90")?.log10()) / P90_TO_P10_SD)
         };
+        let spread = |row: &str| spread_of(PLACER, row);
         let ironsand = item("titanomagnetite_ironsand_resources")?
             .table()
             .ok_or_else(|| ResourceError::MissingReference("ironsand table".into()))?;
@@ -229,6 +238,10 @@ impl SecondaryModels {
             placer_median_g_t: cell(PLACER, "au_g_t", "p50")?,
             placer_grade_log10_sd: spread("au_g_t")?,
             placer_gravel_t_m3: point("placer_gravel_density")?,
+            diamond_median_m3: cell(DIAMOND, "volume_mm3", "p50")? * 1e6,
+            diamond_volume_log10_sd: spread_of(DIAMOND, "volume_mm3")?,
+            diamond_median_ct_m3: cell(DIAMOND, "diamond_ct_m3", "p50")?,
+            diamond_grade_log10_sd: spread_of(DIAMOND, "diamond_ct_m3")?,
             ironsand_mean_t: magnetics_mt / deposits * 1e6,
             ironsand_concentrate_fe_pct: point("titanomagnetite_concentrate_fe")?,
         })
@@ -291,7 +304,7 @@ impl IslandResources {
 
         let channels = Channels::of(physical, domain);
         for deposit in geo.deposits.iter().filter(|d| sheds_gold(d.kind)) {
-            let Some(cell) = channels.placer_trap(deposit.cell) else {
+            let Some(cell) = channels.placer_trap(deposit.cell, true) else {
                 continue;
             };
             let u = |n: u64| hash01(key, n, u64::from(deposit.id));
@@ -307,6 +320,35 @@ impl IslandResources {
                 tonnage_t,
                 remaining_t: tonnage_t,
                 grade: models.placer_median_g_t * draw(models.placer_grade_log10_sd, 3, 4),
+                source_deposit: Some(deposit.id),
+            });
+        }
+
+        // Model 39d excludes beach placers: diamonds stop where the river
+        // slows inland, not at its mouth.
+        for deposit in geo
+            .deposits
+            .iter()
+            .filter(|d| d.kind == DepositKind::Kimberlite)
+        {
+            let Some(cell) = channels.placer_trap(deposit.cell, false) else {
+                continue;
+            };
+            let u = |n: u64| hash01(key, n, u64::from(deposit.id) ^ 0x6469_616d);
+            let draw = |sd: f64, a: u64, b: u64| {
+                10f64.powf(sd * normal(u(a), u(b)).clamp(-MAX_SD, MAX_SD))
+            };
+            let tonnage_t = models.diamond_median_m3
+                * draw(models.diamond_volume_log10_sd, 1, 2)
+                * models.placer_gravel_t_m3;
+            sites.push(ResourceSite {
+                id: 0,
+                kind: SiteKind::PlacerDiamond,
+                cell,
+                depth_m: 0.0,
+                tonnage_t,
+                remaining_t: tonnage_t,
+                grade: models.diamond_median_ct_m3 * draw(models.diamond_grade_log10_sd, 3, 4),
                 source_deposit: Some(deposit.id),
             });
         }
@@ -386,7 +428,11 @@ impl IslandResources {
                 site: id,
                 depth_m: site.depth_m,
             }),
-            SiteKind::Ironsand => Err(ResourceError::WrongTool { site: id, tool }),
+            // Diamonds need a jig or a pan's concentrate sorted by eye; no
+            // pack times either yet.
+            SiteKind::Ironsand | SiteKind::PlacerDiamond => {
+                Err(ResourceError::WrongTool { site: id, tool })
+            }
             SiteKind::PlacerGold => {
                 if !matches!(tool, LabourTool::GoldPan | LabourTool::SluiceBox) {
                     return Err(ResourceError::WrongTool { site: id, tool });
@@ -464,7 +510,7 @@ impl<'a> Channels<'a> {
     /// river cell in a lake or whose outgoing reach is gentler than its
     /// incoming one; the river's mouth if the sea comes first; nowhere if
     /// the water leaves the domain or no river carries it.
-    fn placer_trap(&self, source: (usize, usize)) -> Option<(usize, usize)> {
+    fn placer_trap(&self, source: (usize, usize), beach: bool) -> Option<(usize, usize)> {
         let network = self.physical.flow_network();
         let mut here = source;
         let mut incoming: Option<f64> = None;
@@ -487,7 +533,7 @@ impl<'a> Channels<'a> {
                 // mouth; gold shed straight off a coastal outcrop is a
                 // residual deposit, which model 39a excludes.
                 Receiver::Sea => {
-                    return (here != source && self.is_river(here)).then_some(here);
+                    return (beach && here != source && self.is_river(here)).then_some(here);
                 }
                 Receiver::Edge | Receiver::None => return None,
             }
