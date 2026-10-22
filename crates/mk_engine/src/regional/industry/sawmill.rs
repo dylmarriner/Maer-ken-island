@@ -94,6 +94,16 @@ impl SawmillModel {
         self.shares.map(|s| s * log_m3)
     }
 
+    /// Tonnes of carbon in each output, in [`OUTPUTS`] order, from logs
+    /// holding `log_carbon_t`. Shrinkage is water leaving the sawnwood, so
+    /// its wood's carbon stays in the sawnwood and its own entry is zero.
+    pub fn carbon(&self, log_carbon_t: f64) -> [f64; 5] {
+        let mut c = self.shares.map(|s| s * log_carbon_t);
+        c[0] += c[4];
+        c[4] = 0.0;
+        c
+    }
+
     /// m³ of roundwood needed for `sawnwood_m3` of sawnwood.
     pub fn logs_for(&self, sawnwood_m3: f64) -> f64 {
         sawnwood_m3 * self.roundwood_per_sawnwood
@@ -115,5 +125,8 @@ mod tests {
         assert!((out[1] / out[2] - 33.0 / 9.0).abs() < 1e-12);
         assert!((out[3] / out[4] - 8.0 / 3.0).abs() < 1e-12);
         assert!((mill.logs_for(out[0]) - 10.0).abs() < 1e-12);
+        let carbon = mill.carbon(2.0);
+        assert!((carbon.iter().sum::<f64>() - 2.0).abs() < 1e-12);
+        assert_eq!(carbon[4], 0.0);
     }
 }

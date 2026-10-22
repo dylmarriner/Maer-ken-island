@@ -7,6 +7,10 @@
 //! replanted the same year. So the plantation never cuts more than it has
 //! grown: a forest of evenly spread age classes yields its area times
 //! 486 / 28.2 m³ a year, about 17 m³/ha, and no more.
+//!
+//! Wood carries carbon at radiata's basic density, 0.38 t of dry wood per m³
+//! green (IPCC 2006, Table 4.14), times a conifer's carbon fraction, 0.51
+//! (Table 4.3).
 
 use serde::{Deserialize, Serialize};
 
@@ -17,6 +21,10 @@ use crate::validation::{ReferenceDomain, ReferenceLibrary};
 pub struct PlantationModel {
     pub rotation_years: f64,
     pub clearfell_m3_ha: f64,
+    /// Oven-dry tonnes per m³ of green wood.
+    pub basic_density_t_m3: f64,
+    /// Tonnes of carbon per tonne of dry wood.
+    pub carbon_fraction: f64,
 }
 
 impl PlantationModel {
@@ -24,12 +32,14 @@ impl PlantationModel {
         let point = |key: &str| {
             library
                 .item(ReferenceDomain::Industry, key)
-                .and_then(|i| i.point())
+                .and_then(|i| i.central())
                 .ok_or_else(|| MissingReference(key.into()))
         };
         Ok(Self {
             rotation_years: point("radiata_clearfell_age_years")?,
             clearfell_m3_ha: point("radiata_clearfell_yield_m3_ha")?,
+            basic_density_t_m3: point("radiata_basic_density_t_m3")?,
+            carbon_fraction: point("conifer_wood_carbon_fraction")?,
         })
     }
 
@@ -37,6 +47,11 @@ impl PlantationModel {
         let library = ReferenceLibrary::load(&crate::validation::default_reference_dir())
             .map_err(|e| MissingReference(e.to_string()))?;
         Self::from_reference(&library)
+    }
+
+    /// Tonnes of carbon in a m³ of wood.
+    pub fn carbon_t_per_m3(&self) -> f64 {
+        self.basic_density_t_m3 * self.carbon_fraction
     }
 
     /// m³ a hectare grows a year over a rotation.
@@ -103,6 +118,9 @@ mod tests {
         assert_eq!(m.rotation_years, 28.2);
         assert_eq!(m.clearfell_m3_ha, 486.0);
         assert!((m.mean_annual_increment() - 17.23).abs() < 0.01);
+        assert_eq!(m.basic_density_t_m3, 0.38);
+        assert_eq!(m.carbon_fraction, 0.51);
+        assert!((m.carbon_t_per_m3() - 0.1938).abs() < 1e-12);
     }
 
     #[test]

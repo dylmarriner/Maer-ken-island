@@ -339,9 +339,11 @@ trade, a 2-3 bedroom cottage's floor area (Task 6 and 7b); the Pukekohe growing 
     2020). The rest is shared in North America's residue proportions as a stand-in, since New
     Zealand reports no material balance. The pack item had mislabelled those shares as New
     Zealand's and is corrected.
-  - Still open: the plantation on the map, its wood from the existing felling and hauling,
-    carbon from tree to house (needs a radiata density and carbon fraction with sources),
-    `construction.rs`, and all the food chain.
+  - Carbon: wood carries radiata's basic density 0.38 t/m³ times a conifer's 0.51 carbon fraction
+    (IPCC 2006 Tables 4.14, 4.3). `tests/timber_chain.rs` checks a century of plantation and mill:
+    no overcut, and no carbon lost from felling to the mill's gate.
+  - Still open: the plantation on the map, its wood from the existing felling and hauling, the
+    mill's gate to a house (`construction.rs`), and the whole food chain.
 
 ### 4g. Task 8: town and workforce
 
