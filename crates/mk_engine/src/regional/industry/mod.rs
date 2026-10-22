@@ -15,6 +15,7 @@
 
 pub mod chain;
 pub mod flow_duration;
+pub mod gas_plant;
 pub mod grid;
 pub mod hydro;
 pub mod hydro_sites;
