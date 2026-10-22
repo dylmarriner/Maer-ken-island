@@ -36,7 +36,7 @@ this list holds the current state. The evidence for what is *done* is in
 
 | Area | Item | State | Blocked on |
 |---|---|---|---|
-| Timber | Crosscut, rigging, routes (D40); drying and seasoning done 2026-10-14, splitting 2026-10-23 (D63) | Open | Two-person sawing rate, rigging time |
+| Timber | Rigging, routes, sawing logs for the ute (D40); drying and seasoning done 2026-10-14, splitting and two-person crosscut felling 2026-10-23 (D63) | Open | Rigging time |
 | Living world | Phase 3 Task 1b: species at island scale | Done (D55 open: upstream densities) | — |
 | Living world | Phase 3 Task 2: every resource and material, placers, recipes | Catalogue, mineral sites, gold placers, ironsand done (2026-10-14); biotic and animal nodes, gem placers, tools, recipes open | Cited diamond-placer grade, shaft depth and rate |
 | Living world | D9: actions take one tick | Open (felling, hauling done) | Cited durations per task |
@@ -95,8 +95,11 @@ the log's last water is booked to the air at that moment rather than when the wo
   build split the store's air-dry wood by the house at Höldrich et al. 2007's 2.33 labour-hours
   per solid m³ (`labour/timber.json`), at the Compendium's chopping and splitting MET; the
   cooking fire burns only split wood. Left: a split-only axe rate for a long day, and stacking.
-- **The two-person crosscut saw:** needs both founders at the log together, which is a
-  coordination change in `life.rs`, plus a cited two-person sawing rate.
+- **The two-person crosscut saw (felling done 2026-10-23, D40):** a founder gathering with no
+  tree of their own takes the other end of the shed's saw at a tree one other founder fells,
+  and two at one tree fell it at the pack's two-person crosscut time (`labour/productivity.json`, 8-25 min for
+  30 cm; FAO Forest Harvesting Case Study 18 measured two-cutter crosscut crews at 1.11-1.99
+  m³/h). Left: cross-cutting a log for the ute with the saw rather than the axe.
 - **Excavator rigging:** the CAT 330 lifts with the shed's rope; attaching a sling is untimed
   because no cited figure was found. Either source a rigging time or the owner adds a grapple.
 - **Routes:** legs are straight lines. Walks climb the ground's rises along them (Naismith,

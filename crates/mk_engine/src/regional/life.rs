@@ -262,10 +262,12 @@ impl ShedBuild {
 /// which draws on the estate's electricity (D13) while anyone builds.
 pub const BUILDING_SAW: &str = "Circular Saw";
 
-/// The shed tool a founder fells with: the estate's axe, at the felling
-/// pack's steel-axe times. The two-person crosscut saw needs a second
-/// person on the other end, which nothing here arranges yet.
+/// The shed tool a founder fells with alone: the estate's axe, at the
+/// felling pack's steel-axe times.
 pub const FELLING_TOOL: &str = "Felling Axe";
+/// The shed tool two founders fell with together, one at each end: the
+/// estate's crosscut saw, at the felling pack's two-person times.
+pub const FELLING_SAW: &str = "Crosscut Saw";
 /// The estate's road vehicle that carries cut timber: the ute.
 pub const HAUL_UTE: &str = "Ford Raptor 4x4 Ute";
 /// The estate's machine that lifts whole logs: the excavator.
@@ -1353,13 +1355,18 @@ impl IslandLife {
     ///   steps until the felling pack's time for that trunk is met
     ///   (`LabourTable::fell_tree`), and the stem comes down as a green log
     ///   lying where it fell, its carbon and water booked through the
-    ///   ledger.
+    ///   ledger. With the shed's crosscut saw, a founder with no tree of
+    ///   their own takes the other end of the saw at a tree one other
+    ///   founder is felling, and while two work one tree it comes down at
+    ///   the pack's two-person crosscut time rather than the axe's. Time
+    ///   already worked carries over when the second sawyer arrives.
     ///
     /// While they work their needs drain at the MET of what they are doing
     /// (`HumanBeing::labour_met`, read by the next step's lifecycle) and
     /// their respiration is charged for it.
     fn work(&mut self, dt_s: f64) -> Result<(), IslandLifeError> {
         let has_axe = self.estate_has_tool(FELLING_TOOL);
+        let has_saw = self.estate_has_tool(FELLING_SAW);
         let awake_met = self
             .labour
             .met(AWAKE_AT_HOME_ACTIVITY)
@@ -1415,7 +1422,37 @@ impl IslandLife {
                 met
             } else {
                 // Fell: back to the tree already started, if it still
-                // stands; otherwise the nearest.
+                // stands; otherwise, with the saw, the other end of it at
+                // the nearest tree one founder is felling alone; otherwise
+                // the nearest tree.
+                let alone_at = |tree_id: u64| {
+                    self.felling
+                        .iter()
+                        .filter(|(who, job)| **who != id && job.tree_id == tree_id)
+                        .count()
+                        == 1
+                };
+                let partner = || {
+                    if !has_saw {
+                        return None;
+                    }
+                    self.felling
+                        .iter()
+                        .filter(|(who, _)| **who != id)
+                        .filter(|(_, job)| alone_at(job.tree_id))
+                        .filter_map(|(_, job)| {
+                            self.vegetation
+                                .trees
+                                .iter()
+                                .find(|t| t.id == job.tree_id && t.alive)
+                        })
+                        .min_by(|a, b| {
+                            let d = |t: &&super::local_vegetation::TreeInstance| {
+                                (t.position_m.0 - at.0).powi(2) + (t.position_m.1 - at.1).powi(2)
+                            };
+                            d(a).total_cmp(&d(b)).then(a.id.cmp(&b.id))
+                        })
+                };
                 let tree = self
                     .felling
                     .get(&id)
@@ -1425,6 +1462,7 @@ impl IslandLife {
                             .iter()
                             .find(|t| t.id == job.tree_id && t.alive)
                     })
+                    .or_else(partner)
                     .or_else(|| self.vegetation.nearest_tree(at))
                     .map(|t| (t.id, t.stem_diameter_m, t.position_m));
                 let Some((tree_id, diameter_m, tree_at)) = tree else {
@@ -1433,9 +1471,21 @@ impl IslandLife {
                     }
                     continue;
                 };
+                // Two at one tree with the saw: the crosscut's time, else
+                // the axe's.
+                let sawyers = 1 + self
+                    .felling
+                    .iter()
+                    .filter(|(who, job)| **who != id && job.tree_id == tree_id)
+                    .count();
+                let tool = if has_saw && sawyers >= 2 {
+                    LabourTool::CrosscutSaw
+                } else {
+                    LabourTool::SteelAxe
+                };
                 let spec = self
                     .labour
-                    .fell_tree(LabourTool::SteelAxe, diameter_m * 100.0)
+                    .fell_tree(tool, diameter_m * 100.0)
                     .map_err(IslandLifeError::Labour)?;
                 // The tree is where it stands: the job starts with the walk
                 // to it from wherever the founder is, at the packs' pace.
@@ -1489,6 +1539,8 @@ impl IslandLife {
         self.audited(|life, ledger| {
             for (id, tree_id) in &felled {
                 life.felling.remove(id);
+                // Whoever was on the other end of the saw is done too.
+                life.felling.retain(|_, job| job.tree_id != *tree_id);
                 let Some(tree) = life
                     .vegetation
                     .trees
@@ -3559,6 +3611,75 @@ mod tests {
             "the digest does not see a mining job"
         );
         assert_eq!(life.snapshot().mining, life.mining);
+    }
+
+    /// Two founders who gather outdoors together take the shed's crosscut
+    /// saw to one tree, one at each end, and it comes down after the walk
+    /// plus the felling pack's two-person time for that trunk, sooner than
+    /// the axe alone; both are then free.
+    #[test]
+    fn two_founders_fell_one_tree_with_the_crosscut_saw_in_the_packs_time() {
+        let mut scenario =
+            IslandScenario::load(&repo("fixtures/island/default_scenario.json")).unwrap();
+        scenario.estate_patch.tree_cap = 200;
+        let canon = Arc::new(CanonLocked::load(&repo("fixtures/island/canon.json")).unwrap());
+        let mut life = IslandLife::bootstrap(scenario, canon).expect("the island bootstraps");
+        assert!(life.estate_has_tool(FELLING_SAW), "the shed has the saw");
+
+        let at = life.vegetation.centre_m();
+        for who in ["Gem-D", "Gem-K"] {
+            life.positions.0.insert(
+                who.into(),
+                super::super::humans::EstatePosition {
+                    space: Space::Outdoors,
+                    position_m: at,
+                },
+            );
+            life.humans
+                .registry
+                .get_human_mut(who)
+                .unwrap()
+                .economy_action
+                .kind = crate::humans::ActionKind::Gather;
+        }
+        let tree = life.vegetation.nearest_tree(at).expect("a tree").clone();
+        let distance =
+            ((tree.position_m.0 - at.0).powi(2) + (tree.position_m.1 - at.1).powi(2)).sqrt();
+        let walk = |who: &str| {
+            let body = LabourBody::from_human(life.humans.registry.get_human(who).unwrap());
+            life.labour
+                .walking_time_s(&body, distance, life.climb_m(at, tree.position_m), 0.0)
+                .unwrap()
+        };
+        let slowest_walk = walk("Gem-D").max(walk("Gem-K"));
+        let saw = life
+            .labour
+            .fell_tree(LabourTool::CrosscutSaw, tree.stem_diameter_m * 100.0)
+            .unwrap()
+            .duration_s;
+        let axe = life
+            .labour
+            .fell_tree(LabourTool::SteelAxe, tree.stem_diameter_m * 100.0)
+            .unwrap()
+            .duration_s;
+        assert!(saw < axe, "the saw is quicker than the axe");
+
+        let minute = 60.0;
+        life.work(minute).unwrap();
+        let on: Vec<u64> = life.felling.values().map(|job| job.tree_id).collect();
+        assert_eq!(on, vec![tree.id, tree.id], "both on the one tree");
+        let mut worked = minute;
+        while life.vegetation.trees.iter().any(|t| t.id == tree.id) {
+            assert!(
+                worked < slowest_walk + saw + minute,
+                "still standing after {worked} s; the saw needs {saw} s after the walk"
+            );
+            life.work(minute).unwrap();
+            worked += minute;
+        }
+        assert!(worked >= saw, "felled after {worked} s, before the saw's {saw}");
+        assert!(life.felling.is_empty(), "both sawyers are done");
+        assert_eq!(life.materials.logs().count(), 1, "one log came down");
     }
 
     /// A founder who gathers outdoors with the shed's axe walks to the
