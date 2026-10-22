@@ -2265,6 +2265,21 @@ fn panels(
                                     view.0.look_at(focus, distance);
                                 }
                             }
+                            // The interior camera: stand in the room and
+                            // look level across it; dragging turns the
+                            // view about the room's middle.
+                            if let Some(estate::Picked::Room(room)) = panels.picked {
+                                if ui.button("Step inside").clicked() {
+                                    if let Some((focus, distance)) = island
+                                        .0
+                                        .estate()
+                                        .and_then(|layout| estate::inside(layout, room))
+                                    {
+                                        view.0.look_at(focus, distance);
+                                        view.0.pitch = 0.0;
+                                    }
+                                }
+                            }
                             if ui.button("Clear").clicked() {
                                 panels.picked = None;
                             }
