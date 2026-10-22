@@ -12,6 +12,8 @@
 //!   exponential decline, their carbon out of the crust.
 //! - [`refinery`]: a topping refinery that distils crude into the cuts of a
 //!   published assay and burns its own gas and residue.
+//! - [`sawmill`]: softwood logs sawn at New Zealand's recovery, the rest
+//!   shared as residues.
 
 pub mod chain;
 pub mod flow_duration;
@@ -20,3 +22,4 @@ pub mod hydro;
 pub mod hydro_sites;
 pub mod petroleum;
 pub mod refinery;
+pub mod sawmill;
