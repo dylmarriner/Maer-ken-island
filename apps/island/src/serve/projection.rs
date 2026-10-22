@@ -830,6 +830,20 @@ fn people(life: &IslandLife) -> Vec<Person> {
                 }),
                 body_carbon_kg: life.materials.body_carbon_kg(id),
                 height_m: human.body.height_cm / 100.0,
+                physique: life.physiques.fitness.get(id).map(|f| {
+                    let mass_kg = life
+                        .materials
+                        .body_carbon_kg(id)
+                        .map_or(human.body.weight_kg, |c| {
+                            c / mk_engine::regional::materials::BODY_CARBON_PER_KG
+                        });
+                    mk_island_api::Physique {
+                        vo2max_ml_kg_min: f.vo2max_ml_kg_min,
+                        strength_1rm_kg: f.strength_1rm_kg,
+                        lean_kg: f.lean_kg,
+                        fat_kg: f.fat_kg(mass_kg),
+                    }
+                }),
             }
         })
         .collect()

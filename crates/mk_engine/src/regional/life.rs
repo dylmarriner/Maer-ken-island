@@ -108,6 +108,22 @@ pub struct SubsystemTimings {
 }
 
 /// A child's mother, from its birth record.
+/// The father the runtime recorded at `human`'s birth, if it recorded one.
+fn father_of(human: &crate::humans::HumanBeing) -> Option<String> {
+    human
+        .profile
+        .canonical_schema
+        .as_ref()
+        .and_then(|s| {
+            s.reproductive_systems
+                .genetics_system
+                .birth_records
+                .last()
+                .map(|r| r.father_id.clone())
+        })
+        .filter(|f| !f.is_empty())
+}
+
 fn mother_of(human: &crate::humans::HumanBeing) -> Option<String> {
     human
         .profile
@@ -321,6 +337,8 @@ pub struct IslandLifeSnapshot {
     #[serde(default)]
     pub skills: Skills,
     #[serde(default)]
+    pub physiques: super::physique::Physiques,
+    #[serde(default)]
     pub water_drunk_kg: BTreeMap<String, f64>,
     pub sleep_seconds: BTreeMap<String, (f64, f64)>,
     pub food_cell: (usize, usize),
@@ -395,6 +413,9 @@ pub struct IslandLife {
     /// What every person has learnt by doing (R11): each task they have
     /// done, how much, and when they last did it.
     pub skills: Skills,
+    /// Every living person's genome and trained body (R12, R13).
+    pub physiques: super::physique::Physiques,
+    physique_models: super::physique::PhysiqueModels,
     /// Water each founder has drunk since the island began (kg): the record
     /// the intake checks read.
     pub water_drunk_kg: BTreeMap<String, f64>,
@@ -762,6 +783,9 @@ impl IslandLife {
             hauling: BTreeMap::new(),
             labour_kcal: BTreeMap::new(),
             skills: Skills::default(),
+            physiques: super::physique::Physiques::default(),
+            physique_models: super::physique::PhysiqueModels::load_default()
+                .map_err(|e| IslandLifeError::Labour(LabourError::MissingReference(e)))?,
             water_drunk_kg: BTreeMap::new(),
             sleep_seconds: BTreeMap::new(),
             scheduler: IslandScheduler::new(scenario_cadences),
@@ -820,6 +844,9 @@ impl IslandLife {
         }
         // Saved before the island ran its oil fields, or newly built.
         life.install_industry()?;
+        // Saved before people carried a genome and a trained body, or newly
+        // built: everyone alive is admitted as they are.
+        life.admit_physiques();
         // Saved before the island kept money, or newly built.
         life.install_economy()?;
         if life.ecology.soil.is_none() {
@@ -876,6 +903,7 @@ impl IslandLife {
             hauling: self.hauling.clone(),
             labour_kcal: self.labour_kcal.clone(),
             skills: self.skills.clone(),
+            physiques: self.physiques.clone(),
             water_drunk_kg: self.water_drunk_kg.clone(),
             sleep_seconds: self.sleep_seconds.clone(),
             food_cell: self.food_cell,
@@ -944,6 +972,9 @@ impl IslandLife {
             hauling: snapshot.hauling,
             labour_kcal: snapshot.labour_kcal,
             skills: snapshot.skills,
+            physiques: snapshot.physiques,
+            physique_models: super::physique::PhysiqueModels::load_default()
+                .map_err(|e| IslandLifeError::Labour(LabourError::MissingReference(e)))?,
             water_drunk_kg: snapshot.water_drunk_kg,
             sleep_seconds: snapshot.sleep_seconds,
             labour,
@@ -986,6 +1017,9 @@ impl IslandLife {
         }
         // Saved before the island ran its oil fields, or newly built.
         life.install_industry()?;
+        // Saved before people carried a genome and a trained body, or newly
+        // built: everyone alive is admitted as they are.
+        life.admit_physiques();
         // Saved before the island kept money, or newly built.
         life.install_economy()?;
         if life.ecology.soil.is_none() {
@@ -1220,6 +1254,7 @@ impl IslandLife {
         self.water_drunk_kg.remove(id);
         self.sleep_seconds.remove(id);
         self.skills.0.remove(id);
+        self.physiques.forget(id);
     }
 
     /// Every living human, with the body the labour model costs work against
@@ -1555,6 +1590,7 @@ impl IslandLife {
                     .energy_kcal(&body, awake_met, dt_s)
                     .map_err(IslandLifeError::Labour)?;
             *self.labour_kcal.entry(id.clone()).or_insert(0.0) += extra.max(0.0);
+            self.physiques.record(&self.physique_models, &id, met, dt_s, 0.0);
             if let Some(h) = self.humans.registry.get_human_mut(&id) {
                 h.labour_met = Some(met);
             }
@@ -2232,6 +2268,7 @@ impl IslandLife {
                     .energy_kcal(&body, awake_met, dt_s)
                     .map_err(IslandLifeError::Labour)?;
             *self.labour_kcal.entry(id.clone()).or_insert(0.0) += extra.max(0.0);
+            self.physiques.record(&self.physique_models, &id, met, dt_s, 0.0);
             if let Some(h) = self.humans.registry.get_human_mut(&id) {
                 h.labour_met = Some(met);
             }
@@ -2499,6 +2536,7 @@ impl IslandLife {
                     .labour
                     .energy_kcal(&body, awake_met, s)
                     .map_err(IslandLifeError::Labour)?;
+            self.physiques.record(&self.physique_models, &id, met, s, load_kg);
             *self.labour_kcal.entry(id).or_insert(0.0) += extra.max(0.0);
         }
         Ok(())
@@ -2794,6 +2832,7 @@ impl IslandLife {
                     .energy_kcal(&body, awake_met, dt_s)
                     .map_err(IslandLifeError::Labour)?;
             *self.labour_kcal.entry(id.clone()).or_insert(0.0) += extra.max(0.0);
+            self.physiques.record(&self.physique_models, &id, met, dt_s, 0.0);
             if let Some(h) = self.humans.registry.get_human_mut(&id) {
                 h.labour_met = Some(met);
             }
@@ -2925,6 +2964,7 @@ impl IslandLife {
                     .energy_kcal(&body, awake_met, dt_s)
                     .map_err(IslandLifeError::Labour)?;
             *self.labour_kcal.entry(id.clone()).or_insert(0.0) += extra.max(0.0);
+            self.physiques.record(&self.physique_models, &id, met, dt_s, 0.0);
             if let Some(h) = self.humans.registry.get_human_mut(&id) {
                 h.labour_met = Some(met);
             }
@@ -3278,6 +3318,70 @@ impl IslandLife {
         }
     }
 
+    /// Everyone alive who has no genome yet is given one, from their
+    /// parents' when both are known, and an untrained body of their present
+    /// mass. Ordered by agent id, so admission replays.
+    fn admit_physiques(&mut self) {
+        if self.physiques.genomes.is_empty() {
+            self.physiques.day = self.sim_time_s / 86_400;
+        }
+        let newcomers: Vec<(String, bool, f64, Option<(String, String)>)> = self
+            .humans
+            .registry
+            .iter()
+            .filter(|h| {
+                matches!(h.profile.status, mk_core::human::HumanStatus::Alive)
+                    && !self.physiques.genomes.contains_key(h.agent_id())
+            })
+            .map(|h| {
+                let male = matches!(h.biological_sex(), mk_core::human::BiologicalSex::Male);
+                let parents = mother_of(h).zip(father_of(h));
+                (h.agent_id().to_string(), male, self.body_mass_kg(h), parents)
+            })
+            .collect();
+        for (id, male, mass_kg, parents) in newcomers {
+            let parents = parents.as_ref().map(|(m, f)| (m.as_str(), f.as_str()));
+            self.physiques.admit(
+                &self.physique_models,
+                &self.scenario.seed,
+                &id,
+                male,
+                mass_kg,
+                parents,
+            );
+        }
+    }
+
+    /// A person's body mass (kg): the ledger's body carbon over the body's
+    /// carbon fraction, or the runtime's weight before the ledger holds them.
+    fn body_mass_kg(&self, human: &crate::humans::HumanBeing) -> f64 {
+        self.materials
+            .body_carbon_kg(human.agent_id())
+            .map(|c| c / super::materials::BODY_CARBON_PER_KG)
+            .unwrap_or(human.body.weight_kg)
+    }
+
+    /// Close each local day that has ended: everyone's recorded work trains
+    /// their body, or its absence detrains it.
+    fn close_physique_days(&mut self) {
+        let day = self.sim_time_s / 86_400;
+        if day <= self.physiques.day {
+            return;
+        }
+        let bodies: Vec<(String, bool, f64)> = self
+            .humans
+            .registry
+            .iter()
+            .filter(|h| matches!(h.profile.status, mk_core::human::HumanStatus::Alive))
+            .map(|h| {
+                let male = matches!(h.biological_sex(), mk_core::human::BiologicalSex::Male);
+                (h.agent_id().to_string(), male, self.body_mass_kg(h))
+            })
+            .collect();
+        self.physiques
+            .close_days(&self.physique_models, day, &bodies);
+    }
+
     /// Children under `DEPENDENT_AGE_YEARS` go where their mother goes: they
     /// are carried, then toddle behind her, instead of wandering off alone.
     /// A child whose mother is dead or absent keeps its own movement.
@@ -3354,6 +3458,7 @@ impl IslandLife {
             self.bury_the_dead()?;
             self.keep_children_with_mothers();
             self.adopt_newborns();
+            self.admit_physiques();
             self.timings.households += humans_done.elapsed();
             // Taken out and put back so the registry can be read while the
             // tally is written, without rebuilding a body and cloning an
@@ -3416,12 +3521,14 @@ impl IslandLife {
                 self.foraging.remove(&id);
                 self.labour_kcal.remove(&id);
                 self.skills.0.remove(&id);
+                self.physiques.forget(&id);
             }
             self.work(human_s as f64)?;
             self.mine(human_s as f64)?;
             self.build(human_s as f64)?;
             self.household_water_step(human_s as f64)?;
             self.household_gas_step(human_s as f64)?;
+            self.close_physique_days();
             self.industry_step(human_s as f64)?;
             self.economy_step()?;
             self.meals()?;
@@ -3528,6 +3635,7 @@ impl IslandLife {
         h.update(canonical(&self.hauling).as_bytes());
         h.update(canonical(&self.labour_kcal).as_bytes());
         h.update(canonical(&self.skills).as_bytes());
+        h.update(canonical(&self.physiques).as_bytes());
         h.update(canonical(&self.water_drunk_kg).as_bytes());
         h.update(canonical(&self.household_water).as_bytes());
         h.update(canonical(&self.household_gas).as_bytes());

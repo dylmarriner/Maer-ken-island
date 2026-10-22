@@ -188,6 +188,9 @@ pub fn world_detail(
     let everyone: Vec<&mk_engine::humans::HumanBeing> = current.records.values().collect();
     let mut sections = view::sections(human, &summary, None);
     sections.push(view::family_section(human, &everyone));
+    if let Some(physique) = here.and_then(|p| p.physique.as_ref()) {
+        sections.push(view::physique_section(physique));
+    }
     serde_json::json!({
         "summary": summary,
         "folder": serde_json::Value::Null,

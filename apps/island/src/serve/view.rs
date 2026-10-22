@@ -225,6 +225,39 @@ fn spaced(name: &str) -> String {
 /// Separate from [`sections`] because it needs the rest of the
 /// population: a person carries their parents' ids, not their parents,
 /// and nobody carries a list of their children.
+/// What a person's genes and their own work have made of their body: it
+/// moves with what they do, day by day (R12).
+pub fn physique_section(p: &mk_island_api::Physique) -> Section {
+    let mass = p.lean_kg + p.fat_kg;
+    section(
+        "physique",
+        "Fitness and build",
+        "Trained by what they actually do each day, and lost when they stop.",
+        vec![
+            noted(
+                "Aerobic capacity",
+                format!("{:.1} mL/kg/min", p.vo2max_ml_kg_min),
+                "VO2max: how long and how hard they can keep working.",
+            ),
+            noted(
+                "Strength",
+                format!("{:.0} kg", p.strength_1rm_kg),
+                "The heaviest load they can lift once.",
+            ),
+            measure("Lean mass", p.lean_kg, 1, "kg"),
+            noted(
+                "Body fat",
+                format!("{:.1} kg", p.fat_kg),
+                if mass > 0.0 {
+                    format!("{:.0}% of their body", 100.0 * p.fat_kg / mass)
+                } else {
+                    String::new()
+                },
+            ),
+        ],
+    )
+}
+
 pub fn family_section(human: &HumanBeing, everyone: &[&HumanBeing]) -> Section {
     // Each of the three states in its own words: dormant is not dead.
     let named = |h: &HumanBeing| match h.profile.status {

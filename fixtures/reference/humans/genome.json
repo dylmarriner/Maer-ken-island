@@ -1,0 +1,270 @@
+{
+  "id": "genome",
+  "domain": "humans",
+  "title": "The human genome: chromosome lengths, crossovers and new mutations",
+  "retrieved": "2026-10-23",
+  "licence": "Numerical values cited as facts with attribution; no text, figures or datasets reproduced.",
+  "sources": [
+    {
+      "key": "grch38",
+      "citation": "Genome Reference Consortium (2022). GRCh38.p14 (GCF_000001405.40) assembly report, Sequence-Length of chromosomes 1-22, X, Y; identical to UCSC hg38.chrom.sizes. https://hgdownload.soe.ucsc.edu/goldenPath/hg38/bigZips/hg38.chrom.sizes",
+      "licence": "Facts cited with attribution; no text, figures or datasets reproduced."
+    },
+    {
+      "key": "bherer2017",
+      "citation": "Bherer, C., Campbell, C. L. and Auton, A. (2017). Refined genetic maps reveal sexual dimorphism in human meiotic recombination at multiple scales. Nature Communications 8, 14994. doi:10.1038/ncomms14994. Table 1.",
+      "licence": "Facts cited with attribution; no text, figures or datasets reproduced."
+    },
+    {
+      "key": "kong2012",
+      "citation": "Kong, A. et al. (2012). Rate of de novo mutations and the importance of father's age to disease risk. Nature 488, 471-475. doi:10.1038/nature11396.",
+      "licence": "Facts cited with attribution; no text, figures or datasets reproduced."
+    },
+    {
+      "key": "jonsson2017",
+      "citation": "Jonsson, H. et al. (2017). Parental influence on human germline de novo mutations in 1,548 trios from Iceland. Nature 549, 519-522. doi:10.1038/nature24018.",
+      "licence": "Facts cited with attribution; no text, figures or datasets reproduced."
+    }
+  ],
+  "items": [
+    {
+      "key": "chromosome_lengths",
+      "description": "Length of each GRCh38 primary-assembly chromosome",
+      "unit": "bp",
+      "source": "grch38",
+      "confidence": "high",
+      "value": {
+        "table": {
+          "row_label": "chromosome",
+          "columns": [
+            "bp"
+          ],
+          "rows": [
+            {
+              "label": "chr1",
+              "values": [
+                248956422.0
+              ]
+            },
+            {
+              "label": "chr2",
+              "values": [
+                242193529.0
+              ]
+            },
+            {
+              "label": "chr3",
+              "values": [
+                198295559.0
+              ]
+            },
+            {
+              "label": "chr4",
+              "values": [
+                190214555.0
+              ]
+            },
+            {
+              "label": "chr5",
+              "values": [
+                181538259.0
+              ]
+            },
+            {
+              "label": "chr6",
+              "values": [
+                170805979.0
+              ]
+            },
+            {
+              "label": "chr7",
+              "values": [
+                159345973.0
+              ]
+            },
+            {
+              "label": "chr8",
+              "values": [
+                145138636.0
+              ]
+            },
+            {
+              "label": "chr9",
+              "values": [
+                138394717.0
+              ]
+            },
+            {
+              "label": "chr10",
+              "values": [
+                133797422.0
+              ]
+            },
+            {
+              "label": "chr11",
+              "values": [
+                135086622.0
+              ]
+            },
+            {
+              "label": "chr12",
+              "values": [
+                133275309.0
+              ]
+            },
+            {
+              "label": "chr13",
+              "values": [
+                114364328.0
+              ]
+            },
+            {
+              "label": "chr14",
+              "values": [
+                107043718.0
+              ]
+            },
+            {
+              "label": "chr15",
+              "values": [
+                101991189.0
+              ]
+            },
+            {
+              "label": "chr16",
+              "values": [
+                90338345.0
+              ]
+            },
+            {
+              "label": "chr17",
+              "values": [
+                83257441.0
+              ]
+            },
+            {
+              "label": "chr18",
+              "values": [
+                80373285.0
+              ]
+            },
+            {
+              "label": "chr19",
+              "values": [
+                58617616.0
+              ]
+            },
+            {
+              "label": "chr20",
+              "values": [
+                64444167.0
+              ]
+            },
+            {
+              "label": "chr21",
+              "values": [
+                46709983.0
+              ]
+            },
+            {
+              "label": "chr22",
+              "values": [
+                50818468.0
+              ]
+            },
+            {
+              "label": "chrX",
+              "values": [
+                156040895.0
+              ]
+            },
+            {
+              "label": "chrY",
+              "values": [
+                57227415.0
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "key": "crossovers_per_meiosis",
+      "description": "Autosomal recombination events per informative meiosis, by sex: Table 1 events over meioses (female 2,338,628 / 57,919; male 999,007 / 46,327)",
+      "unit": "crossovers per meiosis",
+      "source": "bherer2017",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "chromosomes",
+          "columns": [
+            "female",
+            "male"
+          ],
+          "rows": [
+            {
+              "label": "autosomal",
+              "values": [
+                40.4,
+                21.6
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Derived from pooled pedigree events after boundary inference, not a direct per-meiosis count; the paper's introduction gives female rates about 1.6 times male, matching 40.4 / 21.6 = 1.87 only roughly."
+    },
+    {
+      "key": "de_novo_mutation_rate",
+      "description": "Germline point mutation rate per nucleotide per generation (78 Icelandic trios, mean father's age 29.7, 4,933 mutations over 2.63 Gb callable)",
+      "unit": "per bp per generation",
+      "source": "kong2012",
+      "confidence": "high",
+      "value": {
+        "table": {
+          "row_label": "rate",
+          "columns": [
+            "value"
+          ],
+          "rows": [
+            {
+              "label": "per_bp_per_generation",
+              "values": [
+                1.2e-08
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "key": "parental_age_effect",
+      "description": "Extra de novo mutations in a child per year of the parent's age at conception",
+      "unit": "mutations per year",
+      "source": "jonsson2017",
+      "confidence": "high",
+      "value": {
+        "table": {
+          "row_label": "parent",
+          "columns": [
+            "value"
+          ],
+          "rows": [
+            {
+              "label": "father",
+              "values": [
+                1.51
+              ]
+            },
+            {
+              "label": "mother",
+              "values": [
+                0.37
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

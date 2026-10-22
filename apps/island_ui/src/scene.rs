@@ -327,6 +327,7 @@ mod tests {
             cell,
             body_carbon_kg: Some(13.0),
             height_m: 1.83,
+            physique: None,
         }
     }
 
