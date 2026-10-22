@@ -58,7 +58,7 @@ this list holds the current state. The evidence for what is *done* is in
 | App | Phase 5 Tasks 3-8 | Partly done | See below; one owner pick (portraits) |
 | Gates | Gate 1, 2, 3 owner reviews | **Closed** (owner, 2026-10-13) | — |
 | Upstream | PRs for every divergence in `UPSTREAM.md` | Open | Owner's upstream access |
-| Realism | R0-R10: humans, work and the living world replicate Earth (section 8) | R0, R1 and R1b (fetching water by hand) done; R3 next | Engineering and sourcing |
+| Realism | R0-R10: humans, work and the living world replicate Earth (section 8) | R0, R1 and R1b (fetching water by hand) done; R8 in part and R11 (learning by doing) started 2026-10-23; R12-R14 with the other session; R3 next | Engineering and sourcing |
 | CI | Nightly slow job and dependency audit | Green after PR #15 | See Housekeeping |
 
 ---
