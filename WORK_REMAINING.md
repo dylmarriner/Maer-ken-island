@@ -43,8 +43,8 @@ this list holds the current state. The evidence for what is *done* is in
 | Living world | D31: NPP ignores soil nutrients | Open | Regional soils model and data |
 | Runtime | Phase 4 Task 2b: deep-time spin-up | **Done** (2026-10-14) | — |
 | Industry | Phase 4b Task 1 remainder: reference tables | Done 2026-10-14 (nine packs); gaps listed in §4a | A few items (see §4a) |
-| Industry | Phase 4b Task 4: oil and gas field (D14, D19) | Fields, decline and carbon done 2026-10-14 (D58); in `IslandLife` with the diesel depot 2026-10-22; wells, water cut, spills open | Per-well rate, water-cut series |
-| Industry | Phase 4b Task 5: refinery, gas plant, fuel depot (D16) | Topping refinery done 2026-10-14; gas plant, reformer, depot open | Reformate yield; gas-plant own use |
+| Industry | Phase 4b Task 4: oil and gas field (D14, D19) | Fields, decline and carbon done 2026-10-14 (D58); in `IslandLife` with the diesel depot 2026-10-22; wells, blowouts and produced water 2026-10-23; rising water cut, spills open | Water-cut series; a blowout's spill volume |
+| Industry | Phase 4b Task 5: refinery, gas plant, fuel depot (D16) | Topping refinery done 2026-10-14; diesel depot 2026-10-22 (D58); gas plant 2026-10-23; reformer open | Reformate yield |
 | Industry | Phase 4b Task 6: jobs, trades, maintenance (D39) | Open | Upstream human-runtime change first |
 | Industry | Phase 4b Task 7: money, enterprises, payroll | Money, payroll and metered bills done 2026-10-18 (`regional/economy/`, D61, D62; `tests/island_economy.rs`). In `IslandLife` 2026-10-22 (`economy/island.rs`: deposits, Gem Petroleum selling the depot's diesel, monthly loans, closes, dividends, money audit); the petroleum business's staff and payslips, household bills, buying and selling homes open | Task 6 staff; upstream buying |
 | Industry | Phase 4b Task 7b: food and timber chains (forestry, sawmill, house framing, farm, livestock, food processing and fishery models 2026-10-23) | Models done; not yet on the map or wired into island life | Task 8 workforce: who works a farm, mill or salt works, chosen by the people themselves (R14), never assigned |
@@ -258,9 +258,12 @@ trade, a 2-3 bedroom cottage's floor area (Task 6 and 7b); the Pukekohe growing 
   fuel; a depot fills the estate's diesel back to the scenario's opening stock from the refinery's
   distillate, and generators and vehicles burn that share as material carbon
   (`energy::IslandFuel`, `book_island_burn`).
-- **Left (D58):** a plateau, reservoir pressure and water cut; wells, workover crews and blowouts
-  (the frequencies are in the pack, but there is no per-well rate to count wells by); spills and their
-  harm to shellfish; methane warming (negligible at island scale, Etminan et al. 2016);
+- **Done 2026-10-23:** wells and blowouts (`PetroleumField::drill_for`): wells for the field's
+  highest daily rate at the average US oil well's 29 bbl/day (EIA 2025), blowouts counted from
+  BOEM's (2014) per-well-drilled and per-well-year frequencies; formation water at the world's
+  average three barrels per barrel of oil (Bailey et al. 2000), injected back.
+- **Left (D58):** a plateau, reservoir pressure, a water cut that rises with age; workover crews; what a blowout
+  spills (no onshore spill volume found) and its harm to shellfish; methane warming (negligible at island scale, Etminan et al. 2016);
   who runs the field (Task 6). D19 (drill rigs cannot be made on the island) stays the owner's call;
   the default is imported equipment, as D15 accepts imported plant.
 
@@ -273,9 +276,15 @@ trade, a 2-3 bedroom cottage's floor area (Task 6 and 7b); the Pukekohe growing 
   2020): about 11% of the crude and 43 kg of CO2 a barrel, inside Downey's 8-12% and Jing et al.'s
   13.9-62.1 kg. Mass and carbon close (IPCC carbon contents, scaled by one factor of 0.974). Crude
   comes from a field's tanks (`PetroleumField::take_oil`).
-- **Left:** the gas plant (LPG and condensate from raw gas; gas-plant own use is not sourced), a
-  reformer for petrol (needs a cited reformate yield), the fuel depot and vehicles and generators
-  buying fuel (`regional/energy.rs`), campaigns that stop on full tanks, and payment (Task 7).
+- **Done 2026-10-23** (`regional/industry/gas_plant.rs`, in `IndustryChain`): each step every
+  field's gas goes to a gas plant that burns US plants' own use, 1.17% of the gas (EIA Natural Gas
+  Annual 2024, `us_gas_plant_fuel_share_of_marketed`), and splits the rest into sales gas and LPG
+  at Kupe's 90,000 t of LPG per 20 PJ of sales gas; carbon closes on IPCC contents, scaled once.
+  The products wait in `IndustryChain::gas`. The diesel depot and its payment are done (D58, Task 7).
+- **Left:** a reformer for petrol (needs a cited reformate yield); campaigns that stop on full
+  tanks. The plant's LPG is a product for sale, never delivered to homes on its own (the owner,
+  2026-10-23: homes start with a log burner and wetback, and a villager who wants gas buys a stove
+  and bottles themselves, through upstream buying).
 
 ### 4d. Task 6: jobs, trades, shifts, maintenance (D39) — upstream first
 
@@ -555,5 +564,5 @@ invertebrate densities, fire danger indices (see each report's "unsourced" secti
   push; the `dependency audit` CI job replaced it.
 - **Firecrawl credits ran out** on 2026-10-12. WebSearch and the TinyFish fetcher still work for
   sources; the container's own network blocks most hosts.
-- **Persist digests.** `WEEK_DIGEST` is `679abc7e…8322`; the planetary topology pin is
+- **Persist digests.** `WEEK_DIGEST` is `577e4215…540a`; the planetary topology pin is
   `e4ece246…73e2`. Any change that moves either is a behaviour change and must say so.

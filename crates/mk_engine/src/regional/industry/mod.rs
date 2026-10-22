@@ -36,6 +36,7 @@ pub mod fishery;
 pub mod flow_duration;
 pub mod food_processing;
 pub mod forestry;
+pub mod gas_plant;
 pub mod grid;
 pub mod hydro;
 pub mod hydro_sites;
