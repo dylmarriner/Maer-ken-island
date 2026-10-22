@@ -24,8 +24,13 @@
 //! Leaked methane oxidises to CO₂ in the air with its perturbation lifetime,
 //! 11.8 years (IPCC AR6 WG1, Table 7.15; [`super::chain`]).
 //!
-//! Not modelled (D58): water cut, reservoir pressure, wells and their
-//! blowouts (there is no per-well rate to count wells by), and the leaked
+//! A field drills as many wells as its highest daily oil rate needs at the
+//! average US oil well's 29 bbl/day in 2024 (EIA 2025), and counts its
+//! blowouts from BOEM's (2014) frequencies per development well drilled
+//! and per oil-producing well-year ([`PetroleumField::drill_for`]).
+//!
+//! Not modelled (D58): water cut, reservoir pressure, what a blowout
+//! spills or stops (no source gives an onshore blowout's volume), and the leaked
 //! methane's warming (the planet's air carries no methane to add it to,
 //! and an island's leaks would change a planet-wide concentration by far
 //! less than a part per billion). Who drills and runs the field is Task 6;
@@ -41,6 +46,9 @@ use crate::validation::{ReferenceDomain, ReferenceLibrary};
 
 /// A US barrel: 42 US gallons of 3.785411784 litres, exact by definition.
 pub const BARREL_M3: f64 = 42.0 * 3.785_411_784e-3;
+
+/// Days in the year the decline rate is quoted per.
+const DAYS_PER_YEAR: f64 = 365.25;
 /// Joules in a petajoule.
 const GJ_PER_PJ: f64 = 1.0e6;
 
@@ -69,6 +77,14 @@ pub struct PetroleumModel {
     /// Methane's perturbation lifetime in the air (years): the e-folding
     /// time of an emitted pulse (IPCC AR6 WG1, Table 7.15).
     pub methane_lifetime_years: f64,
+    /// The average US oil well's output in 2024 (bbl/day; EIA 2025), the
+    /// rate each well on the island is drilled for.
+    pub well_bbl_per_day: f64,
+    /// Blowouts per development well drilled (BOEM 2014, US Gulf of
+    /// Mexico 1980-2011).
+    pub blowout_per_well_drilled: f64,
+    /// Blowouts per oil-producing well-year (BOEM 2014, same record).
+    pub blowout_per_well_year: f64,
 }
 
 /// Why the model could not be read.
@@ -131,6 +147,12 @@ impl PetroleumModel {
                 .point()
                 .ok_or_else(|| MissingReference(key.into()))
         };
+        // The US Gulf of Mexico's column: the larger record of the two.
+        let hazard = |key: &str, row: &str| {
+            table(key)?
+                .get(row, "us_gom")
+                .ok_or_else(|| MissingReference(format!("{key}/{row}")))
+        };
         Ok(Self {
             analogues,
             decline_per_year: decline / 100.0,
@@ -139,6 +161,9 @@ impl PetroleumModel {
             gas_carbon_kg_per_gj: ipcc_cell("Natural Gas", "carbon_kg_per_gj")?,
             methane_loss_fraction: point("methane_loss_us_supply_chain")? / 100.0,
             methane_lifetime_years: point("methane_perturbation_lifetime_yr")?,
+            well_bbl_per_day: point("us_average_oil_well_rate")?,
+            blowout_per_well_drilled: hazard("blowout_per_well_drilled", "development")?,
+            blowout_per_well_year: hazard("blowout_per_well_year_production", "oil_production")?,
         })
     }
 
@@ -172,6 +197,17 @@ pub struct PetroleumField {
     pub tank_gas_gj: f64,
     /// Methane leaked so far (kg C).
     pub leaked_kgc: f64,
+    /// Wells drilled: enough, at the average US oil well's rate, for the
+    /// field's highest daily oil rate so far. A well is never abandoned.
+    #[serde(default)]
+    pub wells: u32,
+    /// The expected number of blowouts so far, from wells drilled and
+    /// well-years produced.
+    #[serde(default)]
+    pub blowout_expectation: f64,
+    /// Blowouts so far: each time the expectation passes a whole number.
+    #[serde(default)]
+    pub blowouts: u32,
 }
 
 /// What one step of production gave.
@@ -215,6 +251,9 @@ impl PetroleumField {
             tank_oil_m3: 0.0,
             tank_gas_gj: 0.0,
             leaked_kgc: 0.0,
+            wells: 0,
+            blowout_expectation: 0.0,
+            blowouts: 0,
         })
     }
 
@@ -323,11 +362,34 @@ impl PetroleumField {
                 ));
             }
         }
+        self.drill_for(oil_m3 / BARREL_M3 / (dt_years * DAYS_PER_YEAR), dt_years, model);
         Production {
             oil_m3,
             gas_gj,
             tanked_kgc,
             leaked_kgc,
         }
+    }
+
+    /// Drills the wells a daily oil rate needs, and counts their blowouts.
+    ///
+    /// Each new well carries the per-well-drilled hazard and every well the
+    /// per-well-year one over `dt_years`; a blowout happens each time their
+    /// sum passes a whole number, so the count is deterministic and its
+    /// long-run rate is the record's.
+    pub fn drill_for(&mut self, bbl_per_day: f64, dt_years: f64, model: &PetroleumModel) {
+        if model.well_bbl_per_day > 0.0 && bbl_per_day > 0.0 {
+            let needed = (bbl_per_day / model.well_bbl_per_day).ceil() as u32;
+            if needed > self.wells {
+                self.blowout_expectation +=
+                    f64::from(needed - self.wells) * model.blowout_per_well_drilled;
+                self.wells = needed;
+            }
+        }
+        if dt_years > 0.0 {
+            self.blowout_expectation +=
+                f64::from(self.wells) * dt_years * model.blowout_per_well_year;
+        }
+        self.blowouts = self.blowout_expectation.floor() as u32;
     }
 }

@@ -191,3 +191,36 @@ fn no_time_no_production() {
     }
     assert!(ledger.entries().is_empty());
 }
+
+#[test]
+fn a_field_drills_the_wells_its_rate_needs_and_counts_their_blowouts() {
+    let m = &base().model;
+    // EIA 2025: the average US oil well, 29 b/d in 2024; BOEM 2014, US Gulf
+    // of Mexico: 1.71e-3 blowouts per development well, 9.88e-5 per
+    // oil-producing well-year.
+    assert_eq!(m.well_bbl_per_day, 29.0);
+    assert_eq!(m.blowout_per_well_drilled, 0.00171);
+    assert_eq!(m.blowout_per_well_year, 9.88e-5);
+    let mut field = fields()
+        .into_iter()
+        .max_by(|a, b| a.ultimate_oil_m3.total_cmp(&b.ultimate_oil_m3))
+        .unwrap();
+    // Choked to the refinery's 500 bbl a day for 30 years.
+    let year_m3 = 500.0 * BARREL_M3 * 365.25;
+    for _ in 0..30 {
+        field.produce_up_to(1.0, year_m3, m, &mut Ledger::new());
+    }
+    assert_eq!(field.wells, 18, "500 / 29 rounded up");
+    let expected = 18.0 * 0.00171 + 18.0 * 30.0 * 9.88e-5;
+    assert!((field.blowout_expectation - expected).abs() < 1e-12);
+    assert_eq!(field.blowouts, 0);
+    // A well is never abandoned, and the count only passes whole numbers.
+    field.drill_for(0.0, 600.0, m);
+    assert_eq!(field.wells, 18);
+    assert_eq!(field.blowouts, field.blowout_expectation.floor() as u32);
+    assert!(field.blowouts >= 1);
+    // No time, no wells.
+    let mut idle = fields().into_iter().next().unwrap();
+    idle.produce_up_to(0.0, year_m3, m, &mut Ledger::new());
+    assert_eq!((idle.wells, idle.blowouts), (0, 0));
+}

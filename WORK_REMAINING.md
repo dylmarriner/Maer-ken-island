@@ -43,7 +43,7 @@ this list holds the current state. The evidence for what is *done* is in
 | Living world | D31: NPP ignores soil nutrients | Open | Regional soils model and data |
 | Runtime | Phase 4 Task 2b: deep-time spin-up | **Done** (2026-10-14) | — |
 | Industry | Phase 4b Task 1 remainder: reference tables | Done 2026-10-14 (nine packs); gaps listed in §4a | A few items (see §4a) |
-| Industry | Phase 4b Task 4: oil and gas field (D14, D19) | Fields, decline and carbon done 2026-10-14 (D58); in `IslandLife` with the diesel depot 2026-10-22; wells, water cut, spills open | Per-well rate, water-cut series |
+| Industry | Phase 4b Task 4: oil and gas field (D14, D19) | Fields, decline and carbon done 2026-10-14 (D58); in `IslandLife` with the diesel depot 2026-10-22; wells and blowouts 2026-10-23; water cut, spills open | Water-cut series; a blowout's spill volume |
 | Industry | Phase 4b Task 5: refinery, gas plant, fuel depot (D16) | Topping refinery done 2026-10-14; diesel depot 2026-10-22 (D58); gas plant 2026-10-23; reformer and LPG deliveries open | Reformate yield |
 | Industry | Phase 4b Task 6: jobs, trades, maintenance (D39) | Open | Upstream human-runtime change first |
 | Industry | Phase 4b Task 7: money, enterprises, payroll | Money, payroll and metered bills done 2026-10-18 (`regional/economy/`, D61, D62; `tests/island_economy.rs`). In `IslandLife` 2026-10-22 (`economy/island.rs`: deposits, Gem Petroleum selling the depot's diesel, monthly loans, closes, dividends, money audit); the petroleum business's staff and payslips, household bills, buying and selling homes open | Task 6 staff; upstream buying |
@@ -258,9 +258,11 @@ trade, a 2-3 bedroom cottage's floor area (Task 6 and 7b); the Pukekohe growing 
   fuel; a depot fills the estate's diesel back to the scenario's opening stock from the refinery's
   distillate, and generators and vehicles burn that share as material carbon
   (`energy::IslandFuel`, `book_island_burn`).
-- **Left (D58):** a plateau, reservoir pressure and water cut; wells, workover crews and blowouts
-  (the frequencies are in the pack, but there is no per-well rate to count wells by); spills and their
-  harm to shellfish; methane warming (negligible at island scale, Etminan et al. 2016);
+- **Done 2026-10-23:** wells and blowouts (`PetroleumField::drill_for`): wells for the field's
+  highest daily rate at the average US oil well's 29 bbl/day (EIA 2025), blowouts counted from
+  BOEM's (2014) per-well-drilled and per-well-year frequencies.
+- **Left (D58):** a plateau, reservoir pressure and water cut; workover crews; what a blowout
+  spills (no onshore spill volume found) and its harm to shellfish; methane warming (negligible at island scale, Etminan et al. 2016);
   who runs the field (Task 6). D19 (drill rigs cannot be made on the island) stays the owner's call;
   the default is imported equipment, as D15 accepts imported plant.
 

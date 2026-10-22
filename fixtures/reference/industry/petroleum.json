@@ -69,6 +69,11 @@
       "key": "ipcc_ar6_wg1_ch7",
       "citation": "IPCC (2021). Climate Change 2021: The Physical Science Basis. WG1, Chapter 7 'The Earth's Energy Budget, Climate Feedbacks and Climate Sensitivity', Section 7.6 and Table 7.15 (printed p. 1017) (ipcc.ch/report/ar6/wg1/downloads/report/IPCC_AR6_WGI_Chapter07.pdf); retrieved 2026-10-14.",
       "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "eia_wdr2025",
+      "citation": "U.S. Energy Information Administration (2025). The Distribution of U.S. Oil and Natural Gas Wells by Production Rate, with Data Through 2024. December 2025, Frequently Asked Questions, p. 8 (data from Enverus).",
+      "licence": "US Government work, public domain"
     }
   ],
   "items": [
@@ -778,6 +783,17 @@
         "point": 9.1
       },
       "note": "Table 6.2 (printed p. 836), row 'AR6 assessed value': Total Chemical Lifetime '9.7 ± 1.1', Soil Lifetime '135 ± 44', Total Atmospheric Lifetime '9.1 ± 0.9' years ('Based on top-down with uncertainty estimate from AR5'; footnote: 'Uncertainties indicate ± 1 standard deviation'). CMIP6 (Stevenson et al.) total 8.0 (7.7-8.2); bottom-up 8.0 (6.3-10.0)."
+    },
+    {
+      "key": "us_average_oil_well_rate",
+      "description": "Average oil production of a producing US oil well in 2024",
+      "unit": "bbl/day per well",
+      "source": "eia_wdr2025",
+      "confidence": "high",
+      "value": {
+        "point": 29
+      },
+      "note": "'In 2024, the average oil well produced 29 b/d (or about 39 BOE/d, if including natural gas) ... 78% of the more than 918,000 U.S. wells produced 15 BOE/d or less, and 8% of the wells produced more than 100 BOE/d.' An oil well has a gas-oil ratio of 6,000 cf/b or less."
     }
   ]
 }
