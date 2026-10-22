@@ -33,7 +33,7 @@ use super::economy::market::Tariffs;
 use super::economy::money::FinanceReference;
 use super::energy::{solar_output_kw, EstateEnergy, FuelKind, ROOM_LIGHT_LUX};
 use super::estate_layout::{Space, SpaceId};
-use super::household_gas::{HouseholdGas, HouseholdGasSpec};
+use super::wood_burner::{WoodBurner, WoodBurnerSpec};
 use super::household_water::{
     installed_capacity_kg, storage_needed_kg, HouseholdWater, HouseholdWaterSpec,
 };
@@ -332,7 +332,7 @@ pub struct IslandLifeSnapshot {
     #[serde(default)]
     pub water_trips: BTreeMap<String, WaterTrip>,
     #[serde(default)]
-    pub household_gas: Option<HouseholdGas>,
+    pub wood_burner: Option<WoodBurner>,
     #[serde(default)]
     pub foraging: BTreeMap<String, ForageTrip>,
     #[serde(default)]
@@ -445,8 +445,8 @@ pub struct IslandLife {
     pub household_water: Option<HouseholdWater>,
     /// Who is walking to water, or home with it (realism programme R1b).
     pub water_trips: BTreeMap<String, WaterTrip>,
-    /// The kitchen stove's bottled LPG (realism programme R4, D59).
-    pub household_gas: Option<HouseholdGas>,
+    /// The house's log burner with its wetback (realism programme R4, D59).
+    pub wood_burner: Option<WoodBurner>,
     /// Who is out gathering their next meal (realism programme R3).
     pub foraging: BTreeMap<String, ForageTrip>,
     /// The oil fields and the refinery, run as one plant (Phase 4b Task 4,
@@ -776,7 +776,7 @@ impl IslandLife {
             water_cell,
             household_water: None,
             water_trips: BTreeMap::new(),
-            household_gas: None,
+            wood_burner: None,
             foraging: BTreeMap::new(),
             industry: None,
             chain_models: None,
@@ -814,9 +814,9 @@ impl IslandLife {
         if life.household_water.is_none() {
             life.install_household_water()?;
         }
-        if life.household_gas.is_none() {
-            // Saved before the stove burned gas, or newly built.
-            life.install_household_gas()?;
+        if life.wood_burner.is_none() {
+            // Saved before the house had its log burner, or newly built.
+            life.install_wood_burner()?;
         }
         // Saved before the island ran its oil fields, or newly built.
         life.install_industry()?;
@@ -882,7 +882,7 @@ impl IslandLife {
             water_cell: self.water_cell,
             household_water: self.household_water.clone(),
             water_trips: self.water_trips.clone(),
-            household_gas: self.household_gas.clone(),
+            wood_burner: self.wood_burner.clone(),
             foraging: self.foraging.clone(),
             industry: self.industry.clone(),
             money: self.money.clone(),
@@ -962,7 +962,7 @@ impl IslandLife {
             water_cell: snapshot.water_cell,
             household_water: snapshot.household_water,
             water_trips: snapshot.water_trips,
-            household_gas: snapshot.household_gas,
+            wood_burner: snapshot.wood_burner,
             foraging: snapshot.foraging,
             industry: snapshot.industry,
             chain_models: None,
@@ -980,9 +980,9 @@ impl IslandLife {
             // Saved before the house had a tank.
             life.install_household_water()?;
         }
-        if life.household_gas.is_none() {
-            // Saved before the stove burned gas, or newly built.
-            life.install_household_gas()?;
+        if life.wood_burner.is_none() {
+            // Saved before the house had its log burner, or newly built.
+            life.install_wood_burner()?;
         }
         // Saved before the island ran its oil fields, or newly built.
         life.install_industry()?;
@@ -2545,35 +2545,27 @@ impl IslandLife {
             .count()
     }
 
-    /// Put the typical home's bottled LPG on the kitchen stove, full.
-    fn install_household_gas(&mut self) -> Result<(), IslandLifeError> {
-        let spec = HouseholdGasSpec::from_reference(self.labour.library())
+    /// Light the house's log burner (the owner's rule, 2026-10-23).
+    fn install_wood_burner(&mut self) -> Result<(), IslandLifeError> {
+        let spec = WoodBurnerSpec::from_reference(self.labour.library())
             .map_err(|e| IslandLifeError::Labour(LabourError::MissingReference(e)))?;
-        self.household_gas = Some(HouseholdGas::new(spec));
+        self.wood_burner = Some(WoodBurner::new(spec));
         Ok(())
     }
 
-    /// The stove for `dt_s`: while anyone is at home it burns the house's
-    /// average cooking gas, carbon to the air (D59). With the bottles empty
-    /// the household cooks on a wood fire from the store's air-dry wood.
-    fn household_gas_step(&mut self, dt_s: f64) -> Result<(), IslandLifeError> {
-        if self.household_gas.is_none() {
+    /// The log burner for `dt_s`: while anyone is at home it cooks, heats
+    /// the house and the hot water through its wetback at the rates HEEP
+    /// measured, from wood someone has split (D63), its carbon to the air
+    /// (D59). With no split wood the burner is cold.
+    fn wood_burner_step(&mut self, dt_s: f64) -> Result<(), IslandLifeError> {
+        let Some(burner) = self.wood_burner.as_ref() else {
+            return Ok(());
+        };
+        let wanted = burner.wanted_kg(self.people_at_home() > 0, dt_s);
+        if wanted <= 0.0 {
             return Ok(());
         }
-        let people = self.people_at_home();
         self.audited(|life, ledger| {
-            let Some(gas) = life.household_gas.as_mut() else {
-                return;
-            };
-            let short_before = gas.without_gas_s;
-            let kg = gas.cook(people > 0, dt_s);
-            super::energy::book_fossil_carbon(ledger, kg * gas.spec.carbon_per_kg());
-            // The bottles are empty: cook on a wood fire from the store.
-            let short_s = gas.without_gas_s - short_before;
-            if short_s <= 0.0 {
-                return;
-            }
-            let wanted = gas.firewood_wanted_kg(people, short_s);
             // Only wood someone has split will burn (D63).
             let have = life
                 .split_wood_kg
@@ -2585,8 +2577,8 @@ impl IslandLife {
                     .expect("no more than the store holds");
                 life.split_wood_kg = (have - burned).max(0.0);
             }
-            if let Some(gas) = life.household_gas.as_mut() {
-                gas.record_fire(wanted, burned, short_s);
+            if let Some(burner) = life.wood_burner.as_mut() {
+                burner.record(wanted, burned, dt_s);
             }
         })
     }
@@ -3421,7 +3413,7 @@ impl IslandLife {
             self.mine(human_s as f64)?;
             self.build(human_s as f64)?;
             self.household_water_step(human_s as f64)?;
-            self.household_gas_step(human_s as f64)?;
+            self.wood_burner_step(human_s as f64)?;
             self.industry_step(human_s as f64)?;
             self.economy_step()?;
             self.meals()?;
@@ -3530,7 +3522,7 @@ impl IslandLife {
         h.update(canonical(&self.skills).as_bytes());
         h.update(canonical(&self.water_drunk_kg).as_bytes());
         h.update(canonical(&self.household_water).as_bytes());
-        h.update(canonical(&self.household_gas).as_bytes());
+        h.update(canonical(&self.wood_burner).as_bytes());
         h.update(canonical(&self.water_trips).as_bytes());
         h.update(canonical(&self.foraging).as_bytes());
         h.update(canonical(&self.industry).as_bytes());
@@ -4120,21 +4112,17 @@ mod tests {
         assert_eq!(restored.state_digest(), life.state_digest());
     }
 
-    /// With the bottles empty the household cooks on a wood fire (R4): it
-    /// burns the packs' firewood per person at home from the store's
-    /// air-dry wood once it has been split (D63), its carbon to the air
-    /// through an audit, and with no split wood the time without any
-    /// cooking fuel is counted.
+    /// The log burner cooks, heats and runs the wetback on the house's
+    /// air-dry wood at HEEP's rates once it has been split (D63), its carbon
+    /// to the air through an audit; with no split wood it is cold.
     #[test]
-    fn with_the_gas_gone_the_kitchen_burns_stored_wood_at_the_measured_rate() {
+    fn the_log_burner_burns_split_wood_at_heeps_rate() {
         let mut scenario =
             IslandScenario::load(&repo("fixtures/island/default_scenario.json")).unwrap();
         scenario.estate_patch.tree_cap = 200;
         let canon = Arc::new(CanonLocked::load(&repo("fixtures/island/canon.json")).unwrap());
         let mut life = IslandLife::bootstrap(scenario, canon).expect("the island bootstraps");
-        let people = life.people_at_home();
-        assert!(people > 0, "the founders start at home");
-        life.household_gas.as_mut().unwrap().stored_kg = 0.0;
+        assert!(life.people_at_home() > 0, "the founders start at home");
         let (cell, area) = (
             life.placed.location,
             life.domain.cell_area_m2(DomainLevel::Medium),
@@ -4146,39 +4134,29 @@ mod tests {
         })
         .unwrap();
         let wood = life.materials.stock_kg(Material::Wood);
+        let cold = life.wood_burner.as_ref().unwrap().cold_s;
 
         // Logs nobody has split will not burn.
-        life.household_gas_step(3_600.0).unwrap();
+        life.split_wood_kg = 0.0;
+        life.wood_burner_step(3_600.0).unwrap();
         assert_eq!(life.materials.stock_kg(Material::Wood), wood, "unsplit");
-        let gas = life.household_gas.clone().unwrap();
-        assert!((gas.without_fuel_s - 3_600.0).abs() < 1e-9);
-        life.household_gas.as_mut().unwrap().without_fuel_s = 0.0;
+        let burner = life.wood_burner.clone().unwrap();
+        assert!((burner.cold_s - cold - 3_600.0).abs() < 1e-9);
 
         life.split_wood_kg = wood;
         let audits = life.audits_closed;
-        life.household_gas_step(3_600.0).unwrap();
-        let gas = life.household_gas.clone().unwrap();
-        let rate = gas.spec.firewood_kg_per_person_day;
+        life.wood_burner_step(3_600.0).unwrap();
+        let after = life.wood_burner.clone().unwrap();
         let burned = wood - life.materials.stock_kg(Material::Wood);
-        let wanted = rate * people as f64 / 24.0;
+        let wanted = after.spec.burn_kg_per_s() * 3_600.0;
         assert!(
             (burned - wanted).abs() < 1e-9,
             "burned {burned} kg of {wanted}"
         );
-        assert!((gas.wood_burned_kg - burned).abs() < 1e-9);
+        assert!((after.wood_burned_kg - burner.wood_burned_kg - burned).abs() < 1e-9);
         assert!((life.split_wood_kg - (wood - burned)).abs() < 1e-9);
-        assert_eq!(gas.without_fuel_s, 0.0, "there was wood");
+        assert_eq!(after.cold_s, burner.cold_s, "there was wood");
         assert_eq!(life.audits_closed, audits + 1, "the fire closed its books");
-
-        // No wood left: an hour with nothing to cook on.
-        let left = life.materials.stock_kg(Material::Wood);
-        life.audited(|life, ledger| {
-            life.materials.burn(Material::Wood, left, ledger).unwrap();
-        })
-        .unwrap();
-        life.household_gas_step(3_600.0).unwrap();
-        let gas = life.household_gas.clone().unwrap();
-        assert!((gas.without_fuel_s - 3_600.0).abs() < 1e-9);
     }
 
     /// A founder who chooses to build, outdoors at the estate, frames the
