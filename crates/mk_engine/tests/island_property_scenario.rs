@@ -12,7 +12,7 @@ use mk_engine::regional::industry::hydro_sites::{ESTATE_HYDRO_KW, TOWN_HYDRO_KW}
 use mk_engine::regional::physical::RegionalPhysicalState;
 use mk_engine::regional::property::{
     bootstrap_regional_property, choose_regional_estate_location, estate_patch_spec,
-    place_regional_estate, EstatePatchError, PlacedEstate,
+    place_regional_estate, town_site, EstatePatchError, PlacedEstate,
 };
 use mk_island::{DomainLevel, EstatePatchConfig, IslandDomain, IslandScenario};
 
@@ -170,6 +170,36 @@ fn placement_is_deterministic_on_dry_buildable_land_beside_a_river() {
     );
     // The layout stands on the patch, which is the block.
     assert_eq!(b.placed.layout.patch, b.placed.patch);
+}
+
+#[test]
+fn the_town_stands_on_dry_land_nearest_its_powerhouse_outside_the_estate() {
+    let b = base();
+    let hydro = b
+        .placed
+        .hydro
+        .as_ref()
+        .expect("the estate has a hydro site");
+    let site = town_site(&b.physical, &b.ecology, &b.domain, hydro, b.placed.location);
+    let Some(town) = &hydro.town else {
+        assert_eq!(site, None, "no town plant, no town");
+        return;
+    };
+    let (row, col) = site.expect("dry land near the town plant");
+    let (er, ec) = b.placed.location;
+    assert!(!((er..=er + 1).contains(&row) && (ec..=ec + 1).contains(&col)));
+    assert!(*b.physical.geophysics.elevation_m.get(row, col) > 0.0);
+    // The plant's own cell is a river; the town stands within a few cells.
+    let (pr, pc) = town.powerhouse_cell;
+    assert!(
+        row.abs_diff(pr) <= 3 && col.abs_diff(pc) <= 3,
+        "the town is near its powerhouse"
+    );
+    // The same island puts the town in the same place.
+    assert_eq!(
+        town_site(&b.physical, &b.ecology, &b.domain, hydro, b.placed.location),
+        Some((row, col))
+    );
 }
 
 #[test]
