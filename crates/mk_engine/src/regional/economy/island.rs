@@ -6,7 +6,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::enterprise::{Enterprise, EnterpriseError, MonthClose};
-use super::money::{founders_shares, FinanceReference, Holder, MoneyError, MoneyLedger};
+use super::money::{founders_shares, Cents, FinanceReference, Holder, MoneyError, MoneyLedger};
 
 /// The founders, who own every business (the owner, 2026-10-15).
 pub const FOUNDERS: [&str; 2] = ["Gem-D", "Gem-K"];
@@ -76,6 +76,28 @@ impl IslandEconomy {
         self.enterprises.iter().find(|e| e.name == name)
     }
 
+    /// The estate buys `cents` of diesel from the petroleum business, the
+    /// founders paying half each (their household is both of theirs). Takes
+    /// what the founders can pay; with no petroleum business nothing moves.
+    pub fn sell_diesel(&mut self, at_s: u64, cents: Cents) -> Result<Cents, IslandEconomyError> {
+        let Some(company) = self.enterprises.iter_mut().find(|e| e.name == PETROLEUM) else {
+            return Ok(0);
+        };
+        let seller = company.holder();
+        let mut paid = 0;
+        for (i, founder) in FOUNDERS.iter().enumerate() {
+            let share = if i == 0 { cents - cents / 2 } else { cents / 2 };
+            let buyer = Holder::Person(founder.to_string());
+            if share > 0 && self.ledger.balance(&buyer) >= share {
+                self.ledger
+                    .transfer(at_s, &buyer, &seller, share, "diesel")?;
+                paid += share;
+            }
+        }
+        company.book_income(paid);
+        Ok(paid)
+    }
+
     /// Run every month that has ended by `now_s`: the bank takes its
     /// instalments, each business closes its month and pays its dividends,
     /// and the ledger must still balance.
@@ -133,6 +155,15 @@ mod tests {
             ]
         );
         assert_eq!(closes[1].profit, 0);
+
+        // The estate's diesel: half from each founder, takings for the month.
+        let before = economy.ledger.balance(&Holder::Person("Gem-D".into()));
+        assert_eq!(economy.sell_diesel(2_600, 1_001).unwrap(), 1_001);
+        assert_eq!(
+            economy.ledger.balance(&Holder::Person("Gem-D".into())),
+            before - 501
+        );
+        assert_eq!(economy.enterprise(PETROLEUM).unwrap().month_income, 1_001);
         assert_eq!(economy.next_month_s, 3_000);
         economy.ledger.audit().unwrap();
     }

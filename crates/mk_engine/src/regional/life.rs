@@ -29,6 +29,7 @@ use mk_island::{
 
 use super::ecology::{RegionalEcologyError, RegionalEcologyState};
 use super::economy::island::{IslandEconomy, IslandEconomyError, PETROLEUM};
+use super::economy::market::Tariffs;
 use super::economy::money::FinanceReference;
 use super::energy::{solar_output_kw, EstateEnergy, FuelKind, ROOM_LIGHT_LUX};
 use super::estate_layout::{Space, SpaceId};
@@ -439,6 +440,8 @@ pub struct IslandLife {
     /// The founders' money, the bank and the businesses (Phase 4b Task 7,
     /// D61, D62).
     pub money: Option<IslandEconomy>,
+    /// Sourced prices, loaded with the books.
+    tariffs: Option<Tariffs>,
     topology: GridTopology,
     /// How the living world was spun up before the founders arrived, when
     /// this island was bootstrapped rather than restored (a record, not
@@ -756,6 +759,7 @@ impl IslandLife {
             industry: None,
             chain_models: None,
             money: None,
+            tariffs: None,
             topology,
             spin_up,
         };
@@ -933,6 +937,7 @@ impl IslandLife {
             industry: snapshot.industry,
             chain_models: None,
             money: snapshot.money,
+            tariffs: None,
             topology,
             spin_up: None,
         };
@@ -2464,6 +2469,10 @@ impl IslandLife {
     /// Open the books if this island has none: the founders' sourced
     /// deposits, and a business for each industry the island runs.
     fn install_economy(&mut self) -> Result<(), IslandLifeError> {
+        let tariffs = Tariffs::from_reference(self.labour.library()).map_err(|e| {
+            IslandLifeError::Labour(LabourError::MissingReference(format!("{e:?}")))
+        })?;
+        self.tariffs = Some(tariffs);
         if self.money.is_some() {
             return Ok(());
         }
@@ -2519,6 +2528,7 @@ impl IslandLife {
         if self.industry.as_ref().is_none_or(|c| c.fields.is_empty()) {
             return Ok(());
         }
+        let mut delivered_l = 0.0;
         self.audited(|life, ledger| {
             let (Some(chain), Some(models)) = (life.industry.as_mut(), life.chain_models.as_ref())
             else {
@@ -2532,7 +2542,20 @@ impl IslandLife {
             let (tonnes, kgc) = chain.take(Product::Distillate, wanted_l / per_t);
             life.energy
                 .deliver_island_fuel(FuelKind::Diesel, tonnes * per_t, kgc);
-        })
+            delivered_l = tonnes * per_t;
+        })?;
+        // The estate pays the petroleum business for the diesel at the pump
+        // price (Task 7).
+        let now_s = self.sim_time_s;
+        if let (Some(money), Some(tariffs)) = (self.money.as_mut(), self.tariffs.as_ref()) {
+            let cents = tariffs.diesel_price(delivered_l);
+            if cents > 0 {
+                money
+                    .sell_diesel(now_s, cents)
+                    .map_err(IslandLifeError::Economy)?;
+            }
+        }
+        Ok(())
     }
 
     /// Put a rainwater tank on the house: its roof is the house's footprint,
@@ -3612,6 +3635,19 @@ mod tests {
             .island;
         assert!((island.litres - half).abs() < 1e-6, "{island:?}");
         assert!(island.kgc > 0.0);
+        // The estate paid the petroleum business for it at the pump price.
+        let tariffs = Tariffs::from_reference(life.labour.library()).unwrap();
+        let takings = life
+            .money
+            .as_ref()
+            .and_then(|m| m.enterprise(PETROLEUM))
+            .map(|e| e.month_income)
+            .unwrap();
+        let expected = tariffs.diesel_price(half) as f64;
+        assert!(
+            (takings as f64 - expected).abs() <= 24.0,
+            "{takings} vs {expected}"
+        );
 
         // The generator burns it: material carbon to the air, audited.
         let before = life.energy.island_fuel_kgc();
@@ -3661,6 +3697,8 @@ mod tests {
         let economy = life.money.clone().unwrap();
         let closes = &economy.enterprise(PETROLEUM).unwrap().closes;
         assert_eq!(closes.len(), 1, "one month closed");
+        let tariffs = Tariffs::from_reference(life.labour.library()).unwrap();
+        assert_eq!(tariffs.diesel_cents_per_litre, 321.7);
         assert_eq!(economy.next_month_s, life.sim_time_s + month_s);
         economy.ledger.audit().unwrap();
 

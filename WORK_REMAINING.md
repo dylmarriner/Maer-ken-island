@@ -46,7 +46,7 @@ this list holds the current state. The evidence for what is *done* is in
 | Industry | Phase 4b Task 4: oil and gas field (D14, D19) | Fields, decline and carbon done 2026-10-14 (D58); in `IslandLife` with the diesel depot 2026-10-22; wells, water cut, spills open | Per-well rate, water-cut series |
 | Industry | Phase 4b Task 5: refinery, gas plant, fuel depot (D16) | Topping refinery done 2026-10-14; gas plant, reformer, depot open | Reformate yield; gas-plant own use |
 | Industry | Phase 4b Task 6: jobs, trades, maintenance (D39) | Open | Upstream human-runtime change first |
-| Industry | Phase 4b Task 7: money, enterprises, payroll | Money, payroll and metered bills done 2026-10-18 (`regional/economy/`, D61, D62; `tests/island_economy.rs`). In `IslandLife` 2026-10-22 (`economy/island.rs`: deposits, Gem Petroleum, monthly loans, closes, dividends, money audit); the petroleum business's sales, staff and payslips, household bills, buying and selling homes open | Task 6 staff; a cited diesel price; upstream buying |
+| Industry | Phase 4b Task 7: money, enterprises, payroll | Money, payroll and metered bills done 2026-10-18 (`regional/economy/`, D61, D62; `tests/island_economy.rs`). In `IslandLife` 2026-10-22 (`economy/island.rs`: deposits, Gem Petroleum selling the depot's diesel, monthly loans, closes, dividends, money audit); the petroleum business's staff and payslips, household bills, buying and selling homes open | Task 6 staff; upstream buying |
 | Industry | Phase 4b Task 7b: food and timber chains | Open | Task 2 catalogue; crop/livestock data |
 | Industry | Phase 4b Task 8: town and workforce | Open; the owner decided the town starts at each enterprise's smallest staff and grows (2026-10-15, §4g) | Demographic tables; a sourced minimum staff per enterprise |
 | Industry | Phase 4b Task 9: dashboard pages, year acceptance | Open | Tasks 4-8 |
@@ -296,8 +296,9 @@ trade, a 2-3 bedroom cottage's floor area (Task 6 and 7b); the Pukekohe growing 
   state, snapshot and digest. The books open with each founder's sourced deposit and a Gem
   Petroleum business, owned 50/50, when the island has oil. Each local month the bank takes its
   instalments, every business closes its month and pays dividends, and the money audit must close.
-- **Left:** the petroleum business sells the depot's diesel (no cited New Zealand diesel price
-  in the packs yet), hires and pays staff (Task 6), and writes payslips to the person's folder;
+  The estate pays Gem Petroleum for each depot delivery at MBIE's weekly adjusted retail diesel
+  price (16 October 2026, 321.7 c/L, `industry/prices.json`), the founders half each.
+- **Left:** the petroleum business hires and pays staff (Task 6), and writes payslips to the person's folder;
   household billing once the town has households that buy power and water (the founders' estate
   makes its own, Task 8); Gem-D and Gem-K offering
   homes and businesses for sale and villagers deciding to buy (upstream first).

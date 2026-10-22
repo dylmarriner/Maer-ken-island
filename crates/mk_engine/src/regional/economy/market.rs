@@ -7,6 +7,8 @@
 //! - water at Watercare's 2026-27 volumetric charge, and wastewater on
 //!   78.5% of the water metered plus a twelfth of its fixed yearly charge.
 //!
+//! Diesel sells at MBIE's weekly adjusted retail price (16 October 2026).
+//!
 //! All prices include GST, which on the island goes to the supplier: there
 //! is no government to collect it (D62).
 
@@ -24,6 +26,8 @@ pub struct Tariffs {
     /// Share of the water metered that is charged as wastewater.
     pub wastewater_share: f64,
     pub wastewater_fixed_cents_per_year: f64,
+    /// Diesel at the pump (MBIE's weekly monitoring, 16 October 2026).
+    pub diesel_cents_per_litre: f64,
 }
 
 impl Tariffs {
@@ -41,12 +45,18 @@ impl Tariffs {
             wastewater_cents_per_m3: point("wastewater_volumetric_2026_27")? * cents,
             wastewater_share: point("wastewater_share_of_water_2026_27")?,
             wastewater_fixed_cents_per_year: point("wastewater_fixed_2026_27")? * cents,
+            diesel_cents_per_litre: point("diesel_retail_nz_2026_10_16")? * cents,
         })
     }
 
     /// A month's electricity bill for `kwh` used.
     pub fn electricity_bill(&self, kwh: f64) -> Cents {
         (kwh.max(0.0) * self.electricity_cents_per_kwh).round() as Cents
+    }
+
+    /// What `litres` of diesel cost at the pump.
+    pub fn diesel_price(&self, litres: f64) -> Cents {
+        (litres.max(0.0) * self.diesel_cents_per_litre).round() as Cents
     }
 
     /// A month's water and wastewater bill for `m3` of water used.
