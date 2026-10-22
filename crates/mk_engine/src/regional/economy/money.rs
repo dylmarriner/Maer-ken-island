@@ -130,6 +130,11 @@ impl MoneyLedger {
         self.balances.get(holder).copied().unwrap_or(0)
     }
 
+    /// Every account and what it holds, in holder order.
+    pub fn balances(&self) -> impl Iterator<Item = (&Holder, Cents)> {
+        self.balances.iter().map(|(h, c)| (h, *c))
+    }
+
     /// Everything held in every account.
     pub fn total_held(&self) -> Cents {
         self.balances.values().sum()

@@ -1500,6 +1500,16 @@ async fn properties_economy_and_timeline_serve_what_the_island_really_holds() {
     let body: serde_json::Value = serde_json::from_str(body_of(&response)).unwrap();
     assert_eq!(body["entries"].as_array().map(|e| e.len()), Some(0));
 
+    // Industry: the money's books are open and close, whatever the chain.
+    let (status, response) = get(port, "/api/industry").await;
+    assert_eq!(status, 200, "{response}");
+    let body: serde_json::Value = serde_json::from_str(body_of(&response)).unwrap();
+    let industry = &body["industry"];
+    assert!(industry["chain"].is_boolean(), "{body}");
+    if industry["money"] == true {
+        assert_eq!(industry["money_closes"], true, "{body}");
+    }
+
     // Now build something and look again. Both views have to move, and
     // promptly — not at the next hourly refresh.
     let (lat, lon) = estate_degrees(port).await;
@@ -1682,7 +1692,12 @@ async fn the_three_views_need_an_island() {
     let routes = server::routes(population, ControlAuth::LoopbackOnly);
     let server = tokio::spawn(async move { warp::serve(routes).incoming(listener).run().await });
 
-    for path in ["/api/properties", "/api/economy", "/api/timeline"] {
+    for path in [
+        "/api/properties",
+        "/api/economy",
+        "/api/industry",
+        "/api/timeline",
+    ] {
         let (status, response) = get(port, path).await;
         assert_eq!(status, 404, "{path}: {response}");
         assert!(

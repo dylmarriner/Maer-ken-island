@@ -1064,6 +1064,27 @@ pub fn routes_with_config(
             }
         });
 
+    // The oil chain and the money (Phase 4b Task 9's industry page).
+    let get_industry = warp::path!("api" / "industry")
+        .and(read())
+        .and(with(world.clone()))
+        .map(|world: Option<SimHandle>| match world {
+            None => json(
+                StatusCode::NOT_FOUND,
+                &serde_json::json!({ "errors": ["No island is running, so it has no industry. Start the server with --scenario."] }),
+            ),
+            Some(world) => {
+                let current = world.projection();
+                json(
+                    StatusCode::OK,
+                    &serde_json::json!({
+                        "industry": &*current.industry,
+                        "tick": current.clock.tick,
+                    }),
+                )
+            }
+        });
+
     // What is at one cell, for a click on the map.
     //
     // The map is one pixel per medium cell, so the page can work out which
@@ -1553,6 +1574,7 @@ pub fn routes_with_config(
         .or(get_estate_layout)
         .or(get_properties)
         .or(get_economy)
+        .or(get_industry)
         .or(get_timeline)
         .or(get_conversations)
         .or(get_map)

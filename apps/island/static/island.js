@@ -24,16 +24,19 @@ import {
 const panels = {
   properties: document.getElementById("properties-panel"),
   economy: document.getElementById("economy-panel"),
+  industry: document.getElementById("industry-panel"),
   timeline: document.getElementById("timeline-panel"),
 };
 const bodies = {
   properties: document.getElementById("properties"),
   economy: document.getElementById("economy"),
+  industry: document.getElementById("industry"),
   timeline: document.getElementById("timeline"),
 };
 const notes = {
   properties: document.getElementById("properties-note"),
   economy: document.getElementById("economy-note"),
+  industry: document.getElementById("industry-note"),
   timeline: document.getElementById("timeline-note"),
 };
 const noWorldEl = document.getElementById("no-world");
@@ -197,6 +200,90 @@ async function showEconomy() {
 
   bodies.economy.replaceChildren(parts);
   panels.economy.hidden = false;
+}
+
+/** Cents as dollars, to the cent. */
+function dollars(cents) {
+  const sign = cents < 0 ? "-" : "";
+  const abs = Math.abs(cents);
+  return `${sign}$${Math.floor(abs / 100).toLocaleString()}.${String(abs % 100).padStart(2, "0")}`;
+}
+
+/** A quantity to a sensible number of figures. */
+function qty(x) {
+  return x.toLocaleString(undefined, { maximumFractionDigits: x < 10 ? 2 : 0 });
+}
+
+async function showIndustry() {
+  const { industry: data, tick } = await getJson("/api/industry");
+  const parts = el("div");
+
+  if (!data.chain) {
+    notes.industry.textContent =
+      "This island has no oil or gas field, so no refinery runs and no fuel is made here.";
+  } else {
+    notes.industry.textContent =
+      `${count(data.fields.length, "field", "fields")} producing. ` +
+      `${qty(data.refined_m3)} m³ of crude refined so far; ` +
+      `${qty(data.atmos_ch4_kgc)} kg C of leaked methane still in the air.`;
+    parts.append(el("h3", "Fields"));
+    parts.append(
+      table(
+        ["Analogue", "Where", "Oil left (m³)", "Gas left (GJ)", "Oil produced (m³)", "Gas produced (GJ)", "Leaked (kg C)"],
+        data.fields.map((f) => [
+          f.analogue,
+          `${f.cell[0]}, ${f.cell[1]}`,
+          qty(f.remaining_oil_m3),
+          qty(f.remaining_gas_gj),
+          qty(f.produced_oil_m3),
+          qty(f.produced_gas_gj),
+          qty(f.leaked_kgc),
+        ]),
+      ),
+    );
+    parts.append(el("h3", "In the store"));
+    parts.append(table(["Product", "Tonnes"], data.products_t.map(([p, t]) => [p, qty(t)])));
+  }
+
+  if (!data.money) {
+    parts.append(emptyState("No books yet", "The money ledger opens when the founders' estate does."));
+  } else {
+    parts.append(el("h3", "The money"));
+    parts.append(pair("Issued and lent", dollars(data.issued_cents)));
+    parts.append(pair("Held in every account", dollars(data.held_cents)));
+    parts.append(
+      pair("Do the books close?", data.money_closes ? "Yes" : "No — money held is not money issued"),
+    );
+    parts.append(
+      table(
+        ["Kind", "Holder", "Balance"],
+        data.accounts.map((a) => [a.kind, a.name, dollars(a.cents)]),
+      ),
+    );
+    if (data.loans.length) {
+      parts.append(el("h3", "Loans outstanding"));
+      parts.append(table(["Borrower", "Owed"], data.loans.map((l) => [l.name, dollars(l.cents)])));
+    }
+    if (data.enterprises.length) {
+      parts.append(el("h3", "Businesses"));
+      parts.append(
+        table(
+          ["Business", "Staff", "This month in", "This month out", "Last month's profit", "Payslips"],
+          data.enterprises.map((e) => [
+            e.name,
+            String(e.staff),
+            dollars(e.month_income_cents),
+            dollars(e.month_costs_cents),
+            e.last_close ? dollars(e.last_close.profit) : "No month closed yet",
+            String(e.payslips),
+          ]),
+        ),
+      );
+    }
+  }
+  parts.append(el("p", `Current as of tick ${tick.toLocaleString()}.`, { class: "panel-note" }));
+  bodies.industry.replaceChildren(parts);
+  panels.industry.hidden = false;
 }
 
 // The island, drawn, and zoomable from the whole 2,400 km of it down to a
@@ -864,7 +951,7 @@ async function showTimeline() {
 /// they hold was true once and is not now, and leaving a write form up for
 /// a stopped island invites an operator to act on it.
 function hidePanels() {
-  for (const id of ["intervene-panel", "map-panel", "properties-panel", "economy-panel", "timeline-panel"]) {
+  for (const id of ["intervene-panel", "map-panel", "properties-panel", "economy-panel", "industry-panel", "timeline-panel"]) {
     const panel = document.getElementById(id);
     if (panel) panel.hidden = true;
   }
@@ -924,6 +1011,7 @@ async function load() {
     await Promise.all([
       showProperties(),
       showEconomy(),
+      showIndustry(),
       showTimeline(),
       fillPlacesAndPeople(),
     ]);
