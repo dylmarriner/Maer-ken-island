@@ -689,13 +689,13 @@
     {
       "key": "hand_dug_shaft_sinking_rate_m_per_crew_day",
       "description": "Hand excavation and lining rate of a vertical shaft by an organised crew (hand-dug well analogue), relatively loose non-caving soil",
-      "unit": "m of depth per crew-day (five diggers plus hoisting hands)",
+      "unit": "m of depth per crew-day (crew size not stated)",
       "source": "fao_koegel_1985",
       "confidence": "low",
       "value": {
         "point": 1
       },
-      "note": "fao_koegel_1985, sec. 5.4: 'An organized and experienced construction team consisting of five workers plus enough people to lower and raise loads in the well can dig and line 1 meter per day in relatively loose soil that does not cave in. However, the bottom section is likely to take 2 or 3 days per meter because of the difficulty in working while water continually enters the well.' Also: 'While one metre per day could theoretically be excavated and lined, this is difficult to achieve consistently, especially at greater depths.' Crew rate, not per worker; no artisanal mining digging-rate source found."
+      "note": "fao_koegel_1985, sec. 5.4 (re-read 2026-10-23): 'While one metre per day could theoretically be excavated and lined, this is difficult to achieve consistently, especially at greater depths.' An upper bound for a crew of unstated size, not a per-worker rate. A quotation earlier attached here ('a team consisting of five workers ... can dig and line 1 meter per day') is not on the cited page and was removed; no source for the crew size or for an artisanal mining digging rate has been found, so hand shafts stay refused."
     },
     {
       "key": "small_mine_shaft_advance_drill_blast",
