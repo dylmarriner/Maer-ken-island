@@ -13,6 +13,8 @@ use super::petroleum::MissingReference;
 use crate::validation::{ReferenceDomain, ReferenceLibrary};
 
 const CROP_YEAR: &str = "y2023";
+/// FAOSTAT's milk-per-animal row, the same year.
+const MILK_YEAR: &str = "2023";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum Crop {
@@ -62,6 +64,8 @@ impl Crop {
 pub struct FarmModel {
     pub dairy_cows_per_ha: f64,
     pub milksolids_kg_per_cow: f64,
+    /// Whole milk a cow gives a year (FAOSTAT's New Zealand yield).
+    pub milk_kg_per_cow: f64,
     /// kg a hectare yields a year, in [`CROPS`] order.
     pub crop_kg_per_ha: [f64; 9],
 }
@@ -89,6 +93,10 @@ impl FarmModel {
         Ok(Self {
             dairy_cows_per_ha: central("dairy_stocking_rate_national")?,
             milksolids_kg_per_cow: central("dairy_milksolids_per_cow")?,
+            milk_kg_per_cow: item("dairy_milk_volume_per_cow_fao")?
+                .table()
+                .and_then(|t| t.get(MILK_YEAR, "kg_milk_per_animal"))
+                .ok_or_else(|| MissingReference("dairy_milk_volume_per_cow_fao".into()))?,
             crop_kg_per_ha,
         })
     }
@@ -116,6 +124,7 @@ pub struct Farm {
 pub struct Harvest {
     pub cows: f64,
     pub milksolids_kg: f64,
+    pub milk_kg: f64,
     pub crops_kg: Vec<(Crop, f64)>,
 }
 
@@ -130,6 +139,7 @@ impl Farm {
         Harvest {
             cows,
             milksolids_kg: cows * model.milksolids_kg_per_cow * fraction,
+            milk_kg: cows * model.milk_kg_per_cow * fraction,
             crops_kg: self
                 .crops_ha
                 .iter()
@@ -148,6 +158,7 @@ mod tests {
         let m = FarmModel::load_default().expect("the pack loads");
         assert_eq!(m.dairy_cows_per_ha, 2.76);
         assert_eq!(m.milksolids_kg_per_cow, 400.0);
+        assert_eq!(m.milk_kg_per_cow, 4_593.0);
         assert_eq!(m.crop_kg_per_ha(Crop::Wheat), 9668.1);
         assert_eq!(m.crop_kg_per_ha(Crop::Potatoes), 51080.7);
         assert!(m.crop_kg_per_ha.iter().all(|y| *y > 0.0));

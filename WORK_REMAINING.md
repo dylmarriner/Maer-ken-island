@@ -354,9 +354,13 @@ trade, a 2-3 bedroom cottage's floor area (Task 6 and 7b); the Pukekohe growing 
     so every calf is finished and the cows are held constant; cull ewes' mutton is not counted.
     Sows farrow all year at NZ Pork's 1.7 t of carcass per sow (2022 annual report) at 71.1 kg a
     pig, killed at 5.5 months; the sow herd is held constant (no sow replacement rate read).
+  - `food_processing.rs`: the farms' wheat, barley and oats milled and malted, and their whole milk
+    (FAOSTAT 2023: 4,593 kg a cow) made into cream, butter, cheese, powder and so on, at New
+    Zealand's extraction rates in FAO's Technical Conversion Factors (wheat 78% flour and 22%
+    bran, butter 6.1% of milk). `tests/food_chain.rs` follows wheat to flour and milk to butter.
   - Still open: roof, floor and other timber in the house (no source read yet), the plantation and
     farms on the map fed by the existing felling and hauling, livestock replacements, fishery,
-    food processing and the supermarket.
+    bread and other second-stage foods, the plants' energy use, and the supermarket.
 
 ### 4g. Task 8: town and workforce
 

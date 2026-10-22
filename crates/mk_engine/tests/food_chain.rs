@@ -2,6 +2,7 @@
 //! produce is the land's cited yield, however finely the year is stepped.
 
 use mk_engine::regional::industry::farm::{Crop, Farm, FarmModel, CROPS};
+use mk_engine::regional::industry::food_processing::{ProcessingModel, Product};
 
 #[test]
 fn a_year_of_farming_in_daily_steps_yields_the_cited_year() {
@@ -28,4 +29,29 @@ fn a_year_of_farming_in_daily_steps_yields_the_cited_year() {
     }
     assert!(whole.crops_kg.iter().any(|(c, _)| *c == Crop::Potatoes));
     assert_eq!(farm.area_ha(), 150.0 + 4.0 * CROPS.len() as f64);
+}
+
+#[test]
+fn the_farm_s_wheat_and_milk_become_flour_and_butter_at_fao_s_rates() {
+    let farm_model = FarmModel::load_default().expect("the agriculture pack loads");
+    let mills = ProcessingModel::load_default().expect("the processing pack loads");
+    let farm = Farm {
+        dairy_ha: 100.0,
+        crops_ha: vec![(Crop::Wheat, 10.0)],
+    };
+    let year = farm.produce(&farm_model, 1.0);
+
+    let wheat = year.crops_kg[0].1;
+    let milled = mills.mill(Crop::Wheat, wheat);
+    let flour = milled
+        .iter()
+        .find(|p| p.0 == Product::WheatFlour)
+        .unwrap()
+        .1;
+    assert!((flour - 0.78 * wheat).abs() < 1e-6 * wheat);
+    assert!((milled.iter().map(|p| p.1).sum::<f64>() - wheat).abs() < 1e-6 * wheat);
+
+    assert!((year.milk_kg - 276.0 * 4_593.0).abs() < 1e-6 * year.milk_kg);
+    let butter = mills.dairy(Product::Butter, year.milk_kg);
+    assert!((butter - 0.061 * year.milk_kg).abs() < 1e-6 * butter);
 }
