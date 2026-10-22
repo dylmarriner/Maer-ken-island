@@ -54,6 +54,8 @@ pub enum RegionalHumanError {
     NotInEstate(String),
     /// No door path to the space.
     Unreachable(String),
+    /// Upstream could not sample a newcomer (their id, why).
+    Spawn(String, String),
 }
 
 impl std::fmt::Display for RegionalHumanError {
@@ -64,6 +66,7 @@ impl std::fmt::Display for RegionalHumanError {
             Self::NoSuchHuman(who) => write!(f, "no human {who}"),
             Self::NotInEstate(who) => write!(f, "{who} is not in the estate"),
             Self::Unreachable(who) => write!(f, "no route for {who}"),
+            Self::Spawn(who, why) => write!(f, "could not sample {who}: {why}"),
         }
     }
 }
@@ -176,6 +179,56 @@ pub fn bootstrap_regional_humans(
     }
     Ok((humans, positions))
 }
+
+/// One person arriving to live in the town (Task 8): who, their sex and
+/// their age on arrival.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Newcomer {
+    pub agent_id: String,
+    pub sex: mk_core::human::BiologicalSex,
+    pub age_years: f64,
+}
+
+/// Settle `newcomers` in the town at medium cell `town` (row, col): each
+/// is sampled whole through upstream's spawn (genome, temperament and
+/// drives drawn from the scenario's streams, keyed by their id, so the
+/// same scenario settles the same people), born `age_years` before `now`
+/// in the town, and stands on the town's cell. The town lies outside the
+/// estate patch, so they get no estate position. Someone already living
+/// is left as they are.
+pub fn settle_in_town(
+    humans: &mut HumanSystem,
+    rng: &RngRegistry,
+    tick: u64,
+    now: chrono::DateTime<chrono::Utc>,
+    birthplace: mk_core::human::astrology::GeoCoordinates,
+    town: (usize, usize),
+    newcomers: &[Newcomer],
+) -> Result<(), RegionalHumanError> {
+    for person in newcomers {
+        if humans.registry.get_human(&person.agent_id).is_some() {
+            continue;
+        }
+        let born = now - chrono::Duration::seconds((person.age_years * YEAR_S) as i64);
+        let mut human = crate::humans::spawn::build_spawned_human(
+            rng,
+            tick,
+            person.agent_id.clone(),
+            person.sex,
+            born,
+            birthplace,
+            person.age_years,
+            None,
+        )
+        .map_err(|e| RegionalHumanError::Spawn(person.agent_id.clone(), e.to_string()))?;
+        human.set_runtime_position(GridPosition::new(town.0 as i32, town.1 as i32));
+        humans.registry.add_human_no_storage(human);
+    }
+    Ok(())
+}
+
+/// A Julian year in seconds, for birth dates from ages.
+const YEAR_S: f64 = 365.25 * 86_400.0;
 
 /// Move a human to a space in the estate, along the door route: returns the
 /// route walked. The walk is instantaneous here; Task 3b gives it a time.
@@ -456,5 +509,84 @@ pub fn step_regional_humans(
             human.set_runtime_position(cell);
         }
         positions.0.insert(id, place);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mk_core::human::astrology::GeoCoordinates;
+    use mk_core::human::BiologicalSex;
+
+    fn newcomer(id: &str, sex: BiologicalSex, age_years: f64) -> Newcomer {
+        Newcomer {
+            agent_id: id.to_string(),
+            sex,
+            age_years,
+        }
+    }
+
+    fn settle(people: &[Newcomer]) -> HumanSystem {
+        let mut humans = HumanSystem::new();
+        let now = chrono::DateTime::from_timestamp(1_800_000_000, 0).expect("a valid time");
+        let here = GeoCoordinates {
+            latitude: -37.2,
+            longitude: 174.9,
+        };
+        settle_in_town(
+            &mut humans,
+            &RngRegistry::new([7; 32]),
+            0,
+            now,
+            here,
+            (4, 9),
+            people,
+        )
+        .expect("the newcomers settle");
+        humans
+    }
+
+    #[test]
+    fn newcomers_settle_on_the_town_cell_at_their_age_and_the_same_seed_settles_the_same_people() {
+        let people = [
+            newcomer("gp-1", BiologicalSex::Female, 41.0),
+            newcomer("gp-1-child-1", BiologicalSex::Male, 9.0),
+        ];
+        let a = settle(&people);
+        assert_eq!(a.registry.count(), 2);
+        for person in &people {
+            let human = a.registry.get_human(&person.agent_id).expect("settled");
+            assert_eq!(human.development.age_years, person.age_years);
+            assert_eq!(human.profile.core_identity.biological_sex, person.sex);
+            assert_eq!(human.position, GridPosition::new(4, 9));
+        }
+        let b = settle(&people);
+        let json =
+            |h: &HumanSystem| serde_json::to_string(h.registry.get_all_humans()).expect("json");
+        assert_eq!(json(&a), json(&b));
+    }
+
+    #[test]
+    fn someone_already_living_is_not_settled_twice() {
+        let people = [newcomer("gp-1", BiologicalSex::Female, 41.0)];
+        let mut humans = settle(&people);
+        let now = chrono::DateTime::from_timestamp(1_800_000_000, 0).expect("a valid time");
+        let here = GeoCoordinates {
+            latitude: 0.0,
+            longitude: 0.0,
+        };
+        settle_in_town(
+            &mut humans,
+            &RngRegistry::new([7; 32]),
+            5,
+            now,
+            here,
+            (0, 0),
+            &people,
+        )
+        .expect("nothing to do");
+        assert_eq!(humans.registry.count(), 1);
+        let human = humans.registry.get_human("gp-1").expect("still there");
+        assert_eq!(human.position, GridPosition::new(4, 9));
     }
 }

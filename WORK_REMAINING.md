@@ -179,7 +179,10 @@ animal and fish resource nodes (done 2026-10-23, §2b).
   beginner and quickened by practice (R11, D64). Still one tick: Craft (upstream's instant
   recipes: planks, masonry, rope, fuel, ingots, tools; on the island nobody carries their inputs
   yet, since timber and gold go to the estate's store), Explore and SocialApproach (moves paced by
-  the cell crossing only), Transfer, Harm and Intimacy.
+  the cell crossing only), Transfer, Harm and Intimacy. Timing Craft is not a matter of a rate:
+  upstream's recipes are unit counts with no masses (3 wood make 2 planks), so a duration per
+  recipe would have nothing to scale with. It needs upstream recipes in kilograms first, then a
+  cited rate per kg (checked 2026-10-23).
 - **Needs:** a cited duration for each action (`fixtures/reference/labour/productivity.json`
   holds some already), and the same task machinery felling uses (`life.rs` `work`) extended to
   them. Actions with no Compendium row cost the resting baseline (D22, accepted).
@@ -190,6 +193,14 @@ animal and fish resource nodes (done 2026-10-23, §2b).
 - **Needs:** a regional soils model (parent rock from `geology.rs`, age from the deep-time
   spin-up in §3, nitrogen and phosphorus) and a cited nutrient limitation on NPP. Large; it
   follows the spin-up.
+- **Checked 2026-10-23:** Porder and Ramachandran (2013, Plant Soil 367:41-55,
+  doi:10.1007/s11104-012-1490-2) give rock phosphorus from 263,539 EarthChem analyses. Their
+  abstract states medians for granite (436 ppm), andesite (1,000), mudstone (1,135), siltstone
+  (698), sandstone (500), several ultramafic rocks (120) and several alkali basalts (>3,000), and
+  that parent rock explains 42% of soil total P across 62 sites. The full table (basalt, schist,
+  gneiss, greywacke, limestone, marble, rhyolite: the rest of `geology.rs`'s lithologies) is
+  behind the paywall and not read. Still missing as well: no source found yet turns soil P into
+  a limit on NPP, so a phosphorus field alone would change nothing.
 
 ---
 
@@ -424,6 +435,10 @@ trade, a 2-3 bedroom cottage's floor area (Task 6 and 7b); the Pukekohe growing 
   oil field's, gas plant's, depot's, bank's, store's and power company's smallest staff (no
   headcount found: Kupe about 35 and Tongariro hydro 40-45 are unverified); the town's people
   as humans in `IslandLife` with homes, hired through `Enterprise::hire`; growth by hiring.
+- **Where (2026-10-23):** `property.rs` `town_site` puts the town on the dry cell nearest the
+  town hydro plant's powerhouse, outside the estate's 2 x 2 block, the same cell for the same
+  island. The town follows its power; nobody chose the cell. Laying out its houses on that cell,
+  and putting the founded townspeople into island life there, are left.
 - **Files:** create `regional/town.rs`, `fixtures/island/workforce.json` (generated from the seed);
   generalise `regional/estate_layout.rs` to any high-detail site.
 - **Tests:** `tests/island_town.rs`.
