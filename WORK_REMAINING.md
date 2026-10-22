@@ -347,8 +347,11 @@ trade, a 2-3 bedroom cottage's floor area (Task 6 and 7b); the Pukekohe growing 
   - `farm.rs`: dairy land at the national 2.76 cows/ha and 400 kg of milksolids a cow (LIC and
     DairyNZ 2023-24, which checks against their 1,105 kg/ha), crops at FAOSTAT's 2023 New Zealand
     yields per hectare (vegetables are FAO estimates).
+  - `livestock.rs`: ewes and cows at Beef + Lamb's Class 5 lambing (140.3%) and calving (87.5%);
+    lambs killed the same season at 19.93 kg, calves at 20 months at the steer's 316 kg. Every
+    young animal is sold: no replacement rate or breeding-stock death rate has a source yet.
   - Still open: roof, floor and other timber in the house (no source read yet), the plantation and
-    farms on the map fed by the existing felling and hauling, livestock herds and meat, fishery,
+    farms on the map fed by the existing felling and hauling, livestock replacements, fishery,
     food processing and the supermarket.
 
 ### 4g. Task 8: town and workforce
