@@ -272,7 +272,12 @@ impl MoneyLedger {
                 continue;
             }
             let interest = monthly_interest(loan.outstanding, loan.annual_rate);
-            let due = loan.instalment.min(loan.outstanding + interest);
+            // Never less than the month's interest, which capitalised
+            // arrears can push above the original instalment.
+            let due = loan
+                .instalment
+                .max(interest)
+                .min(loan.outstanding + interest);
             let borrower = loan.borrower.clone();
             if self.balance(&borrower) >= due {
                 let principal = due - interest;
@@ -365,7 +370,7 @@ impl FinanceReference {
 /// last month stays connected while it catches up; one that has owed
 /// money for a month and paid nothing in that month is disconnected.
 /// A disconnected account is reconnected when it is paid up.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BillingAccount {
     /// Billed and not yet paid.
     pub owed: Cents,
@@ -376,11 +381,19 @@ pub struct BillingAccount {
     pub connected: bool,
 }
 
+impl Default for BillingAccount {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl BillingAccount {
     pub fn new() -> Self {
         Self {
+            owed: 0,
+            owed_since_s: None,
+            last_payment_s: None,
             connected: true,
-            ..Self::default()
         }
     }
 
@@ -455,13 +468,23 @@ pub fn pay_dividends(
         return Ok(Vec::new());
     }
     let pool = (profit as f64 * PAYOUT_SHARE).floor() as Cents;
-    let mut paid = Vec::new();
-    for (holder, share) in shareholders {
-        let cents = (pool as f64 * share).floor() as Cents;
-        if cents > 0 {
-            ledger.transfer(at_s, enterprise, holder, cents, "dividend")?;
-            paid.push((holder.clone(), cents));
-        }
+    let paid: Vec<(Holder, Cents)> = shareholders
+        .iter()
+        .map(|(holder, share)| (holder.clone(), (pool as f64 * share).floor() as Cents))
+        .filter(|(_, cents)| *cents > 0)
+        .collect();
+    // All or nobody: a business that cannot pay every holder pays none.
+    let total: Cents = paid.iter().map(|(_, c)| c).sum();
+    let held = ledger.balance(enterprise);
+    if held < total {
+        return Err(MoneyError::Insufficient {
+            holder: enterprise.clone(),
+            held,
+            asked: total,
+        });
+    }
+    for (holder, cents) in &paid {
+        ledger.transfer(at_s, enterprise, holder, *cents, "dividend")?;
     }
     Ok(paid)
 }
@@ -626,5 +649,59 @@ mod tests {
         let finance = FinanceReference::from_reference(&library).unwrap();
         assert_eq!(finance.founder_opening_cents, 52_900_000);
         assert_eq!(finance.lending_rate, 0.0482);
+    }
+
+    /// Capitalised arrears can lift a month's interest above the fixed
+    /// instalment; a borrower who holds the instalment but not the interest
+    /// then misses the month instead of the books failing.
+    #[test]
+    fn arrears_past_the_instalment_are_missed_not_a_panic() {
+        let mut ledger = MoneyLedger::default();
+        // 10% a month makes one missed month enough.
+        ledger.lend(0, person("v"), 1_000_000, 1.2, 360).unwrap();
+        ledger
+            .transfer(0, &person("v"), &person("x"), 1_000_000, "spent")
+            .unwrap();
+        ledger.service_loans(1);
+        let loan = ledger.loans()[0].clone();
+        assert_eq!(loan.missed, 1);
+        let interest = monthly_interest(loan.outstanding, loan.annual_rate);
+        assert!(
+            interest > loan.instalment,
+            "{interest} vs {}",
+            loan.instalment
+        );
+        let between = (loan.instalment + interest) / 2;
+        ledger.issue(1, person("v"), between, "wages").unwrap();
+        ledger.service_loans(2);
+        assert_eq!(ledger.loans()[0].missed, 2);
+        assert_eq!(ledger.balance(&person("v")), between, "nothing was taken");
+        ledger.audit().unwrap();
+        // With the interest in hand, the month is paid.
+        ledger
+            .issue(2, person("v"), interest, "more wages")
+            .unwrap();
+        ledger.service_loans(3);
+        assert_eq!(ledger.loans()[0].missed, 2);
+        ledger.audit().unwrap();
+    }
+
+    /// A business that cannot pay every shareholder pays none of them.
+    #[test]
+    fn dividends_are_paid_to_everyone_or_no_one() {
+        let mut ledger = MoneyLedger::default();
+        let shop = Holder::Enterprise("shop".to_string());
+        ledger.issue(0, shop.clone(), 150, "takings").unwrap();
+        // A 400-cent profit pays 100 to each founder; the shop holds 150.
+        assert!(pay_dividends(&mut ledger, 1, &shop, 400, &founders_shares()).is_err());
+        assert_eq!(ledger.balance(&shop), 150);
+        assert_eq!(ledger.balance(&person("Gem-D")), 0);
+        ledger.audit().unwrap();
+    }
+
+    #[test]
+    fn a_default_billing_account_is_connected() {
+        assert_eq!(BillingAccount::default(), BillingAccount::new());
+        assert!(BillingAccount::default().connected);
     }
 }
