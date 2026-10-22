@@ -17,7 +17,7 @@
 //!   ones), compounding.
 //!
 //! The numbers come from one manual task, crosscut felling; applying them
-//! to splitting, panning and foraging is a stand-in (DEVIATIONS D64). Skill only sets
+//! to splitting, panning, foraging and building is a stand-in (DEVIATIONS D64). Skill only sets
 //! how long a task takes: what a person does is their own choice.
 
 use std::collections::BTreeMap;
@@ -40,6 +40,8 @@ pub enum Task {
     Panning,
     /// Gathering food (one unit per trip).
     Foraging,
+    /// Building with timber (one unit per building finished).
+    Building,
 }
 
 /// One person's experience at one task.

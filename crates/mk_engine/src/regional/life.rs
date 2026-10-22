@@ -2906,9 +2906,15 @@ impl IslandLife {
             .labour
             .met("carpentry_general")
             .map_err(IslandLifeError::Labour)?;
+        let now_s = self.sim_time_s as f64;
+        let ids: Vec<String> = builders.iter().map(|(id, _)| id.clone()).collect();
         for (id, body) in builders {
+            // The pack's hours are a practised carpenter's (R11).
+            let skill = self
+                .skills
+                .time_factor(&self.learning, &id, Task::Building, now_s);
             if let Some(shed) = self.firewood_shed.as_mut() {
-                shed.worked_s += dt_s;
+                shed.worked_s += dt_s / skill;
             }
             let extra = self
                 .labour
@@ -2921,6 +2927,13 @@ impl IslandLife {
             *self.labour_kcal.entry(id.clone()).or_insert(0.0) += extra.max(0.0);
             if let Some(h) = self.humans.registry.get_human_mut(&id) {
                 h.labour_met = Some(met);
+            }
+        }
+        // A building finished is one of experience for each who built it.
+        if self.firewood_shed.is_some_and(|b| b.is_finished()) {
+            for id in ids {
+                self.skills
+                    .practise(&self.learning, &id, Task::Building, 1.0, now_s);
             }
         }
         Ok(())
@@ -4180,6 +4193,8 @@ mod tests {
         scenario.estate_patch.tree_cap = 200;
         let canon = Arc::new(CanonLocked::load(&repo("fixtures/island/canon.json")).unwrap());
         let mut life = IslandLife::bootstrap(scenario, canon).expect("the island bootstraps");
+        // The pack's hours are a practised carpenter's (R11).
+        practise_everyone(&mut life, Task::Building);
         let at = life.vegetation.centre_m();
         life.positions.0.insert(
             "Gem-D".into(),
