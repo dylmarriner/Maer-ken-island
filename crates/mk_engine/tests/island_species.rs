@@ -8,7 +8,7 @@ use mk_core::canon::CanonLocked;
 use mk_engine::biosphere::{SpeciesCategory, TerrainAffinity};
 use mk_engine::regional::ecology::RegionalEcologyState;
 use mk_engine::regional::physical::RegionalPhysicalState;
-use mk_engine::regional::species::{Abundance, IslandBiota, AFFINITIES};
+use mk_engine::regional::species::{Abundance, IslandBiota, NodeStock, AFFINITIES};
 use mk_island::{DomainLevel, IslandDomain, IslandProfile};
 
 const M: DomainLevel = DomainLevel::Medium;
@@ -197,6 +197,63 @@ fn everything_else_is_upstreams_density_over_the_islands_habitat() {
         if b.biota.habitat_area_m2(&s.affinity) == 0.0 {
             assert!(b.biota.population(i).is_none_or(|n| n == 0.0));
         }
+    }
+}
+
+#[test]
+fn the_animal_nodes_add_up_to_each_species_on_the_island() {
+    let b = base();
+    let cells = b.ecology.herbivore_kgc_m2.data().len();
+    let mut head = vec![0.0; b.biota.species.len()];
+    let mut carbon = vec![0.0; b.biota.species.len()];
+    for cell in 0..cells {
+        for node in b.biota.animal_nodes(cell, &b.ecology) {
+            assert_eq!(node.cell, cell);
+            let s = &b.biota.species[node.species];
+            assert!(b.biota.is_habitat(cell, &s.affinity), "{}", s.name);
+            match node.stock {
+                NodeStock::Head(n) => head[node.species] += n,
+                NodeStock::CarbonKgc(c) => carbon[node.species] += c,
+            }
+        }
+    }
+    for (i, s) in b.biota.species.iter().enumerate() {
+        match s.abundance {
+            Abundance::ProducerCarbon => assert_eq!((head[i], carbon[i]), (0.0, 0.0)),
+            Abundance::GrazerCarbon => {
+                let whole = b.biota.carbon_kgc(i, &b.ecology).unwrap();
+                assert!(
+                    close(carbon[i], whole),
+                    "{}: {} against {whole}",
+                    s.name,
+                    carbon[i]
+                );
+            }
+            Abundance::UpstreamDensity => {
+                let whole = b.biota.population(i).unwrap();
+                assert!(
+                    close(head[i], whole),
+                    "{}: {} against {whole}",
+                    s.name,
+                    head[i]
+                );
+            }
+        }
+    }
+    // The sea's fish are nodes in the sea.
+    let fish = b
+        .biota
+        .species
+        .iter()
+        .position(|s| s.category == SpeciesCategory::Aquatic && is_marine(&s.affinity));
+    if let Some(fish) = fish {
+        let affinity = &b.biota.species[fish].affinity;
+        let cell = b.biota.habitat_cells(affinity).next().expect("sea habitat");
+        assert!(b
+            .biota
+            .animal_nodes(cell, &b.ecology)
+            .iter()
+            .any(|n| n.species == fish));
     }
 }
 

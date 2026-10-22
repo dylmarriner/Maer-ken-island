@@ -123,7 +123,7 @@ Done 2026-10-14 (`regional/species.rs`, D55): upstream's founding species placed
 habitats, plants and grazers as shares of the island's carbon fields, other guilds at upstream's
 density times the island's habitat area. **Left:** Earth-calibrated densities and a carbon pool
 for each consumer guild (realism R8, R10); serving the species to the map and the cell inspector;
-animal and fish resource nodes (§2b), which can now read the habitats.
+animal and fish resource nodes (done 2026-10-23, §2b).
 
 ### 2b. Phase 3 Task 2: every resource and material
 
@@ -141,8 +141,12 @@ animal and fish resource nodes (§2b), which can now read the habitats.
     by hand, with cited rates. Gem placers below the other gem deposits still need a source.
   - Hand mining of primary ore: a cited artisanal shaft or adit depth and rate (refused by name
     until then).
-  - Biotic nodes as views of cell biomass, animal and fish nodes from `regional/species.rs`
-    populations, salt pans and water sources.
+  - Animal and fish nodes (2026-10-23): `IslandBiota::animal_nodes` gives each cell's animals
+    as views of their species' abundance there (a grazer's share of the cell's grazer carbon,
+    any other animal at upstream's density over the cell), adding up to the species on the
+    island; hunting and fishing them, and the fishery model on the sea's fish, are still to
+    come, and the densities stay upstream's (D55).
+  - Biotic nodes as views of cell plant biomass, salt pans and water sources.
   - The new tools in `resource_economy.rs`, smelting and the other recipes, mass-balanced through
     the material ledger.
   - Serving the sites to the map and the founders' choices.
