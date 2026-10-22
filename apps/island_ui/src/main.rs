@@ -21,6 +21,7 @@ use bevy_egui::{EguiContexts, EguiPlugin, EguiPrimaryContextPass};
 
 use island_ui::camera::Orbit;
 use island_ui::estate;
+use island_ui::forest;
 use island_ui::inspectors;
 use island_ui::scene::{self, Point};
 use island_ui::source::{Island, LocalBackend, Snapshot};
@@ -673,6 +674,11 @@ struct Islander(String);
 #[derive(Component)]
 struct Ground;
 
+/// Marks the woods beyond the estate (`forest::marks_in`), so a new cover
+/// can replace them.
+#[derive(Component)]
+struct Woods;
+
 /// Marks everything on the estate, drawn in metres rather than in ten-
 /// kilometre units, and hidden unless the estate is what is being looked
 /// at.
@@ -957,6 +963,7 @@ fn main() {
             say_what_is_drawing,
             read_the_island,
             tint_the_ground,
+            plant_the_forest,
             grow_the_stems,
             lay_the_stands,
             pick_a_view,
@@ -1111,6 +1118,113 @@ fn tint_the_ground(
             mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, linear_colours(colours));
         }
     }
+}
+
+/// Stand marks up from the ground in proportion to its biomass, one merged
+/// mesh per ground chunk, and replace them when the poller brings a new
+/// cover. They go with the ground: shown on the island, hidden on the
+/// estate.
+fn plant_the_forest(
+    mut commands: Commands,
+    latest: Res<Latest>,
+    island: Res<TheIsland>,
+    showing: Res<Showing>,
+    mut drawn: Local<usize>,
+    mut look: Local<Option<Handle<StandardMaterial>>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    old: Query<Entity, With<Woods>>,
+) {
+    let (Some(ground), Some(cover)) = (island.0.terrain(), (*latest.0.cover).as_ref()) else {
+        return;
+    };
+    let read = std::sync::Arc::as_ptr(&latest.0.cover) as usize;
+    if *drawn == read {
+        return;
+    }
+    *drawn = read;
+    for entity in &old {
+        commands.entity(entity).despawn();
+    }
+    let material = look
+        .get_or_insert_with(|| {
+            materials.add(StandardMaterial {
+                base_color: Color::srgb(
+                    terrain::CLOSED_STAND[0],
+                    terrain::CLOSED_STAND[1],
+                    terrain::CLOSED_STAND[2],
+                ),
+                perceptual_roughness: 0.9,
+                ..default()
+            })
+        })
+        .clone();
+    let visibility = if *showing == Showing::Island {
+        Visibility::Inherited
+    } else {
+        Visibility::Hidden
+    };
+    let peak = cover.peak_kgc_m2();
+    let (chunk_rows, chunk_cols) = terrain::chunk_grid(ground);
+    let mut total = 0;
+    for chunk_row in 0..chunk_rows {
+        for chunk_col in 0..chunk_cols {
+            let (row0, col0) = (chunk_row * terrain::CHUNK_CELLS, chunk_col * terrain::CHUNK_CELLS);
+            let marks = forest::marks_in(
+                ground,
+                cover,
+                peak,
+                row0..row0 + terrain::CHUNK_CELLS,
+                col0..col0 + terrain::CHUNK_CELLS,
+            );
+            if marks.is_empty() {
+                continue;
+            }
+            total += marks.len();
+            commands.spawn((
+                Ground,
+                Woods,
+                Mesh3d(meshes.add(woods_mesh(&marks))),
+                MeshMaterial3d(material.clone()),
+                Transform::IDENTITY,
+                visibility,
+            ));
+        }
+    }
+    info!("the island's woods: {total} marks from the standing biomass");
+}
+
+/// Each mark as a four-sided spire, its base a quarter of its block wide
+/// and its height half the block: a map symbol, not a tree to scale.
+fn woods_mesh(marks: &[forest::Mark]) -> Mesh {
+    let mut positions = Vec::with_capacity(marks.len() * 12);
+    let mut normals = Vec::with_capacity(marks.len() * 12);
+    for mark in marks {
+        let (r, h) = (mark.block_units / 8.0, mark.block_units / 2.0);
+        let b = Vec3::new(mark.base.x, mark.base.y, mark.base.z);
+        let top = b + Vec3::Y * h;
+        let corners = [
+            b + Vec3::new(-r, 0.0, -r),
+            b + Vec3::new(r, 0.0, -r),
+            b + Vec3::new(r, 0.0, r),
+            b + Vec3::new(-r, 0.0, r),
+        ];
+        for i in 0..4 {
+            let (a, c) = (corners[i], corners[(i + 1) % 4]);
+            let normal = (c - a).cross(top - a).normalize_or_zero();
+            for p in [a, top, c] {
+                positions.push(p.to_array());
+                normals.push(normal.to_array());
+            }
+        }
+    }
+    let mut mesh = Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::RENDER_WORLD,
+    );
+    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+    mesh
 }
 
 /// One chunk's triangles, kept to the land ones or the sea ones.

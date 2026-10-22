@@ -360,7 +360,7 @@ cost the resting baseline (D22).
 
   Still open from that phase's plan: the rest of the 3D vegetation (the estate view draws the
   individual stems within 250 m of the yard as trunks at their own height and diameter, up to
-  3,000, re-read every 30 s; stand cover and instanced trees beyond the patch are not drawn),
+  3,000, re-read every 30 s; beyond the patch the ground is tinted by standing biomass from `/api/cover.bin` and carries tree marks whose number follows it, refreshed every 30 s),
   the human inspector's full detail sections, the
   foundry panel, the resolution gate and its benchmark. None
   of those is blocked; none is done. `island_bench` and the allocation-bound test came in with
