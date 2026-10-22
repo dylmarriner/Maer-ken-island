@@ -451,6 +451,18 @@ Ordered by what most changes the founders' daily life:
 | R8 | Game and hunting, fish and shellfish, farming and livestock | earth Steps 3-4, §2.5 | Open |
 | R9 | Thermoregulation from sources, clothing and shelter; injury, accident and illness by mechanism; sleep stages | humans ranks 7-9 | Open |
 | R10 | Disturbance and succession, fire, predators, pollinators, disease of plants and animals | earth Steps 5-7 | Open |
+| R11 | Everything is learnt (owner, 2026-10-23): no one is born able to do a task; each skill rises with every repetition (a learning curve), making the task faster and its result better, and fades with disuse; free will picks what to do from what a person needs and wants. Takes over R5's "skill improves with practice". Distinct from Task 6's `TradeQualification` (a credential, not a skill) | Needs sources: learning-curve exponents per kind of task, skill decay with disuse, novice-to-expert time ratios | Open. Upstream first (human runtime) |
+| R12 | The body trains (owner, 2026-10-23): physical work builds stamina (aerobic capacity) and muscle; lifting raises the load a person can lift; inactivity and eating beyond need do the opposite (detraining, fat gain); body composition changes how a person looks. R2's load limits then follow each person's own strength | Needs sources: VO2max and strength gains with training load, detraining rates, muscle protein accretion and loss, energy surplus to fat mass | Open. Upstream first (human runtime) |
+| R13 | Genetics (owner, 2026-10-23): a DNA-like genome, half from each parent, sets each person's starting point and limits (height, build, trainability, predispositions) | Needs sources: heritabilities of the traits modelled; touches birth (`reproduction.rs`) and how the population is stored | Open. Upstream first |
+
+**Owner decision (2026-10-23), in the owner's words:** "the humans in this need to learn to do
+things and have free will to decide what they need and want to do. all things must be learnt and
+over time as they do something more often they get better and better. when they do physical
+activities that increases stamina and muscle mass which changes physical appearance and if they
+are lazy and do nothing but eat all day that does the opposite. if they lift things they get
+stronger and can lift heavier things everything needs to be trained essentially like humans on
+earth do. they also need to have a double helix like humans do." R11-R13 record it; each number
+they need is sourced into `fixtures/reference/` before it is used.
 
 Still unsourced and needing a second pass before use (not to be typed in): edible and carcass
 fractions, fruit and seed yields, foraging return rates, firewood per person per day, cordage
