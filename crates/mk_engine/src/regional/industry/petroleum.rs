@@ -261,6 +261,14 @@ impl PetroleumField {
         taken
     }
 
+    /// Take up to `gj` of the gas kept at the field (for the gas plant);
+    /// returns the GJ and the carbon (kg C) they hold.
+    pub fn take_gas(&mut self, gj: f64, model: &PetroleumModel) -> (f64, f64) {
+        let taken = gj.max(0.0).min(self.tank_gas_gj);
+        self.tank_gas_gj -= taken;
+        (taken, taken * model.gas_carbon_kg_per_gj)
+    }
+
     /// Produce for `dt_years`, booking the carbon in `ledger`.
     pub fn produce(
         &mut self,

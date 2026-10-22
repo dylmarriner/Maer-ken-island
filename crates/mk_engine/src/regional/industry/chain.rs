@@ -13,6 +13,10 @@
 //! fields are choked back to what it can take, oil first from the largest
 //! field. The plant runs itself: nobody is employed to run it until Task
 //! 6's jobs (D58).
+//!
+//! The fields' gas goes to the gas plant ([`super::gas_plant`]), which
+//! burns its own use and stores sales gas and LPG beside the refinery's
+//! products.
 
 use serde::{Deserialize, Serialize};
 
@@ -20,6 +24,7 @@ use mk_core::flux::{FluxEntry, FluxKind, Ledger, Reservoir};
 
 use crate::conservation::O2_PER_CARBON;
 
+use super::gas_plant::{process, GasPlantModel, GasStore};
 use super::petroleum::{PetroleumField, PetroleumModel, BARREL_M3};
 use super::refinery::{products_kgc, refine, Product, RefineryModel, PRODUCTS};
 use crate::regional::deposits::MineralDeposit;
@@ -36,6 +41,7 @@ pub const DEFAULT_REFINERY_BBL_PER_DAY: f64 = 500.0;
 pub struct ChainModels {
     pub petroleum: PetroleumModel,
     pub refinery: RefineryModel,
+    pub gas_plant: GasPlantModel,
     /// Nameplate capacity (barrels of crude a day).
     pub refinery_bbl_per_day: f64,
 }
@@ -45,6 +51,7 @@ impl ChainModels {
         Ok(Self {
             petroleum: PetroleumModel::load_default()?,
             refinery: RefineryModel::load_default()?,
+            gas_plant: GasPlantModel::load_default()?,
             refinery_bbl_per_day: DEFAULT_REFINERY_BBL_PER_DAY,
         })
     }
@@ -64,6 +71,9 @@ pub struct IndustryChain {
     /// CO₂ with methane's perturbation lifetime.
     #[serde(default)]
     pub atmos_ch4_kgc: f64,
+    /// The gas plant's sales gas and LPG waiting to be taken.
+    #[serde(default)]
+    pub gas: GasStore,
 }
 
 /// What a step did.
@@ -76,6 +86,12 @@ pub struct ChainStep {
     pub burned_kgc: f64,
     /// Methane carbon oxidised to CO₂ this step (kg C).
     pub oxidised_kgc: f64,
+    /// Gas the plant took from the fields (GJ).
+    pub plant_gas_gj: f64,
+    /// Gas the plant burned to run itself, as carbon (kg C).
+    pub plant_burned_kgc: f64,
+    pub lpg_t: f64,
+    pub sales_gas_gj: f64,
 }
 
 fn slot(product: Product) -> usize {
@@ -93,17 +109,18 @@ impl IndustryChain {
     }
 
     /// Carbon the chain holds as material (kg C): crude and gas in the
-    /// fields' tanks and the products in store.
+    /// fields' tanks, the refinery's products and the gas plant's.
     pub fn material_kgc(&self, models: &ChainModels) -> f64 {
         self.fields
             .iter()
             .map(|f| f.tank_kgc(&models.petroleum))
             .sum::<f64>()
             + self.store_kgc.iter().sum::<f64>()
+            + self.gas.kgc()
     }
 
-    /// Run the chain for `dt_s` seconds: produce, then refine every
-    /// field's crude.
+    /// Run the chain for `dt_s` seconds: produce, send every field's gas
+    /// through the gas plant, then refine every field's crude.
     pub fn step(&mut self, dt_s: f64, models: &ChainModels, ledger: &mut Ledger) -> ChainStep {
         let mut out = ChainStep::default();
         if dt_s.is_nan() || dt_s <= 0.0 {
@@ -127,6 +144,15 @@ impl IndustryChain {
             out.oil_m3 += made.oil_m3;
             out.gas_gj += made.gas_gj;
             out.leaked_kgc += made.leaked_kgc;
+            let (gas_gj, gas_kgc) = field.take_gas(f64::INFINITY, &models.petroleum);
+            if gas_gj > 0.0 {
+                let plant = process(&models.gas_plant, gas_gj, gas_kgc, ledger);
+                self.gas.add(&plant);
+                out.plant_gas_gj += plant.raw_gj;
+                out.plant_burned_kgc += plant.burned_kgc;
+                out.lpg_t += plant.lpg_t;
+                out.sales_gas_gj += plant.sales_gj;
+            }
             let crude = field.take_oil(f64::INFINITY);
             if crude <= 0.0 {
                 continue;
