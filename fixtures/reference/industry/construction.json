@@ -39,11 +39,11 @@
       "note": "Table row 'CONIFER  Sawnwood all  m3rw/m3p ... 1.81' in the New Zealand (Oceania) column, the last value in the row; implies about 0.55 m3 sawnwood per m3 log (derived 1/1.81 = 0.552). The text quotes Germany 1.59 and the United States of America 2.04 m3 roundwood per m3 sawnwood for comparison. Position-based column assignment from a wide PDF table; verify. Read from a wide PDF table by column position; confirm against the PDF before any test gates on it."
     },
     {
-      "key": "softwood_sawmill_material_balance_nz",
-      "description": "Sawmill material balance, coniferous logs, New Zealand: shares of log volume going to sawnwood, chips/slabs, sawdust and shavings",
+      "key": "softwood_sawmill_material_balance_north_america",
+      "description": "Sawmill material balance, coniferous logs, North America (Canada and United States median/average): shares of log volume going to sawnwood, chips/slabs, sawdust, shavings and shrinkage",
       "unit": "percent of log input",
       "source": "fao2020",
-      "confidence": "low",
+      "confidence": "medium",
       "value": {
         "table": {
           "row_label": "product",
@@ -74,11 +74,17 @@
               "values": [
                 8
               ]
+            },
+            {
+              "label": "shrinkage_loss",
+              "values": [
+                3
+              ]
             }
           ]
         }
       },
-      "note": "Table 'Material balance' rows for conifer: Sawnwood 47, Chips/slabs 33, Sawdust 9, Shavings 8 (last value in each row, New Zealand column). Table was extracted from a wide PDF layout; the New Zealand column assignment is by position (last column) and should be checked against the PDF. Read from a wide PDF table by column position; confirm against the PDF before any test gates on it."
+      "note": "FAO/ITTO/UN (2020) section 4.4.1, p. 26, CONIFER 'Material balance' rows, North America Median/Average column: Sawnwood 47, Chips/slabs 33, Sawdust 9, Shavings 8, Shrinkage loss 3 (read from the rendered PDF page, 2026-10-23). New Zealand reports only 'Sawnwood all' 1.81 m3rw/m3p and no material balance, so an earlier version of this item mislabelled these North American shares as New Zealand's. Use as a stand-in for a New Zealand mill until a New Zealand balance is cited."
     },
     {
       "key": "reference_house_areas",
