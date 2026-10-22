@@ -117,6 +117,8 @@ pub struct Loan {
 /// Every account, the bank's loans and the log.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct MoneyLedger {
+    /// Saved as a list of pairs: a holder is not a JSON map key.
+    #[serde(with = "pairs")]
     balances: BTreeMap<Holder, Cents>,
     loans: Vec<Loan>,
     issued: Cents,
@@ -312,6 +314,29 @@ impl MoneyLedger {
                 });
             }
         }
+    }
+}
+
+mod pairs {
+    use std::collections::BTreeMap;
+
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    use super::{Cents, Holder};
+
+    pub fn serialize<S: Serializer>(
+        map: &BTreeMap<Holder, Cents>,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
+        map.iter().collect::<Vec<_>>().serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<BTreeMap<Holder, Cents>, D::Error> {
+        Ok(Vec::<(Holder, Cents)>::deserialize(deserializer)?
+            .into_iter()
+            .collect())
     }
 }
 
@@ -703,5 +728,15 @@ mod tests {
     fn a_default_billing_account_is_connected() {
         assert_eq!(BillingAccount::default(), BillingAccount::new());
         assert!(BillingAccount::default().connected);
+    }
+
+    #[test]
+    fn the_ledger_saves_to_json_and_back() {
+        let mut ledger = MoneyLedger::default();
+        ledger.issue(0, person("a"), 10_000, "opening").unwrap();
+        ledger.lend(0, person("a"), 5_000, 0.05, 12).unwrap();
+        let json = serde_json::to_string(&ledger).unwrap();
+        let back: MoneyLedger = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, ledger);
     }
 }
