@@ -1082,16 +1082,19 @@ impl IslandLife {
         f: impl FnOnce(&mut Self, &mut Ledger),
     ) -> Result<(), IslandLifeError> {
         // Material carbon is also held outside the store: in the oil
-        // chain's tanks and products, and in island-refined fuel.
+        // chain's tanks and products, and in island-refined fuel. Each
+        // stock's change is taken on its own before they are added, so a
+        // large refinery inventory cannot drown a household's small flows;
+        // the industrial stocks' own rounding is allowed for.
         let stocks = |life: &Self| {
             let chain_kgc = match (&life.industry, &life.chain_models) {
                 (Some(chain), Some(models)) => chain.material_kgc(models),
                 _ => 0.0,
             };
             [
-                life.materials.stock_of(Reservoir::MaterialCarbon)
-                    + chain_kgc
-                    + life.energy.island_fuel_kgc(),
+                life.materials.stock_of(Reservoir::MaterialCarbon),
+                chain_kgc,
+                life.energy.island_fuel_kgc(),
                 life.materials.stock_of(Reservoir::HumanCarbon),
                 life.materials.stock_of(Reservoir::MaterialWater),
             ]
@@ -1100,16 +1103,20 @@ impl IslandLife {
         let mut ledger = Ledger::new();
         f(self, &mut ledger);
         let after = stocks(self);
-        for (i, (reservoir, kind)) in [
-            (Reservoir::MaterialCarbon, FluxKind::Carbon),
-            (Reservoir::HumanCarbon, FluxKind::Carbon),
-            (Reservoir::MaterialWater, FluxKind::Water),
-        ]
-        .into_iter()
-        .enumerate()
-        {
-            let (delta, flow) = (after[i] - before[i], net(&ledger, reservoir, kind));
-            if (delta - flow).abs() > 1e-9 * (1.0 + delta.abs()) {
+        let change = |i: usize| after[i] - before[i];
+        let industrial = before[1].abs() + before[2].abs() + after[1].abs() + after[2].abs();
+        for (reservoir, kind, delta, slack) in [
+            (
+                Reservoir::MaterialCarbon,
+                FluxKind::Carbon,
+                change(0) + change(1) + change(2),
+                4.0 * f64::EPSILON * industrial,
+            ),
+            (Reservoir::HumanCarbon, FluxKind::Carbon, change(3), 0.0),
+            (Reservoir::MaterialWater, FluxKind::Water, change(4), 0.0),
+        ] {
+            let flow = net(&ledger, reservoir, kind);
+            if (delta - flow).abs() > 1e-9 * (1.0 + delta.abs()) + slack {
                 return Err(IslandLifeError::Audit(format!(
                     "{reservoir:?} at t={} s: stock changed {delta}, ledger says {flow}",
                     self.sim_time_s
@@ -2528,6 +2535,14 @@ impl IslandLife {
         if self.industry.as_ref().is_none_or(|c| c.fields.is_empty()) {
             return Ok(());
         }
+        // The depot delivers only what the founders can pay for at the pump
+        // price (Task 7); with no books the delivery is not charged.
+        let price = match (self.money.as_ref(), self.tariffs.as_ref()) {
+            (Some(money), Some(tariffs)) => money
+                .diesel_budget()
+                .map(|budget| (budget, tariffs.diesel_cents_per_litre)),
+            _ => None,
+        };
         let mut delivered_l = 0.0;
         self.audited(|life, ledger| {
             let (Some(chain), Some(models)) = (life.industry.as_mut(), life.chain_models.as_ref())
@@ -2535,17 +2550,19 @@ impl IslandLife {
                 return;
             };
             chain.step(dt_s, models, ledger);
-            let wanted_l = (life.scenario.estate_energy.diesel_litres
+            let mut wanted_l = (life.scenario.estate_energy.diesel_litres
                 - life.energy.stored_litres(FuelKind::Diesel))
             .max(0.0);
+            if let Some((budget, cents_per_l)) = price {
+                // Less a cent for the price's rounding.
+                wanted_l = wanted_l.min(((budget - 1).max(0) as f64 / cents_per_l).max(0.0));
+            }
             let per_t = 1000.0 / FuelKind::Diesel.kg_per_litre();
             let (tonnes, kgc) = chain.take(Product::Distillate, wanted_l / per_t);
             life.energy
                 .deliver_island_fuel(FuelKind::Diesel, tonnes * per_t, kgc);
             delivered_l = tonnes * per_t;
         })?;
-        // The estate pays the petroleum business for the diesel at the pump
-        // price (Task 7).
         let now_s = self.sim_time_s;
         if let (Some(money), Some(tariffs)) = (self.money.as_mut(), self.tariffs.as_ref()) {
             let cents = tariffs.diesel_price(delivered_l);

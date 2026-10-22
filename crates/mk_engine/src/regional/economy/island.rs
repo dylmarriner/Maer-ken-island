@@ -76,26 +76,51 @@ impl IslandEconomy {
         self.enterprises.iter().find(|e| e.name == name)
     }
 
+    /// The most the founders' household can pay for diesel: Gem-D pays the
+    /// larger half of a price, Gem-K the smaller. `None` when the island has
+    /// no petroleum business to buy from.
+    pub fn diesel_budget(&self) -> Option<Cents> {
+        self.enterprise(PETROLEUM)?;
+        let [d, k] = FOUNDERS.map(|f| self.ledger.balance(&Holder::Person(f.to_string())));
+        Some((2 * d).min(2 * k + 1).max(0))
+    }
+
     /// The estate buys `cents` of diesel from the petroleum business, the
-    /// founders paying half each (their household is both of theirs). Takes
-    /// what the founders can pay; with no petroleum business nothing moves.
-    pub fn sell_diesel(&mut self, at_s: u64, cents: Cents) -> Result<Cents, IslandEconomyError> {
+    /// founders paying half each (their household is both of theirs). Both
+    /// shares are paid or neither: a household that cannot pay the whole
+    /// price is refused, and nothing moves.
+    pub fn sell_diesel(&mut self, at_s: u64, cents: Cents) -> Result<(), IslandEconomyError> {
         let Some(company) = self.enterprises.iter_mut().find(|e| e.name == PETROLEUM) else {
-            return Ok(0);
+            return Ok(());
         };
         let seller = company.holder();
-        let mut paid = 0;
-        for (i, founder) in FOUNDERS.iter().enumerate() {
-            let share = if i == 0 { cents - cents / 2 } else { cents / 2 };
-            let buyer = Holder::Person(founder.to_string());
-            if share > 0 && self.ledger.balance(&buyer) >= share {
-                self.ledger
-                    .transfer(at_s, &buyer, &seller, share, "diesel")?;
-                paid += share;
+        let shares: Vec<(Holder, Cents)> = FOUNDERS
+            .iter()
+            .enumerate()
+            .map(|(i, f)| {
+                let share = if i == 0 { cents - cents / 2 } else { cents / 2 };
+                (Holder::Person(f.to_string()), share)
+            })
+            .collect();
+        for (buyer, share) in &shares {
+            let held = self.ledger.balance(buyer);
+            if held < *share {
+                return Err(MoneyError::Insufficient {
+                    holder: buyer.clone(),
+                    held,
+                    asked: *share,
+                }
+                .into());
             }
         }
-        company.book_income(paid);
-        Ok(paid)
+        for (buyer, share) in &shares {
+            if *share > 0 {
+                self.ledger
+                    .transfer(at_s, buyer, &seller, *share, "diesel")?;
+            }
+        }
+        company.book_income(cents);
+        Ok(())
     }
 
     /// Run every month that has ended by `now_s`: the bank takes its
@@ -158,12 +183,19 @@ mod tests {
 
         // The estate's diesel: half from each founder, takings for the month.
         let before = economy.ledger.balance(&Holder::Person("Gem-D".into()));
-        assert_eq!(economy.sell_diesel(2_600, 1_001).unwrap(), 1_001);
+        assert_eq!(economy.diesel_budget(), Some(2 * before));
+        economy.sell_diesel(2_600, 1_001).unwrap();
         assert_eq!(
             economy.ledger.balance(&Holder::Person("Gem-D".into())),
             before - 501
         );
         assert_eq!(economy.enterprise(PETROLEUM).unwrap().month_income, 1_001);
+
+        // A household that cannot pay the whole price is refused outright.
+        let budget = economy.diesel_budget().unwrap();
+        assert!(economy.sell_diesel(2_700, budget + 2).is_err());
+        assert_eq!(economy.enterprise(PETROLEUM).unwrap().month_income, 1_001);
+        economy.ledger.audit().unwrap();
         assert_eq!(economy.next_month_s, 3_000);
         economy.ledger.audit().unwrap();
     }

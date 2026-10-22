@@ -297,7 +297,8 @@ trade, a 2-3 bedroom cottage's floor area (Task 6 and 7b); the Pukekohe growing 
   Petroleum business, owned 50/50, when the island has oil. Each local month the bank takes its
   instalments, every business closes its month and pays dividends, and the money audit must close.
   The estate pays Gem Petroleum for each depot delivery at MBIE's weekly adjusted retail diesel
-  price (16 October 2026, 321.7 c/L, `industry/prices.json`), the founders half each.
+  price (16 October 2026, 321.7 c/L, `industry/prices.json`), the founders half each; the depot
+  delivers only what they can pay for.
 - **Left:** the petroleum business hires and pays staff (Task 6), and writes payslips to the person's folder;
   household billing once the town has households that buy power and water (the founders' estate
   makes its own, Task 8); Gem-D and Gem-K offering
