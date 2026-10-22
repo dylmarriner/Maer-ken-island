@@ -2,5 +2,6 @@
 //! payroll and markets build on it.
 
 pub mod enterprise;
+pub mod island;
 pub mod market;
 pub mod money;

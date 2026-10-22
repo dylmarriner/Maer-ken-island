@@ -28,6 +28,8 @@ use mk_island::{
 };
 
 use super::ecology::{RegionalEcologyError, RegionalEcologyState};
+use super::economy::island::{IslandEconomy, IslandEconomyError, PETROLEUM};
+use super::economy::money::FinanceReference;
 use super::energy::{solar_output_kw, EstateEnergy, FuelKind, ROOM_LIGHT_LUX};
 use super::estate_layout::{Space, SpaceId};
 use super::household_gas::{HouseholdGas, HouseholdGasSpec};
@@ -143,6 +145,8 @@ pub enum IslandLifeError {
     Scenario(IslandScenarioError),
     /// The deep-time spin-up could not run or its cache could not be used.
     DeepTime(super::deep_time::DeepTimeError),
+    /// The money did not balance, or a business could not pay out.
+    Economy(IslandEconomyError),
 }
 
 impl std::fmt::Display for IslandLifeError {
@@ -323,6 +327,8 @@ pub struct IslandLifeSnapshot {
     pub foraging: BTreeMap<String, ForageTrip>,
     #[serde(default)]
     pub industry: Option<IndustryChain>,
+    #[serde(default)]
+    pub money: Option<IslandEconomy>,
 }
 
 pub struct IslandLife {
@@ -430,6 +436,9 @@ pub struct IslandLife {
     /// not saved).
     pub industry: Option<IndustryChain>,
     chain_models: Option<ChainModels>,
+    /// The founders' money, the bank and the businesses (Phase 4b Task 7,
+    /// D61, D62).
+    pub money: Option<IslandEconomy>,
     topology: GridTopology,
     /// How the living world was spun up before the founders arrived, when
     /// this island was bootstrapped rather than restored (a record, not
@@ -746,6 +755,7 @@ impl IslandLife {
             foraging: BTreeMap::new(),
             industry: None,
             chain_models: None,
+            money: None,
             topology,
             spin_up,
         };
@@ -784,6 +794,8 @@ impl IslandLife {
         }
         // Saved before the island ran its oil fields, or newly built.
         life.install_industry()?;
+        // Saved before the island kept money, or newly built.
+        life.install_economy()?;
         if life.ecology.soil.is_none() {
             life.install_soil()?;
         }
@@ -845,6 +857,7 @@ impl IslandLife {
             household_gas: self.household_gas.clone(),
             foraging: self.foraging.clone(),
             industry: self.industry.clone(),
+            money: self.money.clone(),
         }
     }
 
@@ -919,6 +932,7 @@ impl IslandLife {
             foraging: snapshot.foraging,
             industry: snapshot.industry,
             chain_models: None,
+            money: snapshot.money,
             topology,
             spin_up: None,
         };
@@ -937,6 +951,8 @@ impl IslandLife {
         }
         // Saved before the island ran its oil fields, or newly built.
         life.install_industry()?;
+        // Saved before the island kept money, or newly built.
+        life.install_economy()?;
         if life.ecology.soil.is_none() {
             // Saved before the island had soil carbon.
             life.install_soil()?;
@@ -2445,6 +2461,39 @@ impl IslandLife {
         })
     }
 
+    /// Open the books if this island has none: the founders' sourced
+    /// deposits, and a business for each industry the island runs.
+    fn install_economy(&mut self) -> Result<(), IslandLifeError> {
+        if self.money.is_some() {
+            return Ok(());
+        }
+        let finance = FinanceReference::from_reference(self.labour.library()).map_err(|e| {
+            IslandLifeError::Labour(LabourError::MissingReference(format!("{e:?}")))
+        })?;
+        let has_oil = self.industry.as_ref().is_some_and(|c| !c.fields.is_empty());
+        let enterprises: &[&str] = if has_oil { &[PETROLEUM] } else { &[] };
+        self.money = Some(
+            IslandEconomy::open(
+                &finance,
+                self.canon.orbital_period_s.round() as u64,
+                self.sim_time_s,
+                enterprises,
+            )
+            .map_err(IslandLifeError::Economy)?,
+        );
+        Ok(())
+    }
+
+    /// The month's money, once a month has ended: loan instalments, each
+    /// business's close and dividends, and the money audit.
+    fn economy_step(&mut self) -> Result<(), IslandLifeError> {
+        let now_s = self.sim_time_s;
+        if let Some(economy) = self.money.as_mut() {
+            economy.advance(now_s).map_err(IslandLifeError::Economy)?;
+        }
+        Ok(())
+    }
+
     /// Load the oil chain's models, and survey the island's petroleum
     /// deposits into fields if this island has not done so yet.
     fn install_industry(&mut self) -> Result<(), IslandLifeError> {
@@ -3110,6 +3159,7 @@ impl IslandLife {
             self.household_water_step(human_s as f64)?;
             self.household_gas_step(human_s as f64)?;
             self.industry_step(human_s as f64)?;
+            self.economy_step()?;
             self.meals()?;
             self.water_trips_step(human_s as f64)?;
             // After the water: a trip that ends at a source moves its
@@ -3218,6 +3268,7 @@ impl IslandLife {
         h.update(canonical(&self.water_trips).as_bytes());
         h.update(canonical(&self.foraging).as_bytes());
         h.update(canonical(&self.industry).as_bytes());
+        h.update(canonical(&self.money).as_bytes());
         h.update(canonical(&self.sleep_seconds).as_bytes());
         h.update(&self.sim_time_s.to_le_bytes());
         // Deliberately absent, and each for a reason that must stay true:
@@ -3577,6 +3628,44 @@ mod tests {
         // A restored island carries the chain and runs on.
         let restored = IslandLife::restore(life.canon.clone(), life.snapshot()).expect("restores");
         assert_eq!(restored.industry, life.industry);
+        assert_eq!(restored.state_digest(), life.state_digest());
+    }
+
+    /// The island keeps the founders' money (Task 7, D61): their sourced
+    /// deposits open the books, the oil business is theirs 50/50, each
+    /// month closes and the money balances, and a restored island carries
+    /// the books on.
+    #[test]
+    fn the_island_opens_the_founders_books_and_closes_each_month() {
+        let mut scenario =
+            IslandScenario::load(&repo("fixtures/island/default_scenario.json")).unwrap();
+        scenario.estate_patch.tree_cap = 200;
+        let canon = Arc::new(CanonLocked::load(&repo("fixtures/island/canon.json")).unwrap());
+        let mut life = IslandLife::bootstrap(scenario, canon).expect("the island bootstraps");
+        let finance = FinanceReference::from_reference(life.labour.library()).unwrap();
+        let economy = life.money.clone().expect("the books are open");
+        assert_eq!(economy.ledger.issued(), 2 * finance.founder_opening_cents);
+        assert!(
+            economy.enterprise(PETROLEUM).is_some(),
+            "the island has oil"
+        );
+        let month_s = economy.month_s;
+        assert_eq!(
+            month_s,
+            life.canon.orbital_period_s.round() as u64 / 12,
+            "a month is a twelfth of the local year"
+        );
+
+        life.sim_time_s = economy.next_month_s;
+        life.economy_step().unwrap();
+        let economy = life.money.clone().unwrap();
+        let closes = &economy.enterprise(PETROLEUM).unwrap().closes;
+        assert_eq!(closes.len(), 1, "one month closed");
+        assert_eq!(economy.next_month_s, life.sim_time_s + month_s);
+        economy.ledger.audit().unwrap();
+
+        let restored = IslandLife::restore(life.canon.clone(), life.snapshot()).expect("restores");
+        assert_eq!(restored.money, life.money);
         assert_eq!(restored.state_digest(), life.state_digest());
     }
 
