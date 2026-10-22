@@ -36,7 +36,7 @@ this list holds the current state. The evidence for what is *done* is in
 
 | Area | Item | State | Blocked on |
 |---|---|---|---|
-| Timber | Crosscut, rigging, routes (D40); drying and seasoning done 2026-10-14, splitting 2026-10-23 (D63) | Open | Two-person sawing rate, rigging time |
+| Timber | Crosscut, routes (D40); drying and seasoning done 2026-10-14, splitting and excavator rigging 2026-10-23 (D63) | Open | Two-person sawing rate |
 | Living world | Phase 3 Task 1b: species at island scale | Done (D55 open: upstream densities) | — |
 | Living world | Phase 3 Task 2: every resource and material, placers, recipes | Catalogue, mineral sites, gold placers, ironsand done (2026-10-14); biotic and animal nodes, gem placers, tools, recipes open | Cited diamond-placer grade, shaft depth and rate |
 | Living world | D9: actions take one tick | Open (felling, hauling done) | Cited durations per task |
@@ -97,8 +97,10 @@ the log's last water is booked to the air at that moment rather than when the wo
   cooking fire burns only split wood. Left: a split-only axe rate for a long day, and stacking.
 - **The two-person crosscut saw:** needs both founders at the log together, which is a
   coordination change in `life.rs`, plus a cited two-person sawing rate.
-- **Excavator rigging:** the CAT 330 lifts with the shed's rope; attaching a sling is untimed
-  because no cited figure was found. Either source a rigging time or the owner adds a grapple.
+- **Excavator rigging (done 2026-10-23, D40):** the CAT 330 has no grapple, so its operator
+  slings each log by hand before the pick-up and frees it after the set-down, at Borz & Mititelu
+  2022's measured hook and unhook times for hand-rigged winch logs (13.59 s and 9.30 s, 278 logs,
+  `labour/timber.json`). Left: the walk from the cab to the log and back, untimed.
 - **Routes:** legs are straight lines. Walks climb the ground's rises along them (Naismith,
   `EstateLayout::ground_m`, 2026-10-14); obstacles are ignored, vehicle times ignore slope, and
   vehicles have no position of their own. A route over the patch terrain with a

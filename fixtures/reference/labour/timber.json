@@ -21,6 +21,11 @@
       "licence": "Facts cited with attribution"
     },
     {
+      "key": "borz_mititelu2022",
+      "citation": "Borz, S. A. and Mititelu, V.-B. (2022). Productivity and Fuel Consumption in Skidding Roundwood on Flat Terrains by a Zetor Farm Tractor in Group Shelterwood Cutting of Mixed Oak Forests. Forests 13(8), 1294, doi:10.3390/f13081294.",
+      "licence": "Facts cited with attribution"
+    },
+    {
       "key": "manner2013_piskunov2021",
       "citation": "Manner, J., Nordfjell, T. and Lindroos, O. (2013). Effects of the number of assortments and log concentration on time consumption for forwarding. Silva Fennica 47(4); as summarised by Piskunov, M. (2021). Investigation of structure of technology cycle time of hydraulic manipulators in the process of loading forwarders with logs. Croatian Journal of Forest Engineering 42(3), doi:10.5552/crojfe.2021.863.",
       "licence": "Facts cited with attribution"
@@ -201,6 +206,36 @@
         }
       },
       "note": "Forwarder cranes with grapples; more assortments per load lengthen the cycle (two: 0.27/0.34 min, five: 0.35/0.60 min)."
+    },
+    {
+      "key": "log_rigging_time",
+      "description": "Time for a worker to attach one log to a winch cable by hand (hook), and to detach it at the machine (unhook), mean of 278 logs",
+      "unit": "seconds",
+      "source": "borz_mititelu2022",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "operation",
+          "columns": [
+            "seconds"
+          ],
+          "rows": [
+            {
+              "label": "hook",
+              "values": [
+                13.59
+              ]
+            },
+            {
+              "label": "unhook",
+              "values": [
+                9.3
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Table 4, log-based winching by a Zetor farm tractor's winch in mixed oak: hook 13.59 +/- 8.90 s (3-65), unhook 9.30 +/- 4.74 s (3-24), logs 0.03-0.93 m3 (mean 0.37), about 1-15 m long."
     },
     {
       "key": "emc_equation_celsius",
