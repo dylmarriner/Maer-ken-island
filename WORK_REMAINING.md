@@ -444,8 +444,11 @@ trade, a 2-3 bedroom cottage's floor area (Task 6 and 7b); the Pukekohe growing 
   bodies on the material ledger, and live outside the founders' household (`townsfolk`). Gem
   Health and Gem School open, Gem-D and Gem-K's, and hire their staff at the industry's ordinary
   hourly rate (Stats NZ QES 2026 Q2: health care and social assistance, education and training).
+  Staff hours: a member of staff who is awake in the town and whose own choice is a working
+  action (gather, mine, build, craft, transfer, code; not rest, food, water, shelter or company)
+  works that time at their job, on the books for the next pay run; nobody is rostered (R14).
   Left: houses laid out on the town cell (the townsfolk sleep on its open ground until then),
-  hours worked at the practice and the school (nobody records any yet, so payroll pays nothing),
+  the practice's and school's income (fees and government funding, unsourced) and so a pay run,
   and the town's other enterprises' openings.
 - **Files:** create `regional/town.rs`, `fixtures/island/workforce.json` (generated from the seed);
   generalise `regional/estate_layout.rs` to any high-detail site.

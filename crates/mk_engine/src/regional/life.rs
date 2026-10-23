@@ -2743,6 +2743,51 @@ impl IslandLife {
         Ok(())
     }
 
+    /// Hours at the town's practice and school (Task 8): a member of staff
+    /// who is alive, awake, in the town and whose own choice right now is
+    /// to work (upstream's autonomy chose a working action, not rest, food,
+    /// water, shelter or company) works `dt_s` at their job, on the books
+    /// for the next pay run. Nobody is rostered: an hour counts only when
+    /// the person chose to spend it working.
+    fn town_work(&mut self, dt_s: f64) -> Result<(), IslandLifeError> {
+        let Some(cell) = self.town_cell else {
+            return Ok(());
+        };
+        let Some(money) = self.money.as_mut() else {
+            return Ok(());
+        };
+        let pay = PayReference::from_reference(self.labour.library()).map_err(|e| {
+            IslandLifeError::Labour(LabourError::MissingReference(format!("{e:?}")))
+        })?;
+        let at_work: Vec<String> = self
+            .humans
+            .registry
+            .iter()
+            .filter(|h| self.townsfolk.contains(h.agent_id()))
+            .filter(|h| matches!(h.profile.status, mk_core::human::HumanStatus::Alive))
+            .filter(|h| !h.circadian.asleep)
+            .filter(|h| (h.position.row, h.position.col) == (cell.0 as i32, cell.1 as i32))
+            .filter(|h| is_working(h.economy_action.kind))
+            .map(|h| h.agent_id().to_string())
+            .collect();
+        for id in at_work {
+            for enterprise in money
+                .enterprises
+                .iter_mut()
+                .filter(|e| e.name == town::HEALTH || e.name == town::SCHOOL)
+            {
+                if enterprise.staff.iter().any(|s| s.person == id) {
+                    enterprise
+                        .record_hours(&pay, &id, dt_s / 3_600.0)
+                        .map_err(|e| {
+                            IslandLifeError::Labour(LabourError::MissingReference(format!("{e:?}")))
+                        })?;
+                }
+            }
+        }
+        Ok(())
+    }
+
     /// The month's money, once a month has ended: loan instalments, each
     /// business's close and dividends, and the money audit.
     fn economy_step(&mut self) -> Result<(), IslandLifeError> {
@@ -3548,6 +3593,7 @@ impl IslandLife {
             self.household_water_step(human_s as f64)?;
             self.household_gas_step(human_s as f64)?;
             self.industry_step(human_s as f64)?;
+            self.town_work(human_s as f64)?;
             self.economy_step()?;
             self.meals()?;
             self.water_trips_step(human_s as f64)?;
@@ -3704,6 +3750,20 @@ fn attach_estate_hydro(energy: &mut EstateEnergy, placed: &PlacedEstate, domain:
         hydro.estate.powerhouse_cell.1,
     );
     energy.attach_hydro(hydro.estate.clone(), (px - bx).hypot(py - by) / 1_000.0);
+}
+
+/// An action someone chooses when they mean to get something done, rather
+/// than to meet a need of the body or of company.
+fn is_working(kind: crate::humans::ActionKind) -> bool {
+    matches!(
+        kind,
+        crate::humans::ActionKind::Gather
+            | crate::humans::ActionKind::Mine
+            | crate::humans::ActionKind::Build
+            | crate::humans::ActionKind::Craft
+            | crate::humans::ActionKind::Transfer
+            | crate::humans::ActionKind::Code
+    )
 }
 
 #[cfg(test)]
