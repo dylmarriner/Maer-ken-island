@@ -48,7 +48,7 @@ this list holds the current state. The evidence for what is *done* is in
 | Industry | Phase 4b Task 6: jobs, trades, maintenance (D39) | Open | Upstream human-runtime change first |
 | Industry | Phase 4b Task 7: money, enterprises, payroll | Money, payroll and metered bills done 2026-10-18 (`regional/economy/`, D61, D62; `tests/island_economy.rs`). In `IslandLife` 2026-10-22 (`economy/island.rs`: deposits, Gem Petroleum selling the depot's diesel, monthly loans, closes, dividends, money audit); the petroleum business's staff and payslips, household bills, buying and selling homes open | Task 6 staff; upstream buying |
 | Industry | Phase 4b Task 7b: food and timber chains (forestry, sawmill, house framing, farm, livestock, food processing and fishery models 2026-10-23) | Models done; not yet on the map or wired into island life | Task 8 workforce: who works a farm, mill or salt works, chosen by the people themselves (R14), never assigned |
-| Industry | Phase 4b Task 8: town and workforce | Open; the owner decided the town starts at each enterprise's smallest staff and grows (2026-10-15, §4g) | Demographic tables; a sourced minimum staff per enterprise |
+| Industry | Phase 4b Task 8: town and workforce | Founding households, the smallest practice and a staffed school done 2026-10-23 (`regional/town.rs`, D67); other enterprises' minimum staff, the town in `IslandLife`, homes and growth open | A sourced minimum staff for the oil, gas, power, bank and store businesses |
 | Industry | Phase 4b Task 9: dashboard pages, year acceptance | Industry (with payroll), Power, Timber and Food panels done 2026-10-23; Town page open (needs Task 8) | Tasks 4-8 |
 | Climate | D3 rest: sea/land breezes, katabatic winds | Open | A diurnal wind solver |
 | Climate | D25: SST season lags too long | Diagnosed 2026-10-14: 0.281 of the year against 0.18-0.21 observed | A prognostic marine boundary layer (with D29) |
@@ -414,6 +414,16 @@ trade, a 2-3 bedroom cottage's floor area (Task 6 and 7b); the Pukekohe growing 
   from the original one by people's own choices. Upstream first: quitting, leaving and settling
   are decisions in the human mind. Once it exists, the Creator should offer the town (and, for staff,
   a cottage) as where a person lives, rather than only a spot on the estate.
+- **Founding households (done 2026-10-23):** `regional/town.rs` founds one household per
+  opening from the seed: the worker 20-64 by Stats NZ's 2018 ERP, the household's size by the
+  2023 Census, a partner from the worker's band and children under 18 weighted by natural
+  fertility at the mother's age (D67). `found_from_reference` adds the smallest general practice
+  (one GP, HTRHN 2024, and two nurses at the average rural practice's nurse-to-GP ratio, HTRHN
+  2023) and a school with a teacher per 25 children of school age (Ministry of Education's
+  small-school staffing). Tests in `regional::town` and `tests/island_town.rs`. **Left:** the
+  oil field's, gas plant's, depot's, bank's, store's and power company's smallest staff (no
+  headcount found: Kupe about 35 and Tongariro hydro 40-45 are unverified); the town's people
+  as humans in `IslandLife` with homes, hired through `Enterprise::hire`; growth by hiring.
 - **Files:** create `regional/town.rs`, `fixtures/island/workforce.json` (generated from the seed);
   generalise `regional/estate_layout.rs` to any high-detail site.
 - **Tests:** `tests/island_town.rs`.

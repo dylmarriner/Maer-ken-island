@@ -49,6 +49,21 @@
       "key": "wnz",
       "citation": "Woolworths New Zealand. 'About Woolworths NZ' (woolworths.co.nz/info/about/woolworths-nz) and 'About us' (woolworths.co.nz/info/about-us), retrieved 2026-10-14.",
       "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "htrhn2024",
+      "citation": "Hauora Taiwhenua Rural Health Network (2024). Rural General Practice Stocktake Survey 2024 (single-GP rural practices: 10, averaging one GP to 1,790 enrolled), htrhn.org.nz/wp-content/uploads/2024/11/FINAL-Rural-General-Practice-Stocktake-Survey-2024.pdf, retrieved 2026-10-23.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "htrhn2023",
+      "citation": "Hauora Taiwhenua Rural Health Network (2023). GP Stocktake Summary Results, p. 4 (average rural practice: 2.49 GP FTE, 3.89 NP and RN FTE, 4,562 enrolled), htrhn.org.nz/wp-content/uploads/2022/06/GP-Stocktake-Summary-Results-1.pdf, retrieved 2026-10-23.",
+      "licence": "Facts cited with attribution"
+    },
+    {
+      "key": "moe_staffing2024",
+      "citation": "Ministry of Education (2024). How we calculate curriculum staffing (schools with fewer than 176 students: at least one teacher for every 25 students), web-assets.education.govt.nz/s3fs-public/2024-08/How we calculate curriculum staffing -FINAL.pdf, retrieved 2026-10-23.",
+      "licence": "Facts cited with attribution"
     }
   ],
   "items": [
@@ -338,6 +353,63 @@
         "point": 108
       },
       "note": "Derived: 20,000 / 185 = 108. Overstates in-store staff because the 20,000 includes support offices, processing plants and four dry grocery distribution centres; actual in-store headcount per store is lower. No per-store or per-m2 figure was found."
+    },
+    {
+      "key": "rural_gp_practice_smallest",
+      "description": "The smallest rural general practices in New Zealand run with a single GP",
+      "unit": "GPs",
+      "source": "htrhn2024",
+      "confidence": "high",
+      "value": {
+        "point": 1
+      },
+      "note": "Ten single-GP rural practices in the 2024 stocktake, averaging 1:1790 against the RNZCGP's 1:1300."
+    },
+    {
+      "key": "rural_gp_practice_average_fte",
+      "description": "The average New Zealand rural general practice's clinical staff and enrolment",
+      "unit": "FTE; patients",
+      "source": "htrhn2023",
+      "confidence": "medium",
+      "value": {
+        "table": {
+          "row_label": "staff",
+          "columns": [
+            "value"
+          ],
+          "rows": [
+            {
+              "label": "gp_fte",
+              "values": [
+                2.49
+              ]
+            },
+            {
+              "label": "nurse_fte",
+              "values": [
+                3.89
+              ]
+            },
+            {
+              "label": "enrolled",
+              "values": [
+                4562
+              ]
+            }
+          ]
+        }
+      },
+      "note": "Nurse FTE are nurse practitioners and registered nurses together."
+    },
+    {
+      "key": "small_school_students_per_teacher",
+      "description": "Curriculum staffing for New Zealand schools under 176 students: at least one teacher per this many students",
+      "unit": "students/teacher",
+      "source": "moe_staffing2024",
+      "confidence": "high",
+      "value": {
+        "point": 25
+      }
     }
   ]
 }
