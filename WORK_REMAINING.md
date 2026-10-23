@@ -49,7 +49,7 @@ this list holds the current state. The evidence for what is *done* is in
 | Industry | Phase 4b Task 7: money, enterprises, payroll | Money, payroll and metered bills done 2026-10-18 (`regional/economy/`, D61, D62; `tests/island_economy.rs`). In `IslandLife` 2026-10-22 (`economy/island.rs`: deposits, Gem Petroleum selling the depot's diesel, monthly loans, closes, dividends, money audit); the petroleum business's staff and payslips, household bills, buying and selling homes open | Task 6 staff; upstream buying |
 | Industry | Phase 4b Task 7b: food and timber chains (forestry, sawmill, house framing, farm, livestock, food processing and fishery models 2026-10-23) | Models done; not yet on the map or wired into island life | Task 8 workforce: who works a farm, mill or salt works, chosen by the people themselves (R14), never assigned |
 | Industry | Phase 4b Task 8: town and workforce | Open; the owner decided the town starts at each enterprise's smallest staff and grows (2026-10-15, §4g) | Demographic tables; a sourced minimum staff per enterprise |
-| Industry | Phase 4b Task 9: dashboard pages, year acceptance | Industry panel done 2026-10-23; other pages open | Tasks 4-8 |
+| Industry | Phase 4b Task 9: dashboard pages, year acceptance | Industry (with payroll), Power, Timber and Food panels done 2026-10-23; Town page open (needs Task 8) | Tasks 4-8 |
 | Climate | D3 rest: sea/land breezes, katabatic winds | Open | A diurnal wind solver |
 | Climate | D25: SST season lags too long | Diagnosed 2026-10-14: 0.281 of the year against 0.18-0.21 observed | A prognostic marine boundary layer (with D29) |
 | Climate | D4: parametric weather systems | Open | Structural; large |
@@ -422,7 +422,11 @@ trade, a 2-3 bedroom cottage's floor area (Task 6 and 7b); the Pukekohe growing 
 
 - **Pages:** an Industry panel (2026-10-23: `GET /api/industry`, the fields, the plant's store,
   the accounts, loans and each business's last month close, with the money audit) is served;
-  Power, Town, Food, Timber and Payroll pages and owner controls as replayable commands remain.
+  so are Power, Timber and Food panels and the latest payslips (2026-10-23: `/api/power`,
+  `/api/timber`, `/api/food`, `payslips` in `/api/industry`). The owner's controls (pause,
+  resume, step, snapshot, speed) already reach the island only as `IslandCommand::Control`,
+  which the replay log records (Phase 4 Task 4). The Town page (Task 8) remains, and so does any
+  industry control the owner wants (a price, opening a business) as a new recorded command.
 - **Acceptance:** `tests/island_industry_acceptance.rs` (slow tier): one local year, every ledger
   closes (water, carbon, oxygen, methane, money), snapshot mid-year and resume to the same hash.
 - **Benchmark** the full town and record it in the Phase 5 baseline.

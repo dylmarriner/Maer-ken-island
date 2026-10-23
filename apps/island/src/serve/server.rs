@@ -1085,6 +1085,69 @@ pub fn routes_with_config(
             }
         });
 
+    // The estate's power, fuel and vehicles (Phase 4b Task 9's power page).
+    let get_power = warp::path!("api" / "power")
+        .and(read())
+        .and(with(world.clone()))
+        .map(|world: Option<SimHandle>| match world {
+            None => json(
+                StatusCode::NOT_FOUND,
+                &serde_json::json!({ "errors": ["No island is running, so it has no power. Start the server with --scenario."] }),
+            ),
+            Some(world) => {
+                let current = world.projection();
+                json(
+                    StatusCode::OK,
+                    &serde_json::json!({
+                        "power": &*current.power,
+                        "tick": current.clock.tick,
+                    }),
+                )
+            }
+        });
+
+    // The estate's logs and wood (Phase 4b Task 9's timber page).
+    let get_timber = warp::path!("api" / "timber")
+        .and(read())
+        .and(with(world.clone()))
+        .map(|world: Option<SimHandle>| match world {
+            None => json(
+                StatusCode::NOT_FOUND,
+                &serde_json::json!({ "errors": ["No island is running, so it has no timber. Start the server with --scenario."] }),
+            ),
+            Some(world) => {
+                let current = world.projection();
+                json(
+                    StatusCode::OK,
+                    &serde_json::json!({
+                        "timber": &*current.timber,
+                        "tick": current.clock.tick,
+                    }),
+                )
+            }
+        });
+
+    // The household's food and water (Phase 4b Task 9's food page).
+    let get_food = warp::path!("api" / "food")
+        .and(read())
+        .and(with(world.clone()))
+        .map(|world: Option<SimHandle>| match world {
+            None => json(
+                StatusCode::NOT_FOUND,
+                &serde_json::json!({ "errors": ["No island is running, so it has no food. Start the server with --scenario."] }),
+            ),
+            Some(world) => {
+                let current = world.projection();
+                json(
+                    StatusCode::OK,
+                    &serde_json::json!({
+                        "food": &*current.food,
+                        "tick": current.clock.tick,
+                    }),
+                )
+            }
+        });
+
     // What is at one cell, for a click on the map.
     //
     // The map is one pixel per medium cell, so the page can work out which
@@ -1477,7 +1540,7 @@ pub fn routes_with_config(
             }
             json(
                 StatusCode::NOT_FOUND,
-                &serde_json::json!({ "errors": ["No such endpoint. The dashboard serves /api/status, /api/world, /api/world/<estate|vegetation|materials|clock>, /api/world/estate/layout, /api/world/humans, /api/world/humans/<agent-id>, /api/world/interventions, /api/world/commands/<id>, /api/properties, /api/economy, /api/timeline, /api/conversations, /api/map.png, /api/vegetation.png, /api/patch.png, /api/cell/<row>/<col>, /api/trees, /api/control, /api/health, /api/humans, /api/humans/<agent-id>, /api/activity and /api/creator/options."] }),
+                &serde_json::json!({ "errors": ["No such endpoint. The dashboard serves /api/status, /api/world, /api/world/<estate|vegetation|materials|clock>, /api/world/estate/layout, /api/world/humans, /api/world/humans/<agent-id>, /api/world/interventions, /api/world/commands/<id>, /api/properties, /api/economy, /api/industry, /api/power, /api/timber, /api/food, /api/timeline, /api/conversations, /api/map.png, /api/vegetation.png, /api/patch.png, /api/cell/<row>/<col>, /api/trees, /api/control, /api/health, /api/humans, /api/humans/<agent-id>, /api/activity and /api/creator/options."] }),
             )
         });
 
@@ -1575,6 +1638,9 @@ pub fn routes_with_config(
         .or(get_properties)
         .or(get_economy)
         .or(get_industry)
+        .or(get_power)
+        .or(get_timber)
+        .or(get_food)
         .or(get_timeline)
         .or(get_conversations)
         .or(get_map)

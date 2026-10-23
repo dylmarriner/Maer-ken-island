@@ -25,18 +25,27 @@ const panels = {
   properties: document.getElementById("properties-panel"),
   economy: document.getElementById("economy-panel"),
   industry: document.getElementById("industry-panel"),
+  power: document.getElementById("power-panel"),
+  timber: document.getElementById("timber-panel"),
+  food: document.getElementById("food-panel"),
   timeline: document.getElementById("timeline-panel"),
 };
 const bodies = {
   properties: document.getElementById("properties"),
   economy: document.getElementById("economy"),
   industry: document.getElementById("industry"),
+  power: document.getElementById("power"),
+  timber: document.getElementById("timber"),
+  food: document.getElementById("food"),
   timeline: document.getElementById("timeline"),
 };
 const notes = {
   properties: document.getElementById("properties-note"),
   economy: document.getElementById("economy-note"),
   industry: document.getElementById("industry-note"),
+  power: document.getElementById("power-note"),
+  timber: document.getElementById("timber-note"),
+  food: document.getElementById("food-note"),
   timeline: document.getElementById("timeline-note"),
 };
 const noWorldEl = document.getElementById("no-world");
@@ -281,9 +290,117 @@ async function showIndustry() {
       );
     }
   }
+  if (data.payslips && data.payslips.length) {
+    parts.append(el("h3", "Payroll: the latest pay runs"));
+    parts.append(
+      table(
+        ["Worker", "Business", "Hours", "Rate", "Gross", "Paid", "KiwiSaver", "Still owed", "Leave left (h)"],
+        data.payslips.map((p) => [
+          p.person,
+          p.enterprise,
+          qty(p.hours_worked),
+          dollars(p.hourly_cents),
+          dollars(p.gross),
+          dollars(p.paid),
+          dollars(p.kiwisaver_paid),
+          dollars(p.owed),
+          qty(p.leave_balance_hours),
+        ]),
+      ),
+    );
+  }
   parts.append(el("p", `Current as of tick ${tick.toLocaleString()}.`, { class: "panel-note" }));
   bodies.industry.replaceChildren(parts);
   panels.industry.hidden = false;
+}
+
+async function showPower() {
+  const { power: data, tick } = await getJson("/api/power");
+  const parts = el("div");
+  const fuel = data.fuel_stores.reduce((sum, [, l]) => sum + l, 0);
+  notes.power.textContent =
+    `Batteries at ${qty(data.battery_charge_kwh)} of ${qty(data.battery_capacity_kwh)} kWh; ` +
+    `${qty(data.solar_rated_kw)} kW of solar; ${qty(fuel)} L of fuel in store; ` +
+    `${count(data.lights_on, "light", "lights")} on (${qty(data.lights_kw)} kW).`;
+  if (data.generators.length) {
+    parts.append(el("h3", "Generators"));
+    parts.append(
+      table(
+        ["Rated (kW)", "Fuel", "Litres per kWh"],
+        data.generators.map(([kw, fuel, lpk]) => [qty(kw), fuel, qty(lpk)]),
+      ),
+    );
+  }
+  if (data.fuel_stores.length) {
+    parts.append(el("h3", "Fuel in store"));
+    parts.append(table(["Fuel", "Litres"], data.fuel_stores.map(([f, l]) => [f, qty(l)])));
+  }
+  if (data.hydro_lines) {
+    parts.append(pair("Hydro lines", String(data.hydro_lines)));
+  }
+  if (data.loads.length) {
+    parts.append(el("h3", "Appliances"));
+    parts.append(
+      table(
+        ["Appliance", "Draw (kW)", "In use"],
+        data.loads.map((l) => [l.name, qty(l.kw), l.in_use ? "Yes" : "No"]),
+      ),
+    );
+  }
+  if (data.vehicles.length) {
+    parts.append(el("h3", "Vehicles"));
+    parts.append(
+      table(
+        ["Vehicle", "Fuel", "In the tank (L)", "Tank (L)"],
+        data.vehicles.map((v) => [v.name, v.fuel, qty(v.litres), qty(v.tank_litres)]),
+      ),
+    );
+  }
+  parts.append(el("p", `Current as of tick ${tick.toLocaleString()}.`, { class: "panel-note" }));
+  bodies.power.replaceChildren(parts);
+  panels.power.hidden = false;
+}
+
+async function showTimber() {
+  const { timber: data, tick } = await getJson("/api/timber");
+  const parts = el("div");
+  notes.timber.textContent =
+    `${data.standing_trees.toLocaleString()} trees standing on the estate's patch; ` +
+    `${qty(data.seasoned_wood_kg)} kg of seasoned wood in the stock.`;
+  parts.append(
+    table(
+      ["Where", "Logs and pieces", "Dry wood (kg)", "Water in them (kg)"],
+      [
+        ["On the ground", data.ground],
+        ["On a vehicle", data.on_vehicles],
+        ["In the timber store", data.stored],
+      ].map(([where, t]) => [where, String(t.count), qty(t.dry_kg), qty(t.water_kg)]),
+    ),
+  );
+  parts.append(el("p", `Current as of tick ${tick.toLocaleString()}.`, { class: "panel-note" }));
+  bodies.timber.replaceChildren(parts);
+  panels.timber.hidden = false;
+}
+
+async function showFood() {
+  const { food: data, tick } = await getJson("/api/food");
+  const parts = el("div");
+  notes.food.textContent =
+    `${qty(data.plant_food_kg)} kg of plant food and ${qty(data.meat_kg)} kg of meat in the store.`;
+  if (data.tank_capacity_kg !== null) {
+    parts.append(
+      pair("Rainwater tank", `${qty(data.tank_stored_kg)} of ${qty(data.tank_capacity_kg)} kg`),
+    );
+  }
+  parts.append(pair("Times someone found no food", data.food_shortfalls.toLocaleString()));
+  parts.append(pair("Times someone found no water", data.water_shortfalls.toLocaleString()));
+  parts.append(pair("Out gathering food", data.foraging.length ? data.foraging.join(", ") : "Nobody"));
+  parts.append(
+    pair("Out fetching water", data.fetching_water.length ? data.fetching_water.join(", ") : "Nobody"),
+  );
+  parts.append(el("p", `Current as of tick ${tick.toLocaleString()}.`, { class: "panel-note" }));
+  bodies.food.replaceChildren(parts);
+  panels.food.hidden = false;
 }
 
 // The island, drawn, and zoomable from the whole 2,400 km of it down to a
@@ -951,7 +1068,7 @@ async function showTimeline() {
 /// they hold was true once and is not now, and leaving a write form up for
 /// a stopped island invites an operator to act on it.
 function hidePanels() {
-  for (const id of ["intervene-panel", "map-panel", "properties-panel", "economy-panel", "industry-panel", "timeline-panel"]) {
+  for (const id of ["intervene-panel", "map-panel", "properties-panel", "economy-panel", "industry-panel", "power-panel", "timber-panel", "food-panel", "timeline-panel"]) {
     const panel = document.getElementById(id);
     if (panel) panel.hidden = true;
   }
@@ -1012,6 +1129,9 @@ async function load() {
       showProperties(),
       showEconomy(),
       showIndustry(),
+      showPower(),
+      showTimber(),
+      showFood(),
       showTimeline(),
       fillPlacesAndPeople(),
     ]);
