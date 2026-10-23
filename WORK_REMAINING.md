@@ -433,8 +433,8 @@ trade, a 2-3 bedroom cottage's floor area (Task 6 and 7b); the Pukekohe growing 
   2023) and a school with a teacher per 25 children of school age (Ministry of Education's
   small-school staffing). Tests in `regional::town` and `tests/island_town.rs`. **Left:** the
   oil field's, gas plant's, depot's, bank's, store's and power company's smallest staff (no
-  headcount found: Kupe about 35 and Tongariro hydro 40-45 are unverified); the town's people
-  as humans in `IslandLife` with homes, hired through `Enterprise::hire`; growth by hiring.
+  headcount found: Kupe about 35 and Tongariro hydro 40-45 are unverified); homes for the
+  town's people (they are in `IslandLife` and hired, below); growth by hiring.
 - **Where (2026-10-23):** `property.rs` `town_site` puts the town on the dry cell nearest the
   town hydro plant's powerhouse, outside the estate's 2 x 2 block, the same cell for the same
   island. The town follows its power; nobody chose the cell. Island life founds the town at
