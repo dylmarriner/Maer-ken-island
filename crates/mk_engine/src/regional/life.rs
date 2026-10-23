@@ -2115,6 +2115,30 @@ impl IslandLife {
         }
     }
 
+    /// How much longer than in a full crop it takes to find fruit on `cell`:
+    /// a year's crop (its share of production, never more than stands
+    /// there) over the stock left, 1 where the cell has no edible layer or
+    /// is full.
+    fn forage_scarcity(&self, cell: (usize, usize)) -> f64 {
+        let Some(edible) = self.ecology.edible.as_ref() else {
+            return 1.0;
+        };
+        let i = self
+            .ecology
+            .biomass_kgc_m2
+            .grid_to_linear_index(cell.0, cell.1);
+        let share = edible.share.get(i).copied().unwrap_or(0.0);
+        let npp = *self.ecology.npp_kgc_m2_yr.get(cell.0, cell.1);
+        let biomass = *self.ecology.biomass_kgc_m2.get(cell.0, cell.1);
+        let full = (share * npp.max(0.0)).min(biomass.max(0.0));
+        let left = self.edible_kgc_m2(cell);
+        if full > 0.0 && left > 0.0 {
+            (full / left).max(1.0)
+        } else {
+            1.0
+        }
+    }
+
     /// Plant carbon everyone alive at home owes their next meal (kg C).
     fn household_owed_kgc(&self, rows: usize, cols: usize) -> f64 {
         self.humans
@@ -2182,6 +2206,12 @@ impl IslandLife {
         let rate_kcal_h = ecology("forage_return_rate_acorns")?;
         let search_per_handling = ecology("forage_search_per_handling_fruit")?;
         let kcal = owed_kgc / super::materials::respired_carbon_kg_per_kcal();
+        // The pack's search time was measured in a patch in fruit. Holling's
+        // disc equation (1959, Can. Entomol. 91:385) finds food at a rate in
+        // proportion to how much there is, so as the cell is picked over
+        // each kilogram takes longer to find: search scales with a full
+        // crop over what is left (R3).
+        let scarcity = self.forage_scarcity(cell);
         // Kelly's return rates are practised foragers'; a beginner takes
         // longer (R11).
         let skill =
@@ -2194,7 +2224,7 @@ impl IslandLife {
                 cell,
                 kgc: owed_kgc,
                 out_s,
-                forage_s: handling_s * (1.0 + search_per_handling),
+                forage_s: handling_s * (1.0 + search_per_handling * scarcity),
                 back_s,
                 worked_s: 0.0,
                 from_home,
@@ -4486,6 +4516,45 @@ mod tests {
         let digest = life.state_digest();
         life.split_wood_kg -= 1.0;
         assert_ne!(life.state_digest(), digest);
+    }
+
+    /// A picked-over cell takes longer to search (R3, Holling 1959): with
+    /// half its crop left, the same meal's search time doubles; its
+    /// handling time does not change.
+    #[test]
+    fn a_picked_over_cell_takes_longer_to_search() {
+        let mut scenario =
+            IslandScenario::load(&repo("fixtures/island/default_scenario.json")).unwrap();
+        scenario.estate_patch.tree_cap = 200;
+        let canon = Arc::new(CanonLocked::load(&repo("fixtures/island/canon.json")).unwrap());
+        let mut life = IslandLife::bootstrap(scenario, canon).expect("the island bootstraps");
+        practise_everyone(&mut life, Task::Foraging);
+        let medium = DomainLevel::Medium;
+        let (rows, cols) = (life.domain.rows(medium), life.domain.cols(medium));
+        let stands = life.standing_cell("Gem-D", rows, cols);
+        let cell = cells_around(stands, FORAGE_RADIUS_CELLS, rows, cols)
+            .into_iter()
+            .find(|c| life.edible_kgc_m2(*c) > 0.0 && life.forage_scarcity(*c) == 1.0)
+            .expect("a cell in fruit");
+        let owed = 1_000.0 * super::super::materials::respired_carbon_kg_per_kcal();
+        life.plan_forage("Gem-D", stands, cell, owed).unwrap();
+        let full = life.foraging.remove("Gem-D").unwrap();
+
+        let i = life
+            .ecology
+            .biomass_kgc_m2
+            .grid_to_linear_index(cell.0, cell.1);
+        let edible = life.ecology.edible.as_mut().unwrap();
+        edible.kgc_m2[i] /= 2.0;
+        assert!((life.forage_scarcity(cell) - 2.0).abs() < 1e-9);
+        life.plan_forage("Gem-D", stands, cell, owed).unwrap();
+        let half = life.foraging.remove("Gem-D").unwrap();
+
+        // forage_s = handling × (1 + 0.5 × scarcity): 1.5 h for 1 h of
+        // handling in a full crop, 2 h with half of it left.
+        let handling = full.forage_s / 1.5;
+        assert!((half.forage_s - handling * 2.0).abs() < 1e-6 * half.forage_s);
+        assert_eq!(half.out_s, full.out_s);
     }
 
     /// A founder who goes to eat first gathers the meal (R3): nothing is
