@@ -269,7 +269,8 @@ fn a_day_on_the_island_keeps_everything_alive_inside_closed_books() {
             .max((h.position.col - estate.1 as i32).abs());
         assert!(away <= 5, "{id} is {away} cells from home after a day");
     }
-    assert_eq!(w.humans.registry.iter().count(), 2);
+    // The founders, and the townsfolk if the island has a town (Task 8).
+    assert_eq!(w.humans.registry.iter().count(), 2 + w.townsfolk.len());
     // The estate's inventory is intact.
     assert_eq!(w.placed.layout.items.len(), items_at_start);
     // Physical, ecological and household steps all ran, and every audit closed.
