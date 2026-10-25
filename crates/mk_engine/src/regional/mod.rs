@@ -48,6 +48,7 @@ pub mod tectonics;
 pub mod terrain;
 pub mod tides;
 pub mod timber;
+pub mod town;
 pub mod volcanism;
 pub mod weather;
 pub mod world;
