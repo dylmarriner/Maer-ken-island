@@ -309,7 +309,11 @@ impl Town {
             let teachers = self
                 .people
                 .iter()
-                .filter(|p| p.job.as_ref().is_some_and(|j| j.0 == enterprise && j.1 == "teacher"))
+                .filter(|p| {
+                    p.job
+                        .as_ref()
+                        .is_some_and(|j| j.0 == enterprise && j.1 == "teacher")
+                })
                 .count();
             let needed = ((self.school_age() as f64 / students_per_teacher).ceil() as usize).max(1);
             if teachers >= needed {
@@ -503,9 +507,16 @@ mod tests {
         let teachers = town
             .people
             .iter()
-            .filter(|p| p.job.as_ref().is_some_and(|j| j.0 == SCHOOL && j.1 == "teacher"))
+            .filter(|p| {
+                p.job
+                    .as_ref()
+                    .is_some_and(|j| j.0 == SCHOOL && j.1 == "teacher")
+            })
             .count();
-        assert!(teachers >= 1, "non-teaching staff cannot fill teacher positions");
+        assert!(
+            teachers >= 1,
+            "non-teaching staff cannot fill teacher positions"
+        );
         assert!(teachers as f64 * 25.0 >= town.school_age() as f64);
     }
 
