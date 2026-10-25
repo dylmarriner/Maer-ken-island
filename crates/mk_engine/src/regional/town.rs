@@ -186,19 +186,6 @@ impl Demography {
         })
     }
 
-    fn fertility_at(&self, age: f64) -> f64 {
-        self.fertility
-            .iter()
-            .find(|b| age >= b.from && age < b.to)
-            .map_or(0.0, |b| b.weight)
-    }
-
-    fn population_at(&self, male: bool, age: f64) -> f64 {
-        self.population[usize::from(!male)]
-            .iter()
-            .find(|b| age >= b.from && age < b.to)
-            .map_or(0.0, |b| b.weight / (b.to - b.from))
-    }
 }
 
 /// Uniform draws keyed by the seed and a label.
@@ -578,7 +565,9 @@ mod tests {
                 assert!(child.age_years < CHILD_UNDER);
                 let at_birth = mother.age_years - child.age_years;
                 assert!(
-                    d.fertility_at(at_birth) > 0.0,
+                    d.fertility.iter().any(|band| {
+                        (band.from..band.to).contains(&at_birth) && band.weight > 0.0
+                    }),
                     "child born when mother was {at_birth}, outside actual fertility bands"
                 );
             }
