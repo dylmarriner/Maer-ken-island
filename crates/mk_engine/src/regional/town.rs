@@ -468,6 +468,28 @@ mod tests {
     }
 
     #[test]
+    fn school_caretakers_do_not_satisfy_the_teacher_requirement() {
+        let d = demography();
+        let mut town = found(
+            &[Opening {
+                enterprise: SCHOOL.into(),
+                role: "caretaker".into(),
+                staff: 1,
+            }],
+            &d,
+            &[19; 32],
+        );
+        town.staff_school(SCHOOL, 25.0, &d, &[19; 32]);
+        let teachers = town
+            .people
+            .iter()
+            .filter(|p| p.job.as_ref().is_some_and(|j| j.0 == SCHOOL && j.1 == "teacher"))
+            .count();
+        assert!(teachers >= 1, "non-teaching staff cannot fill teacher positions");
+        assert!(teachers as f64 * 25.0 >= town.school_age() as f64);
+    }
+
+    #[test]
     fn the_same_seed_founds_the_same_town() {
         let d = demography();
         assert_eq!(
@@ -509,7 +531,8 @@ mod tests {
 
     #[test]
     fn children_are_born_to_mothers_of_fertile_age() {
-        let town = found(&openings(500), &demography(), &[5; 32]);
+        let d = demography();
+        let town = found(&openings(1500), &d, &[5; 32]);
         for h in &town.households {
             let members: Vec<&Townsperson> = h
                 .members
@@ -523,7 +546,10 @@ mod tests {
             for child in &members[2..] {
                 assert!(child.age_years < CHILD_UNDER);
                 let at_birth = mother.age_years - child.age_years;
-                assert!((19.0..50.0).contains(&at_birth), "{at_birth}");
+                assert!(
+                    d.fertility_at(at_birth) > 0.0,
+                    "child born when mother was {at_birth}, outside actual fertility bands"
+                );
             }
         }
     }
