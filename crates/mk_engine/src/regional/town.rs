@@ -185,7 +185,6 @@ impl Demography {
             fertility: bands(table("natural_marital_fertility")?, "births_per_woman_year")?,
         })
     }
-
 }
 
 /// Uniform draws keyed by the seed and a label.
