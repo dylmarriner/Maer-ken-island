@@ -309,7 +309,7 @@ impl Town {
             let teachers = self
                 .people
                 .iter()
-                .filter(|p| p.job.as_ref().is_some_and(|j| j.0 == enterprise))
+                .filter(|p| p.job.as_ref().is_some_and(|j| j.0 == enterprise && j.1 == "teacher"))
                 .count();
             let needed = ((self.school_age() as f64 / students_per_teacher).ceil() as usize).max(1);
             if teachers >= needed {
@@ -368,21 +368,41 @@ impl Town {
         if size >= 2 {
             let partner_age = b.from + d.uniform() * (b.to - b.from);
             people.push(person(1, !male, partner_age, None));
-            // Children by the mother's fertility at each age she could
-            // have borne them, times the population at that age.
+            // Children are drawn over the exact intervals where both the
+            // mother's fertility schedule and the child's population band
+            // apply. Sampling a whole integer-year bucket first could push
+            // the final birth age outside its selected fertility band.
             let mother_age = if male { partner_age } else { age };
-            let ages: Vec<f64> = (0..CHILD_UNDER as usize).map(|a| a as f64).collect();
             for member in 2..size as usize {
                 let child_male = d.uniform() < 0.5;
-                let weights: Vec<f64> = ages
-                    .iter()
-                    .map(|a| {
-                        demography.fertility_at(mother_age - a)
-                            * demography.population_at(child_male, *a)
-                    })
-                    .collect();
+                let mut intervals = Vec::new();
+                let mut weights = Vec::new();
+                for fertility in &demography.fertility {
+                    if fertility.weight <= 0.0 {
+                        continue;
+                    }
+                    for population in &demography.population[usize::from(!child_male)] {
+                        if population.weight <= 0.0 || population.to <= population.from {
+                            continue;
+                        }
+                        let from = (mother_age - fertility.to).max(population.from).max(0.0);
+                        let to = (mother_age - fertility.from)
+                            .min(population.to)
+                            .min(CHILD_UNDER);
+                        if to > from {
+                            intervals.push((from, to));
+                            // Integrate the piecewise-constant fertility and
+                            // population density over the actual age range.
+                            weights.push(
+                                (to - from) * fertility.weight * population.weight
+                                    / (population.to - population.from),
+                            );
+                        }
+                    }
+                }
                 let Some(i) = d.pick(&weights) else { break };
-                let child_age = ages[i] + d.uniform();
+                let (from, to) = intervals[i];
+                let child_age = from + d.uniform() * (to - from);
                 people.push(person(member, child_male, child_age, None));
             }
         }
