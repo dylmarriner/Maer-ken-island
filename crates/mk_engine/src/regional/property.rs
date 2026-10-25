@@ -219,6 +219,29 @@ pub fn estate_hydro_site(
 
 /// Every qualifying block, best first: `(score, row, col)` of the block's
 /// south-west cell. Ties break on the lowest `(row, col)`.
+/// Where the town stands (Task 8): the medium cell nearest the town
+/// hydro plant's powerhouse that the estate could stand on too, outside
+/// the founders' 2 x 2 block at `estate`; ties go to the lower row, then
+/// column. `None` when the river has no town-sized plant or no such cell.
+/// The town is put by its power, not chosen by anyone (D67).
+pub fn town_site(
+    physical: &RegionalPhysicalState,
+    ecology: &RegionalEcologyState,
+    domain: &IslandDomain,
+    hydro: &EstateHydro,
+    estate: (usize, usize),
+) -> Option<(usize, usize)> {
+    let medium = DomainLevel::Medium;
+    let (pr, pc) = hydro.town.as_ref()?.powerhouse_cell;
+    let in_estate = |r: usize, c: usize| {
+        (estate.0..=estate.0 + 1).contains(&r) && (estate.1..=estate.1 + 1).contains(&c)
+    };
+    (0..domain.rows(medium))
+        .flat_map(|r| (0..domain.cols(medium)).map(move |c| (r, c)))
+        .filter(|&(r, c)| !in_estate(r, c) && standable(physical, ecology, r, c))
+        .min_by_key(|&(r, c)| (r.abs_diff(pr).pow(2) + c.abs_diff(pc).pow(2), r, c))
+}
+
 pub fn ranked_estate_sites(
     canon: &CanonLocked,
     physical: &RegionalPhysicalState,

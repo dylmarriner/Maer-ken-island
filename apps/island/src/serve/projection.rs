@@ -835,11 +835,21 @@ fn people(life: &IslandLife) -> Vec<Person> {
                 age_years: human.development.age_years,
                 space: at.map(|p| space_name(life, p.space)),
                 position_m: at.map(|p| p.position_m),
-                cell: at.and_then(|p| {
-                    let size = life.domain.cell_size_m(mk_island::DomainLevel::Medium);
-                    let (x, y) = p.position_m;
-                    (x >= 0.0 && y >= 0.0).then(|| ((y / size) as usize, (x / size) as usize))
-                }),
+                cell: at
+                    .and_then(|p| {
+                        let size = life.domain.cell_size_m(mk_island::DomainLevel::Medium);
+                        let (x, y) = p.position_m;
+                        (x >= 0.0 && y >= 0.0).then(|| ((y / size) as usize, (x / size) as usize))
+                    })
+                    .or_else(|| {
+                        // Town residents live off-estate: their position is
+                        // an island cell, not an invented estate metre offset.
+                        let row = usize::try_from(human.position.row).ok()?;
+                        let col = usize::try_from(human.position.col).ok()?;
+                        (row < life.domain.rows(mk_island::DomainLevel::Medium)
+                            && col < life.domain.cols(mk_island::DomainLevel::Medium))
+                        .then_some((row, col))
+                    }),
                 body_carbon_kg: life.materials.body_carbon_kg(id),
                 height_m: human.body.height_cm / 100.0,
             }

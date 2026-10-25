@@ -135,8 +135,16 @@ async fn a_client_reads_the_whole_island_through_the_shared_schema() {
             "the roster and the world must be the same people"
         );
         assert!(
-            roster.iter().all(|p| p.space.is_some()),
+            roster
+                .iter()
+                .filter(|p| p.agent_id == "Gem-D" || p.agent_id == "Gem-K")
+                .all(|p| p.space.is_some()),
             "both founders start in their own bedrooms"
+        );
+        assert!(
+            roster.iter().filter(|p| p.agent_id != "Gem-D" && p.agent_id != "Gem-K")
+                .all(|p| p.space.is_none()),
+            "town residents must not be assigned rooms in the founders' estate"
         );
     })
     .await;

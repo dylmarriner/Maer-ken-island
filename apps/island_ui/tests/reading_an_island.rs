@@ -137,11 +137,19 @@ fn the_application_reads_an_island_and_has_enough_to_draw_it() {
         "somebody on the island could not be placed on it"
     );
     for person in &placed {
-        assert!(
-            person.estate.is_some(),
-            "{} starts on the estate and should have metres",
-            person.agent_id
-        );
+        if person.agent_id == "Gem-D" || person.agent_id == "Gem-K" {
+            assert!(
+                person.estate.is_some(),
+                "{} starts on the estate and should have metres",
+                person.agent_id
+            );
+        } else {
+            assert!(
+                person.estate.is_none(),
+                "{} lives in the town and must not be drawn in the founders' yard",
+                person.agent_id
+            );
+        }
         assert!(
             person.regional.y.is_finite()
                 && person.regional.x.is_finite()
