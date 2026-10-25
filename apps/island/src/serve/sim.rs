@@ -1324,7 +1324,18 @@ mod tests {
             "the starting digest describes the island on show, so it is current"
         );
         assert_eq!(at_once.digest.value.len(), 64, "the digest is not a hash");
-        assert_eq!(at_once.people.len(), 2, "the founders are missing");
+        assert!(
+            at_once.people.iter().any(|p| p.agent_id == "Gem-D")
+                && at_once.people.iter().any(|p| p.agent_id == "Gem-K"),
+            "the founders are missing"
+        );
+        assert!(
+            at_once
+                .people
+                .iter()
+                .all(|p| p.position_m.is_some() || p.cell.is_some()),
+            "every resident needs a drawable location"
+        );
         assert!(at_once.people.iter().all(|p| p.alive));
         assert!(at_once.land.trees > 0, "the estate has no trees");
         assert!(at_once.estate.battery_capacity_kwh > 0.0);

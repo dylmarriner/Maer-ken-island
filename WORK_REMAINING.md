@@ -179,7 +179,10 @@ animal and fish resource nodes (done 2026-10-23, §2b).
   beginner and quickened by practice (R11, D64). Still one tick: Craft (upstream's instant
   recipes: planks, masonry, rope, fuel, ingots, tools; on the island nobody carries their inputs
   yet, since timber and gold go to the estate's store), Explore and SocialApproach (moves paced by
-  the cell crossing only), Transfer, Harm and Intimacy.
+  the cell crossing only), Transfer, Harm and Intimacy. Timing Craft is not a matter of a rate:
+  upstream's recipes are unit counts with no masses (3 wood make 2 planks), so a duration per
+  recipe would have nothing to scale with. It needs upstream recipes in kilograms first, then a
+  cited rate per kg (checked 2026-10-23).
 - **Needs:** a cited duration for each action (`fixtures/reference/labour/productivity.json`
   holds some already), and the same task machinery felling uses (`life.rs` `work`) extended to
   them. Actions with no Compendium row cost the resting baseline (D22, accepted).
@@ -190,6 +193,14 @@ animal and fish resource nodes (done 2026-10-23, §2b).
 - **Needs:** a regional soils model (parent rock from `geology.rs`, age from the deep-time
   spin-up in §3, nitrogen and phosphorus) and a cited nutrient limitation on NPP. Large; it
   follows the spin-up.
+- **Checked 2026-10-23:** Porder and Ramachandran (2013, Plant Soil 367:41-55,
+  doi:10.1007/s11104-012-1490-2) give rock phosphorus from 263,539 EarthChem analyses. Their
+  abstract states medians for granite (436 ppm), andesite (1,000), mudstone (1,135), siltstone
+  (698), sandstone (500), several ultramafic rocks (120) and several alkali basalts (>3,000), and
+  that parent rock explains 42% of soil total P across 62 sites. The full table (basalt, schist,
+  gneiss, greywacke, limestone, marble, rhyolite: the rest of `geology.rs`'s lithologies) is
+  behind the paywall and not read. Still missing as well: no source found yet turns soil P into
+  a limit on NPP, so a phosphorus field alone would change nothing.
 
 ---
 
@@ -431,8 +442,23 @@ trade, a 2-3 bedroom cottage's floor area (Task 6 and 7b); the Pukekohe growing 
   2023) and a school with a teacher per 25 children of school age (Ministry of Education's
   small-school staffing). Tests in `regional::town` and `tests/island_town.rs`. **Left:** the
   oil field's, gas plant's, depot's, bank's, store's and power company's smallest staff (no
-  headcount found: Kupe about 35 and Tongariro hydro 40-45 are unverified); the town's people
-  as humans in `IslandLife` with homes, hired through `Enterprise::hire`; growth by hiring.
+  headcount found: Kupe about 35 and Tongariro hydro 40-45 are unverified); homes for the
+  town's people (they are in `IslandLife` and hired, below); growth by hiring.
+- **Where (2026-10-23):** `property.rs` `town_site` puts the town on the dry cell nearest the
+  town hydro plant's powerhouse, outside the estate's 2 x 2 block, the same cell for the same
+  island. The town follows its power; nobody chose the cell. Island life founds the town at
+  bootstrap (`install_town`, also on restoring an island saved without one): `town.rs`'s first
+  staff and households are sampled whole through upstream's spawn (`settle_in_town`, keyed by
+  their ids, born their age before the island's clock), stand on the town cell, have their
+  bodies on the material ledger, and live outside the founders' household (`townsfolk`). Gem
+  Health and Gem School open, Gem-D and Gem-K's, and hire their staff at the industry's ordinary
+  hourly rate (Stats NZ QES 2026 Q2: health care and social assistance, education and training).
+  Staff hours: a member of staff who is awake in the town and whose own choice is a working
+  action (gather, mine, build, craft, transfer, code; not rest, food, water, shelter or company)
+  works that time at their job, on the books for the next pay run; nobody is rostered (R14).
+  Left: houses laid out on the town cell (the townsfolk sleep on its open ground until then),
+  the practice's and school's income (fees and government funding, unsourced) and so a pay run,
+  and the town's other enterprises' openings.
 - **Files:** create `regional/town.rs`, `fixtures/island/workforce.json` (generated from the seed);
   generalise `regional/estate_layout.rs` to any high-detail site.
 - **Tests:** `tests/island_town.rs`.
@@ -534,7 +560,7 @@ Ordered by what most changes the founders' daily life:
 | R0 | Honest register: deviation rows for every mind and sense gap; book grazer faeces and deaths to detritus; remove or wire dead code | humans §1.11, earth §4 Step 0 | Done: D44-D54 record the mind and sense gaps; litter, faeces and carcasses feed RothC soil carbon (`regional/soil.rs`, D43); the unused sparse plant view is gone |
 | R1 | Water at home: a rainwater tank filled by simulated rain on the house roof, sized from the estate's own climate (ESR 2021 use, Harrison Grierson 2011 inflow model); people away from home drink where they find water; a dry tank means fetching by hand | work §3.2 | Tank done (PR #10, D42); R1b fetching by hand with two 20 L jerrycans when dry done (PR #12) |
 | R2 | Mass-based carrying and real containers: load limits by body mass, pace and energy by load | work §3.1, §2.2 | In part (2026-10-14): load limits by body mass; pace under load from measured self-selected speeds; energy by load from Pandolf's equation for water fetched by hand. Open: a general mass inventory of what each person holds, and baskets, sacks and packs |
-| R3 | An edible food base: edible fractions, foraging with a food store at home, seasonal and soil-limited plant production (D31) | earth Steps 1-2, work §3.3 | Started (#42, D57): people eat only a forest's fruit and seed, grown at NPP times Ward et al. 2025's reproductive allocation, not its wood. A meal is now gathered before it is eaten: the walk to the food and back, and the meal's energy over Kelly's (2013, Table 3-4) acorn return rate, 821 kcal/h, at the Compendium's foraging MET. At home the household keeps a food store: one trip gathers what everyone at home owes, carried back within the forager's sustainable load (R2), and the others eat from the store (2026-10-15). Search time on top of Kelly's post-encounter rate: 0.5 h per hour of handling, from O'Connell and Hawkes's (1984) Alyawara fruit trips (2026-10-22). Left: search that slows as the cell's food runs low, spoilage, bracken and raupo once their extent per cell is sourced, seasonality, soil limits (D31) |
+| R3 | An edible food base: edible fractions, foraging with a food store at home, seasonal and soil-limited plant production (D31) | earth Steps 1-2, work §3.3 | Started (#42, D57): people eat only a forest's fruit and seed, grown at NPP times Ward et al. 2025's reproductive allocation, not its wood. A meal is now gathered before it is eaten: the walk to the food and back, and the meal's energy over Kelly's (2013, Table 3-4) acorn return rate, 821 kcal/h, at the Compendium's foraging MET. At home the household keeps a food store: one trip gathers what everyone at home owes, carried back within the forager's sustainable load (R2), and the others eat from the store (2026-10-15). Search time on top of Kelly's post-encounter rate: 0.5 h per hour of handling, from O'Connell and Hawkes's (1984) Alyawara fruit trips (2026-10-22). That search now slows as the cell is picked over: Holling's (1959) disc equation finds food in proportion to how much there is, so search is the measured 0.5 h times a year's crop over what is left (2026-10-23). Left: spoilage, bracken and raupo once their extent per cell is sourced, seasonality, soil limits (D31) |
 | R4 | Firewood, drying (D40), fire and cooking | work §3.4, §2.5-2.6 | In part: logs dry (D40); the kitchen's gas stove burns the house's average cooking LPG from two bottles (D59, 2026-10-14); when the bottles are empty, a wood fire burns the store's air-dry wood at kitchen-performance-test rates (1.74-1.98 kg per adult equivalent per day). Open: meals cooked at times of day, fire tending and fetching time. Splitting done 2026-10-23 (D63): only split wood burns |
 | R5 | Every action takes its real time (D9): gather, mine, build with delivered materials and visible progress, craft chains; skill improves with practice (power law) | work §3.5-3.8 | Started (2026-10-14): mining a placer is timed (D9); the first building, a 10 m² firewood shed, takes its timber from the store's seasoned wood and the packs' timber-frame hours with the powered saw (D60); the starting estate counts as pre-built (D60, the owner's ruling). Open: gathering clay, sand, gravel and stone, a covered stack's drying, craft chains, skill |
 | R6 | Senses and perception as things (sight, hearing, smell, taste, touch and pain from injury), memory of places, and choices that use memory, emotion, goals and personality | humans ranks 1, 3 | Open |
