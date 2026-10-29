@@ -25,8 +25,11 @@
 //!   someone is awake in it and daylight is dimmer than they are, and
 //!   draw from the same supply as everything else.
 //!
-//! There is no refinery: fuel is finite until Phase 4b's production route
-//! (deviation D16).
+//! - **Island fuel**: diesel the island's refinery made and the depot put
+//!   in the store (`regional::industry::chain`) is already material
+//!   carbon, so the share of each burn that is island fuel is booked from
+//!   `MaterialCarbon`, not the crust ([`IslandFuel`], deviation D16).
+//!   Bought fuel is booked from the crust as before.
 
 use std::collections::BTreeSet;
 
@@ -102,6 +105,11 @@ impl FuelKind {
         }
     }
 
+    /// Density (kg/L).
+    pub fn density_kg_per_litre(self) -> f64 {
+        self.composition().2
+    }
+
     fn mol_per_litre(self) -> f64 {
         let (c, h, density) = self.composition();
         1000.0 * density / (c * MOLAR_MASS_C + h * MOLAR_MASS_H)
@@ -134,6 +142,43 @@ impl FuelKind {
 pub struct FuelStore {
     pub fuel: FuelKind,
     pub litres: f64,
+    /// The island-made part of `litres`.
+    #[serde(default)]
+    pub island: IslandFuel,
+}
+
+/// The island-made fuel within a store or a tank: its litres and the
+/// carbon the refinery gave them (kg C). That carbon is material carbon
+/// until it burns; the rest of the fuel was bought, and its carbon is the
+/// crust's (D16). Fuel is well mixed, so a draw takes the island's share in
+/// proportion.
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
+pub struct IslandFuel {
+    pub litres: f64,
+    pub kgc: f64,
+}
+
+impl IslandFuel {
+    /// The island's share of `litres` drawn from a tank that held `held`
+    /// litres before the draw; it leaves this tank.
+    fn draw(&mut self, held: f64, litres: f64) -> IslandFuel {
+        if held <= 0.0 || litres <= 0.0 || self.litres <= 0.0 {
+            return IslandFuel::default();
+        }
+        let f = (litres / held).min(1.0);
+        let out = IslandFuel {
+            litres: self.litres * f,
+            kgc: self.kgc * f,
+        };
+        self.litres -= out.litres;
+        self.kgc -= out.kgc;
+        out
+    }
+
+    fn add(&mut self, other: IslandFuel) {
+        self.litres += other.litres;
+        self.kgc += other.kgc;
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -226,6 +271,9 @@ pub struct EstateVehicle {
     pub tank_litres: f64,
     pub litres: f64,
     pub engine: VehicleEngine,
+    /// The island-made part of `litres`.
+    #[serde(default)]
+    pub island: IslandFuel,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -311,6 +359,33 @@ pub fn book_burn(ledger: &mut Ledger, burn: Burn) {
         return;
     }
     book_fossil_carbon(ledger, burn.litres * burn.fuel.carbon_kg_per_litre());
+}
+
+/// Book a burn of which `island` is island-made: the bought litres as
+/// [`book_burn`], the island's carbon from material to the air as CO₂.
+fn book_burn_with_island(ledger: &mut Ledger, burn: Burn, island: IslandFuel) {
+    book_burn(
+        ledger,
+        Burn {
+            fuel: burn.fuel,
+            litres: (burn.litres - island.litres).max(0.0),
+        },
+    );
+    if island.kgc <= 0.0 {
+        return;
+    }
+    ledger.push(FluxEntry::new(
+        Reservoir::MaterialCarbon,
+        Reservoir::AtmosCO2,
+        island.kgc,
+        FluxKind::Carbon,
+    ));
+    ledger.push(FluxEntry::new(
+        Reservoir::AtmosO2,
+        Reservoir::AtmosCO2,
+        island.kgc * O2_PER_CARBON,
+        FluxKind::Oxygen,
+    ));
 }
 
 /// Book `carbon` kg of fossil fuel's carbon burned: crust → atmosphere as
@@ -427,6 +502,7 @@ impl EstateEnergy {
                             tank_litres: tank,
                             litres: 0.0,
                             engine,
+                            island: IslandFuel::default(),
                         });
                     }
                 }
@@ -438,10 +514,12 @@ impl EstateEnergy {
                 FuelStore {
                     fuel: FuelKind::Diesel,
                     litres: config.diesel_litres,
+                    island: IslandFuel::default(),
                 },
                 FuelStore {
                     fuel: FuelKind::Petrol,
                     litres: config.petrol_litres,
+                    island: IslandFuel::default(),
                 },
             ],
             generators: vec![Generator {
@@ -654,15 +732,18 @@ impl EstateEnergy {
                 continue;
             }
             let litres = kwh * g.litres_per_kwh;
+            let mut island = IslandFuel::default();
             if let Some(store) = self.store_mut(g.fuel) {
+                island = store.island.draw(store.litres, litres);
                 store.litres = (store.litres - litres).max(0.0);
             }
-            book_burn(
+            book_burn_with_island(
                 ledger,
                 Burn {
                     fuel: g.fuel,
                     litres,
                 },
+                island,
             );
             deficit -= kwh;
             generator_kwh += kwh;
@@ -711,11 +792,35 @@ impl EstateEnergy {
         );
         let available = self.stored_litres(fuel);
         let moved = litres.max(0.0).min(room).min(available);
+        let mut island = IslandFuel::default();
         if let Some(store) = self.store_mut(fuel) {
+            island = store.island.draw(store.litres, moved);
             store.litres -= moved;
         }
         self.vehicles[i].litres += moved;
+        self.vehicles[i].island.add(island);
         moved
+    }
+
+    /// Put island-made fuel in the store (the depot's delivery).
+    pub fn deliver_island_fuel(&mut self, fuel: FuelKind, litres: f64, kgc: f64) {
+        if litres <= 0.0 {
+            return;
+        }
+        if let Some(store) = self.store_mut(fuel) {
+            store.litres += litres;
+            store.island.add(IslandFuel {
+                litres,
+                kgc: kgc.max(0.0),
+            });
+        }
+    }
+
+    /// Carbon of the island-made fuel in the store and the tanks (kg C):
+    /// material carbon, audited with the rest of the island's materials.
+    pub fn island_fuel_kgc(&self) -> f64 {
+        self.fuel_stores.iter().map(|s| s.island.kgc).sum::<f64>()
+            + self.vehicles.iter().map(|v| v.island.kgc).sum::<f64>()
     }
 
     /// Drive a road vehicle `km` on `surface`: the distance it actually
@@ -736,13 +841,15 @@ impl EstateEnergy {
         let per_km = reference_l_per_100km(surface) * class_factor / 100.0;
         let driven = km.max(0.0).min(v.litres / per_km.max(f64::MIN_POSITIVE));
         let litres = driven * per_km;
+        let island = v.island.draw(v.litres, litres);
         v.litres -= litres;
-        book_burn(
+        book_burn_with_island(
             ledger,
             Burn {
                 fuel: v.fuel,
                 litres,
             },
+            island,
         );
         driven
     }
@@ -794,13 +901,15 @@ impl EstateEnergy {
             .max(0.0)
             .min(v.litres / per_hour.max(f64::MIN_POSITIVE));
         let litres = run * per_hour;
+        let island = v.island.draw(v.litres, litres);
         v.litres -= litres;
-        book_burn(
+        book_burn_with_island(
             ledger,
             Burn {
                 fuel: v.fuel,
                 litres,
             },
+            island,
         );
         run
     }
@@ -935,6 +1044,53 @@ mod lighting_tests {
         let step = energy.step(3_600.0, 0.0, &mut ledger);
         assert!((step.unmet_kwh - 0.125).abs() < 1e-12, "{step:?}");
         assert!(!energy.is_lit(SpaceId(1)));
+    }
+
+    #[test]
+    fn island_diesel_burns_as_material_carbon_and_bought_diesel_as_crust() {
+        let (mut energy, _) = wired();
+        let mut ledger = Ledger::new();
+        for b in &mut energy.batteries {
+            b.charge_kwh = 0.0;
+        }
+        let diesel = FuelKind::Diesel;
+        let bought = energy.stored_litres(diesel);
+        // As much island diesel as there is bought, at 2.5 kg C a litre.
+        energy.deliver_island_fuel(diesel, bought, 2.5 * bought);
+        assert!((energy.island_fuel_kgc() - 2.5 * bought).abs() < 1e-9);
+        energy.set_lit(SpaceId(1), true);
+        let step = energy.step(3_600.0, 0.0, &mut ledger);
+        let burned = step.fuel_burned_litres;
+        assert!(burned > 0.0);
+        let from = |source: Reservoir| -> f64 {
+            ledger
+                .entries()
+                .iter()
+                .filter(|e| e.kind == FluxKind::Carbon && e.source == source)
+                .map(|e| e.amount)
+                .sum()
+        };
+        // Half the burn was island fuel: its carbon left the material
+        // stock, exactly what the store lost; the other half was bought.
+        let island_kgc = from(Reservoir::MaterialCarbon);
+        assert!(
+            (island_kgc - 2.5 * burned / 2.0).abs() < 1e-9,
+            "{island_kgc}"
+        );
+        assert!((energy.island_fuel_kgc() - 2.5 * (bought - burned / 2.0)).abs() < 1e-9);
+        let crust = from(Reservoir::CrustCarbon);
+        assert!((crust - diesel.carbon_kg_per_litre() * burned / 2.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn an_estate_saved_before_island_fuel_reads_none_of_it() {
+        let (energy, _) = wired();
+        let mut json = serde_json::to_value(&energy).unwrap();
+        for store in json["fuel_stores"].as_array_mut().unwrap() {
+            store.as_object_mut().unwrap().remove("island");
+        }
+        let old: EstateEnergy = serde_json::from_value(json).unwrap();
+        assert_eq!(old.island_fuel_kgc(), 0.0);
     }
 
     #[test]

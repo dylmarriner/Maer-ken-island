@@ -43,8 +43,8 @@ this list holds the current state. The evidence for what is *done* is in
 | Living world | D31: NPP ignores soil nutrients | Open | Regional soils model and data |
 | Runtime | Phase 4 Task 2b: deep-time spin-up | **Done** (2026-10-14) | — |
 | Industry | Phase 4b Task 1 remainder: reference tables | Done 2026-10-14 (nine packs); gaps listed in §4a | A few items (see §4a) |
-| Industry | Phase 4b Task 4: oil and gas field (D14, D19) | Fields, decline and carbon done 2026-10-14 (D58); wells, water cut, spills open | Per-well rate, water-cut series |
-| Industry | Phase 4b Task 5: refinery, gas plant, fuel depot (D16) | Topping refinery done 2026-10-14; gas plant, reformer, depot open | Reformate yield; gas-plant own use |
+| Industry | Phase 4b Task 4: oil and gas field (D14, D19) | Fields, decline and carbon done 2026-10-14 (D58); the chain runs in `IslandLife` (2026-10-18); wells, water cut, spills open | Per-well rate, water-cut series |
+| Industry | Phase 4b Task 5: refinery, gas plant, fuel depot (D16) | Topping refinery done 2026-10-14; diesel depot done 2026-10-18; gas plant, reformer open | Reformate yield; gas-plant own use |
 | Industry | Phase 4b Task 6: jobs, trades, maintenance (D39) | Open | Upstream human-runtime change first |
 | Industry | Phase 4b Task 7: money, enterprises, payroll | Open; the owner's decisions are made (2026-10-15, §4e) | Engineering; a sourced NZ lending rate |
 | Industry | Phase 4b Task 7b: food and timber chains | Open | Task 2 catalogue; crop/livestock data |
@@ -219,8 +219,12 @@ trade, a 2-3 bedroom cottage's floor area (Task 6 and 7b); the Pukekohe growing 
   methane oxidises with its 11.8-year lifetime (IPCC AR6). Packs gained reformate yields (Speight),
   gas-plant fuel and shrinkage (EIA), methane lifetimes, alluvial diamond grades (low), Lake
   Grassmere solar salt and hand-dug shaft depth and sinking rate (a well analogue, low).
-- **Next:** carry `IndustryChain` in `IslandLife` (state, snapshot, the audited material stock) and
-  let a depot top the estate's diesel up from the store, burning island diesel as material carbon.
+- **Also done 2026-10-18** (`IslandLife::industry`, `tests/island_industry_chain.rs`): the chain runs
+  in every island step, is hashed and saved with the island (an island saved before it surveys it on
+  restore), and its tanks and store count as material carbon in `IslandLife::audited`. A depot tops
+  the estate's diesel store back up to the scenario's starting fill from the refinery's distillate;
+  that diesel keeps the refinery's carbon (`energy::IslandFuel`, through the store and vehicle tanks),
+  and its share of every burn is booked from `MaterialCarbon`, not the crust (D16).
 - **Left (D58):** a plateau, reservoir pressure and water cut; wells, workover crews and blowouts
   (the frequencies are in the pack, but there is no per-well rate to count wells by); spills and their
   harm to shellfish; methane warming (negligible at island scale, Etminan et al. 2016);
@@ -236,9 +240,10 @@ trade, a 2-3 bedroom cottage's floor area (Task 6 and 7b); the Pukekohe growing 
   2020): about 11% of the crude and 43 kg of CO2 a barrel, inside Downey's 8-12% and Jing et al.'s
   13.9-62.1 kg. Mass and carbon close (IPCC carbon contents, scaled by one factor of 0.974). Crude
   comes from a field's tanks (`PetroleumField::take_oil`).
+- **Done 2026-10-18:** the diesel depot (§4b): the generator and the vehicles burn island diesel.
 - **Left:** the gas plant (LPG and condensate from raw gas; gas-plant own use is not sourced), a
-  reformer for petrol (needs a cited reformate yield), the fuel depot and vehicles and generators
-  buying fuel (`regional/energy.rs`), campaigns that stop on full tanks, and payment (Task 7).
+  reformer for petrol (needs a cited reformate yield), a tanker and driver for the depot's
+  deliveries (Task 6), campaigns that stop on full tanks, and payment (Task 7).
 
 ### 4d. Task 6: jobs, trades, shifts, maintenance (D39) — upstream first
 
