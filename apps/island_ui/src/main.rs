@@ -14,6 +14,7 @@
 //! hardware at all.
 
 use bevy::asset::RenderAssetUsages;
+use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy::render::mesh::{Indices, PrimitiveTopology};
 use bevy_egui::egui::{self, LayerId, Ui, UiBuilder};
@@ -1120,25 +1121,33 @@ fn tint_the_ground(
     }
 }
 
+/// Immutable inputs shared by the forest system. Grouping them keeps
+/// Bevy's injected system parameters within Clippy's argument limit.
+#[derive(SystemParam)]
+struct ForestScene<'w> {
+    latest: Res<'w, Latest>,
+    island: Res<'w, TheIsland>,
+    showing: Res<'w, Showing>,
+}
+
 /// Stand marks up from the ground in proportion to its biomass, one merged
 /// mesh per ground chunk, and replace them when the poller brings a new
 /// cover. They go with the ground: shown on the island, hidden on the
 /// estate.
 fn plant_the_forest(
     mut commands: Commands,
-    latest: Res<Latest>,
-    island: Res<TheIsland>,
-    showing: Res<Showing>,
+    scene: ForestScene,
     mut drawn: Local<usize>,
     mut look: Local<Option<Handle<StandardMaterial>>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     old: Query<Entity, With<Woods>>,
 ) {
-    let (Some(ground), Some(cover)) = (island.0.terrain(), (*latest.0.cover).as_ref()) else {
+    let (Some(ground), Some(cover)) = (scene.island.0.terrain(), (*scene.latest.0.cover).as_ref())
+    else {
         return;
     };
-    let read = std::sync::Arc::as_ptr(&latest.0.cover) as usize;
+    let read = std::sync::Arc::as_ptr(&scene.latest.0.cover) as usize;
     if *drawn == read {
         return;
     }
@@ -1159,7 +1168,7 @@ fn plant_the_forest(
             })
         })
         .clone();
-    let visibility = if *showing == Showing::Island {
+    let visibility = if *scene.showing == Showing::Island {
         Visibility::Inherited
     } else {
         Visibility::Hidden
