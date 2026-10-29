@@ -2379,6 +2379,9 @@ impl IslandLife {
             } else {
                 WALKING_MET
             };
+            // A returning forager carries the gathered food; outbound travel
+            // and gathering do not count as loaded strength training.
+            let carried_kg = if home_with_food { trip.load_kg } else { 0.0 };
             let trip = self.foraging.get_mut(&id).expect("listed");
             trip.worked_s += dt_s;
             if trip.worked_s >= trip.out_s + trip.forage_s + trip.back_s {
@@ -2394,7 +2397,7 @@ impl IslandLife {
                     .map_err(IslandLifeError::Labour)?;
             *self.labour_kcal.entry(id.clone()).or_insert(0.0) += extra.max(0.0);
             self.physiques
-                .record(&self.physique_models, &id, met, dt_s, 0.0);
+                .record(&self.physique_models, &id, met, dt_s, carried_kg);
             if let Some(h) = self.humans.registry.get_human_mut(&id) {
                 h.labour_met = Some(met);
             }

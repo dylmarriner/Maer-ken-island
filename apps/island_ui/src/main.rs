@@ -1223,7 +1223,7 @@ fn woods_mesh(marks: &[forest::Mark]) -> Mesh {
         ];
         for i in 0..4 {
             let (a, c) = (corners[i], corners[(i + 1) % 4]);
-            let normal = (c - a).cross(top - a).normalize_or_zero();
+            let normal = (top - a).cross(c - a).normalize_or_zero();
             for p in [a, top, c] {
                 positions.push(p.to_array());
                 normals.push(normal.to_array());
@@ -1262,10 +1262,14 @@ fn chunk_mesh(chunk: &terrain::Chunk, want_land: bool) -> Option<Mesh> {
     if kept.is_empty() {
         return None;
     }
-    let mut mesh = Mesh::new(
-        PrimitiveTopology::TriangleList,
-        RenderAssetUsages::RENDER_WORLD,
-    );
+    // Land is recoloured as biomass changes, so its mesh must remain in
+    // the main world after render extraction. Sea meshes are immutable.
+    let usages = if want_land {
+        RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD
+    } else {
+        RenderAssetUsages::RENDER_WORLD
+    };
+    let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, usages);
     mesh.insert_attribute(
         Mesh::ATTRIBUTE_POSITION,
         chunk
