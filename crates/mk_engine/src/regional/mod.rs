@@ -3,6 +3,7 @@
 //! mk_island → mk_core`).
 
 pub mod boundary;
+pub mod choice;
 pub mod climate;
 pub mod commands;
 pub mod create_human;

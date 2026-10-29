@@ -56,6 +56,10 @@ use super::scheduler::IslandScheduler;
 use super::skills::{LearningRates, Skills, Task};
 use super::timber::{self, HaulJob, HaulTask};
 use crate::humans::lifecycle::WALKING_MET;
+
+/// What a finished job teaches the one who did it: it went as planned.
+/// R14's structure, not a measured rate.
+const WORK_DONE: f64 = 0.5;
 use crate::humans::HumanSystem;
 use crate::resource_economy::ResourceEconomyState;
 use crate::topology::GridTopology;
@@ -321,6 +325,8 @@ pub struct IslandLifeSnapshot {
     #[serde(default)]
     pub skills: Skills,
     #[serde(default)]
+    pub wills: super::choice::Wills,
+    #[serde(default)]
     pub water_drunk_kg: BTreeMap<String, f64>,
     pub sleep_seconds: BTreeMap<String, (f64, f64)>,
     pub food_cell: (usize, usize),
@@ -395,6 +401,8 @@ pub struct IslandLife {
     /// What every person has learnt by doing (R11): each task they have
     /// done, how much, and when they last did it.
     pub skills: Skills,
+    /// Each person's own mind about work (R14).
+    pub wills: super::choice::Wills,
     /// Water each founder has drunk since the island began (kg): the record
     /// the intake checks read.
     pub water_drunk_kg: BTreeMap<String, f64>,
@@ -762,6 +770,7 @@ impl IslandLife {
             hauling: BTreeMap::new(),
             labour_kcal: BTreeMap::new(),
             skills: Skills::default(),
+            wills: Default::default(),
             water_drunk_kg: BTreeMap::new(),
             sleep_seconds: BTreeMap::new(),
             scheduler: IslandScheduler::new(scenario_cadences),
@@ -876,6 +885,7 @@ impl IslandLife {
             hauling: self.hauling.clone(),
             labour_kcal: self.labour_kcal.clone(),
             skills: self.skills.clone(),
+            wills: self.wills.clone(),
             water_drunk_kg: self.water_drunk_kg.clone(),
             sleep_seconds: self.sleep_seconds.clone(),
             food_cell: self.food_cell,
@@ -944,6 +954,7 @@ impl IslandLife {
             hauling: snapshot.hauling,
             labour_kcal: snapshot.labour_kcal,
             skills: snapshot.skills,
+            wills: snapshot.wills,
             water_drunk_kg: snapshot.water_drunk_kg,
             sleep_seconds: snapshot.sleep_seconds,
             labour,
@@ -1220,6 +1231,7 @@ impl IslandLife {
         self.water_drunk_kg.remove(id);
         self.sleep_seconds.remove(id);
         self.skills.0.remove(id);
+        self.wills.0.remove(id);
     }
 
     /// Every living human, with the body the labour model costs work against
@@ -1420,10 +1432,13 @@ impl IslandLife {
                 continue;
             };
 
-            // A log on the ground nobody is moving: haul it.
+            // Between jobs, the person chooses for themselves whether to
+            // haul a log lying on the ground or to fell a tree (R14).
             if !self.hauling.contains_key(&id) && !self.felling.contains_key(&id) {
                 if let Some(job) = self.plan_haul(at, &body)? {
-                    self.hauling.insert(id.clone(), job);
+                    if self.chooses_to_haul(&id, &job, at)? {
+                        self.hauling.insert(id.clone(), job);
+                    }
                 }
             }
             let met = if let Some(job) = self.hauling.get_mut(&id) {
@@ -1439,6 +1454,8 @@ impl IslandLife {
                 }
                 if job.tasks.is_empty() {
                     self.hauling.remove(&id);
+                    self.will_of(&id)
+                        .learn(super::choice::Work::Haul, WORK_DONE);
                 }
                 met
             } else {
@@ -1543,6 +1560,8 @@ impl IslandLife {
                 let job = self.felling.get(&id).expect("inserted above");
                 if job.worked_s >= walk_s + felling_s {
                     felled.push((id.clone(), tree_id));
+                    self.will_of(&id)
+                        .learn(super::choice::Work::Fell, WORK_DONE);
                 }
                 met
             };
@@ -1695,6 +1714,56 @@ impl IslandLife {
             to,
             layout.patch.cell_size_m,
         )
+    }
+
+    /// Whether `id`, free to choose, hauls the log `job` would move rather
+    /// than fell the nearest tree. Both keep the house in wood, so the
+    /// need is the same; what differs is the effort, as each job's MET
+    /// against the harder of the two, and the person's own liking and
+    /// calling (R14, D68).
+    fn chooses_to_haul(
+        &mut self,
+        id: &str,
+        job: &HaulJob,
+        at: (f64, f64),
+    ) -> Result<bool, IslandLifeError> {
+        use super::choice::{draw, Candidate, Work};
+        let Some(tree) = self.vegetation.nearest_tree(at) else {
+            return Ok(true);
+        };
+        let fell_met = self
+            .labour
+            .fell_tree(LabourTool::SteelAxe, tree.stem_diameter_m * 100.0)
+            .map_err(IslandLifeError::Labour)?
+            .met;
+        let (s, m) = job.tasks.iter().fold((0.0, 0.0), |(s, m), t| {
+            (s + t.duration_s, m + t.met * t.duration_s)
+        });
+        let haul_met = if s > 0.0 { m / s } else { WALKING_MET };
+        let hardest = fell_met.max(haul_met).max(f64::MIN_POSITIVE);
+        let candidates = [
+            Candidate {
+                work: Work::Haul,
+                need: 0.5,
+                effort: haul_met / hardest,
+            },
+            Candidate {
+                work: Work::Fell,
+                need: 0.5,
+                effort: fell_met / hardest,
+            },
+        ];
+        let seed = self.scenario.seed;
+        let noise = [0, 1].map(|k| draw(&seed, &format!("choice:{id}:{}:{k}", self.sim_time_s)));
+        Ok(self.will_of(id).choose(&candidates, 0.0, &noise) != Some(Work::Fell))
+    }
+
+    /// `id`'s own will, made on first use from their inherited openness.
+    fn will_of(&mut self, id: &str) -> &mut super::choice::Will {
+        let openness = self.humans.registry.get_human(id).map_or(0.0, |h| {
+            crate::humans::genetics::GeneticsSnapshot::from_profile(&h.profile).openness
+        });
+        self.wills.of(&self.scenario.seed, id, openness)
     }
 
     /// The quickest haul of the log on the ground nearest `at` that no
@@ -2750,7 +2819,7 @@ impl IslandLife {
             .collect();
         for (id, at, body) in miners {
             if !self.mining.contains_key(&id) {
-                let Some((site_id, there)) = self.nearest_placer(at) else {
+                let Some((site_id, there)) = self.chosen_placer(&id, at) else {
                     continue;
                 };
                 let distance = (there.0 - at.0).hypot(there.1 - at.1);
@@ -2809,13 +2878,29 @@ impl IslandLife {
                         })?;
                 let resources = self.resources.as_mut().expect("checked above");
                 // A site worked out while they walked yields nothing.
-                if let Ok(work) =
-                    resources.work_day(site_id, LabourTool::GoldPan, false, &self.labour, &models)
-                {
-                    self.materials
-                        .bank_mined(super::materials::Material::Gold, work.product_kg)
-                        .expect("gold carries no carbon or water");
-                }
+                let gave = match resources.work_day(
+                    site_id,
+                    LabourTool::GoldPan,
+                    false,
+                    &self.labour,
+                    &models,
+                ) {
+                    Ok(work) => {
+                        self.materials
+                            .bank_mined(super::materials::Material::Gold, work.product_kg)
+                            .expect("gold carries no carbon or water");
+                        work.product_kg
+                    }
+                    Err(_) => 0.0,
+                };
+                // What the day gave is theirs to remember, and colours how
+                // they feel about panning (R14).
+                let will = self.will_of(&id);
+                will.remember(site_id, gave);
+                will.learn(
+                    super::choice::Work::Pan,
+                    if gave > 0.0 { WORK_DONE } else { -WORK_DONE },
+                );
             }
         }
         Ok(())
@@ -3036,8 +3121,11 @@ impl IslandLife {
 
     /// The placer gold site nearest `at` (domain metres) that still holds
     /// gravel, and where it is.
-    fn nearest_placer(&self, at: (f64, f64)) -> Option<(u32, (f64, f64))> {
-        self.resources
+    /// The placer `id` chooses to work, from what each has given them and
+    /// how far it is (R14), with their own keyed noise.
+    fn chosen_placer(&mut self, id: &str, at: (f64, f64)) -> Option<(u32, (f64, f64))> {
+        let sites: Vec<(u32, (f64, f64))> = self
+            .resources
             .as_ref()?
             .sites()
             .iter()
@@ -3048,10 +3136,25 @@ impl IslandLife {
                     .cell_center_m(DomainLevel::Medium, s.cell.0, s.cell.1);
                 (s.id, c)
             })
-            .min_by(|a, b| {
-                let d = |p: (f64, f64)| (p.0 - at.0).hypot(p.1 - at.1);
-                d(a.1).total_cmp(&d(b.1)).then(a.0.cmp(&b.0))
+            .collect();
+        let far = sites
+            .iter()
+            .map(|(_, c)| (c.0 - at.0).hypot(c.1 - at.1))
+            .fold(0.0_f64, f64::max)
+            .max(f64::MIN_POSITIVE);
+        let options: Vec<(u32, f64)> = sites
+            .iter()
+            .map(|(sid, c)| (*sid, (c.0 - at.0).hypot(c.1 - at.1) / far))
+            .collect();
+        let seed = self.scenario.seed;
+        let noise: Vec<f64> = options
+            .iter()
+            .map(|(sid, _)| {
+                super::choice::draw(&seed, &format!("place:{id}:{}:{sid}", self.sim_time_s))
             })
+            .collect();
+        let chosen = self.will_of(id).choose_place(&options, &noise)?;
+        sites.into_iter().find(|(sid, _)| *sid == chosen)
     }
 
     fn install_household_water(&mut self) -> Result<(), IslandLifeError> {
@@ -3528,6 +3631,7 @@ impl IslandLife {
         h.update(canonical(&self.hauling).as_bytes());
         h.update(canonical(&self.labour_kcal).as_bytes());
         h.update(canonical(&self.skills).as_bytes());
+        h.update(canonical(&self.wills).as_bytes());
         h.update(canonical(&self.water_drunk_kg).as_bytes());
         h.update(canonical(&self.household_water).as_bytes());
         h.update(canonical(&self.household_gas).as_bytes());
@@ -3613,7 +3717,7 @@ mod tests {
     }
 
     #[test]
-    fn a_founder_with_the_pan_works_the_nearest_placer_for_a_day() {
+    fn a_founder_with_the_pan_works_the_placer_they_choose_for_a_day() {
         let mut scenario =
             IslandScenario::load(&repo("fixtures/island/default_scenario.json")).unwrap();
         scenario.estate_patch.tree_cap = 200;
@@ -3640,7 +3744,11 @@ mod tests {
             .unwrap()
             .economy_action
             .kind = crate::humans::ActionKind::Mine;
-        let (site_id, there) = life.nearest_placer(at).expect("the island has a placer");
+        // Choosing is their own and repeatable: asked again at the same
+        // moment, they choose the same placer.
+        let (site_id, there) = life
+            .chosen_placer("Gem-D", at)
+            .expect("the island has a placer");
         let before_t = life
             .resources
             .as_ref()
