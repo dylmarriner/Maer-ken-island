@@ -571,6 +571,7 @@ Ordered by what most changes the founders' daily life:
 | R11 | Everything is learnt (owner, 2026-10-23): no one is born able to do a task; each skill rises with every repetition (a learning curve), making the task faster and its result better, and fades with disuse; free will picks what to do from what a person needs and wants. Takes over R5's "skill improves with practice". Distinct from Task 6's `TradeQualification` (a credential, not a skill) | Needs sources: learning-curve exponents per kind of task (only crosscut felling found), quality with skill, teaching | Started 2026-10-23 (D64): everyone learns felling, splitting, panning, foraging and building by doing, from one sourced curve, and forgets with disuse. Open: per-task curves, quality, teaching, other tasks |
 | R12 | The body trains (owner, 2026-10-23): physical work builds stamina (aerobic capacity) and muscle; lifting raises the load a person can lift; inactivity and eating beyond need do the opposite (detraining, fat gain); body composition changes how a person looks. R2's load limits then follow each person's own strength | Needs sources: VO2max and strength gains with training load, detraining rates, muscle protein accretion and loss, energy surplus to fat mass | Open. Upstream first (human runtime) |
 | R13 | Genetics (owner, 2026-10-23): a DNA-like genome, half from each parent, sets each person's starting point and limits (height, build, trainability, predispositions) | Needs sources: heritabilities of the traits modelled; touches birth (`reproduction.rs`) and how the population is stored | Open. Upstream first |
+| R14 | Free will: each person chooses for themselves who to be and what to do (owner, 2026-10-23, below) | humans ranks 1, 3 | Open |
 
 **Owner decision (2026-10-23), in the owner's words:** "the humans in this need to learn to do
 things and have free will to decide what they need and want to do. all things must be learnt and
@@ -580,6 +581,31 @@ are lazy and do nothing but eat all day that does the opposite. if they lift thi
 stronger and can lift heavier things everything needs to be trained essentially like humans on
 earth do. they also need to have a double helix like humans do." R11-R13 record it; each number
 they need is sourced into `fixtures/reference/` before it is used.
+
+**R14, free will (owner, 2026-10-23).** In the owner's words: "this isnt a simulation where the
+humans are npcs and are coded and told what to do. the humans need to be like real life humans
+and have their own thoughts and decisions and actions and consequences. they need to simulate the
+closest thing to conscious beings with free will who can be who they want to be and do what they
+want to do", and "not just founders all humans". R11-R13 (skills, fitness, genome) and R14
+therefore cover every living human, keyed by agent id, children and townspeople included.
+What it takes:
+
+- **Nothing assigns anyone a job, task, schedule or purchase.** The island offers affordances
+  and their consequences; the choice is the person's, from `humans/autonomy.rs`
+  `choose_action` (needs, learned values, drives, personality, predictive policy). Today
+  `IslandLife::work` picks the concrete job by rule inside the economy's `Gather` (it hauls a
+  log lying on the ground before felling): those rules stand in for the person's choice and
+  are to be replaced by the person choosing among the concrete jobs they can see.
+- **Who they want to be:** person-owned aspirations formed from personality and experience
+  (what they did, what it earned them, who they admire), which bias `choose_action` and hold
+  multi-day plans (build a house, learn a trade, save for a stove).
+- **Their own purchases:** households buy LPG, stoves or anything else only by deciding to
+  (upstream `ActionKind::Buy`), never by a delivery written into the island.
+- **Consequences feed back:** skill (R11), fitness and appearance (R12), money and health are
+  what the mind learns from (`learn_from_outcome`), so a lazy, well-fed person grows weak and
+  fat and a labourer grows strong, and each can see it and choose differently.
+- **Files:** `humans/autonomy.rs`, `regional/life.rs` (`work`, `economy_action`), a new
+  `humans/aspiration.rs`; upstream first where the mind is imported code (`UPSTREAM.md`).
 
 Still unsourced and needing a second pass before use (not to be typed in): edible and carcass
 fractions, fruit and seed yields, foraging return rates, firewood per person per day, cordage

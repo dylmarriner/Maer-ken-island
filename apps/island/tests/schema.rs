@@ -53,6 +53,7 @@ fn a_projection() -> IslandProjection {
         cell: Some((5, 6)),
         body_carbon_kg: Some(16.0),
         height_m: 1.74,
+        physique: None,
     });
     projection
 }
