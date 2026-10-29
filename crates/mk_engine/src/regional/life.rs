@@ -3072,6 +3072,8 @@ impl IslandLife {
                     .energy_kcal(&body, awake_met, dt_s)
                     .map_err(IslandLifeError::Labour)?;
             *self.labour_kcal.entry(id.clone()).or_insert(0.0) += extra.max(0.0);
+            self.physiques
+                .record(&self.physique_models, &id, met, dt_s, 0.0);
             if let Some(h) = self.humans.registry.get_human_mut(&id) {
                 h.labour_met = Some(met);
             }
