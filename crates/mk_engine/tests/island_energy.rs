@@ -268,3 +268,73 @@ fn burning_fuel_books_the_stoichiometric_carbon_and_oxygen() {
     );
     assert!(ledger.entries().is_empty());
 }
+
+#[test]
+fn island_made_fuel_keeps_its_share_and_burns_as_material_carbon() {
+    let config = EstateEnergyConfig {
+        diesel_litres: 100.0,
+        ..EstateEnergyConfig::default()
+    };
+    let (mut e, _) = energy(config);
+    let per_litre = FuelKind::Diesel.carbon_kg_per_litre();
+    // The estate's own diesel (what the vehicles' first fill left in the
+    // store) and 300 L from the refinery: only the island's litres are
+    // material carbon, and the store holds them in proportion.
+    assert_eq!(e.island_fuel_kgc(), 0.0);
+    let own = e.stored_litres(FuelKind::Diesel);
+    e.deliver_island_fuel(FuelKind::Diesel, 300.0, 300.0 * per_litre);
+    let share = 300.0 / (own + 300.0);
+    let store = e
+        .fuel_stores
+        .iter()
+        .find(|s| s.fuel == FuelKind::Diesel)
+        .unwrap();
+    assert!(((store.island.litres / store.litres) - share).abs() < 1e-12);
+    assert!((e.island_fuel_kgc() - 300.0 * per_litre).abs() < 1e-9);
+
+    // A tank filled from the store carries the store's share.
+    let machine = e
+        .vehicles
+        .iter()
+        .find(|v| v.fuel == FuelKind::Diesel)
+        .unwrap()
+        .item_id;
+    let moved = e.refuel(machine, 40.0);
+    let tank = e.vehicles.iter().find(|v| v.item_id == machine).unwrap();
+    // The tank already held estate diesel from its first fill, so it mixes.
+    assert!(
+        (tank.island.litres / tank.litres) > 0.0 && (tank.island.litres / tank.litres) <= share
+    );
+    let tank_share = (tank.island.litres / tank.litres);
+    assert!(
+        (e.island_fuel_kgc() - 300.0 * per_litre).abs() < 1e-9,
+        "moving fuel moves no carbon"
+    );
+
+    // Burning it: the tank's island share of the carbon leaves the
+    // materials, the rest the crust.
+    let mut ledger = Ledger::new();
+    let before = e.island_fuel_kgc();
+    let per_hour = e.litres_per_hour(machine).unwrap();
+    let hours = e.run_engine_hours(machine, moved / per_hour, &mut ledger);
+    let burned_kgc = hours * per_hour * per_litre;
+    let net = |r: Reservoir| -> f64 {
+        ledger
+            .entries()
+            .iter()
+            .filter(|f| f.kind == FluxKind::Carbon)
+            .map(|f| {
+                if f.sink == r {
+                    f.amount
+                } else if f.source == r {
+                    -f.amount
+                } else {
+                    0.0
+                }
+            })
+            .sum()
+    };
+    assert!((net(Reservoir::MaterialCarbon) + tank_share * burned_kgc).abs() < 1e-9);
+    assert!((net(Reservoir::CrustCarbon) + (1.0 - tank_share) * burned_kgc).abs() < 1e-9);
+    assert!((before - e.island_fuel_kgc() - tank_share * burned_kgc).abs() < 1e-9);
+}
