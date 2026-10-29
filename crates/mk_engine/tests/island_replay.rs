@@ -183,6 +183,7 @@ fn control_commands_are_recorded_and_change_nothing() {
 #[test]
 fn a_replay_that_stops_halfway_and_carries_on_lands_in_the_same_place() {
     let mut live = island();
+    let starting_population = live.humans.registry.iter().count();
     let space = live
         .placed
         .layout
@@ -205,7 +206,7 @@ fn a_replay_that_stops_halfway_and_carries_on_lands_in_the_same_place() {
     assert_eq!(halfway.tick, 5);
     assert_eq!(
         halfway.humans.registry.iter().count(),
-        3,
+        starting_population + 1,
         "the creation before tick 5 is missing"
     );
 

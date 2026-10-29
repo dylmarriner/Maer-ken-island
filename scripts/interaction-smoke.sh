@@ -195,7 +195,7 @@ import subprocess, sys
 raw = subprocess.run(["convert", sys.argv[1], "-crop", "320x400+0+150", "-depth", "8", "rgb:-"],
                      capture_output=True, check=True).stdout
 width = 320
-best, best_row = 0, None
+best, blue_rows = 0, []
 for row in range(len(raw) // (3 * width)):
     start = row * width * 3
     blue = sum(
@@ -205,9 +205,12 @@ for row in range(len(raw) // (3 * width)):
         and raw[start + 3 * x + 2] > raw[start + 3 * x] + 40
         and raw[start + 3 * x + 2] > raw[start + 3 * x + 1] + 20
     )
-    if blue > best:
-        best, best_row = blue, row
-print(150 + best_row if best_row is not None else 242)
+    best = max(best, blue)
+    blue_rows.append(blue)
+# The highest-scoring row is often the *top* of the highlighted tab.
+# Click the vertical centre of its blue band, not its top border.
+strong_rows = [row for row, count in enumerate(blue_rows) if best > 0 and count >= best * 0.9]
+print(150 + (strong_rows[0] + strong_rows[-1]) // 2 if strong_rows else 242)
 FIND
 )
 echo "the 'Looking at' row is at y=$button_y"
@@ -216,9 +219,15 @@ echo "the 'Looking at' row is at y=$button_y"
 # Unlike dragging, clicking must finish inside egui's click-duration
 # threshold. Both events are queued for the next frame on slow renderers.
 DISPLAY="$DISPLAY_NUM" xdotool mousemove 182 "$button_y"
-DISPLAY="$DISPLAY_NUM" xdotool mousedown 1
-sleep "$CLICK_HOLD"
-DISPLAY="$DISPLAY_NUM" xdotool mouseup 1
+# A slow software-rendered frame can swallow a short press/release pair.
+# Repeat short clicks over multiple frames rather than holding one click
+# longer than egui's maximum click duration.
+for _ in 1 2 3 4 5; do
+    DISPLAY="$DISPLAY_NUM" xdotool mousedown 1
+    sleep "$CLICK_HOLD"
+    DISPLAY="$DISPLAY_NUM" xdotool mouseup 1
+    sleep 0.6
+done
 sleep "$REDRAW"
 alive "a click on the estate button"
 shot 05-clicked
