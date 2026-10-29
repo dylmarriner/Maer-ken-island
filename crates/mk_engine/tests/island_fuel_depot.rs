@@ -8,10 +8,11 @@ use std::sync::{Arc, OnceLock};
 
 use mk_core::canon::CanonLocked;
 use mk_core::flux::Ledger;
+use mk_engine::regional::boundary::sample_regional_boundaries;
 use mk_engine::regional::energy::FuelKind;
+use mk_engine::regional::geophysics::bootstrap_regional_geophysics;
 use mk_engine::regional::industry::chain::{ChainModels, IndustryChain};
 use mk_engine::regional::life::IslandLife;
-use mk_engine::regional::physical::RegionalPhysicalState;
 use mk_island::{IslandDomain, IslandProfile, IslandScenario};
 
 fn repo(p: &str) -> PathBuf {
@@ -28,9 +29,10 @@ fn owners_fields() -> &'static IndustryChain {
         let profile = IslandProfile::load(&repo("fixtures/island/default_profile.json")).unwrap();
         let seed = profile.seed_bytes().unwrap();
         let domain = IslandDomain::from_profile(profile).unwrap();
-        let physical = RegionalPhysicalState::bootstrap(&canon, &domain, seed).unwrap();
+        let boundaries = sample_regional_boundaries(seed, &canon, &domain, 0.0);
+        let geophysics = bootstrap_regional_geophysics(&canon, &domain, &boundaries, seed).unwrap();
         let chain = IndustryChain::survey(
-            &physical.geophysics.deposits,
+            &geophysics.deposits,
             &ChainModels::load_default().unwrap(),
             &seed,
         );

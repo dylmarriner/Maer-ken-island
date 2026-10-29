@@ -493,9 +493,14 @@ async fn the_world_has_its_own_roster_and_its_own_person_pages() {
     assert_eq!(status, 200, "{response}");
     let roster: serde_json::Value = serde_json::from_str(body_of(&response)).unwrap();
     let people = roster["people"].as_array().expect("a roster");
-    assert_eq!(people.len(), 2, "the founders are not both there: {roster}");
+    // The town now boots with residents as well as the two founders.
+    assert!(
+        people.iter().any(|p| p["agent_id"] == "Gem-D")
+            && people.iter().any(|p| p["agent_id"] == "Gem-K"),
+        "the founders are not both there: {roster}"
+    );
 
-    let id = people[0]["agent_id"].as_str().unwrap().to_string();
+    let id = "Gem-D".to_string();
     let (status, response) = get(port, &format!("/api/world/humans/{id}")).await;
     assert_eq!(status, 200, "{response}");
     let person: serde_json::Value = serde_json::from_str(body_of(&response)).unwrap();
@@ -788,19 +793,19 @@ async fn a_phase_0b_population_can_be_carried_into_the_world() {
         let (_, body) = get(port, "/api/world/humans").await;
         let roster: serde_json::Value = serde_json::from_str(body_of(&body)).unwrap();
         let people = roster["people"].as_array().unwrap();
-        if people.len() == 4 {
-            let ids: Vec<&str> = people
-                .iter()
-                .map(|p| p["agent_id"].as_str().unwrap())
-                .collect();
-            assert!(ids.contains(&"rawiri"), "{ids:?}");
-            assert!(ids.contains(&"ngaire"), "{ids:?}");
+        let ids: Vec<&str> = people
+            .iter()
+            .filter_map(|p| p["agent_id"].as_str())
+            .collect();
+        // The default island also has town residents; do not assume the
+        // world contains exactly the two founders before these arrivals.
+        if ids.contains(&"rawiri") && ids.contains(&"ngaire") {
+            assert!(people.len() >= 4, "the founders and arrivals must exist");
             break;
         }
         assert!(
             std::time::Instant::now() < deadline,
-            "only {} people reached the world",
-            people.len()
+            "the stored arrivals have not reached the world: {ids:?}"
         );
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
     }

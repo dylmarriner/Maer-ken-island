@@ -358,12 +358,17 @@ cost the resting baseline (D22).
   takes the frame from 3,457 colours to 2,172 and names thirteen missing files, and only the
   log half of the check fails it.
 
-  Still open from that phase's plan: the rest of the 3D vegetation (the estate view draws the
-  individual stems within 250 m of the yard as trunks at their own height and diameter, up to
-  3,000, re-read every 30 s; beyond the patch the ground is tinted by standing biomass from `/api/cover.bin` and carries tree marks whose number follows it, refreshed every 30 s),
-  the human inspector's full detail sections, the
-  foundry panel, the resolution gate and its benchmark. None
-  of those is blocked; none is done. `island_bench` and the allocation-bound test came in with
+  Vegetation now includes estate stems within 250 m of the yard as trunks at
+  their own height and diameter (up to 3,000, re-read every 30 s). Beyond the
+  estate patch, the ground is tinted by standing biomass from `/api/cover.bin`
+  and carries deterministic tree marks proportional to that cover, refreshed
+  every 30 s.
+
+  Still open from that phase's plan: realistic instanced 3D trees and the
+  remaining vegetation detail, the human inspector's full detail sections,
+  the foundry panel, the resolution gate and its benchmark. None of those
+  outstanding items is blocked or complete. `island_bench` and the
+  allocation-bound test came in with
   the merged local line, and the planetary-only pruning is analysed rather than outstanding:
   `docs/island/PRUNING_INVENTORY.md` shows 9 of 35 modules (8.5% of lines, all tooling) are
   unreachable from the apps, with no runtime or memory benefit, and recommends not pruning (an

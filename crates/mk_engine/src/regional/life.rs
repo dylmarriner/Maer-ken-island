@@ -3625,13 +3625,14 @@ impl IslandLife {
 
     /// Everyone alive who has no genome yet is given one, from their
     /// parents' when both are known, and an untrained body of their present
-    /// mass. Ordered by agent id, so admission replays.
+    /// mass. Parents (older people) are admitted before their children,
+    /// with agent id breaking age ties for deterministic replay.
     fn admit_physiques(&mut self) {
         if self.physiques.genomes.is_empty() {
             self.physiques.day = self.sim_time_s / 86_400;
         }
         type Newcomer = (String, bool, f64, f64, Option<(String, String)>);
-        let newcomers: Vec<Newcomer> = self
+        let mut newcomers: Vec<Newcomer> = self
             .humans
             .registry
             .iter()
@@ -3652,6 +3653,7 @@ impl IslandLife {
                 )
             })
             .collect();
+        newcomers.sort_by(|a, b| b.2.total_cmp(&a.2).then_with(|| a.0.cmp(&b.0)));
         for (id, male, age_years, mass_kg, parents) in newcomers {
             let parents = parents.as_ref().map(|(m, f)| (m.as_str(), f.as_str()));
             self.physiques.admit(
@@ -3803,6 +3805,7 @@ impl IslandLife {
                         || self.hauling.contains_key(human.agent_id())
                         || self.labour_kcal.contains_key(human.agent_id())
                         || self.skills.0.contains_key(human.agent_id())
+                        || self.wills.0.contains_key(human.agent_id())
                     {
                         forget.push(human.agent_id().to_string());
                     }
@@ -3837,6 +3840,7 @@ impl IslandLife {
                 self.labour_kcal.remove(&id);
                 self.skills.0.remove(&id);
                 self.physiques.forget(&id);
+                self.wills.0.remove(&id);
             }
             self.work(human_s as f64)?;
             self.mine(human_s as f64)?;
@@ -4406,6 +4410,9 @@ mod tests {
 
         // Keep working: Gem-D moves the log to the store, the quickest way.
         let (carbon, water) = (log.carbon_kgc, log.water_kg);
+        let will = life.wills.0.get_mut("Gem-D").expect("Gem-D has a will");
+        will.openness = 0.0;
+        will.liking.insert(super::super::choice::Work::Haul, 1.0);
         life.work(minute).unwrap();
         let job = life
             .hauling

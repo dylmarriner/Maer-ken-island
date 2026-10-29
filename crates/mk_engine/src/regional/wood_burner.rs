@@ -46,14 +46,18 @@ impl WoodBurnerSpec {
                 .and_then(|t| t.get(label, "annual_kwh"))
                 .ok_or_else(|| format!("household_solid_fuel_end_uses/{label}"))
         };
+        let wood_kwh_per_kg = library
+            .item(d, "air_dry_wood_net_calorific_value")
+            .and_then(|i| i.point())
+            .ok_or("air_dry_wood_net_calorific_value")?;
+        if !(wood_kwh_per_kg > 0.0) {
+            return Err("air_dry_wood_net_calorific_value must be positive".to_string());
+        }
         Ok(Self {
             cooking_kwh_per_year: use_kwh("range")?,
             heating_kwh_per_year: use_kwh("heating")?,
             wetback_kwh_per_year: use_kwh("wetback")?,
-            wood_kwh_per_kg: library
-                .item(d, "air_dry_wood_net_calorific_value")
-                .and_then(|i| i.point())
-                .ok_or("air_dry_wood_net_calorific_value")?,
+            wood_kwh_per_kg,
         })
     }
 

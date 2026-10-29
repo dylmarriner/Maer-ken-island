@@ -71,8 +71,8 @@ pub struct Snapshot {
     /// The standing biomass per cell (`/api/cover.bin`), read at startup
     /// and again every [`COVER_POLL`], so the ground's tint follows the
     /// forest as it grows and is cut; `None` from a server that does not
-    /// serve it. Replaced whole on each read, so its pointer says whether
-    /// it is new.
+    /// serve it. Replaced only when the cover contents change, so its
+    /// pointer signals a changed cover.
     pub cover: Arc<Option<Cover>>,
     /// What went wrong last time, if anything. Carried rather than
     /// logged: a desktop application that silently showed an island five
@@ -297,7 +297,9 @@ fn spawn_poller(
                     // Timed by the attempt, as the trees are.
                     cover_at = Instant::now();
                     if let Ok(cover) = client.cover() {
-                        next.cover = Arc::new(Some(cover));
+                        if (*next.cover).as_ref() != Some(&cover) {
+                            next.cover = Arc::new(Some(cover));
+                        }
                     }
                 }
 
