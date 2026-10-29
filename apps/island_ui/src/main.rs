@@ -1113,7 +1113,7 @@ fn tint_the_ground(
     *drawn = read;
     let peak = cover.peak_kgc_m2();
     for (tint, mesh) in &land {
-        if let Some(mesh) = meshes.get_mut(&mesh.0) {
+        if let Some(mut mesh) = meshes.get_mut(&mesh.0) {
             let colours = terrain::sampled_colours(&tint.rows, &tint.cols, cover, peak);
             mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, linear_colours(colours));
         }

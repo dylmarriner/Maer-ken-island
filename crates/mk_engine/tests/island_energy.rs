@@ -305,7 +305,7 @@ fn island_made_fuel_keeps_its_share_and_burns_as_material_carbon() {
     assert!(
         (tank.island.litres / tank.litres) > 0.0 && (tank.island.litres / tank.litres) <= share
     );
-    let tank_share = (tank.island.litres / tank.litres);
+    let tank_share = tank.island.litres / tank.litres;
     assert!(
         (e.island_fuel_kgc() - 300.0 * per_litre).abs() < 1e-9,
         "moving fuel moves no carbon"
