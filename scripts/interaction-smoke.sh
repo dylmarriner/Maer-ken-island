@@ -154,7 +154,12 @@ shot 01-dragged
 
 # Five notches of scroll: the zoom, which is exponential, so five is a
 # visible step rather than a nudge.
-DISPLAY="$DISPLAY_NUM" xdotool click --repeat 5 4
+# Space wheel events across rendered frames on software rasterisers.
+# A five-event burst may arrive between two slow Bevy input updates.
+for _ in 1 2 3 4 5; do
+    DISPLAY="$DISPLAY_NUM" xdotool click 4
+    sleep "$HOLD"
+done
 sleep "$REDRAW"
 alive "a scroll"
 shot 02-zoomed
@@ -207,7 +212,12 @@ FIND
 echo "the 'Looking at' row is at y=$button_y"
 # "the estate" is the second word on that row; "the island" is the first
 # and is the highlighted one, so the estate's button is to its right.
-DISPLAY="$DISPLAY_NUM" xdotool mousemove 182 "$button_y" click 1
+# Egui samples pointer state per frame. Keep the button down across
+# frames, rather than sending press and release in the same millisecond.
+DISPLAY="$DISPLAY_NUM" xdotool mousemove 182 "$button_y"
+DISPLAY="$DISPLAY_NUM" xdotool mousedown 1
+sleep "$HOLD"
+DISPLAY="$DISPLAY_NUM" xdotool mouseup 1
 sleep "$REDRAW"
 alive "a click on the estate button"
 shot 05-clicked

@@ -868,13 +868,14 @@ impl IslandLife {
         }
         // Saved before the island ran its oil fields, or newly built.
         life.install_industry()?;
-        // Saved before people carried a genome and a trained body, or newly
-        // built: everyone alive is admitted as they are.
-        life.admit_physiques();
         // Saved before the island kept money, or newly built.
         life.install_economy()?;
         // Saved before the island had a town, or newly built.
         life.install_town()?;
+        // Admit everyone after founding the town, including its initial
+        // residents. Otherwise a fresh snapshot lacks their physiques and
+        // restoring it silently changes the state digest.
+        life.admit_physiques();
         if life.ecology.soil.is_none() {
             life.install_soil()?;
         }
@@ -1049,13 +1050,14 @@ impl IslandLife {
         }
         // Saved before the island ran its oil fields, or newly built.
         life.install_industry()?;
-        // Saved before people carried a genome and a trained body, or newly
-        // built: everyone alive is admitted as they are.
-        life.admit_physiques();
         // Saved before the island kept money, or newly built.
         life.install_economy()?;
         // Saved before the island had a town, or newly built.
         life.install_town()?;
+        // Admit everyone after founding the town, including its initial
+        // residents. Otherwise a fresh snapshot lacks their physiques and
+        // restoring it silently changes the state digest.
+        life.admit_physiques();
         if life.ecology.soil.is_none() {
             // Saved before the island had soil carbon.
             life.install_soil()?;
@@ -2369,7 +2371,13 @@ impl IslandLife {
             let body = LabourBody::from_human(human);
             let trip = self.foraging.get_mut(&id).expect("listed");
             let picking = (trip.out_s..trip.out_s + trip.forage_s).contains(&trip.worked_s);
-            let home_with_food = trip.worked_s >= trip.out_s + trip.forage_s;
+            let return_start = trip.out_s + trip.forage_s;
+            let return_end = return_start + trip.back_s;
+            let home_with_food = trip.worked_s >= return_start;
+            // Include a return leg that begins or finishes inside this
+            // substep. Checking only the end state loses completed trips.
+            let carried_on_return =
+                trip.worked_s < return_end && trip.worked_s + dt_s > return_start;
             let met = if picking {
                 foraging_met
             } else if home_with_food && trip.load_kg > 0.0 {
@@ -2381,7 +2389,7 @@ impl IslandLife {
             };
             // A returning forager carries the gathered food; outbound travel
             // and gathering do not count as loaded strength training.
-            let carried_kg = if home_with_food { trip.load_kg } else { 0.0 };
+            let carried_kg = if carried_on_return { trip.load_kg } else { 0.0 };
             let trip = self.foraging.get_mut(&id).expect("listed");
             trip.worked_s += dt_s;
             if trip.worked_s >= trip.out_s + trip.forage_s + trip.back_s {
@@ -3806,6 +3814,7 @@ impl IslandLife {
                         || self.labour_kcal.contains_key(human.agent_id())
                         || self.skills.0.contains_key(human.agent_id())
                         || self.wills.0.contains_key(human.agent_id())
+                        || self.physiques.fitness.contains_key(human.agent_id())
                     {
                         forget.push(human.agent_id().to_string());
                     }
@@ -4545,6 +4554,11 @@ mod tests {
         let mut life = IslandLife::bootstrap(scenario, canon).expect("the island bootstraps");
         let finance = FinanceReference::from_reference(life.labour.library()).unwrap();
         let economy = life.money.clone().expect("the books are open");
+        // Town residents exist before the first simulation tick and must
+        // already have physiques, including in the first saved snapshot.
+        assert!(life.townsfolk.iter().all(|id| {
+            life.physiques.genomes.contains_key(id) && life.physiques.fitness.contains_key(id)
+        }));
         assert_eq!(economy.ledger.issued(), 2 * finance.founder_opening_cents);
         assert!(
             economy.enterprise(PETROLEUM).is_some(),

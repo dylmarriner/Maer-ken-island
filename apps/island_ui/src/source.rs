@@ -137,7 +137,14 @@ impl Island {
         let estate = client.estate_layout().ok();
         // Not fatal either: without it the ground is drawn one green, as
         // it was before the server served cover.
-        let cover = terrain.as_ref().and_then(|_| client.cover().ok());
+        let (cover, retry_cover) = if terrain.is_some() {
+            match client.cover() {
+                Ok(cover) => (Some(cover), true),
+                Err(err) => (None, err.worth_retrying()),
+            }
+        } else {
+            (None, false)
+        };
 
         let latest = Arc::new(RwLock::new(Snapshot {
             cover: Arc::new(cover),
@@ -150,6 +157,7 @@ impl Island {
             Arc::clone(&latest),
             Arc::clone(&stop),
             tree_box,
+            retry_cover,
         );
 
         Ok(Self {
@@ -226,6 +234,7 @@ fn spawn_poller(
     latest: Arc<RwLock<Snapshot>>,
     stop: Arc<AtomicBool>,
     tree_box: Option<(f64, f64, f64, f64)>,
+    mut retry_cover: bool,
 ) -> std::thread::JoinHandle<()> {
     std::thread::Builder::new()
         .name("island-poll".into())
@@ -288,18 +297,18 @@ fn spawn_poller(
                     }
                 }
 
-                // Only once a cover has been read: a server that does not
-                // serve one is not asked again every half-minute.
-                if next.trouble.is_none()
-                    && next.cover.is_some()
-                    && cover_at.elapsed() >= COVER_POLL
-                {
-                    // Timed by the attempt, as the trees are.
+                // Retry transient network failures, including the initial
+                // read. Do not keep polling a server that refused the route
+                // or returned an incompatible or malformed response.
+                if next.trouble.is_none() && retry_cover && cover_at.elapsed() >= COVER_POLL {
                     cover_at = Instant::now();
-                    if let Ok(cover) = client.cover() {
-                        if (*next.cover).as_ref() != Some(&cover) {
-                            next.cover = Arc::new(Some(cover));
+                    match client.cover() {
+                        Ok(cover) => {
+                            if (*next.cover).as_ref() != Some(&cover) {
+                                next.cover = Arc::new(Some(cover));
+                            }
                         }
+                        Err(err) => retry_cover = err.worth_retrying(),
                     }
                 }
 
