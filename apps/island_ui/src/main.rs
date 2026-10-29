@@ -1169,7 +1169,10 @@ fn plant_the_forest(
     let mut total = 0;
     for chunk_row in 0..chunk_rows {
         for chunk_col in 0..chunk_cols {
-            let (row0, col0) = (chunk_row * terrain::CHUNK_CELLS, chunk_col * terrain::CHUNK_CELLS);
+            let (row0, col0) = (
+                chunk_row * terrain::CHUNK_CELLS,
+                chunk_col * terrain::CHUNK_CELLS,
+            );
             let marks = forest::marks_in(
                 ground,
                 cover,

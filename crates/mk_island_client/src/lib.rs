@@ -32,9 +32,9 @@ pub use error::ClientError;
 pub use mk_island_api as api;
 
 use mk_island_api::{
-    Accepted, Capabilities, Cell, ControlRequest, Conversation, Cover, CreateHumanRequest, CreatorOptions,
-    Economy, InterventionRequest, Outcome, Property, Refusal, ServerVersion, Terrain,
-    TimelineEntry, Trees, World,
+    Accepted, Capabilities, Cell, ControlRequest, Conversation, Cover, CreateHumanRequest,
+    CreatorOptions, Economy, InterventionRequest, Outcome, Property, Refusal, ServerVersion,
+    Terrain, TimelineEntry, Trees, World,
 };
 use std::time::Duration;
 

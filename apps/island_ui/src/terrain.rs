@@ -291,7 +291,11 @@ pub fn sampled_colours(
 }
 
 /// [`sampled_colours`] for one chunk.
-pub fn chunk_colours(chunk: &Chunk, cover: &mk_island_api::Cover, peak_kgc_m2: f32) -> Vec<[f32; 3]> {
+pub fn chunk_colours(
+    chunk: &Chunk,
+    cover: &mk_island_api::Cover,
+    peak_kgc_m2: f32,
+) -> Vec<[f32; 3]> {
     sampled_colours(&chunk.sampled_rows, &chunk.sampled_cols, cover, peak_kgc_m2)
 }
 

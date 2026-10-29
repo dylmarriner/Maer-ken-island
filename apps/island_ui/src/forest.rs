@@ -85,9 +85,8 @@ pub fn marks_in(
         b.x - a.x
     };
     let first = |range: &std::ops::Range<usize>| range.start / BLOCK_CELLS;
-    let last = |range: &std::ops::Range<usize>, limit: usize| {
-        range.end.min(limit).div_ceil(BLOCK_CELLS)
-    };
+    let last =
+        |range: &std::ops::Range<usize>, limit: usize| range.end.min(limit).div_ceil(BLOCK_CELLS);
     for block_row in first(&rows)..last(&rows, terrain.rows) {
         for block_col in first(&cols)..last(&cols, terrain.cols) {
             let (row0, col0) = (block_row * BLOCK_CELLS, block_col * BLOCK_CELLS);

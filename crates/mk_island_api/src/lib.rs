@@ -23,11 +23,11 @@ pub mod terrain;
 pub mod version;
 pub mod wire;
 
+pub use cover::{Cover, CoverError};
 pub use request::{
     Accepted, ControlRequest, CreateHumanRequest, CreatorOptions, InterventionRequest,
     InterventionTarget, Outcome, Refusal,
 };
-pub use cover::{Cover, CoverError};
 pub use terrain::{Terrain, TerrainError};
 pub use version::{Capabilities, ServerVersion, API_VERSION};
 pub use wire::{
