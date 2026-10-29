@@ -1829,6 +1829,38 @@ async fn get_bytes_with(port: u16, path: &str, header: &str) -> (u16, String, Ve
 }
 
 #[tokio::test]
+async fn the_standing_vegetation_is_served_as_numbers_on_the_terrains_grid() {
+    // A desktop client tints its ground by what stands on it. The cover
+    // has to be the terrain's grid, cell for cell, and has to say it is
+    // live rather than immutable: biomass grows.
+    let port = a_shared_dashboard();
+
+    let (status, head, body) = get_bytes(port, "/api/cover.bin").await;
+    assert_eq!(status, 200, "{head}");
+    let lower = head.to_ascii_lowercase();
+    assert!(
+        lower.contains("content-type: application/octet-stream"),
+        "{head}"
+    );
+    assert!(
+        lower.contains("no-store"),
+        "cover moves, so it must not be cached: {head}"
+    );
+    let cover = mk_island_api::Cover::parse(&body).expect("the format the client reads");
+
+    let (_, _, terrain) = get_bytes(port, "/api/elevation.bin").await;
+    let terrain = mk_island_api::Terrain::parse(&terrain).unwrap();
+    assert_eq!((cover.rows, cover.cols), (terrain.rows, terrain.cols));
+
+    // Something grows on the land, and nothing is negative or NaN.
+    assert!(cover.peak_kgc_m2() > 0.0, "an island with no vegetation");
+    assert!(cover
+        .biomass_kgc_m2
+        .iter()
+        .all(|b| b.is_finite() && *b >= 0.0));
+}
+
+#[tokio::test]
 async fn the_terrain_is_served_as_numbers_a_renderer_can_use() {
     // A desktop client builds a mesh out of the island. It cannot do that
     // from `/api/map.png`: a colour ramp is not a height. This is the same

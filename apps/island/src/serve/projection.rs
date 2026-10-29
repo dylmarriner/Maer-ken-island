@@ -1285,6 +1285,26 @@ pub fn elevation_bin(terrain: &Terrain) -> Vec<u8> {
     grid.encode()
 }
 
+/// The island's standing biomass as numbers: `/api/cover.bin`, in
+/// [`mk_island_api::Cover::encode`]'s layout, for the reason
+/// [`elevation_bin`] gives. Unlike the terrain this moves, so it is
+/// redrawn with the vegetation picture rather than built once.
+pub fn cover_bin(life: &IslandLife) -> Vec<u8> {
+    use mk_island::DomainLevel::Medium;
+    mk_island_api::Cover {
+        rows: life.domain.rows(Medium),
+        cols: life.domain.cols(Medium),
+        biomass_kgc_m2: life
+            .ecology
+            .biomass_kgc_m2
+            .data()
+            .iter()
+            .map(|b| *b as f32)
+            .collect(),
+    }
+    .encode()
+}
+
 /// [`elevation_bin`] gzipped, for `Content-Encoding: gzip`.
 ///
 /// Worth the once-at-startup cost: the island's medium grid is 1,152,000

@@ -164,6 +164,9 @@ pub struct SimHandle {
     /// nobody but the sim thread may touch the island.
     vegetation_png: Arc<RwLock<Arc<Vec<u8>>>>,
     patch_png: Arc<RwLock<Arc<Vec<u8>>>>,
+    /// The standing biomass as numbers (`/api/cover.bin`), raw and
+    /// gzipped, redrawn with the vegetation picture.
+    cover_bin: Arc<RwLock<CoverBytes>>,
     /// The island's terrain as numbers, raw and gzipped.
     ///
     /// Built once beside `map_png`, and for the same reason: terrain
@@ -280,6 +283,21 @@ impl SimHandle {
             Arc::clone(&self.elevation_gz)
         } else {
             Arc::clone(&self.elevation_bin)
+        }
+    }
+
+    /// The standing biomass as numbers, as of the last redraw: see
+    /// [`crate::serve::projection::cover_bin`]. `gzip` as for
+    /// [`Self::elevation_bin`].
+    pub fn cover_bin(&self, gzip: bool) -> Arc<Vec<u8>> {
+        let current = match self.cover_bin.read() {
+            Ok(current) => current.clone(),
+            Err(poisoned) => poisoned.into_inner().clone(),
+        };
+        if gzip {
+            current.gz
+        } else {
+            current.raw
         }
     }
 
@@ -559,6 +577,7 @@ pub fn spawn_persisting(
     let patch_png = Arc::new(RwLock::new(Arc::new(
         island_preview::stand_image(&life.vegetation).png(),
     )));
+    let cover_bin = Arc::new(RwLock::new(CoverBytes::of(&life)));
     let first = IslandProjection::digest_now(&life);
     let views = Views::of(&life);
     let projection = Arc::new(RwLock::new(IslandProjection::of(
@@ -591,6 +610,7 @@ pub fn spawn_persisting(
         has_computer_bridge: life.has_computer_bridge(),
         vegetation_png,
         patch_png,
+        cover_bin,
     };
     let stop = Arc::clone(&handle.stop);
     let outcomes = Arc::clone(&handle.outcomes);
@@ -598,6 +618,7 @@ pub fn spawn_persisting(
     let log_error = Arc::clone(&handle.log_error);
     let vegetation_png = Arc::clone(&handle.vegetation_png);
     let patch_png = Arc::clone(&handle.patch_png);
+    let cover_bin = Arc::clone(&handle.cover_bin);
 
     let thread = std::thread::Builder::new()
         .name("island-sim".into())
@@ -617,6 +638,7 @@ pub fn spawn_persisting(
                 snapshots,
                 vegetation_png,
                 patch_png,
+                cover_bin,
                 persist,
                 last_saved: Instant::now(),
             })
@@ -627,6 +649,25 @@ pub fn spawn_persisting(
     }
 
     handle
+}
+
+/// `/api/cover.bin`'s two forms, swapped together so a reader never gets
+/// the raw bytes of one redraw and the gzip of another.
+#[derive(Clone)]
+struct CoverBytes {
+    raw: Arc<Vec<u8>>,
+    gz: Arc<Vec<u8>>,
+}
+
+impl CoverBytes {
+    fn of(life: &IslandLife) -> Self {
+        let raw = crate::serve::projection::cover_bin(life);
+        let gz = crate::serve::projection::gzipped(&raw);
+        Self {
+            raw: Arc::new(raw),
+            gz: Arc::new(gz),
+        }
+    }
 }
 
 /// Everything the thread owns.
@@ -647,6 +688,7 @@ struct Loop {
     /// Shared with the handle, and redrawn on the stems' cadence.
     vegetation_png: Arc<RwLock<Arc<Vec<u8>>>>,
     patch_png: Arc<RwLock<Arc<Vec<u8>>>>,
+    cover_bin: Arc<RwLock<CoverBytes>>,
     /// Where `ControlCommand::Snapshot` writes. Without one the command is
     /// *refused*, because the alternative is what this used to do: record
     /// "wrote a snapshot" in the timeline and write nothing.
@@ -910,6 +952,11 @@ fn run(mut it: Loop) {
             match it.patch_png.write() {
                 Ok(mut slot) => *slot = patch,
                 Err(poisoned) => *poisoned.into_inner() = patch,
+            }
+            let cover = CoverBytes::of(&it.life);
+            match it.cover_bin.write() {
+                Ok(mut slot) => *slot = cover,
+                Err(poisoned) => *poisoned.into_inner() = cover,
             }
         }
 

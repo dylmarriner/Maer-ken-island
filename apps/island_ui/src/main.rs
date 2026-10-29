@@ -21,6 +21,7 @@ use bevy_egui::{EguiContexts, EguiPlugin, EguiPrimaryContextPass};
 
 use island_ui::camera::Orbit;
 use island_ui::estate;
+use island_ui::forest;
 use island_ui::inspectors;
 use island_ui::scene::{self, Point};
 use island_ui::source::{Island, LocalBackend, Snapshot};
@@ -673,6 +674,11 @@ struct Islander(String);
 #[derive(Component)]
 struct Ground;
 
+/// Marks the woods beyond the estate (`forest::marks_in`), so a new cover
+/// can replace them.
+#[derive(Component)]
+struct Woods;
+
 /// Marks everything on the estate, drawn in metres rather than in ten-
 /// kilometre units, and hidden unless the estate is what is being looked
 /// at.
@@ -956,6 +962,8 @@ fn main() {
         (
             say_what_is_drawing,
             read_the_island,
+            tint_the_ground,
+            plant_the_forest,
             grow_the_stems,
             lay_the_stands,
             pick_a_view,
@@ -998,8 +1006,14 @@ fn build_ground(
     let Some(ground) = island.0.terrain() else {
         return;
     };
+    // The land's colour is per vertex, from what stands on each cell
+    // (`tint_the_ground` redraws it as the cover changes), and the
+    // material only lights it.
+    let snapshot = island.0.snapshot();
+    let cover = (*snapshot.cover).as_ref();
+    let peak = cover.map_or(0.0, |cover| cover.peak_kgc_m2());
     let land = materials.add(StandardMaterial {
-        base_color: Color::srgb(0.33, 0.42, 0.26),
+        base_color: Color::WHITE,
         perceptual_roughness: 0.95,
         ..default()
     });
@@ -1019,11 +1033,29 @@ fn build_ground(
         // triangles is, and it means a coastline is a real edge rather
         // than a blend between two colours.
         for (is_land, material) in [(true, land.clone()), (false, sea.clone())] {
-            let Some(mesh) = chunk_mesh(&chunk, is_land) else {
+            let Some(mut mesh) = chunk_mesh(&chunk, is_land) else {
                 continue;
             };
+            if !is_land {
+                commands.spawn((
+                    Ground,
+                    Mesh3d(meshes.add(mesh)),
+                    MeshMaterial3d(material),
+                    Transform::IDENTITY,
+                ));
+                continue;
+            }
+            let colours = match cover {
+                Some(cover) => terrain::chunk_colours(&chunk, cover, peak),
+                None => vec![BARE_LAND; chunk.positions.len()],
+            };
+            mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, linear_colours(colours));
             commands.spawn((
                 Ground,
+                LandTint {
+                    rows: chunk.sampled_rows.clone(),
+                    cols: chunk.sampled_cols.clone(),
+                },
                 Mesh3d(meshes.add(mesh)),
                 MeshMaterial3d(material),
                 Transform::IDENTITY,
@@ -1039,6 +1071,163 @@ fn build_ground(
         detail.0,
         if detail.0 == 1 { "" } else { "s" }
     );
+}
+
+/// The land's one green, from a server that serves no cover.
+const BARE_LAND: [f32; 3] = [0.33, 0.42, 0.26];
+
+/// A land chunk's sampled grid rows and columns, kept so its colours can
+/// be redrawn from a new cover without rebuilding the mesh.
+#[derive(Component)]
+struct LandTint {
+    rows: Vec<usize>,
+    cols: Vec<usize>,
+}
+
+/// sRGB colours as the linear RGBA a mesh's colour attribute holds.
+fn linear_colours(colours: Vec<[f32; 3]>) -> Vec<[f32; 4]> {
+    colours
+        .into_iter()
+        .map(|[r, g, b]| Color::srgb(r, g, b).to_linear().to_f32_array())
+        .collect()
+}
+
+/// Recolour the land when the poller brings a new cover: the forest grows
+/// and is cut, and the ground beyond the yard should show it. Only the
+/// colour attribute changes; the shape is the terrain's and never moves.
+fn tint_the_ground(
+    latest: Res<Latest>,
+    mut drawn: Local<usize>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    land: Query<(&LandTint, &Mesh3d)>,
+) {
+    let Some(cover) = (*latest.0.cover).as_ref() else {
+        return;
+    };
+    // The poller replaces the whole read, so the pointer says whether it
+    // is a new one.
+    let read = std::sync::Arc::as_ptr(&latest.0.cover) as usize;
+    if *drawn == read {
+        return;
+    }
+    *drawn = read;
+    let peak = cover.peak_kgc_m2();
+    for (tint, mesh) in &land {
+        if let Some(mesh) = meshes.get_mut(&mesh.0) {
+            let colours = terrain::sampled_colours(&tint.rows, &tint.cols, cover, peak);
+            mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, linear_colours(colours));
+        }
+    }
+}
+
+/// Stand marks up from the ground in proportion to its biomass, one merged
+/// mesh per ground chunk, and replace them when the poller brings a new
+/// cover. They go with the ground: shown on the island, hidden on the
+/// estate.
+fn plant_the_forest(
+    mut commands: Commands,
+    latest: Res<Latest>,
+    island: Res<TheIsland>,
+    showing: Res<Showing>,
+    mut drawn: Local<usize>,
+    mut look: Local<Option<Handle<StandardMaterial>>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    old: Query<Entity, With<Woods>>,
+) {
+    let (Some(ground), Some(cover)) = (island.0.terrain(), (*latest.0.cover).as_ref()) else {
+        return;
+    };
+    let read = std::sync::Arc::as_ptr(&latest.0.cover) as usize;
+    if *drawn == read {
+        return;
+    }
+    *drawn = read;
+    for entity in &old {
+        commands.entity(entity).despawn();
+    }
+    let material = look
+        .get_or_insert_with(|| {
+            materials.add(StandardMaterial {
+                base_color: Color::srgb(
+                    terrain::CLOSED_STAND[0],
+                    terrain::CLOSED_STAND[1],
+                    terrain::CLOSED_STAND[2],
+                ),
+                perceptual_roughness: 0.9,
+                ..default()
+            })
+        })
+        .clone();
+    let visibility = if *showing == Showing::Island {
+        Visibility::Inherited
+    } else {
+        Visibility::Hidden
+    };
+    let peak = cover.peak_kgc_m2();
+    let (chunk_rows, chunk_cols) = terrain::chunk_grid(ground);
+    let mut total = 0;
+    for chunk_row in 0..chunk_rows {
+        for chunk_col in 0..chunk_cols {
+            let (row0, col0) = (
+                chunk_row * terrain::CHUNK_CELLS,
+                chunk_col * terrain::CHUNK_CELLS,
+            );
+            let marks = forest::marks_in(
+                ground,
+                cover,
+                peak,
+                row0..row0 + terrain::CHUNK_CELLS,
+                col0..col0 + terrain::CHUNK_CELLS,
+            );
+            if marks.is_empty() {
+                continue;
+            }
+            total += marks.len();
+            commands.spawn((
+                Ground,
+                Woods,
+                Mesh3d(meshes.add(woods_mesh(&marks))),
+                MeshMaterial3d(material.clone()),
+                Transform::IDENTITY,
+                visibility,
+            ));
+        }
+    }
+    info!("the island's woods: {total} marks from the standing biomass");
+}
+
+/// Each mark as a four-sided spire, its base a quarter of its block wide
+/// and its height half the block: a map symbol, not a tree to scale.
+fn woods_mesh(marks: &[forest::Mark]) -> Mesh {
+    let mut positions = Vec::with_capacity(marks.len() * 12);
+    let mut normals = Vec::with_capacity(marks.len() * 12);
+    for mark in marks {
+        let (r, h) = (mark.block_units / 8.0, mark.block_units / 2.0);
+        let b = Vec3::new(mark.base.x, mark.base.y, mark.base.z);
+        let top = b + Vec3::Y * h;
+        let corners = [
+            b + Vec3::new(-r, 0.0, -r),
+            b + Vec3::new(r, 0.0, -r),
+            b + Vec3::new(r, 0.0, r),
+            b + Vec3::new(-r, 0.0, r),
+        ];
+        for i in 0..4 {
+            let (a, c) = (corners[i], corners[(i + 1) % 4]);
+            let normal = (c - a).cross(top - a).normalize_or_zero();
+            for p in [a, top, c] {
+                positions.push(p.to_array());
+                normals.push(normal.to_array());
+            }
+        }
+    }
+    let mut mesh = Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::RENDER_WORLD,
+    );
+    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+    mesh
 }
 
 /// One chunk's triangles, kept to the land ones or the sea ones.

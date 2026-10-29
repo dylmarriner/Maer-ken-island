@@ -17,11 +17,13 @@
 
 #![forbid(unsafe_code)]
 
+pub mod cover;
 pub mod request;
 pub mod terrain;
 pub mod version;
 pub mod wire;
 
+pub use cover::{Cover, CoverError};
 pub use request::{
     Accepted, ControlRequest, CreateHumanRequest, CreatorOptions, InterventionRequest,
     InterventionTarget, Outcome, Refusal,
