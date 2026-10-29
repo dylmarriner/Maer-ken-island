@@ -50,7 +50,7 @@ impl WoodBurnerSpec {
             .item(d, "air_dry_wood_net_calorific_value")
             .and_then(|i| i.point())
             .ok_or("air_dry_wood_net_calorific_value")?;
-        if !(wood_kwh_per_kg > 0.0) {
+        if wood_kwh_per_kg <= 0.0 || wood_kwh_per_kg.is_nan() {
             return Err("air_dry_wood_net_calorific_value must be positive".to_string());
         }
         Ok(Self {
