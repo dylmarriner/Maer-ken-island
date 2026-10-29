@@ -517,6 +517,32 @@ pub fn framing_of(layout: &EstateLayout, stems: &[Stem], picked: Picked) -> Opti
     }
 }
 
+/// Where the camera stands to be inside a room rather than looking down on
+/// it: the room's centre at half the height of the building it is in (the
+/// middle of the storey, so the floor and the things on it are in view and
+/// no eye height is invented), and a distance of a quarter of the room's
+/// shorter side, so the eye stays inside the walls whichever way it turns
+/// while it looks level. `None` when the index names no room.
+pub fn inside(layout: &EstateLayout, room: usize) -> Option<(Point, f32)> {
+    let space = layout.spaces.get(room)?;
+    let (x, y) = space.rect_m.centre_m();
+    let height = layout
+        .buildings
+        .iter()
+        .find(|b| {
+            (b.rect_m.x0..=b.rect_m.x1).contains(&x) && (b.rect_m.y0..=b.rect_m.y1).contains(&y)
+        })
+        .map(|b| b.height_m as f32)
+        .filter(|h| *h > 0.0)
+        .unwrap_or(WALL_HEIGHT_M);
+    let origin = (layout.patch.x0, layout.patch.y0);
+    let shorter = space.rect_m.width_m().min(space.rect_m.depth_m()) as f32;
+    Some((
+        estate_of(origin, x, y, f64::from(height) / 2.0),
+        shorter / 4.0,
+    ))
+}
+
 /// The nearest the camera is brought to something it is asked to look at
 /// (m): close enough to read a desk, not so close that a small thing
 /// fills the view with one face of its box.
@@ -847,6 +873,30 @@ mod tests {
         // A tree no longer drawn, or an index past the end, frames nothing.
         assert_eq!(framing_of(&layout, &[], Picked::Tree(9)), None);
         assert_eq!(framing_of(&layout, &[], Picked::Room(99)), None);
+    }
+
+    #[test]
+    fn stepping_inside_a_room_keeps_the_eye_within_its_walls() {
+        let layout = layout();
+        let room = &rooms(&layout)[0];
+        let (focus, distance) = inside(&layout, 0).unwrap();
+        // Over the room's centre, half way up the 3 m homestead.
+        assert_eq!((focus.x, focus.z), (room.at.x, room.at.z));
+        assert!((focus.y - 1.5).abs() < 1e-4, "{}", focus.y);
+        // The 4 m room: a 1 m distance, so a level eye turned any way is
+        // inside it.
+        assert!((distance - 1.0).abs() < 1e-4);
+        for k in 0..8 {
+            let orbit = crate::camera::Orbit {
+                focus,
+                distance,
+                yaw: k as f32 * std::f32::consts::FRAC_PI_4,
+                pitch: 0.0,
+            };
+            let eye = orbit.eye();
+            assert!((eye.x - room.at.x).abs() < 2.0 && (eye.z - room.at.z).abs() < 2.0);
+        }
+        assert_eq!(inside(&layout, 9), None);
     }
 
     #[test]
