@@ -431,7 +431,6 @@ pub struct IslandLife {
     /// Every living person's genome and trained body (R12, R13).
     pub physiques: super::physique::Physiques,
     physique_models: super::physique::PhysiqueModels,
-    #[serde(default)]
     /// Each person's own mind about work (R14).
     pub wills: super::choice::Wills,
     /// Water each founder has drunk since the island began (kg): the record
