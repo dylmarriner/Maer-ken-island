@@ -529,7 +529,9 @@ pub fn inside(layout: &EstateLayout, room: usize) -> Option<(Point, f32)> {
     let height = layout
         .buildings
         .iter()
-        .find(|b| (b.rect_m.x0..=b.rect_m.x1).contains(&x) && (b.rect_m.y0..=b.rect_m.y1).contains(&y))
+        .find(|b| {
+            (b.rect_m.x0..=b.rect_m.x1).contains(&x) && (b.rect_m.y0..=b.rect_m.y1).contains(&y)
+        })
         .map(|b| b.height_m as f32)
         .filter(|h| *h > 0.0)
         .unwrap_or(WALL_HEIGHT_M);
