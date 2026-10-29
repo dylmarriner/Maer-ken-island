@@ -334,7 +334,12 @@ pub fn book_burn_from(ledger: &mut Ledger, burn: Burn, island_share: f64) {
         (Reservoir::CrustCarbon, carbon - island),
     ] {
         if kgc > 0.0 {
-            ledger.push(FluxEntry::new(from, Reservoir::AtmosCO2, kgc, FluxKind::Carbon));
+            ledger.push(FluxEntry::new(
+                from,
+                Reservoir::AtmosCO2,
+                kgc,
+                FluxKind::Carbon,
+            ));
         }
     }
     ledger.push(FluxEntry::new(

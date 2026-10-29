@@ -28,11 +28,9 @@ use mk_island::{
 };
 
 use super::ecology::{RegionalEcologyError, RegionalEcologyState};
+use super::energy::FuelKind;
 use super::energy::{solar_output_kw, EstateEnergy, ROOM_LIGHT_LUX};
 use super::estate_layout::{Space, SpaceId};
-use super::energy::FuelKind;
-use super::industry::chain::{ChainModels, IndustryChain};
-use super::industry::refinery::Product;
 use super::household_water::{
     installed_capacity_kg, storage_needed_kg, HouseholdWater, HouseholdWaterSpec,
 };
@@ -42,6 +40,8 @@ use super::humans::{
     RegionalHumanError,
 };
 use super::hydrology::discharge_m3_s;
+use super::industry::chain::{ChainModels, IndustryChain};
+use super::industry::refinery::Product;
 use super::labour::{LabourBody, LabourError, LabourTable, LabourTool};
 use super::local_vegetation::{seed_local_vegetation, LocalVegetationError, LocalVegetationPatch};
 use super::materials::{
@@ -2022,7 +2022,8 @@ impl IslandLife {
         }
         let target = self.scenario.estate_energy.diesel_litres;
         self.audited(|life, ledger| {
-            let (Some(chain), Some(models)) = (life.industry.as_mut(), life.industry_models.as_ref())
+            let (Some(chain), Some(models)) =
+                (life.industry.as_mut(), life.industry_models.as_ref())
             else {
                 return;
             };
