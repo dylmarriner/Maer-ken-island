@@ -87,13 +87,17 @@ fn burn_diesel(life: &mut IslandLife, litres: f64) {
 fn the_depot_refills_burned_diesel_from_the_islands_refinery_and_the_books_close() {
     let mut life = small_island();
     life.industry = Some(owners_fields().clone());
-    let full = life.energy.stored_litres(FuelKind::Diesel);
-    assert!(full > 0.0);
+    // Vehicles start with partly filled tanks drawn from the estate store.
+    // The depot replenishes to the scenario's configured store level, not
+    // the already-depleted amount left in the store after bootstrap.
+    let target = life.scenario.estate_energy.diesel_litres;
+    let initial = life.energy.stored_litres(FuelKind::Diesel);
+    assert!(initial > 0.0 && initial <= target);
     assert_eq!(life.energy.island_fuel_kgc(), 0.0);
 
-    burn_diesel(&mut life, 0.5 * full);
+    burn_diesel(&mut life, 0.5 * initial);
     let low = life.energy.stored_litres(FuelKind::Diesel);
-    assert!(low < full);
+    assert!(low < initial);
 
     let audits = life.audits_closed;
     for _ in 0..48 {
@@ -102,8 +106,8 @@ fn the_depot_refills_burned_diesel_from_the_islands_refinery_and_the_books_close
     assert!(life.audits_closed > audits, "the chain's steps are audited");
     let now = life.energy.stored_litres(FuelKind::Diesel);
     assert!(
-        (now - full).abs() < 1e-6 * full,
-        "the depot tops the store back up: {low} L then {now} L, {full} L wanted"
+        (now - target).abs() < 1e-6 * target,
+        "the depot tops the store back up: {low} L then {now} L, {target} L wanted"
     );
     let store = life
         .energy
@@ -111,9 +115,9 @@ fn the_depot_refills_burned_diesel_from_the_islands_refinery_and_the_books_close
         .iter()
         .find(|s| s.fuel == FuelKind::Diesel)
         .unwrap();
-    let delivered = full - low;
+    let delivered = target - low;
     assert!(
-        ((store.island.litres / store.litres) - delivered / full).abs() < 1e-6,
+        ((store.island.litres / store.litres) - delivered / target).abs() < 1e-6,
         "the island-made share is what the depot delivered: {}",
         (store.island.litres / store.litres)
     );
