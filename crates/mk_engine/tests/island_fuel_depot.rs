@@ -87,6 +87,10 @@ fn burn_diesel(life: &mut IslandLife, litres: f64) {
 fn the_depot_refills_burned_diesel_from_the_islands_refinery_and_the_books_close() {
     let mut life = small_island();
     life.industry = Some(owners_fields().clone());
+    // Isolate depot replenishment from unrelated generator demand: the
+    // generator runs after the hourly depot refill and can burn diesel
+    // before the final store-level assertion.
+    life.energy.generators.clear();
     // Vehicles start with partly filled tanks drawn from the estate store.
     // The depot replenishes to the scenario's configured store level, not
     // the already-depleted amount left in the store after bootstrap.

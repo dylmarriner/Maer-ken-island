@@ -2707,7 +2707,9 @@ impl IslandLife {
         (row..=row + 1).contains(&cell.0) && (col..=col + 1).contains(&cell.1)
     }
 
-    /// The living who are at home now.
+    /// Living members of the founders' household who are at home.
+    /// Town residents do not draw on the estate house's water or heating,
+    /// even if their map cell overlaps the estate patch.
     fn people_at_home(&self) -> usize {
         let (rows, cols) = (
             self.domain.rows(DomainLevel::Medium),
@@ -2717,6 +2719,7 @@ impl IslandLife {
             .registry
             .iter()
             .filter(|h| matches!(h.profile.status, mk_core::human::HumanStatus::Alive))
+            .filter(|h| !self.townsfolk.contains(h.agent_id()))
             .filter(|h| self.at_home(self.standing_cell(h.agent_id(), rows, cols)))
             .count()
     }
@@ -4539,6 +4542,27 @@ mod tests {
         let restored = IslandLife::restore(life.canon.clone(), life.snapshot()).expect("restores");
         assert_eq!(restored.industry, life.industry);
         assert_eq!(restored.state_digest(), life.state_digest());
+    }
+
+    #[test]
+    fn townsfolk_on_the_estate_cell_are_not_household_water_users() {
+        let mut scenario =
+            IslandScenario::load(&repo("fixtures/island/default_scenario.json")).unwrap();
+        scenario.estate_patch.tree_cap = 50;
+        let canon = Arc::new(CanonLocked::load(&repo("fixtures/island/canon.json")).unwrap());
+        let mut life = IslandLife::bootstrap(scenario, canon).unwrap();
+        let household = life.people_at_home();
+        assert_eq!(household, 2, "the founders start at home");
+        let town_id = life.townsfolk.iter().next().expect("town exists").clone();
+        let (row, col) = life.placed.location;
+        let resident = life.humans.registry.get_human_mut(&town_id).unwrap();
+        resident.position.row = row as i32;
+        resident.position.col = col as i32;
+        assert_eq!(
+            life.people_at_home(),
+            household,
+            "townsfolk do not live in the house"
+        );
     }
 
     /// The island keeps the founders' money (Task 7, D61): their sourced
