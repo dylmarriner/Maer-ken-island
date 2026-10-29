@@ -60,9 +60,10 @@ SETTLE=${ISLAND_INPUT_SETTLE:-90}
 # seconds is about seven frames, and a gesture held for less than one of
 # them is not sampled at all.
 REDRAW=${ISLAND_INPUT_REDRAW:-12}
-# How long each step of a held drag waits. It has to exceed one frame or
-# the button is down and up again between samples; see the note above.
+# A drag needs a held button across frames, but a click must be short:
+# egui rejects presses held beyond its max_click_duration as clicks.
 HOLD=${ISLAND_INPUT_HOLD:-3}
+CLICK_HOLD=${ISLAND_INPUT_CLICK_HOLD:-0.15}
 
 missing=""
 for tool in Xvfb xdotool convert compare; do
@@ -212,11 +213,11 @@ FIND
 echo "the 'Looking at' row is at y=$button_y"
 # "the estate" is the second word on that row; "the island" is the first
 # and is the highlighted one, so the estate's button is to its right.
-# Egui samples pointer state per frame. Keep the button down across
-# frames, rather than sending press and release in the same millisecond.
+# Unlike dragging, clicking must finish inside egui's click-duration
+# threshold. Both events are queued for the next frame on slow renderers.
 DISPLAY="$DISPLAY_NUM" xdotool mousemove 182 "$button_y"
 DISPLAY="$DISPLAY_NUM" xdotool mousedown 1
-sleep "$HOLD"
+sleep "$CLICK_HOLD"
 DISPLAY="$DISPLAY_NUM" xdotool mouseup 1
 sleep "$REDRAW"
 alive "a click on the estate button"

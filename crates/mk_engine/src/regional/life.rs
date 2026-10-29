@@ -2373,14 +2373,14 @@ impl IslandLife {
             let picking = (trip.out_s..trip.out_s + trip.forage_s).contains(&trip.worked_s);
             let return_start = trip.out_s + trip.forage_s;
             let return_end = return_start + trip.back_s;
-            let home_with_food = trip.worked_s >= return_start;
             // Include a return leg that begins or finishes inside this
-            // substep. Checking only the end state loses completed trips.
-            let carried_on_return =
-                trip.worked_s < return_end && trip.worked_s + dt_s > return_start;
+            // substep, but never count a zero-length leg as loaded travel.
+            let carried_on_return = return_end > return_start
+                && trip.worked_s < return_end
+                && trip.worked_s + dt_s > return_start;
             let met = if picking {
                 foraging_met
-            } else if home_with_food && trip.load_kg > 0.0 {
+            } else if carried_on_return && trip.load_kg > 0.0 {
                 self.labour
                     .loaded_walking_met(&body, trip.load_kg, WALKING_MET)
                     .map_err(IslandLifeError::Labour)?
