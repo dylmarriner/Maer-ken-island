@@ -14,10 +14,16 @@ use mk_engine::world_integration::WorldState;
 /// a `labour_met` field. Both are state the planetary world now carries,
 /// not a change to how it steps. Re-pinned again (2026-10-13) when the shed
 /// gained two 20 L water jerrycans (R1b, UPSTREAM.md), likewise state only.
-const EXPECTED: &str = "e4ece246a21e726f63f1f5561eb3c2a039f8d38c1b503f1647395f6864ba73e2";
+/// Re-pinned (2026-10-31) after the island worktree reconciliation intentionally
+/// changed world state: household gas was replaced by the wood burner, and
+/// physiques and human wills became part of the hashed simulation state.
+/// The previous pre-reconciliation hash was
+/// e4ece246a21e726f63f1f5561eb3c2a039f8d38c1b503f1647395f6864ba73e2.
+/// Future changes must still explain any divergence from the new baseline.
+const EXPECTED: &str = "bd75bc7db962d4bbc97b03d4612fa7d23042c27a9035f4ad89269eaf3b966285";
 
 #[test]
-fn ten_planetary_steps_hash_as_before_the_topology_refactor() {
+fn ten_planetary_steps_hash_after_island_reconciliation() {
     let mut world = WorldState::new(Arc::new(CanonLocked::default()), [11u8; 32]);
     for _ in 0..10 {
         world.step_world(3_600).unwrap();
