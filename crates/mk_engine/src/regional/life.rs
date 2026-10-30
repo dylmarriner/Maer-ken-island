@@ -35,7 +35,6 @@ use super::economy::money::founders_shares;
 use super::economy::money::FinanceReference;
 use super::energy::{solar_output_kw, EstateEnergy, FuelKind, ROOM_LIGHT_LUX};
 use super::estate_layout::{Space, SpaceId};
-use super::household_gas::{HouseholdGas, HouseholdGasSpec};
 use super::household_water::{
     installed_capacity_kg, storage_needed_kg, HouseholdWater, HouseholdWaterSpec,
 };
@@ -58,7 +57,12 @@ use super::scheduler::IslandScheduler;
 use super::skills::{LearningRates, Skills, Task};
 use super::timber::{self, HaulJob, HaulTask};
 use super::town;
+use super::wood_burner::{WoodBurner, WoodBurnerSpec};
 use crate::humans::lifecycle::WALKING_MET;
+
+/// What a finished job teaches the one who did it: it went as planned.
+/// R14's structure, not a measured rate.
+const WORK_DONE: f64 = 0.5;
 use crate::humans::HumanSystem;
 use crate::resource_economy::ResourceEconomyState;
 use crate::topology::GridTopology;
@@ -111,6 +115,22 @@ pub struct SubsystemTimings {
 }
 
 /// A child's mother, from its birth record.
+/// The father the runtime recorded at `human`'s birth, if it recorded one.
+fn father_of(human: &crate::humans::HumanBeing) -> Option<String> {
+    human
+        .profile
+        .canonical_schema
+        .as_ref()
+        .and_then(|s| {
+            s.reproductive_systems
+                .genetics_system
+                .birth_records
+                .last()
+                .map(|r| r.father_id.clone())
+        })
+        .filter(|f| !f.is_empty())
+}
+
 fn mother_of(human: &crate::humans::HumanBeing) -> Option<String> {
     human
         .profile
@@ -281,7 +301,9 @@ pub const HAUL_EXCAVATOR: &str = "30-Ton Excavator (CAT 330)";
 
 /// The snapshot format. A snapshot written by another version is refused
 /// rather than guessed at.
-pub const ISLAND_SNAPSHOT_VERSION: u32 = 1;
+// Version 1 predates the household heating-state replacement. Reject it
+// rather than silently treating old heating data as the current model.
+pub const ISLAND_SNAPSHOT_VERSION: u32 = 2;
 
 /// An island's whole persisted state. See [`IslandLife::snapshot`] for what
 /// is deliberately absent.
@@ -324,6 +346,10 @@ pub struct IslandLifeSnapshot {
     #[serde(default)]
     pub skills: Skills,
     #[serde(default)]
+    pub physiques: super::physique::Physiques,
+    #[serde(default)]
+    pub wills: super::choice::Wills,
+    #[serde(default)]
     pub water_drunk_kg: BTreeMap<String, f64>,
     pub sleep_seconds: BTreeMap<String, (f64, f64)>,
     pub food_cell: (usize, usize),
@@ -335,7 +361,7 @@ pub struct IslandLifeSnapshot {
     #[serde(default)]
     pub water_trips: BTreeMap<String, WaterTrip>,
     #[serde(default)]
-    pub household_gas: Option<HouseholdGas>,
+    pub wood_burner: Option<WoodBurner>,
     #[serde(default)]
     pub foraging: BTreeMap<String, ForageTrip>,
     #[serde(default)]
@@ -404,6 +430,11 @@ pub struct IslandLife {
     /// What every person has learnt by doing (R11): each task they have
     /// done, how much, and when they last did it.
     pub skills: Skills,
+    /// Every living person's genome and trained body (R12, R13).
+    pub physiques: super::physique::Physiques,
+    physique_models: super::physique::PhysiqueModels,
+    /// Each person's own mind about work (R14).
+    pub wills: super::choice::Wills,
     /// Water each founder has drunk since the island began (kg): the record
     /// the intake checks read.
     pub water_drunk_kg: BTreeMap<String, f64>,
@@ -454,8 +485,8 @@ pub struct IslandLife {
     pub household_water: Option<HouseholdWater>,
     /// Who is walking to water, or home with it (realism programme R1b).
     pub water_trips: BTreeMap<String, WaterTrip>,
-    /// The kitchen stove's bottled LPG (realism programme R4, D59).
-    pub household_gas: Option<HouseholdGas>,
+    /// The house's log burner with its wetback (realism programme R4, D59).
+    pub wood_burner: Option<WoodBurner>,
     /// Who is out gathering their next meal (realism programme R3).
     pub foraging: BTreeMap<String, ForageTrip>,
     /// The oil fields and the refinery, run as one plant (Phase 4b Task 4,
@@ -775,6 +806,10 @@ impl IslandLife {
             hauling: BTreeMap::new(),
             labour_kcal: BTreeMap::new(),
             skills: Skills::default(),
+            physiques: super::physique::Physiques::default(),
+            physique_models: super::physique::PhysiqueModels::load_default()
+                .map_err(|e| IslandLifeError::Labour(LabourError::MissingReference(e)))?,
+            wills: Default::default(),
             water_drunk_kg: BTreeMap::new(),
             sleep_seconds: BTreeMap::new(),
             scheduler: IslandScheduler::new(scenario_cadences),
@@ -789,7 +824,7 @@ impl IslandLife {
             water_cell,
             household_water: None,
             water_trips: BTreeMap::new(),
-            household_gas: None,
+            wood_burner: None,
             foraging: BTreeMap::new(),
             industry: None,
             town_cell: None,
@@ -829,9 +864,9 @@ impl IslandLife {
         if life.household_water.is_none() {
             life.install_household_water()?;
         }
-        if life.household_gas.is_none() {
-            // Saved before the stove burned gas, or newly built.
-            life.install_household_gas()?;
+        if life.wood_burner.is_none() {
+            // Saved before the house had its log burner, or newly built.
+            life.install_wood_burner()?;
         }
         // Saved before the island ran its oil fields, or newly built.
         life.install_industry()?;
@@ -839,6 +874,10 @@ impl IslandLife {
         life.install_economy()?;
         // Saved before the island had a town, or newly built.
         life.install_town()?;
+        // Admit everyone after founding the town, including its initial
+        // residents. Otherwise a fresh snapshot lacks their physiques and
+        // restoring it silently changes the state digest.
+        life.admit_physiques();
         if life.ecology.soil.is_none() {
             life.install_soil()?;
         }
@@ -893,13 +932,15 @@ impl IslandLife {
             hauling: self.hauling.clone(),
             labour_kcal: self.labour_kcal.clone(),
             skills: self.skills.clone(),
+            physiques: self.physiques.clone(),
+            wills: self.wills.clone(),
             water_drunk_kg: self.water_drunk_kg.clone(),
             sleep_seconds: self.sleep_seconds.clone(),
             food_cell: self.food_cell,
             water_cell: self.water_cell,
             household_water: self.household_water.clone(),
             water_trips: self.water_trips.clone(),
-            household_gas: self.household_gas.clone(),
+            wood_burner: self.wood_burner.clone(),
             foraging: self.foraging.clone(),
             industry: self.industry.clone(),
             town_cell: self.town_cell,
@@ -963,6 +1004,10 @@ impl IslandLife {
             hauling: snapshot.hauling,
             labour_kcal: snapshot.labour_kcal,
             skills: snapshot.skills,
+            physiques: snapshot.physiques,
+            physique_models: super::physique::PhysiqueModels::load_default()
+                .map_err(|e| IslandLifeError::Labour(LabourError::MissingReference(e)))?,
+            wills: snapshot.wills,
             water_drunk_kg: snapshot.water_drunk_kg,
             sleep_seconds: snapshot.sleep_seconds,
             labour,
@@ -981,7 +1026,7 @@ impl IslandLife {
             water_cell: snapshot.water_cell,
             household_water: snapshot.household_water,
             water_trips: snapshot.water_trips,
-            household_gas: snapshot.household_gas,
+            wood_burner: snapshot.wood_burner,
             foraging: snapshot.foraging,
             industry: snapshot.industry,
             town_cell: snapshot.town_cell,
@@ -1001,9 +1046,9 @@ impl IslandLife {
             // Saved before the house had a tank.
             life.install_household_water()?;
         }
-        if life.household_gas.is_none() {
-            // Saved before the stove burned gas, or newly built.
-            life.install_household_gas()?;
+        if life.wood_burner.is_none() {
+            // Saved before the house had its log burner, or newly built.
+            life.install_wood_burner()?;
         }
         // Saved before the island ran its oil fields, or newly built.
         life.install_industry()?;
@@ -1011,6 +1056,10 @@ impl IslandLife {
         life.install_economy()?;
         // Saved before the island had a town, or newly built.
         life.install_town()?;
+        // Admit everyone after founding the town, including its initial
+        // residents. Otherwise a fresh snapshot lacks their physiques and
+        // restoring it silently changes the state digest.
+        life.admit_physiques();
         if life.ecology.soil.is_none() {
             // Saved before the island had soil carbon.
             life.install_soil()?;
@@ -1243,6 +1292,8 @@ impl IslandLife {
         self.water_drunk_kg.remove(id);
         self.sleep_seconds.remove(id);
         self.skills.0.remove(id);
+        self.physiques.forget(id);
+        self.wills.0.remove(id);
     }
 
     /// Every living human of the founders' household (everyone but the
@@ -1445,10 +1496,13 @@ impl IslandLife {
                 continue;
             };
 
-            // A log on the ground nobody is moving: haul it.
+            // Between jobs, the person chooses for themselves whether to
+            // haul a log lying on the ground or to fell a tree (R14).
             if !self.hauling.contains_key(&id) && !self.felling.contains_key(&id) {
                 if let Some(job) = self.plan_haul(at, &body)? {
-                    self.hauling.insert(id.clone(), job);
+                    if self.chooses_to_haul(&id, &job, at)? {
+                        self.hauling.insert(id.clone(), job);
+                    }
                 }
             }
             let met = if let Some(job) = self.hauling.get_mut(&id) {
@@ -1464,6 +1518,8 @@ impl IslandLife {
                 }
                 if job.tasks.is_empty() {
                     self.hauling.remove(&id);
+                    self.will_of(&id)
+                        .learn(super::choice::Work::Haul, WORK_DONE);
                 }
                 met
             } else {
@@ -1568,6 +1624,8 @@ impl IslandLife {
                 let job = self.felling.get(&id).expect("inserted above");
                 if job.worked_s >= walk_s + felling_s {
                     felled.push((id.clone(), tree_id));
+                    self.will_of(&id)
+                        .learn(super::choice::Work::Fell, WORK_DONE);
                 }
                 met
             };
@@ -1580,6 +1638,8 @@ impl IslandLife {
                     .energy_kcal(&body, awake_met, dt_s)
                     .map_err(IslandLifeError::Labour)?;
             *self.labour_kcal.entry(id.clone()).or_insert(0.0) += extra.max(0.0);
+            self.physiques
+                .record(&self.physique_models, &id, met, dt_s, 0.0);
             if let Some(h) = self.humans.registry.get_human_mut(&id) {
                 h.labour_met = Some(met);
             }
@@ -1720,6 +1780,56 @@ impl IslandLife {
             to,
             layout.patch.cell_size_m,
         )
+    }
+
+    /// Whether `id`, free to choose, hauls the log `job` would move rather
+    /// than fell the nearest tree. Both keep the house in wood, so the
+    /// need is the same; what differs is the effort, as each job's MET
+    /// against the harder of the two, and the person's own liking and
+    /// calling (R14, D68).
+    fn chooses_to_haul(
+        &mut self,
+        id: &str,
+        job: &HaulJob,
+        at: (f64, f64),
+    ) -> Result<bool, IslandLifeError> {
+        use super::choice::{draw, Candidate, Work};
+        let Some(tree) = self.vegetation.nearest_tree(at) else {
+            return Ok(true);
+        };
+        let fell_met = self
+            .labour
+            .fell_tree(LabourTool::SteelAxe, tree.stem_diameter_m * 100.0)
+            .map_err(IslandLifeError::Labour)?
+            .met;
+        let (s, m) = job.tasks.iter().fold((0.0, 0.0), |(s, m), t| {
+            (s + t.duration_s, m + t.met * t.duration_s)
+        });
+        let haul_met = if s > 0.0 { m / s } else { WALKING_MET };
+        let hardest = fell_met.max(haul_met).max(f64::MIN_POSITIVE);
+        let candidates = [
+            Candidate {
+                work: Work::Haul,
+                need: 0.5,
+                effort: haul_met / hardest,
+            },
+            Candidate {
+                work: Work::Fell,
+                need: 0.5,
+                effort: fell_met / hardest,
+            },
+        ];
+        let seed = self.scenario.seed;
+        let noise = [0, 1].map(|k| draw(&seed, &format!("choice:{id}:{}:{k}", self.sim_time_s)));
+        Ok(self.will_of(id).choose(&candidates, 0.0, &noise) != Some(Work::Fell))
+    }
+
+    /// `id`'s own will, made on first use from their inherited openness.
+    fn will_of(&mut self, id: &str) -> &mut super::choice::Will {
+        let openness = self.humans.registry.get_human(id).map_or(0.0, |h| {
+            crate::humans::genetics::GeneticsSnapshot::from_profile(&h.profile).openness
+        });
+        self.wills.of(&self.scenario.seed, id, openness)
     }
 
     /// The quickest haul of the log on the ground nearest `at` that no
@@ -2263,16 +2373,25 @@ impl IslandLife {
             let body = LabourBody::from_human(human);
             let trip = self.foraging.get_mut(&id).expect("listed");
             let picking = (trip.out_s..trip.out_s + trip.forage_s).contains(&trip.worked_s);
-            let home_with_food = trip.worked_s >= trip.out_s + trip.forage_s;
+            let return_start = trip.out_s + trip.forage_s;
+            let return_end = return_start + trip.back_s;
+            // Include a return leg that begins or finishes inside this
+            // substep, but never count a zero-length leg as loaded travel.
+            let carried_on_return = return_end > return_start
+                && trip.worked_s < return_end
+                && trip.worked_s + dt_s > return_start;
             let met = if picking {
                 foraging_met
-            } else if home_with_food && trip.load_kg > 0.0 {
+            } else if carried_on_return && trip.load_kg > 0.0 {
                 self.labour
                     .loaded_walking_met(&body, trip.load_kg, WALKING_MET)
                     .map_err(IslandLifeError::Labour)?
             } else {
                 WALKING_MET
             };
+            // A returning forager carries the gathered food; outbound travel
+            // and gathering do not count as loaded strength training.
+            let carried_kg = if carried_on_return { trip.load_kg } else { 0.0 };
             let trip = self.foraging.get_mut(&id).expect("listed");
             trip.worked_s += dt_s;
             if trip.worked_s >= trip.out_s + trip.forage_s + trip.back_s {
@@ -2287,6 +2406,8 @@ impl IslandLife {
                     .energy_kcal(&body, awake_met, dt_s)
                     .map_err(IslandLifeError::Labour)?;
             *self.labour_kcal.entry(id.clone()).or_insert(0.0) += extra.max(0.0);
+            self.physiques
+                .record(&self.physique_models, &id, met, dt_s, carried_kg);
             if let Some(h) = self.humans.registry.get_human_mut(&id) {
                 h.labour_met = Some(met);
             }
@@ -2554,6 +2675,8 @@ impl IslandLife {
                     .labour
                     .energy_kcal(&body, awake_met, s)
                     .map_err(IslandLifeError::Labour)?;
+            self.physiques
+                .record(&self.physique_models, &id, met, s, load_kg);
             *self.labour_kcal.entry(id).or_insert(0.0) += extra.max(0.0);
         }
         Ok(())
@@ -2586,7 +2709,9 @@ impl IslandLife {
         (row..=row + 1).contains(&cell.0) && (col..=col + 1).contains(&cell.1)
     }
 
-    /// The living who are at home now.
+    /// Living members of the founders' household who are at home.
+    /// Town residents do not draw on the estate house's water or heating,
+    /// even if their map cell overlaps the estate patch.
     fn people_at_home(&self) -> usize {
         let (rows, cols) = (
             self.domain.rows(DomainLevel::Medium),
@@ -2596,39 +2721,32 @@ impl IslandLife {
             .registry
             .iter()
             .filter(|h| matches!(h.profile.status, mk_core::human::HumanStatus::Alive))
+            .filter(|h| !self.townsfolk.contains(h.agent_id()))
             .filter(|h| self.at_home(self.standing_cell(h.agent_id(), rows, cols)))
             .count()
     }
 
-    /// Put the typical home's bottled LPG on the kitchen stove, full.
-    fn install_household_gas(&mut self) -> Result<(), IslandLifeError> {
-        let spec = HouseholdGasSpec::from_reference(self.labour.library())
+    /// Light the house's log burner (the owner's rule, 2026-10-23).
+    fn install_wood_burner(&mut self) -> Result<(), IslandLifeError> {
+        let spec = WoodBurnerSpec::from_reference(self.labour.library())
             .map_err(|e| IslandLifeError::Labour(LabourError::MissingReference(e)))?;
-        self.household_gas = Some(HouseholdGas::new(spec));
+        self.wood_burner = Some(WoodBurner::new(spec));
         Ok(())
     }
 
-    /// The stove for `dt_s`: while anyone is at home it burns the house's
-    /// average cooking gas, carbon to the air (D59). With the bottles empty
-    /// the household cooks on a wood fire from the store's air-dry wood.
-    fn household_gas_step(&mut self, dt_s: f64) -> Result<(), IslandLifeError> {
-        if self.household_gas.is_none() {
+    /// The log burner for `dt_s`: while anyone is at home it cooks, heats
+    /// the house and the hot water through its wetback at the rates HEEP
+    /// measured, from wood someone has split (D63), its carbon to the air
+    /// (D59). With no split wood the burner is cold.
+    fn wood_burner_step(&mut self, dt_s: f64) -> Result<(), IslandLifeError> {
+        let Some(burner) = self.wood_burner.as_ref() else {
+            return Ok(());
+        };
+        let wanted = burner.wanted_kg(self.people_at_home() > 0, dt_s);
+        if wanted <= 0.0 {
             return Ok(());
         }
-        let people = self.people_at_home();
         self.audited(|life, ledger| {
-            let Some(gas) = life.household_gas.as_mut() else {
-                return;
-            };
-            let short_before = gas.without_gas_s;
-            let kg = gas.cook(people > 0, dt_s);
-            super::energy::book_fossil_carbon(ledger, kg * gas.spec.carbon_per_kg());
-            // The bottles are empty: cook on a wood fire from the store.
-            let short_s = gas.without_gas_s - short_before;
-            if short_s <= 0.0 {
-                return;
-            }
-            let wanted = gas.firewood_wanted_kg(people, short_s);
             // Only wood someone has split will burn (D63).
             let have = life
                 .split_wood_kg
@@ -2640,8 +2758,8 @@ impl IslandLife {
                     .expect("no more than the store holds");
                 life.split_wood_kg = (have - burned).max(0.0);
             }
-            if let Some(gas) = life.household_gas.as_mut() {
-                gas.record_fire(wanted, burned, short_s);
+            if let Some(burner) = life.wood_burner.as_mut() {
+                burner.record(wanted, burned, dt_s);
             }
         })
     }
@@ -2950,7 +3068,7 @@ impl IslandLife {
             .collect();
         for (id, at, body) in miners {
             if !self.mining.contains_key(&id) {
-                let Some((site_id, there)) = self.nearest_placer(at) else {
+                let Some((site_id, there)) = self.chosen_placer(&id, at) else {
                     continue;
                 };
                 let distance = (there.0 - at.0).hypot(there.1 - at.1);
@@ -2994,6 +3112,8 @@ impl IslandLife {
                     .energy_kcal(&body, awake_met, dt_s)
                     .map_err(IslandLifeError::Labour)?;
             *self.labour_kcal.entry(id.clone()).or_insert(0.0) += extra.max(0.0);
+            self.physiques
+                .record(&self.physique_models, &id, met, dt_s, 0.0);
             if let Some(h) = self.humans.registry.get_human_mut(&id) {
                 h.labour_met = Some(met);
             }
@@ -3009,13 +3129,29 @@ impl IslandLife {
                         })?;
                 let resources = self.resources.as_mut().expect("checked above");
                 // A site worked out while they walked yields nothing.
-                if let Ok(work) =
-                    resources.work_day(site_id, LabourTool::GoldPan, false, &self.labour, &models)
-                {
-                    self.materials
-                        .bank_mined(super::materials::Material::Gold, work.product_kg)
-                        .expect("gold carries no carbon or water");
-                }
+                let gave = match resources.work_day(
+                    site_id,
+                    LabourTool::GoldPan,
+                    false,
+                    &self.labour,
+                    &models,
+                ) {
+                    Ok(work) => {
+                        self.materials
+                            .bank_mined(super::materials::Material::Gold, work.product_kg)
+                            .expect("gold carries no carbon or water");
+                        work.product_kg
+                    }
+                    Err(_) => 0.0,
+                };
+                // What the day gave is theirs to remember, and colours how
+                // they feel about panning (R14).
+                let will = self.will_of(&id);
+                will.remember(site_id, gave);
+                will.learn(
+                    super::choice::Work::Pan,
+                    if gave > 0.0 { WORK_DONE } else { -WORK_DONE },
+                );
             }
         }
         Ok(())
@@ -3125,6 +3261,8 @@ impl IslandLife {
                     .energy_kcal(&body, awake_met, dt_s)
                     .map_err(IslandLifeError::Labour)?;
             *self.labour_kcal.entry(id.clone()).or_insert(0.0) += extra.max(0.0);
+            self.physiques
+                .record(&self.physique_models, &id, met, dt_s, 0.0);
             if let Some(h) = self.humans.registry.get_human_mut(&id) {
                 h.labour_met = Some(met);
             }
@@ -3227,6 +3365,8 @@ impl IslandLife {
                     .energy_kcal(&body, awake_met, dt_s)
                     .map_err(IslandLifeError::Labour)?;
             *self.labour_kcal.entry(id.clone()).or_insert(0.0) += extra.max(0.0);
+            self.physiques
+                .record(&self.physique_models, &id, met, dt_s, 0.0);
             if let Some(h) = self.humans.registry.get_human_mut(&id) {
                 h.labour_met = Some(met);
             }
@@ -3236,8 +3376,11 @@ impl IslandLife {
 
     /// The placer gold site nearest `at` (domain metres) that still holds
     /// gravel, and where it is.
-    fn nearest_placer(&self, at: (f64, f64)) -> Option<(u32, (f64, f64))> {
-        self.resources
+    /// The placer `id` chooses to work, from what each has given them and
+    /// how far it is (R14), with their own keyed noise.
+    fn chosen_placer(&mut self, id: &str, at: (f64, f64)) -> Option<(u32, (f64, f64))> {
+        let sites: Vec<(u32, (f64, f64))> = self
+            .resources
             .as_ref()?
             .sites()
             .iter()
@@ -3248,10 +3391,25 @@ impl IslandLife {
                     .cell_center_m(DomainLevel::Medium, s.cell.0, s.cell.1);
                 (s.id, c)
             })
-            .min_by(|a, b| {
-                let d = |p: (f64, f64)| (p.0 - at.0).hypot(p.1 - at.1);
-                d(a.1).total_cmp(&d(b.1)).then(a.0.cmp(&b.0))
+            .collect();
+        let far = sites
+            .iter()
+            .map(|(_, c)| (c.0 - at.0).hypot(c.1 - at.1))
+            .fold(0.0_f64, f64::max)
+            .max(f64::MIN_POSITIVE);
+        let options: Vec<(u32, f64)> = sites
+            .iter()
+            .map(|(sid, c)| (*sid, (c.0 - at.0).hypot(c.1 - at.1) / far))
+            .collect();
+        let seed = self.scenario.seed;
+        let noise: Vec<f64> = options
+            .iter()
+            .map(|(sid, _)| {
+                super::choice::draw(&seed, &format!("place:{id}:{}:{sid}", self.sim_time_s))
             })
+            .collect();
+        let chosen = self.will_of(id).choose_place(&options, &noise)?;
+        sites.into_iter().find(|(sid, _)| *sid == chosen)
     }
 
     fn install_household_water(&mut self) -> Result<(), IslandLifeError> {
@@ -3478,6 +3636,82 @@ impl IslandLife {
         }
     }
 
+    /// Everyone alive who has no genome yet is given one, from their
+    /// parents' when both are known, and an untrained body of their present
+    /// mass. Parents (older people) are admitted before their children,
+    /// with agent id breaking age ties for deterministic replay.
+    fn admit_physiques(&mut self) {
+        if self.physiques.genomes.is_empty() {
+            self.physiques.day = self.sim_time_s / 86_400;
+        }
+        type Newcomer = (String, bool, f64, f64, Option<(String, String)>);
+        let mut newcomers: Vec<Newcomer> = self
+            .humans
+            .registry
+            .iter()
+            .filter(|h| {
+                matches!(h.profile.status, mk_core::human::HumanStatus::Alive)
+                    && !self.physiques.genomes.contains_key(h.agent_id())
+            })
+            .map(|h| {
+                let male = matches!(h.biological_sex(), mk_core::human::BiologicalSex::Male);
+                let parents = mother_of(h).zip(father_of(h));
+                let age = h.development.age_years;
+                (
+                    h.agent_id().to_string(),
+                    male,
+                    age,
+                    self.body_mass_kg(h),
+                    parents,
+                )
+            })
+            .collect();
+        newcomers.sort_by(|a, b| b.2.total_cmp(&a.2).then_with(|| a.0.cmp(&b.0)));
+        for (id, male, age_years, mass_kg, parents) in newcomers {
+            let parents = parents.as_ref().map(|(m, f)| (m.as_str(), f.as_str()));
+            self.physiques.admit(
+                &self.physique_models,
+                &self.scenario.seed,
+                &id,
+                male,
+                age_years,
+                mass_kg,
+                parents,
+            );
+        }
+    }
+
+    /// A person's body mass (kg): the ledger's body carbon over the body's
+    /// carbon fraction, or the runtime's weight before the ledger holds them.
+    fn body_mass_kg(&self, human: &crate::humans::HumanBeing) -> f64 {
+        self.materials
+            .body_carbon_kg(human.agent_id())
+            .map(|c| c / super::materials::BODY_CARBON_PER_KG)
+            .unwrap_or(human.body.weight_kg)
+    }
+
+    /// Close each local day that has ended: everyone's recorded work trains
+    /// their body, or its absence detrains it.
+    fn close_physique_days(&mut self) {
+        let day = self.sim_time_s / 86_400;
+        if day <= self.physiques.day {
+            return;
+        }
+        let bodies: Vec<(String, bool, f64, f64)> = self
+            .humans
+            .registry
+            .iter()
+            .filter(|h| matches!(h.profile.status, mk_core::human::HumanStatus::Alive))
+            .map(|h| {
+                let male = matches!(h.biological_sex(), mk_core::human::BiologicalSex::Male);
+                let age = h.development.age_years;
+                (h.agent_id().to_string(), male, age, self.body_mass_kg(h))
+            })
+            .collect();
+        self.physiques
+            .close_days(&self.physique_models, day, &bodies);
+    }
+
     /// Children under `DEPENDENT_AGE_YEARS` go where their mother goes: they
     /// are carried, then toddle behind her, instead of wandering off alone.
     /// A child whose mother is dead or absent keeps its own movement.
@@ -3554,6 +3788,7 @@ impl IslandLife {
             self.bury_the_dead()?;
             self.keep_children_with_mothers();
             self.adopt_newborns();
+            self.admit_physiques();
             self.timings.households += humans_done.elapsed();
             // Taken out and put back so the registry can be read while the
             // tally is written, without rebuilding a body and cloning an
@@ -3583,6 +3818,8 @@ impl IslandLife {
                         || self.hauling.contains_key(human.agent_id())
                         || self.labour_kcal.contains_key(human.agent_id())
                         || self.skills.0.contains_key(human.agent_id())
+                        || self.wills.0.contains_key(human.agent_id())
+                        || self.physiques.fitness.contains_key(human.agent_id())
                     {
                         forget.push(human.agent_id().to_string());
                     }
@@ -3616,12 +3853,15 @@ impl IslandLife {
                 self.foraging.remove(&id);
                 self.labour_kcal.remove(&id);
                 self.skills.0.remove(&id);
+                self.physiques.forget(&id);
+                self.wills.0.remove(&id);
             }
             self.work(human_s as f64)?;
             self.mine(human_s as f64)?;
             self.build(human_s as f64)?;
             self.household_water_step(human_s as f64)?;
-            self.household_gas_step(human_s as f64)?;
+            self.wood_burner_step(human_s as f64)?;
+            self.close_physique_days();
             self.industry_step(human_s as f64)?;
             self.town_work(human_s as f64)?;
             self.economy_step()?;
@@ -3729,9 +3969,11 @@ impl IslandLife {
         h.update(canonical(&self.hauling).as_bytes());
         h.update(canonical(&self.labour_kcal).as_bytes());
         h.update(canonical(&self.skills).as_bytes());
+        h.update(canonical(&self.physiques).as_bytes());
+        h.update(canonical(&self.wills).as_bytes());
         h.update(canonical(&self.water_drunk_kg).as_bytes());
         h.update(canonical(&self.household_water).as_bytes());
-        h.update(canonical(&self.household_gas).as_bytes());
+        h.update(canonical(&self.wood_burner).as_bytes());
         h.update(canonical(&self.water_trips).as_bytes());
         h.update(canonical(&self.foraging).as_bytes());
         h.update(canonical(&self.industry).as_bytes());
@@ -3830,7 +4072,7 @@ mod tests {
     }
 
     #[test]
-    fn a_founder_with_the_pan_works_the_nearest_placer_for_a_day() {
+    fn a_founder_with_the_pan_works_the_placer_they_choose_for_a_day() {
         let mut scenario =
             IslandScenario::load(&repo("fixtures/island/default_scenario.json")).unwrap();
         scenario.estate_patch.tree_cap = 200;
@@ -3857,7 +4099,11 @@ mod tests {
             .unwrap()
             .economy_action
             .kind = crate::humans::ActionKind::Mine;
-        let (site_id, there) = life.nearest_placer(at).expect("the island has a placer");
+        // Choosing is their own and repeatable: asked again at the same
+        // moment, they choose the same placer.
+        let (site_id, there) = life
+            .chosen_placer("Gem-D", at)
+            .expect("the island has a placer");
         let before_t = life
             .resources
             .as_ref()
@@ -4178,6 +4424,9 @@ mod tests {
 
         // Keep working: Gem-D moves the log to the store, the quickest way.
         let (carbon, water) = (log.carbon_kgc, log.water_kg);
+        let will = life.wills.0.get_mut("Gem-D").expect("Gem-D has a will");
+        will.openness = 0.0;
+        will.liking.insert(super::super::choice::Work::Haul, 1.0);
         life.work(minute).unwrap();
         let job = life
             .hauling
@@ -4297,6 +4546,27 @@ mod tests {
         assert_eq!(restored.state_digest(), life.state_digest());
     }
 
+    #[test]
+    fn townsfolk_on_the_estate_cell_are_not_household_water_users() {
+        let mut scenario =
+            IslandScenario::load(&repo("fixtures/island/default_scenario.json")).unwrap();
+        scenario.estate_patch.tree_cap = 50;
+        let canon = Arc::new(CanonLocked::load(&repo("fixtures/island/canon.json")).unwrap());
+        let mut life = IslandLife::bootstrap(scenario, canon).unwrap();
+        let household = life.people_at_home();
+        assert_eq!(household, 2, "the founders start at home");
+        let town_id = life.townsfolk.iter().next().expect("town exists").clone();
+        let (row, col) = life.placed.location;
+        let resident = life.humans.registry.get_human_mut(&town_id).unwrap();
+        resident.position.row = row as i32;
+        resident.position.col = col as i32;
+        assert_eq!(
+            life.people_at_home(),
+            household,
+            "townsfolk do not live in the house"
+        );
+    }
+
     /// The island keeps the founders' money (Task 7, D61): their sourced
     /// deposits open the books, the oil business is theirs 50/50, each
     /// month closes and the money balances, and a restored island carries
@@ -4310,6 +4580,11 @@ mod tests {
         let mut life = IslandLife::bootstrap(scenario, canon).expect("the island bootstraps");
         let finance = FinanceReference::from_reference(life.labour.library()).unwrap();
         let economy = life.money.clone().expect("the books are open");
+        // Town residents exist before the first simulation tick and must
+        // already have physiques, including in the first saved snapshot.
+        assert!(life.townsfolk.iter().all(|id| {
+            life.physiques.genomes.contains_key(id) && life.physiques.fitness.contains_key(id)
+        }));
         assert_eq!(economy.ledger.issued(), 2 * finance.founder_opening_cents);
         assert!(
             economy.enterprise(PETROLEUM).is_some(),
@@ -4337,21 +4612,17 @@ mod tests {
         assert_eq!(restored.state_digest(), life.state_digest());
     }
 
-    /// With the bottles empty the household cooks on a wood fire (R4): it
-    /// burns the packs' firewood per person at home from the store's
-    /// air-dry wood once it has been split (D63), its carbon to the air
-    /// through an audit, and with no split wood the time without any
-    /// cooking fuel is counted.
+    /// The log burner cooks, heats and runs the wetback on the house's
+    /// air-dry wood at HEEP's rates once it has been split (D63), its carbon
+    /// to the air through an audit; with no split wood it is cold.
     #[test]
-    fn with_the_gas_gone_the_kitchen_burns_stored_wood_at_the_measured_rate() {
+    fn the_log_burner_burns_split_wood_at_heeps_rate() {
         let mut scenario =
             IslandScenario::load(&repo("fixtures/island/default_scenario.json")).unwrap();
         scenario.estate_patch.tree_cap = 200;
         let canon = Arc::new(CanonLocked::load(&repo("fixtures/island/canon.json")).unwrap());
         let mut life = IslandLife::bootstrap(scenario, canon).expect("the island bootstraps");
-        let people = life.people_at_home();
-        assert!(people > 0, "the founders start at home");
-        life.household_gas.as_mut().unwrap().stored_kg = 0.0;
+        assert!(life.people_at_home() > 0, "the founders start at home");
         let (cell, area) = (
             life.placed.location,
             life.domain.cell_area_m2(DomainLevel::Medium),
@@ -4363,39 +4634,29 @@ mod tests {
         })
         .unwrap();
         let wood = life.materials.stock_kg(Material::Wood);
+        let cold = life.wood_burner.as_ref().unwrap().cold_s;
 
         // Logs nobody has split will not burn.
-        life.household_gas_step(3_600.0).unwrap();
+        life.split_wood_kg = 0.0;
+        life.wood_burner_step(3_600.0).unwrap();
         assert_eq!(life.materials.stock_kg(Material::Wood), wood, "unsplit");
-        let gas = life.household_gas.clone().unwrap();
-        assert!((gas.without_fuel_s - 3_600.0).abs() < 1e-9);
-        life.household_gas.as_mut().unwrap().without_fuel_s = 0.0;
+        let burner = life.wood_burner.clone().unwrap();
+        assert!((burner.cold_s - cold - 3_600.0).abs() < 1e-9);
 
         life.split_wood_kg = wood;
         let audits = life.audits_closed;
-        life.household_gas_step(3_600.0).unwrap();
-        let gas = life.household_gas.clone().unwrap();
-        let rate = gas.spec.firewood_kg_per_person_day;
+        life.wood_burner_step(3_600.0).unwrap();
+        let after = life.wood_burner.clone().unwrap();
         let burned = wood - life.materials.stock_kg(Material::Wood);
-        let wanted = rate * people as f64 / 24.0;
+        let wanted = after.spec.burn_kg_per_s() * 3_600.0;
         assert!(
             (burned - wanted).abs() < 1e-9,
             "burned {burned} kg of {wanted}"
         );
-        assert!((gas.wood_burned_kg - burned).abs() < 1e-9);
+        assert!((after.wood_burned_kg - burner.wood_burned_kg - burned).abs() < 1e-9);
         assert!((life.split_wood_kg - (wood - burned)).abs() < 1e-9);
-        assert_eq!(gas.without_fuel_s, 0.0, "there was wood");
+        assert_eq!(after.cold_s, burner.cold_s, "there was wood");
         assert_eq!(life.audits_closed, audits + 1, "the fire closed its books");
-
-        // No wood left: an hour with nothing to cook on.
-        let left = life.materials.stock_kg(Material::Wood);
-        life.audited(|life, ledger| {
-            life.materials.burn(Material::Wood, left, ledger).unwrap();
-        })
-        .unwrap();
-        life.household_gas_step(3_600.0).unwrap();
-        let gas = life.household_gas.clone().unwrap();
-        assert!((gas.without_fuel_s - 3_600.0).abs() < 1e-9);
     }
 
     /// A founder who chooses to build, outdoors at the estate, frames the

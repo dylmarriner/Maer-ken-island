@@ -159,6 +159,7 @@ fn the_same_request_at_the_same_tick_makes_the_same_person() {
 fn two_people_of_one_name_get_their_own_ids() {
     let mut life = island();
     let (space, _) = a_space(&life);
+    let before = life.humans.registry.iter().count();
     let first = life
         .create_human(somebody("Mere", CreateLocation::EstateSpace(space)))
         .unwrap();
@@ -166,7 +167,7 @@ fn two_people_of_one_name_get_their_own_ids() {
         .create_human(somebody("Mere", CreateLocation::EstateSpace(space)))
         .unwrap();
     assert_ne!(first.agent_id, second.agent_id);
-    assert_eq!(life.humans.registry.iter().count(), 4);
+    assert_eq!(life.humans.registry.iter().count(), before + 2);
 }
 
 #[test]
@@ -212,6 +213,7 @@ fn a_cell_on_land_works_and_the_sea_does_not() {
 fn every_bad_field_is_named_and_they_are_named_together() {
     let mut life = island();
     let (space, _) = a_space(&life);
+    let before = life.humans.registry.iter().count();
 
     let mut request = somebody("", CreateLocation::EstateSpace(space));
     request.age_years = 900.0;
@@ -232,7 +234,7 @@ fn every_bad_field_is_named_and_they_are_named_together() {
     }
     assert_eq!(
         life.humans.registry.iter().count(),
-        2,
+        before,
         "a refused creation still added somebody"
     );
 }

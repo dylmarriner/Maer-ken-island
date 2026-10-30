@@ -19,7 +19,7 @@
 //! polls, and the renderer reads whatever was last published.
 
 use mk_island_api::{
-    Capabilities, Conversation, Economy, EstateLayout, Property, ServerVersion, Terrain,
+    Capabilities, Conversation, Cover, Economy, EstateLayout, Property, ServerVersion, Terrain,
     TimelineEntry, World,
 };
 use mk_island_client::{ClientError, IslandClient};
@@ -44,6 +44,14 @@ pub const POLL: Duration = Duration::from_millis(250);
 /// move.
 pub const SLOW_POLL: Duration = Duration::from_secs(2);
 
+/// And how often the ground's cover is asked for.
+///
+/// The island redraws it once a simulated day (`/api/vegetation.png`'s
+/// cadence), which at any speed an operator would watch is minutes apart;
+/// half a minute keeps the tint within one redraw of the island without
+/// fetching the whole grid four times a second.
+pub const COVER_POLL: Duration = Duration::from_secs(30);
+
 /// The island as this application last saw it.
 ///
 /// Cloned out of the lock for the renderer to read. Everything in it came
@@ -60,6 +68,12 @@ pub struct Snapshot {
     /// for every `stems::TREE_POLL`; `None` until first read, and for an
     /// island with no estate.
     pub trees: Arc<Option<mk_island_api::Trees>>,
+    /// The standing biomass per cell (`/api/cover.bin`), read at startup
+    /// and again every [`COVER_POLL`], so the ground's tint follows the
+    /// forest as it grows and is cut; `None` from a server that does not
+    /// serve it. Replaced only when the cover contents change, so its
+    /// pointer signals a changed cover.
+    pub cover: Arc<Option<Cover>>,
     /// What went wrong last time, if anything. Carried rather than
     /// logged: a desktop application that silently showed an island five
     /// minutes out of date would be worse than one that said it had lost
@@ -121,8 +135,21 @@ impl Island {
         // start over a missing building would be worse than one that
         // shows the island and says the estate is unavailable.
         let estate = client.estate_layout().ok();
+        // Not fatal either: without it the ground is drawn one green, as
+        // it was before the server served cover.
+        let (cover, retry_cover) = if terrain.is_some() {
+            match client.cover() {
+                Ok(cover) => (Some(cover), true),
+                Err(err) => (None, err.worth_retrying()),
+            }
+        } else {
+            (None, false)
+        };
 
-        let latest = Arc::new(RwLock::new(Snapshot::default()));
+        let latest = Arc::new(RwLock::new(Snapshot {
+            cover: Arc::new(cover),
+            ..Snapshot::default()
+        }));
         let stop = Arc::new(AtomicBool::new(false));
         let tree_box = estate.as_ref().map(crate::stems::neighbourhood);
         let poller = spawn_poller(
@@ -130,6 +157,7 @@ impl Island {
             Arc::clone(&latest),
             Arc::clone(&stop),
             tree_box,
+            retry_cover,
         );
 
         Ok(Self {
@@ -206,12 +234,15 @@ fn spawn_poller(
     latest: Arc<RwLock<Snapshot>>,
     stop: Arc<AtomicBool>,
     tree_box: Option<(f64, f64, f64, f64)>,
+    mut retry_cover: bool,
 ) -> std::thread::JoinHandle<()> {
     std::thread::Builder::new()
         .name("island-poll".into())
         .spawn(move || {
             let mut slow_at = Instant::now() - SLOW_POLL;
             let mut trees_at: Option<Instant> = None;
+            // Read at startup already, so the first poll waits its turn.
+            let mut cover_at = Instant::now();
             while !stop.load(Ordering::Relaxed) {
                 let started = Instant::now();
                 let mut next = {
@@ -263,6 +294,21 @@ fn spawn_poller(
                         if let Ok(trees) = client.trees_in(x0, y0, x1, y1, crate::stems::STEM_CAP) {
                             next.trees = Arc::new(Some(trees));
                         }
+                    }
+                }
+
+                // Retry transient network failures, including the initial
+                // read. Do not keep polling a server that refused the route
+                // or returned an incompatible or malformed response.
+                if next.trouble.is_none() && retry_cover && cover_at.elapsed() >= COVER_POLL {
+                    cover_at = Instant::now();
+                    match client.cover() {
+                        Ok(cover) => {
+                            if (*next.cover).as_ref() != Some(&cover) {
+                                next.cover = Arc::new(Some(cover));
+                            }
+                        }
+                        Err(err) => retry_cover = err.worth_retrying(),
                     }
                 }
 

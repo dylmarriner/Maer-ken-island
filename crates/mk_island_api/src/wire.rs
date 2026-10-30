@@ -118,6 +118,19 @@ pub struct Person {
     /// as somebody with no height.
     #[serde(default)]
     pub height_m: f64,
+    /// What their genes and their own activity have made of their body.
+    /// Absent from a backend that does not track it.
+    #[serde(default)]
+    pub physique: Option<Physique>,
+}
+
+/// A person's trained body: aerobic capacity, strength and build.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct Physique {
+    pub vo2max_ml_kg_min: f64,
+    pub grip_strength_kg: f64,
+    pub lean_kg: f64,
+    pub fat_kg: f64,
 }
 
 /// The founders' estate.

@@ -3,6 +3,7 @@
 //! mk_island → mk_core`).
 
 pub mod boundary;
+pub mod choice;
 pub mod climate;
 pub mod commands;
 pub mod create_human;
@@ -16,9 +17,10 @@ pub mod edible;
 pub mod energy;
 pub mod estate_layout;
 pub mod fauna;
+pub mod fitness;
+pub mod genome;
 pub mod geology;
 pub mod geophysics;
-pub mod household_gas;
 pub mod household_water;
 pub mod human_store;
 pub mod humans;
@@ -34,6 +36,7 @@ pub mod materials;
 pub mod ocean;
 pub mod par;
 pub mod physical;
+pub mod physique;
 pub mod property;
 pub mod replay;
 pub mod resources;
@@ -51,5 +54,6 @@ pub mod timber;
 pub mod town;
 pub mod volcanism;
 pub mod weather;
+pub mod wood_burner;
 pub mod world;
 pub mod zonal;

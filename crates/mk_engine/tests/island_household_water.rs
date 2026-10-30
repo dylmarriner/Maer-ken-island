@@ -44,11 +44,10 @@ fn the_house_draws_its_water_from_a_tank_on_its_own_roof() {
     );
 
     let drunk_before: f64 = life.water_drunk_kg.values().sum();
-    let gas = life
-        .household_gas
+    let burner = life
+        .wood_burner
         .clone()
-        .expect("the stove has its bottles");
-    assert_eq!(gas.stored_kg, 90.0, "two full 45 kg bottles");
+        .expect("the house has its log burner");
     for _ in 0..(86_400 / 60) {
         // `advance` audits every household step, the tank's included: a
         // kilogram that moved without a ledger entry fails here.
@@ -94,18 +93,18 @@ fn the_house_draws_its_water_from_a_tank_on_its_own_roof() {
         after.rationed_s
     );
 
-    // The stove burned gas while anyone was home, no more than a whole
-    // day of the house's average cooking would, and every kilogram left the
-    // bottles (its carbon went to the air through the audit above).
-    let burned_gas = life.household_gas.as_ref().unwrap().burned_kg - gas.burned_kg;
-    let day_kg = gas.spec.burn_kg_per_s() * 86_400.0;
+    // The log burner burned no more than a whole day of the house's
+    // cooking, heating and wetback would, its carbon to the air through the
+    // audit above; whatever it wanted and could not burn was time cold.
+    let now = life.wood_burner.clone().unwrap();
+    let burned = now.wood_burned_kg - burner.wood_burned_kg;
+    let day_kg = burner.spec.burn_kg_per_s() * 86_400.0;
     assert!(
-        burned_gas > 0.0 && burned_gas <= day_kg + 1e-9,
-        "the stove burned {burned_gas} kg of a day's {day_kg} kg"
+        burned >= 0.0 && burned <= day_kg + 1e-9,
+        "the burner burned {burned} kg of a day's {day_kg} kg"
     );
-    assert!(
-        (gas.stored_kg - life.household_gas.as_ref().unwrap().stored_kg - burned_gas).abs() < 1e-9
-    );
+    let cold = now.cold_s - burner.cold_s;
+    assert!(burned > 0.0 || cold > 0.0, "the burner never wanted wood");
 
     // The tank is part of the island: saved and restored with it, and in
     // its digest.
@@ -118,13 +117,13 @@ fn the_house_draws_its_water_from_a_tank_on_its_own_roof() {
         digest,
         "the digest does not see the tank"
     );
-    assert_eq!(snapshot.household_gas, life.household_gas);
+    assert_eq!(snapshot.wood_burner, life.wood_burner);
     let digest = life.state_digest();
-    life.household_gas.as_mut().unwrap().stored_kg -= 1.0;
+    life.wood_burner.as_mut().unwrap().wood_burned_kg += 1.0;
     assert_ne!(
         life.state_digest(),
         digest,
-        "the digest does not see the gas"
+        "the digest does not see the burner"
     );
 }
 

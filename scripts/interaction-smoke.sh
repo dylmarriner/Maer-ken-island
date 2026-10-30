@@ -60,9 +60,10 @@ SETTLE=${ISLAND_INPUT_SETTLE:-90}
 # seconds is about seven frames, and a gesture held for less than one of
 # them is not sampled at all.
 REDRAW=${ISLAND_INPUT_REDRAW:-12}
-# How long each step of a held drag waits. It has to exceed one frame or
-# the button is down and up again between samples; see the note above.
+# A drag needs a held button across frames, but a click must be short:
+# egui rejects presses held beyond its max_click_duration as clicks.
 HOLD=${ISLAND_INPUT_HOLD:-3}
+CLICK_HOLD=${ISLAND_INPUT_CLICK_HOLD:-0.15}
 
 missing=""
 for tool in Xvfb xdotool convert compare; do
@@ -101,9 +102,15 @@ Xvfb "$DISPLAY_NUM" -screen 0 1600x1000x24 >"$data/xvfb.log" 2>&1 &
 XVFB=$!
 sleep 2
 
+# The mouse smoke needs responsive input on GitHub's CPU-only lavapipe.
+# Full-resolution island rendering is checked separately by render-smoke.sh.
+# At detail 1 the software renderer manages ~0.6 FPS, which can swallow a
+# complete short egui click between input updates. Detail 4 preserves the
+# island, coastline and terrain at ~3.2 FPS while exercising real buttons.
 DISPLAY="$DISPLAY_NUM" "$UI" \
     --scenario "$root/fixtures/island/default_scenario.json" \
     --data-dir "$data/people" \
+    --detail 4 \
     --speed max >"$data/app.log" 2>&1 &
 APP=$!
 sleep "$SETTLE"
@@ -154,7 +161,12 @@ shot 01-dragged
 
 # Five notches of scroll: the zoom, which is exponential, so five is a
 # visible step rather than a nudge.
-DISPLAY="$DISPLAY_NUM" xdotool click --repeat 5 4
+# Space wheel events across rendered frames on software rasterisers.
+# A five-event burst may arrive between two slow Bevy input updates.
+for _ in 1 2 3 4 5; do
+    DISPLAY="$DISPLAY_NUM" xdotool click 4
+    sleep "$HOLD"
+done
 sleep "$REDRAW"
 alive "a scroll"
 shot 02-zoomed
@@ -189,7 +201,7 @@ import subprocess, sys
 raw = subprocess.run(["convert", sys.argv[1], "-crop", "320x400+0+150", "-depth", "8", "rgb:-"],
                      capture_output=True, check=True).stdout
 width = 320
-best, best_row = 0, None
+best, blue_rows = 0, []
 for row in range(len(raw) // (3 * width)):
     start = row * width * 3
     blue = sum(
@@ -199,15 +211,29 @@ for row in range(len(raw) // (3 * width)):
         and raw[start + 3 * x + 2] > raw[start + 3 * x] + 40
         and raw[start + 3 * x + 2] > raw[start + 3 * x + 1] + 20
     )
-    if blue > best:
-        best, best_row = blue, row
-print(150 + best_row if best_row is not None else 242)
+    best = max(best, blue)
+    blue_rows.append(blue)
+# The highest-scoring row is often the *top* of the highlighted tab.
+# Click the vertical centre of its blue band, not its top border.
+strong_rows = [row for row, count in enumerate(blue_rows) if best > 0 and count >= best * 0.9]
+print(150 + (strong_rows[0] + strong_rows[-1]) // 2 if strong_rows else 242)
 FIND
 )
 echo "the 'Looking at' row is at y=$button_y"
 # "the estate" is the second word on that row; "the island" is the first
 # and is the highlighted one, so the estate's button is to its right.
-DISPLAY="$DISPLAY_NUM" xdotool mousemove 182 "$button_y" click 1
+# Unlike dragging, clicking must finish inside egui's click-duration
+# threshold. Both events are queued for the next frame on slow renderers.
+DISPLAY="$DISPLAY_NUM" xdotool mousemove 182 "$button_y"
+# A slow software-rendered frame can swallow a short press/release pair.
+# Repeat short clicks over multiple frames rather than holding one click
+# longer than egui's maximum click duration.
+for _ in 1 2 3 4 5; do
+    DISPLAY="$DISPLAY_NUM" xdotool mousedown 1
+    sleep "$CLICK_HOLD"
+    DISPLAY="$DISPLAY_NUM" xdotool mouseup 1
+    sleep 0.6
+done
 sleep "$REDRAW"
 alive "a click on the estate button"
 shot 05-clicked

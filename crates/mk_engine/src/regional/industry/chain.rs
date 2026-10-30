@@ -47,6 +47,17 @@ pub struct ChainModels {
 }
 
 impl ChainModels {
+    pub fn from_reference(
+        library: &crate::validation::ReferenceLibrary,
+    ) -> Result<Self, super::petroleum::MissingReference> {
+        Ok(Self {
+            petroleum: PetroleumModel::from_reference(library)?,
+            refinery: RefineryModel::from_reference(library)?,
+            gas_plant: GasPlantModel::from_reference(library)?,
+            refinery_bbl_per_day: DEFAULT_REFINERY_BBL_PER_DAY,
+        })
+    }
+
     pub fn load_default() -> Result<Self, super::petroleum::MissingReference> {
         Ok(Self {
             petroleum: PetroleumModel::load_default()?,

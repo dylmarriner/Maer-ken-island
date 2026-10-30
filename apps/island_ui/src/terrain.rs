@@ -247,6 +247,58 @@ pub fn chunks_at(terrain: &Terrain, stride: usize) -> Vec<Chunk> {
         .collect()
 }
 
+/// The colour of open ground with nothing standing on it, sRGB: dry
+/// pasture and scrub. A drawing choice, not a measurement.
+pub const OPEN_GROUND: [f32; 3] = [0.46, 0.44, 0.30];
+
+/// The colour of the island's most heavily stocked ground, sRGB: a closed
+/// canopy. A drawing choice, not a measurement.
+pub const CLOSED_STAND: [f32; 3] = [0.13, 0.27, 0.11];
+
+/// The ground's colour for how fully stocked it is, 0 (open) to 1 (the
+/// island's densest stand), blended straight between the two.
+pub fn ground_colour(stocked: f32) -> [f32; 3] {
+    let t = if stocked.is_finite() {
+        stocked.clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    std::array::from_fn(|i| OPEN_GROUND[i] + (CLOSED_STAND[i] - OPEN_GROUND[i]) * t)
+}
+
+/// One sRGB colour per vertex of a chunk that sampled `rows` by `cols`
+/// (`Chunk::sampled_rows`, `Chunk::sampled_cols`), row-major as its
+/// positions are, from the standing biomass of the cell each vertex
+/// samples (`Cover`, `/api/cover.bin`) over `peak_kgc_m2`, the island's
+/// densest cell (`Cover::peak_kgc_m2`, found once for every chunk rather
+/// than once per chunk). A cell the cover does not hold is drawn as open
+/// ground rather than guessed at.
+pub fn sampled_colours(
+    rows: &[usize],
+    cols: &[usize],
+    cover: &mk_island_api::Cover,
+    peak_kgc_m2: f32,
+) -> Vec<[f32; 3]> {
+    let mut colours = Vec::with_capacity(rows.len() * cols.len());
+    for &row in rows {
+        for &col in cols {
+            colours.push(ground_colour(
+                cover.fraction_at(row, col, peak_kgc_m2).unwrap_or(0.0),
+            ));
+        }
+    }
+    colours
+}
+
+/// [`sampled_colours`] for one chunk.
+pub fn chunk_colours(
+    chunk: &Chunk,
+    cover: &mk_island_api::Cover,
+    peak_kgc_m2: f32,
+) -> Vec<[f32; 3]> {
+    sampled_colours(&chunk.sampled_rows, &chunk.sampled_cols, cover, peak_kgc_m2)
+}
+
 /// Normals from the heights either side of each vertex.
 ///
 /// The central difference, falling back to a one-sided one at the edges,
@@ -596,5 +648,50 @@ mod tests {
         }
         let centre = chunk.centre();
         assert!(centre.x > chunk.min.x && centre.x < chunk.max.x);
+    }
+
+    #[test]
+    fn open_ground_and_the_densest_stand_are_the_two_ends_of_the_tint() {
+        assert_eq!(ground_colour(0.0), OPEN_GROUND);
+        assert_eq!(ground_colour(1.0), CLOSED_STAND);
+        assert_eq!(ground_colour(-3.0), OPEN_GROUND);
+        assert_eq!(ground_colour(f32::NAN), OPEN_GROUND);
+        let half = ground_colour(0.5);
+        for i in 0..3 {
+            let lo = OPEN_GROUND[i].min(CLOSED_STAND[i]);
+            let hi = OPEN_GROUND[i].max(CLOSED_STAND[i]);
+            assert!(half[i] > lo && half[i] < hi);
+        }
+    }
+
+    #[test]
+    fn every_vertex_is_tinted_by_the_biomass_of_the_cell_it_samples() {
+        let terrain = flat(100, 100);
+        // Biomass rising eastward, so each column has its own colour.
+        let cover = mk_island_api::Cover {
+            rows: 100,
+            cols: 100,
+            biomass_kgc_m2: (0..100 * 100).map(|i| (i % 100) as f32).collect(),
+        };
+        for stride in [1, 2] {
+            let chunk = chunk_at(&terrain, 0, 1, stride).unwrap();
+            let colours = chunk_colours(&chunk, &cover, cover.peak_kgc_m2());
+            assert_eq!(colours.len(), chunk.positions.len());
+            let width = chunk.sampled_cols.len();
+            for (i, colour) in colours.iter().enumerate() {
+                let col = chunk.sampled_cols[i % width];
+                assert_eq!(*colour, ground_colour(col as f32 / 99.0));
+            }
+        }
+        // A cover for some other island draws open ground, not noise.
+        let wrong = mk_island_api::Cover {
+            rows: 10,
+            cols: 10,
+            biomass_kgc_m2: vec![5.0; 100],
+        };
+        let chunk = chunk_at(&terrain, 1, 1, 1).unwrap();
+        assert!(chunk_colours(&chunk, &wrong, wrong.peak_kgc_m2())
+            .iter()
+            .all(|c| *c == OPEN_GROUND));
     }
 }

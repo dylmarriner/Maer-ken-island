@@ -480,7 +480,7 @@ fn build_items(bedroom_owners: &[&str]) -> Vec<PropertyItem> {
     // --- House — kitchen ---
     b.push(
         PropertyItemKind::HouseholdItem,
-        "Stove (gas, 4 burners, oven)",
+        "Log burner (cooktop, oven, wetback)",
         HOUSE,
         Some("Kitchen"),
     );

@@ -32,9 +32,9 @@ pub use error::ClientError;
 pub use mk_island_api as api;
 
 use mk_island_api::{
-    Accepted, Capabilities, Cell, ControlRequest, Conversation, CreateHumanRequest, CreatorOptions,
-    Economy, InterventionRequest, Outcome, Property, Refusal, ServerVersion, Terrain,
-    TimelineEntry, Trees, World,
+    Accepted, Capabilities, Cell, ControlRequest, Conversation, Cover, CreateHumanRequest,
+    CreatorOptions, Economy, InterventionRequest, Outcome, Property, Refusal, ServerVersion,
+    Terrain, TimelineEntry, Trees, World,
 };
 use std::time::Duration;
 
@@ -235,6 +235,19 @@ impl IslandClient {
         let bytes = self.bytes("/api/elevation.bin")?;
         Terrain::parse(&bytes).map_err(|err| ClientError::Malformed {
             url: self.url("/api/elevation.bin"),
+            reason: err.to_string(),
+        })
+    }
+
+    /// The island's standing biomass per medium cell, as numbers.
+    ///
+    /// Unlike the terrain this moves -- biomass grows and is cut -- so
+    /// the backend serves it uncached and a caller asks again when it
+    /// wants the forest as it is now.
+    pub fn cover(&self) -> Result<Cover, ClientError> {
+        let bytes = self.bytes("/api/cover.bin")?;
+        Cover::parse(&bytes).map_err(|err| ClientError::Malformed {
+            url: self.url("/api/cover.bin"),
             reason: err.to_string(),
         })
     }

@@ -493,9 +493,14 @@ async fn the_world_has_its_own_roster_and_its_own_person_pages() {
     assert_eq!(status, 200, "{response}");
     let roster: serde_json::Value = serde_json::from_str(body_of(&response)).unwrap();
     let people = roster["people"].as_array().expect("a roster");
-    assert_eq!(people.len(), 2, "the founders are not both there: {roster}");
+    // The town now boots with residents as well as the two founders.
+    assert!(
+        people.iter().any(|p| p["agent_id"] == "Gem-D")
+            && people.iter().any(|p| p["agent_id"] == "Gem-K"),
+        "the founders are not both there: {roster}"
+    );
 
-    let id = people[0]["agent_id"].as_str().unwrap().to_string();
+    let id = "Gem-D".to_string();
     let (status, response) = get(port, &format!("/api/world/humans/{id}")).await;
     assert_eq!(status, 200, "{response}");
     let person: serde_json::Value = serde_json::from_str(body_of(&response)).unwrap();
@@ -507,14 +512,14 @@ async fn the_world_has_its_own_roster_and_its_own_person_pages() {
     let sections = person["sections"].as_array().expect("sections");
     assert_eq!(
         sections.len(),
-        12,
-        "the twelve per-person sections are not there"
+        13,
+        "the thirteen per-person sections are not there"
     );
     // What they are doing and thinking, and their family: the two the
     // person inspector added (Phase 5 Task 4).
     let ids: Vec<&str> = sections.iter().filter_map(|s| s["id"].as_str()).collect();
     assert!(
-        ids.contains(&"choosing") && ids.contains(&"family"),
+        ids.contains(&"choosing") && ids.contains(&"family") && ids.contains(&"physique"),
         "{ids:?}"
     );
     assert!(person["where"]["space"].is_string(), "{person}");
@@ -788,19 +793,19 @@ async fn a_phase_0b_population_can_be_carried_into_the_world() {
         let (_, body) = get(port, "/api/world/humans").await;
         let roster: serde_json::Value = serde_json::from_str(body_of(&body)).unwrap();
         let people = roster["people"].as_array().unwrap();
-        if people.len() == 4 {
-            let ids: Vec<&str> = people
-                .iter()
-                .map(|p| p["agent_id"].as_str().unwrap())
-                .collect();
-            assert!(ids.contains(&"rawiri"), "{ids:?}");
-            assert!(ids.contains(&"ngaire"), "{ids:?}");
+        let ids: Vec<&str> = people
+            .iter()
+            .filter_map(|p| p["agent_id"].as_str())
+            .collect();
+        // The default island also has town residents; do not assume the
+        // world contains exactly the two founders before these arrivals.
+        if ids.contains(&"rawiri") && ids.contains(&"ngaire") {
+            assert!(people.len() >= 4, "the founders and arrivals must exist");
             break;
         }
         assert!(
             std::time::Instant::now() < deadline,
-            "only {} people reached the world",
-            people.len()
+            "the stored arrivals have not reached the world: {ids:?}"
         );
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
     }
@@ -1826,6 +1831,38 @@ async fn get_bytes_with(port: u16, path: &str, header: &str) -> (u16, String, Ve
         .and_then(|c| c.parse().ok())
         .expect("a status line");
     (status, head, response[split + 4..].to_vec())
+}
+
+#[tokio::test]
+async fn the_standing_vegetation_is_served_as_numbers_on_the_terrains_grid() {
+    // A desktop client tints its ground by what stands on it. The cover
+    // has to be the terrain's grid, cell for cell, and has to say it is
+    // live rather than immutable: biomass grows.
+    let port = a_shared_dashboard();
+
+    let (status, head, body) = get_bytes(port, "/api/cover.bin").await;
+    assert_eq!(status, 200, "{head}");
+    let lower = head.to_ascii_lowercase();
+    assert!(
+        lower.contains("content-type: application/octet-stream"),
+        "{head}"
+    );
+    assert!(
+        lower.contains("no-store"),
+        "cover moves, so it must not be cached: {head}"
+    );
+    let cover = mk_island_api::Cover::parse(&body).expect("the format the client reads");
+
+    let (_, _, terrain) = get_bytes(port, "/api/elevation.bin").await;
+    let terrain = mk_island_api::Terrain::parse(&terrain).unwrap();
+    assert_eq!((cover.rows, cover.cols), (terrain.rows, terrain.cols));
+
+    // Something grows on the land, and nothing is negative or NaN.
+    assert!(cover.peak_kgc_m2() > 0.0, "an island with no vegetation");
+    assert!(cover
+        .biomass_kgc_m2
+        .iter()
+        .all(|b| b.is_finite() && *b >= 0.0));
 }
 
 #[tokio::test]

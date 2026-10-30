@@ -852,6 +852,20 @@ fn people(life: &IslandLife) -> Vec<Person> {
                     }),
                 body_carbon_kg: life.materials.body_carbon_kg(id),
                 height_m: human.body.height_cm / 100.0,
+                physique: life.physiques.fitness.get(id).map(|f| {
+                    let mass_kg = life
+                        .materials
+                        .body_carbon_kg(id)
+                        .map_or(human.body.weight_kg, |c| {
+                            c / mk_engine::regional::materials::BODY_CARBON_PER_KG
+                        });
+                    mk_island_api::Physique {
+                        vo2max_ml_kg_min: f.vo2max_ml_kg_min,
+                        grip_strength_kg: f.strength_kg,
+                        lean_kg: f.lean_kg,
+                        fat_kg: f.fat_kg(mass_kg),
+                    }
+                }),
             }
         })
         .collect()
@@ -1269,6 +1283,26 @@ pub fn elevation_bin(terrain: &Terrain) -> Vec<u8> {
         }
     }
     grid.encode()
+}
+
+/// The island's standing biomass as numbers: `/api/cover.bin`, in
+/// [`mk_island_api::Cover::encode`]'s layout, for the reason
+/// [`elevation_bin`] gives. Unlike the terrain this moves, so it is
+/// redrawn with the vegetation picture rather than built once.
+pub fn cover_bin(life: &IslandLife) -> Vec<u8> {
+    use mk_island::DomainLevel::Medium;
+    mk_island_api::Cover {
+        rows: life.domain.rows(Medium),
+        cols: life.domain.cols(Medium),
+        biomass_kgc_m2: life
+            .ecology
+            .biomass_kgc_m2
+            .data()
+            .iter()
+            .map(|b| *b as f32)
+            .collect(),
+    }
+    .encode()
 }
 
 /// [`elevation_bin`] gzipped, for `Content-Encoding: gzip`.
