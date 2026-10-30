@@ -212,6 +212,23 @@ fn a_snapshot_from_a_future_build_is_refused_rather_than_guessed_at() {
 }
 
 #[test]
+fn a_version_one_snapshot_is_refused_after_the_heating_state_change() {
+    let life = small_island();
+    let mut snapshot = life.snapshot();
+    assert_eq!(
+        snapshot.version, 2,
+        "the heating-state format must be version 2"
+    );
+    snapshot.version = 1;
+
+    match IslandLife::restore(canon(), snapshot) {
+        Err(IslandLifeError::SnapshotVersion(1)) => {}
+        Err(other) => panic!("wrong refusal for an obsolete heating-state format: {other}"),
+        Ok(_) => panic!("an obsolete version 1 snapshot was accepted"),
+    }
+}
+
+#[test]
 fn a_snapshot_carrying_a_scenario_this_build_cannot_run_is_refused() {
     let life = small_island();
 

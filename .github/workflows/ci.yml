@@ -36,7 +36,9 @@ jobs:
     name: fmt, clippy, fast tests
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # The complete backend fast suite exceeded 45 minutes on PR #67;
+    # it was still passing tests when GitHub cancelled the job.
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       # Installs the toolchain pinned in rust-toolchain.toml.

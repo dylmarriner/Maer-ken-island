@@ -301,7 +301,9 @@ pub const HAUL_EXCAVATOR: &str = "30-Ton Excavator (CAT 330)";
 
 /// The snapshot format. A snapshot written by another version is refused
 /// rather than guessed at.
-pub const ISLAND_SNAPSHOT_VERSION: u32 = 1;
+// Version 1 predates the household heating-state replacement. Reject it
+// rather than silently treating old heating data as the current model.
+pub const ISLAND_SNAPSHOT_VERSION: u32 = 2;
 
 /// An island's whole persisted state. See [`IslandLife::snapshot`] for what
 /// is deliberately absent.
