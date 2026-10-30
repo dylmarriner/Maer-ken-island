@@ -102,9 +102,15 @@ Xvfb "$DISPLAY_NUM" -screen 0 1600x1000x24 >"$data/xvfb.log" 2>&1 &
 XVFB=$!
 sleep 2
 
+# The mouse smoke needs responsive input on GitHub's CPU-only lavapipe.
+# Full-resolution island rendering is checked separately by render-smoke.sh.
+# At detail 1 the software renderer manages ~0.6 FPS, which can swallow a
+# complete short egui click between input updates. Detail 4 preserves the
+# island, coastline and terrain at ~3.2 FPS while exercising real buttons.
 DISPLAY="$DISPLAY_NUM" "$UI" \
     --scenario "$root/fixtures/island/default_scenario.json" \
     --data-dir "$data/people" \
+    --detail 4 \
     --speed max >"$data/app.log" 2>&1 &
 APP=$!
 sleep "$SETTLE"
