@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createPersonSelection, personRecordPath, personRecordExport } from '../static/people-selection.mjs';
+import { createPersonSelection, createLatestRequest, personRecordPath, personRecordExport } from '../static/people-selection.mjs';
 
 function deferred() {
   let resolve;
@@ -75,4 +75,31 @@ test('download filenames cannot contain path separators or reserved characters',
   assert.equal(personRecordExport(person).filename, '.._weird_name_x_1.json');
   assert.equal(personRecordExport({ summary: { agent_id: '...' }, human: {} }).filename, '_.json');
   assert.throws(() => personRecordExport({ summary: { agent_id: 'a' } }), /inspected human record/);
+});
+
+// The conversation panel polls every five seconds; a slow old poll or late
+// error must not rewind or hide a more recent conversation snapshot.
+test('conversation polling renders only the latest completed snapshot', async () => {
+  const latest = createLatestRequest();
+  const slow = deferred();
+  const fast = deferred();
+  const shown = [];
+  const first = latest.load(() => slow.promise, (data) => shown.push(data.tick), () => shown.push('stale error'));
+  const second = latest.load(() => fast.promise, (data) => shown.push(data.tick), () => shown.push('current error'));
+  fast.resolve({ tick: 102 });
+  await second;
+  slow.resolve({ tick: 101 });
+  await first;
+  assert.deepEqual(shown, [102]);
+});
+
+test('a late conversation poll failure cannot hide a newer successful panel', async () => {
+  const latest = createLatestRequest();
+  const slow = deferred();
+  const visible = [];
+  const first = latest.load(() => slow.promise, () => visible.push('old'), () => visible.push('hide'));
+  await latest.load(async () => ({ tick: 104 }), (data) => visible.push(data.tick), () => visible.push('hide'));
+  slow.reject(new Error('temporary timeout'));
+  await first;
+  assert.deepEqual(visible, [104]);
 });

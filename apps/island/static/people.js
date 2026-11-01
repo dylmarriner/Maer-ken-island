@@ -14,7 +14,7 @@ import {
   message,
   reportOffline,
 } from "/static/app.js";
-import { createPersonSelection, personRecordPath, personRecordExport } from "/static/people-selection.mjs";
+import { createPersonSelection, createLatestRequest, personRecordPath, personRecordExport } from "/static/people-selection.mjs";
 
 const rosterEl = document.getElementById("roster");
 const rosterCountEl = document.getElementById("roster-count");
@@ -394,31 +394,38 @@ function conversationCard(conversation) {
   return card;
 }
 
+const conversationRequest = createLatestRequest();
+
 async function loadConversations() {
-  try {
-    const data = await getJson("/api/conversations");
-    // Shown rather than paraphrased, like the island page's notes: a reader
-    // needs to know these lines are composed from real state and that no
-    // language model wrote them.
-    talkNoteEl.textContent = data.note;
-    if (!data.conversations.length) {
-      talkEl.replaceChildren(
-        emptyState(
-          "Nobody has spoken yet",
-          "Conversations happen when people are near each other or are kin. None has been generated on this island so far.",
-        ),
-      );
-    } else {
-      talkEl.replaceChildren(...data.conversations.map(conversationCard));
-    }
-    talkPanelEl.hidden = false;
-  } catch (error) {
-    // A missing island is not an error worth shouting about here: the page
-    // already says there is no world. Any other failure hides the panel
-    // rather than showing an empty one that looks like silence.
-    if (error.status !== 404) reportOffline(error);
-    talkPanelEl.hidden = true;
-  }
+  // A slow earlier poll must not replace newer dialogue or hide the panel
+  // after a later poll succeeded. Both successes and failures are ordered.
+  await conversationRequest.load(
+    () => getJson("/api/conversations"),
+    (data) => {
+      // Shown rather than paraphrased, like the island page's notes: a reader
+      // needs to know these lines are composed from real state and that no
+      // language model wrote them.
+      talkNoteEl.textContent = data.note;
+      if (!data.conversations.length) {
+        talkEl.replaceChildren(
+          emptyState(
+            "Nobody has spoken yet",
+            "Conversations happen when people are near each other or are kin. None has been generated on this island so far.",
+          ),
+        );
+      } else {
+        talkEl.replaceChildren(...data.conversations.map(conversationCard));
+      }
+      talkPanelEl.hidden = false;
+    },
+    (error) => {
+      // A missing island is not an error worth shouting about here: the page
+      // already says there is no world. Any other failure hides the panel
+      // rather than showing an empty one that looks like silence.
+      if (error.status !== 404) reportOffline(error);
+      talkPanelEl.hidden = true;
+    },
+  );
 }
 
 loadConversations();

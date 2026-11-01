@@ -1,6 +1,6 @@
-// People inspector requests can finish in any order. A monotonically
-// increasing generation also handles A -> B -> A (the earlier A is stale).
-export function createPersonSelection() {
+// Repeated dashboard requests can finish in any order. Only the newest
+// response (including errors) may update the visible state.
+export function createLatestRequest() {
   let generation = 0;
   return {
     invalidate() { generation += 1; },
@@ -15,6 +15,10 @@ export function createPersonSelection() {
     },
   };
 }
+
+// Keep the existing People inspector API; conversation polling uses the same
+// latest-wins contract so slow responses cannot rewind the visible timeline.
+export const createPersonSelection = createLatestRequest;
 
 // The live island record and the stored human record are different sources.
 // Choose the correct live or stored inspection source. Downloads use the
