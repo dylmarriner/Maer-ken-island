@@ -150,3 +150,11 @@ cargo run -p island -- serve --scenario fixtures/island/default_scenario.json   
 - Regression tests failed before the change (missing roster-source helper), then **32/32** Node dashboard tests passed including three new source-isolation cases. JS syntax, Cargo formatting and Git diff checks passed on OpenCommander amd. No simulation, ledger, snapshot, seed, source pack or replay digest changed.
 - [ ] Exact-new-SHA CI green. [ ] Slow week/year replay hashes and water/carbon/material ledger acceptance. [ ] Sourced ecology/industry, autonomy and open owner decisions.
 - Next: confirm CI and run the capacity-safe slow simulation acceptance; then advance a sourced physics/industry milestone.
+
+## 2026-11-02: validate live simulation clock before presenting People roster
+
+- Canonical target confirmed as `dylmarriner/Maer-ken-island`, distinct from `Maer-Ken`; PR #68. Previous exact-head CI [#41359624792](https://github.com/dylmarriner/Maer-ken-island/actions/runs/41359624792) **passed** all scheduled jobs; ignored slow simulation acceptance was skipped.
+- The People page's freshness status subtracts `records_at_tick` from `tick`, but live roster validation previously accepted missing, fractional, negative, future or unsafe-precision tick fields. A malformed response could show NaN or incorrectly call future records current. `reconcileLiveRoster` now requires both unsigned safe-integer ticks and `records_at_tick <= tick`, before changing the roster.
+- Regression failed before fix (missing tick accepted); after fix **39/39** dashboard Node tests passed, JavaScript syntax, `cargo fmt --all -- --check` and `git diff --check` passed on OpenCommander amd. No Rust simulation or pinned digests changed.
+- [ ] Exact-new-SHA full CI including desktop, Rust, installed backend and dashboard; [ ] week/year replay-hash slow acceptance and ledger checks; [ ] sourced ecology/material/water/carbon/industry milestones; [ ] owner acceptance.
+- Next: verify new CI and run capacity-safe deterministic week/year acceptance without changing pinned digests absent an audited reason. No live simulation or governance changes authorized.

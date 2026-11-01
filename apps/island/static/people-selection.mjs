@@ -115,7 +115,13 @@ export async function loadPeopleRoster(fetchJson) {
 // it without reselecting the same person or replacing a valid inspector
 // snapshot. Stored populations remain a separate, non-polled source.
 export function reconcileLiveRoster(roster, currentSelection) {
-  if (!roster || !Array.isArray(roster.people)) {
+  // The server publishes unsigned simulation ticks. Reject malformed clocks
+  // and records from the future before the UI can describe them as current.
+  // Safe integers also avoid silently rounding large JSON tick counters.
+  if (!roster || !Array.isArray(roster.people) ||
+      !Number.isSafeInteger(roster.tick) || roster.tick < 0 ||
+      !Number.isSafeInteger(roster.records_at_tick) ||
+      roster.records_at_tick < 0 || roster.records_at_tick > roster.tick) {
     throw new TypeError('Invalid live island roster');
   }
   // Do not turn malformed simulation data into a plausible-looking dashboard.

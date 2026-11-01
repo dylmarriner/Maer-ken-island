@@ -45,17 +45,17 @@ test('live roster failure is not silently replaced by unrelated stored people', 
 
 
 test('live roster reconciliation retains selected person and detects arrivals and departures', () => {
-  const first = reconcileLiveRoster({ people: [
+  const first = reconcileLiveRoster({ tick: 15, records_at_tick: 14, people: [
     { agent_id: 'Gem-D', alive: true, age_years: 28 },
     { agent_id: 'Gem-K', alive: false, age_years: 34 },
   ] }, 'Gem-D');
   assert.equal(first.selected, 'Gem-D');
   assert.equal(first.selectionChanged, false);
   assert.deepEqual(first.people.map((p) => [p.agent_id, p.status]), [['Gem-D', 'Alive'], ['Gem-K', 'Dead']]);
-  const next = reconcileLiveRoster({ people: [{ agent_id: 'Gem-K', alive: true, age_years: 34 }] }, 'Gem-D');
+  const next = reconcileLiveRoster({ tick: 16, records_at_tick: 16, people: [{ agent_id: 'Gem-K', alive: true, age_years: 34 }] }, 'Gem-D');
   assert.equal(next.selected, 'Gem-K');
   assert.equal(next.selectionChanged, true);
-  const empty = reconcileLiveRoster({ people: [] }, 'Gem-K');
+  const empty = reconcileLiveRoster({ tick: 17, records_at_tick: 17, people: [] }, 'Gem-K');
   assert.equal(empty.selected, null);
   assert.equal(empty.selectionChanged, true);
 });
@@ -114,8 +114,8 @@ test('invalidated roster errors are suppressed and new requests may start', asyn
 });
 
 test('malformed live roster is rejected before replacing the visible population', () => {
-  assert.throws(() => reconcileLiveRoster({ people: null }, 'Gem-D'), /Invalid live island roster/);
-  assert.throws(() => reconcileLiveRoster({ people: [{ agent_id: null }] }, 'Gem-D'), /Invalid live island roster/);
+  assert.throws(() => reconcileLiveRoster({ tick: 5, records_at_tick: 5, people: null }, 'Gem-D'), /Invalid live island roster/);
+  assert.throws(() => reconcileLiveRoster({ tick: 5, records_at_tick: 5, people: [{ agent_id: null }] }, 'Gem-D'), /Invalid live island roster/);
 });
 
 
@@ -131,6 +131,23 @@ test('live roster rejects duplicate or malformed identities and impossible life 
     [{ ...valid, age_years: Infinity }],
     [{ ...valid, age_years: '28' }],
   ]) {
-    assert.throws(() => reconcileLiveRoster({ people }, 'Gem-D'), /Invalid live island roster/);
+    assert.throws(() => reconcileLiveRoster({ tick: 5, records_at_tick: 5, people }, 'Gem-D'), /Invalid live island roster/);
+  }
+});
+
+test('live roster rejects impossible simulation clock and record freshness before display', () => {
+  const people = [{ agent_id: 'Gem-D', alive: true, age_years: 28 }];
+  const valid = { tick: 102, records_at_tick: 100, people };
+  assert.equal(reconcileLiveRoster(valid, 'Gem-D').selected, 'Gem-D');
+  for (const [tick, records_at_tick] of [
+    [undefined, 100], [102, undefined], ['102', 100],
+    [-1, 0], [1.5, 1], [Infinity, 0], [Number.MAX_SAFE_INTEGER + 1, 0],
+    [102, -1], [102, 103], [102, 99.5], [102, NaN],
+  ]) {
+    assert.throws(
+      () => reconcileLiveRoster({ tick, records_at_tick, people }, 'Gem-D'),
+      /Invalid live island roster/,
+      `invalid tick=${tick} records_at_tick=${records_at_tick}`,
+    );
   }
 });
