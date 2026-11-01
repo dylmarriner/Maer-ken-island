@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { cellEnvironmentDetails } from '../static/cell-details.mjs';
+import { cellEnvironmentDetails, createCellSelectionGate } from '../static/cell-details.mjs';
 
 test('shows the real annual climatology and land productivity fields', () => {
   assert.deepEqual(cellEnvironmentDetails({
@@ -31,4 +31,28 @@ test('omits absent, malformed and non-finite measurements without inventing numb
     annual_rain_mm: Number.POSITIVE_INFINITY, npp_kgc_m2_yr: -1,
   }), []);
   assert.deepEqual(cellEnvironmentDetails({land: true}), []);
+});
+
+test('only the latest map click may select an intervention location', () => {
+  const gate = createCellSelectionGate();
+  const first = gate.begin();
+  assert.equal(gate.isCurrent(first), true);
+  const second = gate.begin();
+  assert.equal(gate.isCurrent(first), false);
+  assert.equal(gate.isCurrent(second), true);
+  assert.equal(gate.isCurrent(0), false);
+});
+
+test('late success and late error from an earlier click cannot overwrite the newer cell', async () => {
+  const gate = createCellSelectionGate();
+  const rendered = [];
+  const first = gate.begin();
+  const pending = Promise.resolve().then(() => {
+    if (gate.isCurrent(first)) rendered.push('old cell');
+  });
+  const second = gate.begin();
+  if (gate.isCurrent(second)) rendered.push('new cell');
+  await pending;
+  if (gate.isCurrent(first)) rendered.push('old error');
+  assert.deepEqual(rendered, ['new cell']);
 });

@@ -20,7 +20,7 @@ import {
   reportOffline,
   storedToken,
 } from "/static/app.js";
-import { cellEnvironmentDetails } from "/static/cell-details.mjs";
+import { cellEnvironmentDetails, createCellSelectionGate } from "/static/cell-details.mjs";
 
 const panels = {
   properties: document.getElementById("properties-panel"),
@@ -842,6 +842,8 @@ function sayScale(canvas) {
   key.replaceChildren(...bits);
 }
 
+const cellSelectionGate = createCellSelectionGate();
+
 async function onMapClick(event) {
   const canvas = mapCanvas();
   const out = document.getElementById("map-cell");
@@ -851,8 +853,10 @@ async function onMapClick(event) {
   const col = Math.floor(x / ground.cellM);
   const row = Math.floor(y / ground.cellM);
   if (col < 0 || row < 0 || col >= ground.cols || row >= ground.rows) return;
+  const selection = cellSelectionGate.begin();
   try {
     const data = await getJson(`/api/cell/${row}/${col}`);
+    if (!cellSelectionGate.isCurrent(selection)) return;
     const c = data.cell;
     out.replaceChildren(
       el("p", `Row ${c.row}, column ${c.col} — ${c.latitude.toFixed(4)}°, ${c.longitude.toFixed(4)}°`, { class: "cell-where" }),
@@ -874,10 +878,13 @@ async function onMapClick(event) {
       latitude: c.latitude,
       longitude: c.longitude,
     };
-    await fillPlacesAndPeople();
+    if (!(await fillPlacesAndPeople(selection))) return;
+    if (!cellSelectionGate.isCurrent(selection)) return;
     whereEl.value = String(places.findIndex((p) => p === clickedPlace));
   } catch (error) {
-    out.replaceChildren(el("p", explain(error), { class: "cell-what" }));
+    if (cellSelectionGate.isCurrent(selection)) {
+      out.replaceChildren(el("p", explain(error), { class: "cell-what" }));
+    }
   }
 }
 
@@ -1311,8 +1318,9 @@ function fillSelect(select, options) {
 /// select that reset its own selection on refresh.
 let clickedPlace = null;
 
-async function fillPlacesAndPeople() {
+async function fillPlacesAndPeople(selection = null) {
   const world = await getJson("/api/world");
+  if (selection !== null && !cellSelectionGate.isCurrent(selection)) return false;
   places = [
     {
       label: `The estate — cell ${world.estate.cell[0]}, ${world.estate.cell[1]}`,
@@ -1329,6 +1337,7 @@ async function fillPlacesAndPeople() {
     personEl,
     world.people.map((p) => ({ value: p.agent_id, label: p.agent_id })),
   );
+  return true;
 }
 
 /// Poll a queued command until the island has answered it.

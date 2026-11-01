@@ -18,3 +18,13 @@ export function cellEnvironmentDetails(cell) {
   }
   return details;
 }
+
+// Map cell requests can finish out of order. Only the latest click may
+// replace the inspector or select a location for an intervention.
+export function createCellSelectionGate() {
+  let generation = 0;
+  return {
+    begin() { return ++generation; },
+    isCurrent(token) { return token === generation; },
+  };
+}
