@@ -23,3 +23,14 @@ export function personRecordPath(onTheIsland, agentId) {
   return (onTheIsland ? '/api/world/humans/' : '/api/humans/') +
     encodeURIComponent(agentId);
 }
+
+// Export the exact inspected snapshot, not a second unauthenticated GET that
+// can return a stale/different record (or 401 when the API needs a bearer token).
+export function personRecordExport(person) {
+  if (!person || !person.human || typeof person.human !== "object" || Array.isArray(person.human)) {
+    throw new TypeError("Person export requires an inspected human record");
+  }
+  const agentId = String(person.summary?.agent_id ?? "");
+  const safeName = agentId.replace(/[^A-Za-z0-9._-]/g, "_").replace(/^\.+$/, "_").slice(0, 100) || "person";
+  return { filename: safeName + ".json", json: JSON.stringify(person.human, null, 2) };
+}

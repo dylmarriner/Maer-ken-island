@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createPersonSelection, personRecordPath } from '../static/people-selection.mjs';
+import { createPersonSelection, personRecordPath, personRecordExport } from '../static/people-selection.mjs';
 
 function deferred() {
   let resolve;
@@ -59,4 +59,20 @@ test('record download and inspector share the correct live or stored source', ()
   assert.equal(personRecordPath(true, 'Gem-D'), '/api/world/humans/Gem-D');
   assert.equal(personRecordPath(false, 'Gem-D'), '/api/humans/Gem-D');
   assert.equal(personRecordPath(true, 'person/name?x=1'), '/api/world/humans/person%2Fname%3Fx%3D1');
+});
+
+test('download exports exactly the inspected snapshot without a second HTTP request', () => {
+  const person = { summary: { agent_id: 'Gem-D' }, human: { tick: 42, alive: true, nested: { mood: 'resting' } } };
+  const result = personRecordExport(person);
+  assert.equal(result.filename, 'Gem-D.json');
+  assert.equal(result.json, JSON.stringify(person.human, null, 2));
+  person.human = { tick: 43 };
+  assert.equal(JSON.parse(result.json).tick, 42);
+});
+
+test('download filenames cannot contain path separators or reserved characters', () => {
+  const person = { summary: { agent_id: '../weird/name?x=1' }, human: { id: 1 } };
+  assert.equal(personRecordExport(person).filename, '.._weird_name_x_1.json');
+  assert.equal(personRecordExport({ summary: { agent_id: '...' }, human: {} }).filename, '_.json');
+  assert.throws(() => personRecordExport({ summary: { agent_id: 'a' } }), /inspected human record/);
 });

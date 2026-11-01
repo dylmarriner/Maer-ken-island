@@ -14,7 +14,7 @@ import {
   message,
   reportOffline,
 } from "/static/app.js";
-import { createPersonSelection, personRecordPath } from "/static/people-selection.mjs";
+import { createPersonSelection, personRecordPath, personRecordExport } from "/static/people-selection.mjs";
 
 const rosterEl = document.getElementById("roster");
 const rosterCountEl = document.getElementById("roster-count");
@@ -151,13 +151,13 @@ function readingGroup(section) {
 }
 
 function recordDetails(person) {
-  const text = JSON.stringify(person.human, null, 2);
+  const { filename, json: text } = personRecordExport(person);
   const details = el("details", null, { class: "record" });
   details.append(
     el("summary", `Everything stored about ${displayName(person.summary)}`),
     el(
       "p",
-      "The complete record, exactly as it is written to disk. Most of it is derived; nothing here is typed by hand.",
+      "The inspected record at the time it was loaded. Live records may change as the island runs.",
       { class: "hint" },
     ),
   );
@@ -175,10 +175,16 @@ function recordDetails(person) {
       copy.textContent = "Copy as JSON";
     }, 2500);
   });
-  const download = el("a", "Download", {
-    class: "button secondary",
-    href: personRecordPath(onTheIsland, person.summary.agent_id),
-    download: `${person.summary.agent_id}.json`,
+  const download = el("button", "Download", { type: "button", class: "button secondary" });
+  download.addEventListener("click", () => {
+    // A normal anchor GET omits our bearer token, and a second fetch may read
+    // a different simulation tick. Download the inspected snapshot instead.
+    const objectUrl = URL.createObjectURL(new Blob([text], { type: "application/json;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = filename;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
   });
   tools.append(copy, download);
   details.append(tools, el("pre", text));
