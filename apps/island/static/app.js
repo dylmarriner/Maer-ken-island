@@ -95,10 +95,27 @@ function remember(key, value) {
   }
 }
 
-/** Trim a backend address to scheme, host and port. */
+/** Accept only an HTTP(S) origin, never a path, credentials or a query.
+ * A ?backend= link is untrusted input, and may not redirect an existing
+ * control token to a different server. */
 export function tidyBackend(value) {
-  const trimmed = String(value || "").trim().replace(/\/+$/, "");
-  return trimmed;
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  if (raw.includes("\\") || raw.includes("?") || raw.includes("#")) {
+    throw new Error("Backend address must be a bare HTTP(S) origin.");
+  }
+  let parsed;
+  try {
+    parsed = new URL(raw);
+  } catch (_) {
+    throw new Error("Backend address must be a bare HTTP(S) origin.");
+  }
+  if (!["http:", "https:"].includes(parsed.protocol) ||
+      !parsed.hostname || parsed.username || parsed.password ||
+      parsed.pathname !== "/") {
+    throw new Error("Backend address must be a bare HTTP(S) origin.");
+  }
+  return parsed.origin;
 }
 
 let backendOverride = null;
@@ -149,7 +166,7 @@ function headersFor(extra) {
 
 export async function getJson(path) {
   const url = apiUrl(path);
-  const response = await fetch(url, { headers: headersFor() });
+  const response = await fetch(url, { headers: headersFor(), redirect: "error" });
   if (!response.ok) {
     // The code travels with the error. Without it a caller could only match
     // on the message, and `island.js` had a `error.status === 404` branch
@@ -179,6 +196,7 @@ export async function postJson(path, body, token) {
   if (token) headers.authorization = "Bearer " + token;
   const response = await fetch(apiUrl(path), {
     method: "POST",
+    redirect: "error",
     headers,
     body: JSON.stringify(body),
   });
@@ -196,7 +214,7 @@ export async function postJson(path, body, token) {
  *
  * The caller revokes the URL when it is done with it. */
 export async function getImage(path) {
-  const response = await fetch(apiUrl(path), { headers: headersFor({ accept: "image/png" }) });
+  const response = await fetch(apiUrl(path), { headers: headersFor({ accept: "image/png" }), redirect: "error" });
   if (!response.ok) {
     const failed = new Error(`The server answered ${response.status} for ${path}.`);
     failed.status = response.status;
@@ -213,10 +231,19 @@ export async function getImage(path) {
  * with `ISLAND_CONTROL_TOKEN` every pause, every speed change and every
  * intervention came back 401 with nothing on screen explaining why. */
 export const TOKEN_KEY = "island-control-token";
+export const TOKEN_ORIGIN_KEY = "island-control-token-origin";
+
+// A token belongs to one backend origin. Never forward a token saved for
+// island A to island B, including when B came from an untrusted ?backend= link.
+// Legacy unscoped tokens are intentionally not sent until re-entered.
+function currentBackendOrigin() {
+  return backend() || location.origin;
+}
 
 export function storedToken() {
   try {
-    return sessionStorage.getItem(TOKEN_KEY) || "";
+    const token = sessionStorage.getItem(TOKEN_KEY) || "";
+    return sessionStorage.getItem(TOKEN_ORIGIN_KEY) === currentBackendOrigin() ? token : "";
   } catch (_) {
     return "";
   }
@@ -224,8 +251,13 @@ export function storedToken() {
 
 export function rememberToken(token) {
   try {
-    if (token) sessionStorage.setItem(TOKEN_KEY, token);
-    else sessionStorage.removeItem(TOKEN_KEY);
+    if (token) {
+      sessionStorage.setItem(TOKEN_ORIGIN_KEY, currentBackendOrigin());
+      sessionStorage.setItem(TOKEN_KEY, token);
+    } else {
+      sessionStorage.removeItem(TOKEN_KEY);
+      sessionStorage.removeItem(TOKEN_ORIGIN_KEY);
+    }
   } catch (_) {
     // A browser with storage switched off still works; the token just has
     // to be typed again next time.
@@ -341,9 +373,17 @@ export function mountServerChrome() {
     if (!form.hidden) url.focus();
   });
 
+  url.addEventListener("input", () => url.setCustomValidity(""));
   form.addEventListener("submit", (event) => {
     event.preventDefault();
-    setBackend(url.value);
+    try {
+      setBackend(url.value);
+      url.setCustomValidity("");
+    } catch (error) {
+      url.setCustomValidity(error.message);
+      url.reportValidity();
+      return;
+    }
     rememberToken(token.value.trim());
     // A reload rather than a re-fetch: every page holds state built from
     // one island -- a selected person, a map view, a roster -- and

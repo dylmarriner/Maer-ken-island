@@ -21,3 +21,11 @@ Next: run the slow acceptance suite in an isolated environment, then select the 
 - Evidence on OpenCommander `amd`: `node --test apps/island/tests/cell-details.test.mjs` **5/5 passed** including two new out-of-order selection tests; `node --check` on both changed modules, `cargo fmt --all -- --check`, and `git diff --check` passed. Full Rust/server acceptance not rerun locally.
 - Remaining: [ ] exact-new-SHA CI; [ ] nightly week/year deterministic replay and material/water/carbon ledgers; [ ] sourced ecology/industry tasks from `WORK_REMAINING.md` (including serving species without inventing densities); [ ] final owner acceptance.
 - Next: verify CI and execute the slow simulation acceptance suite before claiming completion. Do not confuse map correctness with simulation realism.
+
+## 2026-11-01 continuation: prevent cross-island token forwarding
+
+- The browser previously stored a single session control token independent of backend origin. An untrusted backend query link could silently switch the API target and cause all three fetch helpers to forward the existing owner's bearer token to that host. This is a credential-disclosure risk.
+- Backend URLs now require a bare HTTP(S) origin without credentials, paths, queries or fragments. Tokens are scoped to the origin on which they were entered. An existing token is never sent to a different island, including when selected via query string; legacy unscoped tokens require re-entry. All three fetch helpers reject redirects. Invalid manual backend addresses display form validation.
+- Added regression tests covering malicious query override, origin switching, legacy tokens, malformed addresses and redirect refusal; CI web dashboard runs the expanded suite.
+- Verification: OpenCommander AMD node --test apps/island/tests/*.test.mjs **10/10 passed**, node --check apps/island/static/app.js, git diff --check passed before commit. Rust simulation tick and ledger code unchanged.
+- Remaining: [ ] exact-SHA full CI; [ ] slow week/year ledger and replay acceptance; [ ] sourced ecology/industry roadmap; [ ] owner acceptance. Next: check CI, execute slow simulation suite, then continue sourced tasks.
