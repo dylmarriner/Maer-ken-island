@@ -78,3 +78,13 @@ Next: inspect slow workflow completion and the exact-SHA CI, then take the next 
 - New tests cover out-of-order success and late failure; `node --test apps/island/tests/*.test.mjs` **23/23 passed**, JS syntax, `cargo fmt --all -- --check`, and `git diff --check` passed. Code commit `1445eee` pushed to PR #68. Full Rust slow acceptance was not executed; this is a read-only UI correctness fix.
 - [ ] Exact-new-SHA full CI green; [ ] ignored week/year simulation with deterministic replay and water/carbon/material ledger audit; [ ] sourced ecology, industry and workforce milestones in `WORK_REMAINING.md`; [ ] owner acceptance.
 - Next: inspect exact-SHA CI, then execute slow deterministic simulation acceptance on an isolated runner before claiming ledger/replay completion or re-pinning digests.
+
+## 2026-11-02 continuation: abort superseded People and conversation HTTP requests
+
+- Confirmed canonical `dylmarriner/Maer-ken-island`, PR #68 (not `Maer-Ken`). Previous exact-head CI [#41323156295](https://github.com/dylmarriner/Maer-ken-island/actions/runs/41323156295) passed at `f3f6ff2`, **excluding skipped slow nightly tests**. Latest manual slow workflow [#41295467331](https://github.com/dylmarriner/Maer-ken-island/actions/runs/41295467331) was cancelled.
+- The generation guard prevented stale DOM updates but did not stop obsolete network fetches, so repeated 5-second conversation polls or rapid person selections could leave multiple requests in flight. Added `AbortController` cancellation on replacement/invalidation, forwarded signals through the authenticated JSON fetch, and preserved latest-wins rendering/error behavior.
+- On OpenCommander `amd`: 3 new tests **failed before** implementation, **26/26 dashboard Node tests passed** afterward; JS syntax checks for all changed modules, `cargo fmt --all -- --check`, and `git diff --check` passed. Code commit `da08253` pushed to PR #68. No Rust single-writer, append-only log, snapshots, ledger, replay, owner governance or live simulation changed.
+- [ ] Exact-new-SHA full CI green.
+- [ ] Run ignored week/year slow simulation with replay hashes and material/water/carbon ledger audits before re-pinning digests.
+- [ ] Implement sourced ecology, industry and workforce tasks from `WORK_REMAINING.md`, document deviations and complete owner acceptance.
+- Next: verify new CI, obtain slow deterministic acceptance evidence, then select a sourced realism/industry slice. Avoid claiming full simulation acceptance from browser tests.
