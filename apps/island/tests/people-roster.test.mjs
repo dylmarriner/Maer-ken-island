@@ -82,6 +82,37 @@ test('live roster refresh never overlaps and preserves last good roster after er
 });
 
 
+test('hidden-tab invalidation aborts the old roster and cannot overwrite a fresh roster', async () => {
+  let oldResolve;
+  const old = new Promise((resolve) => { oldResolve = resolve; });
+  const seen = [];
+  const signals = [];
+  let calls = 0;
+  const poller = createLiveRosterPoller((signal) => {
+    signals.push(signal);
+    return ++calls === 1 ? old : Promise.resolve({ tick: 20, people: [] });
+  }, (value) => seen.push(value.tick), (error) => seen.push(error.message));
+  const first = poller.refresh();
+  poller.invalidate();
+  assert.equal(signals[0].aborted, true);
+  assert.equal(await poller.refresh(), true);
+  oldResolve({ tick: 19, people: [] });
+  await first;
+  assert.deepEqual(seen, [20]);
+});
+
+test('invalidated roster errors are suppressed and new requests may start', async () => {
+  let oldReject;
+  const old = new Promise((_resolve, reject) => { oldReject = reject; });
+  const errors = [];
+  const poller = createLiveRosterPoller(() => old, () => {}, (error) => errors.push(error.message));
+  const first = poller.refresh();
+  poller.invalidate();
+  oldReject(new Error('stale error'));
+  await first;
+  assert.deepEqual(errors, []);
+});
+
 test('malformed live roster is rejected before replacing the visible population', () => {
   assert.throws(() => reconcileLiveRoster({ people: null }, 'Gem-D'), /Invalid live island roster/);
   assert.throws(() => reconcileLiveRoster({ people: [{ agent_id: null }] }, 'Gem-D'), /Invalid live island roster/);

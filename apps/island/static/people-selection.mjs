@@ -135,17 +135,33 @@ export function reconcileLiveRoster(roster, currentSelection) {
 
 export function createLiveRosterPoller(fetchRoster, showRoster, showError) {
   let pending = false;
+  let revision = 0;
+  let controller = null;
   return {
+    invalidate() {
+      // A hidden or unloading tab must not apply an obsolete roster. Abort
+      // the fetch and allow a fresh one when the tab becomes visible again.
+      revision += 1;
+      controller?.abort();
+      controller = null;
+      pending = false;
+    },
     async refresh() {
       if (pending) return false;
+      const request = ++revision;
+      const currentController = new AbortController();
+      controller = currentController;
       pending = true;
       try {
-        const roster = await fetchRoster();
-        showRoster(roster);
+        const roster = await fetchRoster(currentController.signal);
+        if (request === revision) showRoster(roster);
       } catch (error) {
-        showError(error);
+        if (request === revision) showError(error);
       } finally {
-        pending = false;
+        if (request === revision) {
+          pending = false;
+          controller = null;
+        }
       }
       return true;
     },

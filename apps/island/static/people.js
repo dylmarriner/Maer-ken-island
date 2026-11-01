@@ -322,7 +322,7 @@ async function load() {
 // arrivals and deaths. Keep the current selection and inspector intact when
 // it still exists; only select a different person when the old one disappears.
 const liveRosterPoller = createLiveRosterPoller(
-  () => getJson("/api/world/humans"),
+  (signal) => getJson("/api/world/humans", { signal }),
   (roster) => {
     const next = reconcileLiveRoster(roster, selected);
     everyone = next.people;
@@ -361,6 +361,13 @@ load();
 setInterval(() => {
   if (onTheIsland && !document.hidden) void liveRosterPoller.refresh();
 }, 5000);
+
+// A request started while visible can finish after the tab is hidden. Stop
+// that request so its stale roster cannot replace the last inspected state.
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) liveRosterPoller.invalidate();
+});
+addEventListener("pagehide", () => liveRosterPoller.invalidate());
 
 // Live human records change on every simulation tick. Refresh the selected
 // person's snapshot without resetting the scroll, URL or loading skeleton.
