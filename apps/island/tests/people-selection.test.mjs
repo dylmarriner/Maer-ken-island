@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createPersonSelection } from '../static/people-selection.mjs';
+import { createPersonSelection, personRecordPath } from '../static/people-selection.mjs';
 
 function deferred() {
   let resolve;
@@ -53,4 +53,10 @@ test('latest failure remains visible and invalidation suppresses an obsolete res
   await selection.load(async () => { throw new Error('current failure'); },
     (value) => visible.push(value), (error) => visible.push(error.message));
   assert.deepEqual(visible, ['current failure']);
+});
+
+test('record download and inspector share the correct live or stored source', () => {
+  assert.equal(personRecordPath(true, 'Gem-D'), '/api/world/humans/Gem-D');
+  assert.equal(personRecordPath(false, 'Gem-D'), '/api/humans/Gem-D');
+  assert.equal(personRecordPath(true, 'person/name?x=1'), '/api/world/humans/person%2Fname%3Fx%3D1');
 });

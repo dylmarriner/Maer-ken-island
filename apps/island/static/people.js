@@ -14,7 +14,7 @@ import {
   message,
   reportOffline,
 } from "/static/app.js";
-import { createPersonSelection } from "/static/people-selection.mjs";
+import { createPersonSelection, personRecordPath } from "/static/people-selection.mjs";
 
 const rosterEl = document.getElementById("roster");
 const rosterCountEl = document.getElementById("roster-count");
@@ -177,7 +177,7 @@ function recordDetails(person) {
   });
   const download = el("a", "Download", {
     class: "button secondary",
-    href: `/api/humans/${encodeURIComponent(person.summary.agent_id)}`,
+    href: personRecordPath(onTheIsland, person.summary.agent_id),
     download: `${person.summary.agent_id}.json`,
   });
   tools.append(copy, download);
@@ -226,9 +226,9 @@ async function select(agentId) {
   url.searchParams.set("human", agentId);
   history.replaceState(null, "", url);
   loadingPerson();
-  const path = onTheIsland ? "/api/world/humans/" : "/api/humans/";
+  const path = personRecordPath(onTheIsland, agentId);
   await personSelection.load(
-    () => getJson(path + encodeURIComponent(agentId)),
+    () => getJson(path),
     (person) => drawPerson(person),
     (error) => {
       detailEl.replaceChildren(

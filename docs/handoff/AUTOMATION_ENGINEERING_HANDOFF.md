@@ -55,3 +55,10 @@ Next: inspect slow workflow completion and the exact-SHA CI, then take the next 
 - [ ] Verify exact-commit PR CI, slow week/year simulation, ledger and deterministic replay evidence.
 - [ ] Continue sourced ecology/industry work from `WORK_REMAINING.md` and owner acceptance; no week digest re-pin without slow audit.
 - Next: inspect exact-SHA CI and execute slow acceptance in an isolated environment, then take the next unblocked sourced realism slice.
+
+## 2026-11-02 continuation: live People record downloads
+
+- People inspector selected live island records from `/api/world/humans/<id>`, but its Download link always fetched `/api/humans/<id>` (stored, potentially stale, or absent). The exported JSON could therefore disagree with the inspected live record.
+- Added shared `personRecordPath` for both inspection and download, selecting the live or stored endpoint consistently and percent-encoding agent IDs.
+- OpenCommander AMD: 4/4 People-selection Node tests, JS syntax, Cargo formatting and git diff checks passed. No simulation state or canon modified.
+- Remaining: [ ] exact-commit full CI; [ ] week/year replay, water/carbon/material ledgers; [ ] sourced realism and industry roadmap. Next: validate CI and run slow deterministic acceptance before merge.
