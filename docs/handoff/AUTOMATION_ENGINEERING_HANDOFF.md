@@ -113,3 +113,14 @@ Next: inspect slow workflow completion and the exact-SHA CI, then take the next 
 - Two new Node regressions failed before the fix; after, **37/37 dashboard Node tests passed**, both JS syntax checks, Cargo fmt and `git diff --check` passed on OpenCommander `amd`.
 - [ ] Exact-new-SHA full CI green; [ ] ignored week/year replay-hash and material/water/carbon ledger acceptance on a capacity-safe runner; [ ] sourced ecology/industry/workforce milestones and deviations; [ ] owner acceptance.
 - Next: verify exact-commit CI, run slow deterministic acceptance without prematurely re-pinning digests, then implement the next sourced roadmap item. No live simulation or deployment changes.
+
+## 2026-11-02 continuation: fail-closed live People roster integrity
+
+- Verified canonical `dylmarriner/Maer-ken-island`, PR #68, branch `fix/island-client-human-id-20261101` against `WORK_REMAINING.md`, `HANDOFF.md` and implementation-ready roadmap. The similarly named `Maer-Ken` repository was not used.
+- Earlier exact-head full CI [#41354119665](https://github.com/dylmarriner/Maer-ken-island/actions/runs/41354119665) passed its non-nightly jobs; slow week/year deterministic acceptance was skipped.
+- Code `36d5ced`: the live roster previously accepted duplicate/blank identities, truthy non-boolean `alive` fields and negative/non-finite/non-numeric ages. It could therefore display `alive: "false"` as Alive, and duplicate IDs made inspector selection ambiguous. Now validates every entry and rejects the entire malformed roster before updating the UI; existing last-good-roster preservation applies.
+- Regression failed before the fix, then OpenCommander AMD **38/38** dashboard Node tests passed, both JS syntax checks, `cargo fmt --all -- --check` and `git diff --check` passed. No simulation tick, Rust single-writer, append-only logs, snapshots, replay hashes, material/water/carbon ledgers, canon or owner governance changed.
+- [ ] Exact-new-SHA full CI green including installed Rust server and desktop.
+- [ ] Capacity-safe ignored week/year deterministic replay-hash and material/water/carbon ledger acceptance before any digest re-pin.
+- [ ] Sourced ecology/industry/workforce milestones from `WORK_REMAINING.md`, reference packs/deviation records and owner acceptance.
+- Next: inspect CI, execute slow deterministic acceptance without changing pinned digests, then implement the highest-impact sourced roadmap item. No live deployment or governance changes.
