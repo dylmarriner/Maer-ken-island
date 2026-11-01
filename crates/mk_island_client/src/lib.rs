@@ -162,7 +162,13 @@ impl IslandClient {
     /// it, and would be wrong the first time upstream changed a field. A
     /// frontend reads the parts it shows.
     pub fn human(&self, agent_id: &str) -> Result<serde_json::Value, ClientError> {
-        self.json(&format!("/api/world/humans/{agent_id}"))
+        // IDs are URL path segments, not caller-supplied paths or queries.
+        // Reject reserved delimiters instead of accidentally requesting another endpoint.
+        let path = human_path(agent_id).ok_or_else(|| ClientError::Malformed {
+            url: self.url("/api/world/humans"),
+            reason: "invalid human identifier: expected ASCII letters, digits, '-' or '_'".into(),
+        })?;
+        self.json(&path)
     }
 
     /// What a creation form may offer: the lists and limits the creator
@@ -457,6 +463,38 @@ impl IslandClient {
                 url: self.url(path),
                 reason: transport.to_string(),
             },
+        }
+    }
+}
+
+
+/// Construct exactly one human resource path, without query or path traversal.
+fn human_path(agent_id: &str) -> Option<String> {
+    if agent_id.is_empty()
+        || !agent_id.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
+    {
+        return None;
+    }
+    Some(format!("/api/world/humans/{agent_id}"))
+}
+
+#[cfg(test)]
+mod human_id_tests {
+    use super::{human_path, IslandClient, ClientError};
+
+    #[test]
+    fn canonical_human_ids_remain_addressable() {
+        assert_eq!(human_path("HUM-000001").as_deref(), Some("/api/world/humans/HUM-000001"));
+        assert_eq!(human_path("Gem_K2").as_deref(), Some("/api/world/humans/Gem_K2"));
+    }
+
+    #[test]
+    fn path_and_query_injection_is_rejected_before_network_access() {
+        let client = IslandClient::new("http://127.0.0.1:1", None);
+        for id in ["", ".", "..", "../control", "HUM/000001", "HUM%2F000001",
+                   "HUM-000001?token=x", "HUM-000001#fragment", "HUM 000001", "HUM-ø"] {
+            assert!(human_path(id).is_none(), "{id}");
+            assert!(matches!(client.human(id), Err(ClientError::Malformed { .. })), "{id}");
         }
     }
 }
