@@ -70,3 +70,11 @@ Next: inspect slow workflow completion and the exact-SHA CI, then take the next 
 - OpenCommander AMD: 21/21 browser Node tests, both JS syntax checks, cargo fmt --check and git diff --check passed. Prior exact-SHA full CI #41313267055 succeeded on 08852f4; new SHA CI required.
 - [ ] New exact-SHA full CI green; [ ] slow week/year replay hashes and water/carbon/material ledgers; [ ] sourced realism/industry/workforce milestones and deviation records; [ ] owner acceptance. No simulation, canon or live deployment changes.
 - Next: verify new CI, run slow acceptance on isolated runner, then implement a sourced roadmap item; never re-pin week digests without full audit.
+
+## 2026-11-02 continuation: prevent stale conversation polling results
+
+- Confirmed canonical `dylmarriner/Maer-ken-island`, PR #68; separate from the similarly named Maer-Ken repo. Prior exact-SHA full CI [#41318269395](https://github.com/dylmarriner/Maer-ken-island/actions/runs/41318269395) **passed** on `3e165c7`, with the slow nightly job **skipped**.
+- People dashboard polls `/api/conversations` every 5 seconds. Slow older responses (or failures) could overwrite a newer conversation feed or hide its panel. Generalised the tested generation-based latest-request guard and applied it to both success and failure callbacks of conversation refresh. Rust single-writer, ledgers, logs, snapshots, replay and governance untouched.
+- New tests cover out-of-order success and late failure; `node --test apps/island/tests/*.test.mjs` **23/23 passed**, JS syntax, `cargo fmt --all -- --check`, and `git diff --check` passed. Code commit `1445eee` pushed to PR #68. Full Rust slow acceptance was not executed; this is a read-only UI correctness fix.
+- [ ] Exact-new-SHA full CI green; [ ] ignored week/year simulation with deterministic replay and water/carbon/material ledger audit; [ ] sourced ecology, industry and workforce milestones in `WORK_REMAINING.md`; [ ] owner acceptance.
+- Next: inspect exact-SHA CI, then execute slow deterministic simulation acceptance on an isolated runner before claiming ledger/replay completion or re-pinning digests.
