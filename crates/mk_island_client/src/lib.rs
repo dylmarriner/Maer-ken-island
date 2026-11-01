@@ -467,11 +467,12 @@ impl IslandClient {
     }
 }
 
-
 /// Construct exactly one human resource path, without query or path traversal.
 fn human_path(agent_id: &str) -> Option<String> {
     if agent_id.is_empty()
-        || !agent_id.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
+        || !agent_id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
     {
         return None;
     }
@@ -480,21 +481,40 @@ fn human_path(agent_id: &str) -> Option<String> {
 
 #[cfg(test)]
 mod human_id_tests {
-    use super::{human_path, IslandClient, ClientError};
+    use super::{human_path, ClientError, IslandClient};
 
     #[test]
     fn canonical_human_ids_remain_addressable() {
-        assert_eq!(human_path("HUM-000001").as_deref(), Some("/api/world/humans/HUM-000001"));
-        assert_eq!(human_path("Gem_K2").as_deref(), Some("/api/world/humans/Gem_K2"));
+        assert_eq!(
+            human_path("HUM-000001").as_deref(),
+            Some("/api/world/humans/HUM-000001")
+        );
+        assert_eq!(
+            human_path("Gem_K2").as_deref(),
+            Some("/api/world/humans/Gem_K2")
+        );
     }
 
     #[test]
     fn path_and_query_injection_is_rejected_before_network_access() {
         let client = IslandClient::new("http://127.0.0.1:1", None);
-        for id in ["", ".", "..", "../control", "HUM/000001", "HUM%2F000001",
-                   "HUM-000001?token=x", "HUM-000001#fragment", "HUM 000001", "HUM-ø"] {
+        for id in [
+            "",
+            ".",
+            "..",
+            "../control",
+            "HUM/000001",
+            "HUM%2F000001",
+            "HUM-000001?token=x",
+            "HUM-000001#fragment",
+            "HUM 000001",
+            "HUM-ø",
+        ] {
             assert!(human_path(id).is_none(), "{id}");
-            assert!(matches!(client.human(id), Err(ClientError::Malformed { .. })), "{id}");
+            assert!(
+                matches!(client.human(id), Err(ClientError::Malformed { .. })),
+                "{id}"
+            );
         }
     }
 }
