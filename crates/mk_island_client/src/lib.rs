@@ -282,18 +282,12 @@ impl IslandClient {
 
     /// Create somebody in the world.
     pub fn create_human(&self, request: &CreateHumanRequest) -> Result<Accepted, ClientError> {
-        self.post(
-            "/api/world/humans",
-            &serde_json::to_value(request).unwrap_or_default(),
-        )
+        self.post_serialized("/api/world/humans", request)
     }
 
     /// Pause, resume, step, snapshot or change the speed.
     pub fn control(&self, request: &ControlRequest) -> Result<Accepted, ClientError> {
-        self.post(
-            "/api/control",
-            &serde_json::to_value(request).unwrap_or_default(),
-        )
+        self.post_serialized("/api/control", request)
     }
 
     /// Intervene in the island. Many interventions are refused by name and
@@ -382,6 +376,19 @@ impl IslandClient {
             }
             Err(err) => Err(self.failure(path, err)),
         }
+    }
+
+    /// Serialize a command before touching the network. Sending JSON null on a
+    /// serialization failure would enqueue a different command from the one requested.
+    fn post_serialized<T: serde::Serialize>(
+        &self,
+        path: &str,
+        request: &T,
+    ) -> Result<Accepted, ClientError> {
+        let body = serde_json::to_value(request).map_err(|err| ClientError::InvalidRequest {
+            reason: format!("could not serialize {path}: {err}"),
+        })?;
+        self.post(path, &body)
     }
 
     fn post(&self, path: &str, body: &serde_json::Value) -> Result<Accepted, ClientError> {
@@ -516,5 +523,25 @@ mod human_id_tests {
                 "{id}"
             );
         }
+    #[test]
+    fn failed_command_serialization_is_not_sent_as_null() {
+        struct CannotSerialize;
+
+        impl serde::Serialize for CannotSerialize {
+            fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: serde::Serializer,
+            {
+                Err(serde::ser::Error::custom("intentional failure"))
+            }
+        }
+
+        let client = IslandClient::new("http://127.0.0.1:1", None);
+        let err = client
+            .post_serialized("/api/control", &CannotSerialize)
+            .expect_err("a serialization failure must not become an HTTP request");
+        assert!(matches!(err, ClientError::InvalidRequest { .. }), "{err:?}");
+        assert!(!err.worth_retrying());
+    }
     }
 }
