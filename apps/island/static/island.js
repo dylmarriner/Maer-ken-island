@@ -20,6 +20,7 @@ import {
   reportOffline,
   storedToken,
 } from "/static/app.js";
+import { cellEnvironmentDetails } from "/static/cell-details.mjs";
 
 const panels = {
   properties: document.getElementById("properties-panel"),
@@ -862,6 +863,7 @@ async function onMapClick(event) {
           : `Sea, ${(-c.elevation_m).toFixed(0)} m deep. Nobody can be created here and nothing can be built.`,
         { class: "cell-what" },
       ),
+      ...cellEnvironmentDetails(c).map((detail) => el("p", detail, { class: "cell-what" })),
     );
     // The point of clicking. Before this the intervention form offered
     // exactly one place -- the estate -- so the whole rest of the island

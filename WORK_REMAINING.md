@@ -125,7 +125,7 @@ the log's last water is booked to the air at that moment rather than when the wo
 Done 2026-10-14 (`regional/species.rs`, D55): upstream's founding species placed on the island's
 habitats, plants and grazers as shares of the island's carbon fields, other guilds at upstream's
 density times the island's habitat area. **Left:** Earth-calibrated densities and a carbon pool
-for each consumer guild (realism R8, R10); serving the species to the map and the cell inspector;
+for each consumer guild (realism R8, R10); serving the species to the map and the cell inspector (the 2026-11-01 read-only cell inspector now shows biome, annual climate and terrestrial NPP, **not species**);
 animal and fish resource nodes (done 2026-10-23, §2b).
 
 ### 2b. Phase 3 Task 2: every resource and material

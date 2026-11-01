@@ -129,3 +129,8 @@ cargo run -p island -- serve --scenario fixtures/island/default_scenario.json   
   computer service, web, dependency audit) before merging to `main`.
 - After every feature or fix, update `docs/ISLAND_SYSTEM_STATUS.md`, the deviation register, the
   plan's status notes, and `WORK_REMAINING.md`.
+
+## 2026-11-01 follow-up: map cell environment inspector
+- The web island map now exposes already-persisted `/api/cell` biome, mean annual temperature, precipitation and land NPP on click, using a pure tested formatter. Sea cells do not claim that unmodelled marine NPP is zero biological activity. Added the embedded module to the Rust server's asset table and the web CI test job.
+- Verified on OpenCommander `amd`: `node --test apps/island/tests/cell-details.test.mjs` **3/3 passed**, Node syntax checks passed, `cargo fmt --all -- --check` passed. Rust server test could **not** run offline because `aead v0.5.2` was not cached. Full CI on the new SHA must confirm the Rust asset route test.
+- No simulation/ledger/replay change; D55 remains open. Next: confirm full CI, run slow week/year replay and ledger acceptance, then implement a sourced realism/industry item from `WORK_REMAINING.md`.

@@ -225,6 +225,9 @@ jobs:
             node --check "/tmp/$(basename "$file" .js).mjs"
             echo "ok $file"
           done
+          node --check apps/island/static/cell-details.mjs
+      - name: Cell inspector presentation regressions
+        run: node --test apps/island/tests/cell-details.test.mjs
 
   # Known vulnerabilities in what the island depends on: the Rust lockfile
   # against the RustSec advisory database, and the computer service's npm

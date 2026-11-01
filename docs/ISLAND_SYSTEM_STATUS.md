@@ -23,6 +23,9 @@ thing feels to use or what it costs on a real GPU — every frame so far was ras
 CPU. See `docs/island/RENDER_STACK.md`, which also records that an earlier version of this
 document was wrong about whether rendering here was possible at all.
 
+## 2026-11-01 dashboard inspector increment
+The island web map's clicked-cell inspector now renders the existing `/api/cell` biome, mean annual air temperature, annual precipitation and **terrestrial** net primary production fields. It omits missing/non-finite measurements and does not present marine NPP's unmodelled zero as an ecological observation. This is read-only UI; no tick, seed, snapshot, ledger, reference pack or replay hash changed. The species-in-cell work and D55's density limitations remain open. Evidence: `apps/island/tests/cell-details.test.mjs` (3 Node tests), `apps/island/src/serve/pages.rs` asset-route regression; full Rust server tests await dependencies/CI.
+
 ## Implemented
 
 | System | State | Evidence |

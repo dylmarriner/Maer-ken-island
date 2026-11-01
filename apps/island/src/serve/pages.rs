@@ -16,12 +16,17 @@ const CSS: &str = "text/css; charset=utf-8";
 
 /// The files under `/static/`. Keeping them in one table means a new asset is
 /// one line here rather than a new route.
-pub const ASSETS: [(&str, &str, &str); 6] = [
+pub const ASSETS: [(&str, &str, &str); 7] = [
     ("style.css", include_str!("../../static/style.css"), CSS),
     ("app.js", include_str!("../../static/app.js"), JS),
     ("overview.js", include_str!("../../static/overview.js"), JS),
     ("people.js", include_str!("../../static/people.js"), JS),
     ("island.js", include_str!("../../static/island.js"), JS),
+    (
+        "cell-details.mjs",
+        include_str!("../../static/cell-details.mjs"),
+        JS,
+    ),
     ("creator.js", include_str!("../../static/creator.js"), JS),
 ];
 
@@ -141,6 +146,16 @@ mod tests {
             ("/people", "text/html", "id=\"roster\""),
             ("/creator", "text/html", "id=\"creator\""),
             ("/static/app.js", "text/javascript", "export"),
+            (
+                "/static/island.js",
+                "text/javascript",
+                "cellEnvironmentDetails",
+            ),
+            (
+                "/static/cell-details.mjs",
+                "text/javascript",
+                "cellEnvironmentDetails",
+            ),
             ("/static/overview.js", "text/javascript", "/api/activity"),
             ("/static/people.js", "text/javascript", "/api/humans"),
             (
