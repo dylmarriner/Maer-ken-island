@@ -56,8 +56,15 @@ pub struct IslandClient {
 impl std::fmt::Debug for IslandClient {
     /// Written by hand so a token never reaches a log through a `{:?}`.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Invalid origins can contain user-supplied passwords. Never print
+        // them, even in a Debug log produced before the first request.
+        let safe_base = if self.validate_base().is_ok() {
+            self.base.as_str()
+        } else {
+            "<invalid origin>"
+        };
         f.debug_struct("IslandClient")
-            .field("base", &self.base)
+            .field("base", &safe_base)
             .field("token", &self.token.as_ref().map(|_| "<set>"))
             .finish()
     }
@@ -600,6 +607,12 @@ mod human_id_tests {
             );
             assert!(!err.to_string().contains("secret"));
             assert!(!err.to_string().contains("owner-token"));
+            let debug = format!("{client:?}");
+            assert!(
+                !debug.contains("secret"),
+                "unsafe base leaked through Debug"
+            );
+            assert!(!debug.contains("owner-token"), "token leaked through Debug");
             assert!(!err.worth_retrying());
         }
     }
