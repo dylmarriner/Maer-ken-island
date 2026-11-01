@@ -135,6 +135,12 @@ export function backend() {
   return tidyBackend(window.ISLAND_BACKEND || "");
 }
 
+/** A token shown for island A must never silently be saved for island B.
+ * Only a token explicitly edited for the destination may cross the switch. */
+export function tokenForBackendSwitch(previousOrigin, nextOrigin, visibleToken, edited) {
+  return previousOrigin === nextOrigin || edited ? visibleToken.trim() : "";
+}
+
 /** Point this browser at another island. `""` means the page's own host. */
 export function setBackend(value) {
   const tidy = tidyBackend(value);
@@ -374,10 +380,13 @@ export function mountServerChrome() {
     token,
     el(
       "p",
-      "Sent with every request. The control token reads and writes; a read token only reads. It is kept in this browser and never sent anywhere but the island above.",
+      "Sent with every request. The control token reads and writes; a read token only reads. When changing islands, enter the new island's token again; the old token is not copied.",
       { class: "hint" },
     ),
   );
+  const originalOrigin = currentBackendOrigin();
+  let tokenEdited = false;
+  token.addEventListener("input", () => { tokenEdited = true; });
   const save = el("button", "Connect", { type: "submit", class: "primary" });
   form.append(save);
   host.append(form);
@@ -390,15 +399,22 @@ export function mountServerChrome() {
   url.addEventListener("input", () => url.setCustomValidity(""));
   form.addEventListener("submit", (event) => {
     event.preventDefault();
+    let target;
     try {
-      setBackend(url.value);
+      target = tidyBackend(url.value);
       url.setCustomValidity("");
     } catch (error) {
       url.setCustomValidity(error.message);
       url.reportValidity();
       return;
     }
-    rememberToken(token.value.trim());
+    // The password field initially contains the previous island's token.
+    // Changing only the backend URL must not rebind that secret to a new host.
+    const nextToken = tokenForBackendSwitch(
+      originalOrigin, target || location.origin, token.value, tokenEdited,
+    );
+    setBackend(target);
+    rememberToken(nextToken);
     // A reload rather than a re-fetch: every page holds state built from
     // one island -- a selected person, a map view, a roster -- and
     // carrying that across to a different island would show one island's

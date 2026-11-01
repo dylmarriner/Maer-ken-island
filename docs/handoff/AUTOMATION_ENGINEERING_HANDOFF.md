@@ -35,3 +35,14 @@ Next: run the slow acceptance suite in an isolated environment, then select the 
 - Shared browser apiUrl() now rejects scheme-relative/absolute, non-API, fragment, backslash and traversal paths before any JSON, command or image fetch can carry an owner token. Previously, with a same-host dashboard, a scheme-relative path could be resolved by the browser as a different origin if constructed from untrusted input. Cached backend origins are revalidated instead of trusted from localStorage.
 - OpenCommander amd evidence: Node dashboard tests **13/13 passed**, JavaScript syntax, cargo fmt --all -- --check, git diff --check passed. Added three regressions for poisoned storage, malicious paths across all three fetch helpers and valid API queries. No Rust simulation logic, replay hashes or owner state changed.
 - Remaining: [ ] exact-new-SHA CI; [ ] slow week/year replay, water/carbon/material ledgers and reference-pack acceptance; [ ] sourced ecology/industry roadmap, including serving species and real workforce data; [ ] owner review. Next: inspect the manual slow workflow and exact-commit CI, then advance an unblocked sourced simulation slice. Do not claim slow acceptance until it actually passes.
+
+## 2026-11-02 continuation: avoid re-binding prefilled owner tokens when switching islands
+
+- The server-connection form prefilled the current island's token. On a backend URL change, submitting without touching the password field called `rememberToken(oldToken)` after `setBackend(newOrigin)`, silently binding island A's credential to island B despite the earlier origin guard.
+- The form now distinguishes an explicitly edited destination token from an untouched prefill, clears the old credential when switching origins, and preserves a token on same-origin reconnect. The help text explains re-entry. No Rust single-writer, ledger, snapshot, replay or simulation configuration changed.
+- OpenCommander `amd` evidence: `node --test apps/island/tests/*.test.mjs` **15/15 passed**, `node --check apps/island/static/app.js`, `cargo fmt --all -- --check` and `git diff --check` passed.
+- [ ] Exact-new-SHA CI green.
+- [ ] Slow week/year deterministic replay and water/carbon/material ledger acceptance; manual slow run #41295467331 was still in progress at inspection.
+- [ ] Remaining sourced ecology, industry and human runtime tasks in `WORK_REMAINING.md`; owner acceptance.
+
+Next: inspect slow workflow completion and the exact-SHA CI, then take the next unblocked sourced simulation task. Never re-pin week digest without the full ledger and replay audit.

@@ -130,3 +130,23 @@ test('valid API query paths remain usable with and without a configured backend'
   app.setBackend('http://127.0.0.1:8080');
   assert.equal(app.apiUrl('/api/activity?limit=8'), 'http://127.0.0.1:8080/api/activity?limit=8');
 });
+
+test('server switch does not silently rebind the prefilled control token to another island', async () => {
+  const app = await setup();
+  app.rememberToken('old-island-secret');
+  const oldOrigin = location.origin;
+  const newOrigin = 'https://another-island.example';
+  const untouched = app.tokenForBackendSwitch(oldOrigin, newOrigin, app.storedToken(), false);
+  assert.equal(untouched, '');
+  app.setBackend(newOrigin);
+  app.rememberToken(untouched);
+  assert.equal(app.storedToken(), '');
+  assert.equal(sessionStorage.getItem(app.TOKEN_KEY), null);
+});
+
+test('same-island reconnect preserves token and deliberate new-island entry is allowed', async () => {
+  const app = await setup();
+  const oldOrigin = location.origin;
+  assert.equal(app.tokenForBackendSwitch(oldOrigin, oldOrigin, '  existing  ', false), 'existing');
+  assert.equal(app.tokenForBackendSwitch(oldOrigin, 'https://new.example', '  new-secret  ', true), 'new-secret');
+});
