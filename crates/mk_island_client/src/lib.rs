@@ -164,8 +164,7 @@ impl IslandClient {
     pub fn human(&self, agent_id: &str) -> Result<serde_json::Value, ClientError> {
         // IDs are URL path segments, not caller-supplied paths or queries.
         // Reject reserved delimiters instead of accidentally requesting another endpoint.
-        let path = human_path(agent_id).ok_or_else(|| ClientError::Malformed {
-            url: self.url("/api/world/humans"),
+        let path = human_path(agent_id).ok_or_else(|| ClientError::InvalidRequest {
             reason: "invalid human identifier: expected ASCII letters, digits, '-' or '_'".into(),
         })?;
         self.json(&path)
@@ -221,6 +220,14 @@ impl IslandClient {
         y1: f64,
         cap: usize,
     ) -> Result<Trees, ClientError> {
+        // A non-finite coordinate is not a geographic box and must never
+        // become a network request (or a confusing server-side parse error).
+        // Reversed bounds and cap=0 are valid server requests.
+        if ![x0, y0, x1, y1].iter().all(|value| value.is_finite()) {
+            return Err(ClientError::InvalidRequest {
+                reason: "tree box coordinates must be finite".into(),
+            });
+        }
         self.field(
             &format!("/api/trees?x0={x0}&y0={y0}&x1={x1}&y1={y1}&cap={cap}"),
             "trees",
@@ -519,9 +526,25 @@ mod human_id_tests {
         ] {
             assert!(human_path(id).is_none(), "{id}");
             assert!(
-                matches!(client.human(id), Err(ClientError::Malformed { .. })),
+                matches!(client.human(id), Err(ClientError::InvalidRequest { .. })),
                 "{id}"
             );
+        }
+    }
+
+    #[test]
+    fn non_finite_tree_box_is_rejected_locally_without_retry() {
+        let client = IslandClient::new("http://127.0.0.1:1", None);
+        for value in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            for axis in 0..4 {
+                let mut coords = [0.0, 0.0, 10.0, 10.0];
+                coords[axis] = value;
+                let err = client
+                    .trees_in(coords[0], coords[1], coords[2], coords[3], 100)
+                    .expect_err("invalid coordinates must be rejected before HTTP");
+                assert!(matches!(err, ClientError::InvalidRequest { .. }), "{err:?}");
+                assert!(!err.worth_retrying());
+            }
         }
     }
 
