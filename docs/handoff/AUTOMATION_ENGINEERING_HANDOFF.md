@@ -62,3 +62,11 @@ Next: inspect slow workflow completion and the exact-SHA CI, then take the next 
 - Added shared `personRecordPath` for both inspection and download, selecting the live or stored endpoint consistently and percent-encoding agent IDs.
 - OpenCommander AMD: 4/4 People-selection Node tests, JS syntax, Cargo formatting and git diff checks passed. No simulation state or canon modified.
 - Remaining: [ ] exact-commit full CI; [ ] week/year replay, water/carbon/material ledgers; [ ] sourced realism and industry roadmap. Next: validate CI and run slow deterministic acceptance before merge.
+
+## 2026-11-02: authenticated inspected-person export (code df7ac0a)
+
+- Canonical repo/branch verified: dylmarriner/Maer-ken-island, PR #68, not separate Maer-Ken. Sources: WORK_REMAINING.md, HANDOFF.md, docs/IMPLEMENTATION_READY_ROADMAP.md and reference packs.
+- People Download previously navigated directly to a live/stored API path without the JavaScript bearer token; protected exports could return 401 and a second GET could export a different tick. The UI now downloads the inspected JSON snapshot via a temporary Blob URL with safe filename and URL revocation. No extra network request or simulation mutation.
+- OpenCommander AMD: 21/21 browser Node tests, both JS syntax checks, cargo fmt --check and git diff --check passed. Prior exact-SHA full CI #41313267055 succeeded on 08852f4; new SHA CI required.
+- [ ] New exact-SHA full CI green; [ ] slow week/year replay hashes and water/carbon/material ledgers; [ ] sourced realism/industry/workforce milestones and deviation records; [ ] owner acceptance. No simulation, canon or live deployment changes.
+- Next: verify new CI, run slow acceptance on isolated runner, then implement a sourced roadmap item; never re-pin week digests without full audit.

@@ -17,8 +17,8 @@ export function createPersonSelection() {
 }
 
 // The live island record and the stored human record are different sources.
-// Use the same source for inspection and download so the exported JSON is
-// exactly what the user was looking at, including live state and tick.
+// Choose the correct live or stored inspection source. Downloads use the
+// already inspected JSON snapshot rather than fetching the endpoint again.
 export function personRecordPath(onTheIsland, agentId) {
   return (onTheIsland ? '/api/world/humans/' : '/api/humans/') +
     encodeURIComponent(agentId);
