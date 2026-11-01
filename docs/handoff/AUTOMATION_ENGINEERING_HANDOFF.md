@@ -88,3 +88,11 @@ Next: inspect slow workflow completion and the exact-SHA CI, then take the next 
 - [ ] Run ignored week/year slow simulation with replay hashes and material/water/carbon ledger audits before re-pinning digests.
 - [ ] Implement sourced ecology, industry and workforce tasks from `WORK_REMAINING.md`, document deviations and complete owner acceptance.
 - Next: verify new CI, obtain slow deterministic acceptance evidence, then select a sourced realism/industry slice. Avoid claiming full simulation acceptance from browser tests.
+
+## 2026-11-02 continuation: serve People dashboard module from embedded Rust binary
+
+- Canonical repo `dylmarriner/Maer-ken-island`, PR #68, not the separate Maer-Ken repo. The previous exact-head CI [#41338956880](https://github.com/dylmarriner/Maer-ken-island/actions/runs/41338956880) failed `serve::pages::tests::pages_are_served_with_their_content_types`: stale test expected `/api/humans` in `people.js` after the roster source was extracted to `people-selection.mjs`.
+- More importantly, the embedded Rust `ASSETS` table did **not serve** `/static/people-selection.mjs`, despite `people.js` importing it, so the actual People page could fail to load in the installed single-binary server. Registered the module with the correct JavaScript content type, updated the route test, added a regression verifying imported static modules are served, and extended markup-insertion checks to `.mjs` files.
+- OpenCommander `amd`: **32/32** dashboard Node tests, `cargo fmt --all -- --check` and `git diff --check` passed. Local targeted Rust test was attempted but the fresh dependency compilation exceeded the 240-second command timeout; **Rust test success is not claimed**. New exact-head CI must prove it. No simulation tick, single-writer, ledgers, snapshots, replay or owner governance changed.
+- [ ] Exact-new-SHA full CI including Rust server tests green; [ ] slow week/year deterministic replay with material/water/carbon ledger audit; [ ] sourced ecology, industry and workforce tasks from `WORK_REMAINING.md`; [ ] owner acceptance.
+- Next: inspect CI for the embedded asset regression, then run slow acceptance on a capacity-safe isolated runner. Do not re-pin digests without the full audit.
