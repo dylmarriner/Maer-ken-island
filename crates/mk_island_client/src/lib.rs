@@ -523,6 +523,8 @@ mod human_id_tests {
                 "{id}"
             );
         }
+    }
+
     #[test]
     fn failed_command_serialization_is_not_sent_as_null() {
         struct CannotSerialize;
@@ -542,6 +544,5 @@ mod human_id_tests {
             .expect_err("a serialization failure must not become an HTTP request");
         assert!(matches!(err, ClientError::InvalidRequest { .. }), "{err:?}");
         assert!(!err.worth_retrying());
-    }
     }
 }
