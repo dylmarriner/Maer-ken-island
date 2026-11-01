@@ -46,3 +46,12 @@ Next: run the slow acceptance suite in an isolated environment, then select the 
 - [ ] Remaining sourced ecology, industry and human runtime tasks in `WORK_REMAINING.md`; owner acceptance.
 
 Next: inspect slow workflow completion and the exact-SHA CI, then take the next unblocked sourced simulation task. Never re-pin week digest without the full ledger and replay audit.
+
+## 2026-11-02 continuation: reject stale People inspector responses
+
+- Found that the People page guarded successful requests only by selected agent ID and did not guard errors. A late failure could replace the newer person's details with an obsolete error/retry button. A -> B -> A also defeated the ID-only guard, allowing the first A response to overwrite the newest A.
+- Added a monotonic per-selection generation helper and wired both success and failure rendering through it. An empty roster invalidates pending requests. No simulation state, Rust single-writer, ledger, snapshots, append-only log, replay or owner governance changed.
+- OpenCommander `amd` verification: `node --test apps/island/tests/*.test.mjs` **18/18 passed** (3 new async race regressions); `node --check` on both changed modules, `cargo fmt --all -- --check`, and `git diff --check` passed.
+- [ ] Verify exact-commit PR CI, slow week/year simulation, ledger and deterministic replay evidence.
+- [ ] Continue sourced ecology/industry work from `WORK_REMAINING.md` and owner acceptance; no week digest re-pin without slow audit.
+- Next: inspect exact-SHA CI and execute slow acceptance in an isolated environment, then take the next unblocked sourced realism slice.

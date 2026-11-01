@@ -14,6 +14,7 @@ import {
   message,
   reportOffline,
 } from "/static/app.js";
+import { createPersonSelection } from "/static/people-selection.mjs";
 
 const rosterEl = document.getElementById("roster");
 const rosterCountEl = document.getElementById("roster-count");
@@ -32,6 +33,7 @@ const leadEl = document.getElementById("people-lead");
 
 let everyone = [];
 let selected = null;
+const personSelection = createPersonSelection();
 
 function displayName(human) {
   return human.name || human.agent_id;
@@ -224,19 +226,19 @@ async function select(agentId) {
   url.searchParams.set("human", agentId);
   history.replaceState(null, "", url);
   loadingPerson();
-  try {
-    const path = onTheIsland ? "/api/world/humans/" : "/api/humans/";
-    const person = await getJson(path + encodeURIComponent(agentId));
-    if (selected !== agentId) return; // a faster click won
-    drawPerson(person);
-  } catch (error) {
-    detailEl.replaceChildren(
-      emptyState("That record could not be read", error.message),
-    );
-    const retry = el("button", "Try again", { type: "button", class: "secondary" });
-    retry.addEventListener("click", () => select(agentId));
-    detailEl.append(retry);
-  }
+  const path = onTheIsland ? "/api/world/humans/" : "/api/humans/";
+  await personSelection.load(
+    () => getJson(path + encodeURIComponent(agentId)),
+    (person) => drawPerson(person),
+    (error) => {
+      detailEl.replaceChildren(
+        emptyState("That record could not be read", explain(error)),
+      );
+      const retry = el("button", "Try again", { type: "button", class: "secondary" });
+      retry.addEventListener("click", () => select(agentId));
+      detailEl.append(retry);
+    },
+  );
 }
 
 function describeStatus(status) {
@@ -290,6 +292,8 @@ async function load() {
     }
     fillChrome(status);
     if (everyone.length === 0) {
+      personSelection.invalidate();
+      selected = null;
       rosterEl.replaceChildren();
       detailEl.replaceChildren(
         emptyState(
