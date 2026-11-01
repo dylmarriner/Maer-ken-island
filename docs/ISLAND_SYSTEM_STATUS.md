@@ -389,3 +389,12 @@ cost the resting baseline (D22).
 - Added a non-overlapping inspector controller: a new selection aborts a pending refresh, stale responses cannot overwrite a different person, and a transient poll error preserves the last successful record. JSON export continues to represent the exact displayed snapshot. No simulation logic, deterministic replay hashes, ledgers or source packs changed.
 - OpenCommander `amd`: **29/29** targeted Node tests passed (three new inspector tests), JS syntax, `cargo fmt --all -- --check`, and `git diff --check` passed. Rust and full CI on the new SHA are pending.
 - [ ] Exact-SHA CI; [ ] slow week/year deterministic replay and carbon/water/material ledger acceptance; [ ] sourced ecology/industry and human autonomy milestones. Next: verify CI and run slow tests, then advance a sourced physics/industry slice.
+
+
+## 2026-11-02 continuation: live People roster independent of stored population
+
+- Verified the canonical dylmarriner/Maer-ken-island remote and PR #68; previous exact-head [CI #41333346433](https://github.com/dylmarriner/Maer-ken-island/actions/runs/41333346433) **passed**.
+- Found the live People page eagerly fetched /api/humans (stored Phase-0b population) before choosing /api/world/humans (running island). A stale or inaccessible stored endpoint could blank the **live** roster even though the running island was healthy. Now selects the source first and fetches only the relevant roster; a failed live request is not silently replaced by unrelated stored records.
+- Regression tests failed before the change (missing roster-source helper), then **32/32** Node dashboard tests passed including three new source-isolation cases. JS syntax, Cargo formatting and Git diff checks passed on OpenCommander amd. No simulation, ledger, snapshot, seed, source pack or replay digest changed.
+- [ ] Exact-new-SHA CI green. [ ] Slow week/year replay hashes and water/carbon/material ledger acceptance. [ ] Sourced ecology/industry, autonomy and open owner decisions.
+- Next: confirm CI and run the capacity-safe slow simulation acceptance; then advance a sourced physics/industry milestone.

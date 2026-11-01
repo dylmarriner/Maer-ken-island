@@ -14,7 +14,7 @@ import {
   message,
   reportOffline,
 } from "/static/app.js";
-import { createLivePersonInspector, createLatestRequest, personRecordPath, personRecordExport } from "/static/people-selection.mjs";
+import { createLivePersonInspector, createLatestRequest, loadPeopleRoster, personRecordPath, personRecordExport } from "/static/people-selection.mjs";
 
 const rosterEl = document.getElementById("roster");
 const rosterCountEl = document.getElementById("roster-count");
@@ -274,13 +274,9 @@ function describeWorld(world) {
 
 async function load() {
   try {
-    const [status, stored, world] = await Promise.all([
-      getJson("/api/status"),
-      getJson("/api/humans"),
-      getJson("/api/world"),
-    ]);
+    const { status, roster, onTheIsland: live } = await loadPeopleRoster(getJson);
     clearOffline();
-    onTheIsland = world && world.running === true;
+    onTheIsland = live;
     if (onTheIsland) {
       // The standing copy says nothing has stepped these people, which is
       // true of a stored population and false of a living one.
@@ -288,7 +284,6 @@ async function load() {
         "Pick someone to see how they are: who they are, what their body is " +
         "doing, how they feel and how they think. These people are living on " +
         "the island — the readings move as they breathe, sleep and eat.";
-      const roster = await getJson("/api/world/humans");
       // The world's people in the shape this roster already draws.
       everyone = roster.people.map((person) => ({
         agent_id: person.agent_id,
@@ -300,7 +295,7 @@ async function load() {
       }));
       statusEl.textContent = describeWorld(roster);
     } else {
-      everyone = stored;
+      everyone = roster;
       statusEl.textContent = describeStatus(status);
     }
     fillChrome(status);

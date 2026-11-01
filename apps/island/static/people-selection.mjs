@@ -96,3 +96,16 @@ export function personRecordExport(person) {
   const safeName = agentId.replace(/[^A-Za-z0-9._-]/g, "_").replace(/^\.+$/, "_").slice(0, 100) || "person";
   return { filename: safeName + ".json", json: JSON.stringify(person.human, null, 2) };
 }
+
+// The stored population and the running island are distinct sources.
+// A live island must remain inspectable even when the stored-population
+// endpoint is unavailable; never silently substitute stale stored records.
+export async function loadPeopleRoster(fetchJson) {
+  const [status, world] = await Promise.all([
+    fetchJson('/api/status'),
+    fetchJson('/api/world'),
+  ]);
+  const onTheIsland = world?.running === true;
+  const roster = await fetchJson(onTheIsland ? '/api/world/humans' : '/api/humans');
+  return { status, world, roster, onTheIsland };
+}
