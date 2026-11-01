@@ -134,3 +134,10 @@ cargo run -p island -- serve --scenario fixtures/island/default_scenario.json   
 - The web island map now exposes already-persisted `/api/cell` biome, mean annual temperature, precipitation and land NPP on click, using a pure tested formatter. Sea cells do not claim that unmodelled marine NPP is zero biological activity. Added the embedded module to the Rust server's asset table and the web CI test job.
 - Verified on OpenCommander `amd`: `node --test apps/island/tests/cell-details.test.mjs` **3/3 passed**, Node syntax checks passed, `cargo fmt --all -- --check` passed. Rust server test could **not** run offline because `aead v0.5.2` was not cached. Full CI on the new SHA must confirm the Rust asset route test.
 - No simulation/ledger/replay change; D55 remains open. Next: confirm full CI, run slow week/year replay and ledger acceptance, then implement a sourced realism/industry item from `WORK_REMAINING.md`.
+
+
+## 2026-11-02 continuation: live People inspector refresh
+- The People inspector formerly loaded each person's record only on selection, even while the island clock continued ticking. It now refreshes the selected **live** record every five seconds without a loading skeleton or URL change; hidden tabs and stored-only populations do not poll.
+- Added a non-overlapping inspector controller: a new selection aborts a pending refresh, stale responses cannot overwrite a different person, and a transient poll error preserves the last successful record. JSON export continues to represent the exact displayed snapshot. No simulation logic, deterministic replay hashes, ledgers or source packs changed.
+- OpenCommander `amd`: **29/29** targeted Node tests passed (three new inspector tests), JS syntax, `cargo fmt --all -- --check`, and `git diff --check` passed. Rust and full CI on the new SHA are pending.
+- [ ] Exact-SHA CI; [ ] slow week/year deterministic replay and carbon/water/material ledger acceptance; [ ] sourced ecology/industry and human autonomy milestones. Next: verify CI and run slow tests, then advance a sourced physics/industry slice.

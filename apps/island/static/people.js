@@ -14,7 +14,7 @@ import {
   message,
   reportOffline,
 } from "/static/app.js";
-import { createPersonSelection, createLatestRequest, personRecordPath, personRecordExport } from "/static/people-selection.mjs";
+import { createLivePersonInspector, createLatestRequest, personRecordPath, personRecordExport } from "/static/people-selection.mjs";
 
 const rosterEl = document.getElementById("roster");
 const rosterCountEl = document.getElementById("roster-count");
@@ -33,7 +33,7 @@ const leadEl = document.getElementById("people-lead");
 
 let everyone = [];
 let selected = null;
-const personSelection = createPersonSelection();
+
 
 function displayName(human) {
   return human.name || human.agent_id;
@@ -225,6 +225,25 @@ function loadingPerson() {
   detailEl.replaceChildren(wrap);
 }
 
+const personInspection = createLivePersonInspector(
+  (live, agentId, signal) => getJson(personRecordPath(live, agentId), { signal }),
+  (person) => {
+    clearOffline();
+    drawPerson(person);
+  },
+  (error) => {
+    detailEl.replaceChildren(emptyState("That record could not be read", explain(error)));
+    const retry = el("button", "Try again", { type: "button", class: "secondary" });
+    retry.addEventListener("click", () => select(selected));
+    detailEl.append(retry);
+  },
+  (error) => {
+    // Do not replace the last good inspected snapshot on a transient poll
+    // failure. The next successful refresh will clear the offline warning.
+    if (error.status !== 404) reportOffline(error);
+  },
+);
+
 async function select(agentId) {
   selected = agentId;
   markSelected(agentId);
@@ -232,19 +251,7 @@ async function select(agentId) {
   url.searchParams.set("human", agentId);
   history.replaceState(null, "", url);
   loadingPerson();
-  const path = personRecordPath(onTheIsland, agentId);
-  await personSelection.load(
-    (signal) => getJson(path, { signal }),
-    (person) => drawPerson(person),
-    (error) => {
-      detailEl.replaceChildren(
-        emptyState("That record could not be read", explain(error)),
-      );
-      const retry = el("button", "Try again", { type: "button", class: "secondary" });
-      retry.addEventListener("click", () => select(agentId));
-      detailEl.append(retry);
-    },
-  );
+  await personInspection.select(agentId, onTheIsland);
 }
 
 function describeStatus(status) {
@@ -298,7 +305,7 @@ async function load() {
     }
     fillChrome(status);
     if (everyone.length === 0) {
-      personSelection.invalidate();
+      personInspection.invalidate();
       selected = null;
       rosterEl.replaceChildren();
       detailEl.replaceChildren(
@@ -336,6 +343,15 @@ addEventListener("popstate", () => {
 // token into when the first request comes back 401.
 mountServerChrome();
 load();
+
+// Live human records change on every simulation tick. Refresh the selected
+// person's snapshot without resetting the scroll, URL or loading skeleton.
+// Hidden tabs and stored (non-running) populations do not poll.
+setInterval(() => {
+  if (onTheIsland && selected && !document.hidden) {
+    void personInspection.refresh();
+  }
+}, 5000);
 
 // ---------------------------------------------------------------------------
 // What the islanders have said to each other.

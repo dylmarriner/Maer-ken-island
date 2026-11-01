@@ -632,3 +632,10 @@ invertebrate densities, fire danger indices (see each report's "unsourced" secti
   sources; the container's own network blocks most hosts.
 - **Persist digests.** `WEEK_DIGEST` is `577e4215…540a`; the planetary topology pin is
   `e4ece246…73e2`. Any change that moves either is a behaviour change and must say so.
+
+
+## 2026-11-02 continuation: live People inspector refresh
+- The People inspector formerly loaded each person's record only on selection, even while the island clock continued ticking. It now refreshes the selected **live** record every five seconds without a loading skeleton or URL change; hidden tabs and stored-only populations do not poll.
+- Added a non-overlapping inspector controller: a new selection aborts a pending refresh, stale responses cannot overwrite a different person, and a transient poll error preserves the last successful record. JSON export continues to represent the exact displayed snapshot. No simulation logic, deterministic replay hashes, ledgers or source packs changed.
+- OpenCommander `amd`: **29/29** targeted Node tests passed (three new inspector tests), JS syntax, `cargo fmt --all -- --check`, and `git diff --check` passed. Rust and full CI on the new SHA are pending.
+- [ ] Exact-SHA CI; [ ] slow week/year deterministic replay and carbon/water/material ledger acceptance; [ ] sourced ecology/industry and human autonomy milestones. Next: verify CI and run slow tests, then advance a sourced physics/industry slice.

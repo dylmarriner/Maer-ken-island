@@ -382,3 +382,10 @@ cost the resting baseline (D22).
 - The five-year run was made before meals and drinks were booked where people stand; it has not been repeated on the new bookkeeping, so its end state describes the earlier one. It also predates the merge with `main`.
 - Children: they are small, grow on the WHO curves, eat what their own respiration burned, and under five years old stay with their mother. Older children choose their own actions, but not an adult's: under 12 they do not mine, build, craft, code or use email and search, and under 16 they take no part in harm or intimacy (`humans/autonomy.rs` `age_substitute`; the thresholds are round numbers, not sourced); a child whose mother has died is not cared for; schooling and play are not modelled.
 - Upstream pull requests for every divergence in `UPSTREAM.md`.
+
+
+## 2026-11-02 continuation: live People inspector refresh
+- The People inspector formerly loaded each person's record only on selection, even while the island clock continued ticking. It now refreshes the selected **live** record every five seconds without a loading skeleton or URL change; hidden tabs and stored-only populations do not poll.
+- Added a non-overlapping inspector controller: a new selection aborts a pending refresh, stale responses cannot overwrite a different person, and a transient poll error preserves the last successful record. JSON export continues to represent the exact displayed snapshot. No simulation logic, deterministic replay hashes, ledgers or source packs changed.
+- OpenCommander `amd`: **29/29** targeted Node tests passed (three new inspector tests), JS syntax, `cargo fmt --all -- --check`, and `git diff --check` passed. Rust and full CI on the new SHA are pending.
+- [ ] Exact-SHA CI; [ ] slow week/year deterministic replay and carbon/water/material ledger acceptance; [ ] sourced ecology/industry and human autonomy milestones. Next: verify CI and run slow tests, then advance a sourced physics/industry slice.

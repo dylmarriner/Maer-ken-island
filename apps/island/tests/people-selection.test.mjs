@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createPersonSelection, createLatestRequest, personRecordPath, personRecordExport } from '../static/people-selection.mjs';
+import { createPersonSelection, createLatestRequest, createLivePersonInspector, personRecordPath, personRecordExport } from '../static/people-selection.mjs';
 
 function deferred() {
   let resolve;
@@ -133,4 +133,73 @@ test('invalidating the inspector cancels a pending request', async () => {
   assert.equal(signal.aborted, true);
   pending.reject(new DOMException('aborted', 'AbortError'));
   await first;
+});
+
+test('live inspector refreshes the same person without overlapping requests', async () => {
+  const pending = deferred();
+  const fetched = [];
+  const shown = [];
+  const inspector = createLivePersonInspector(
+    (live, id, signal) => {
+      fetched.push({ live, id, signal });
+      return fetched.length === 2 ? pending.promise : Promise.resolve({ tick: fetched.length });
+    },
+    (record) => shown.push(record.tick),
+    () => assert.fail('unexpected selection failure'),
+    () => assert.fail('unexpected refresh failure'),
+  );
+  await inspector.select('Gem-D', true);
+  const refresh = inspector.refresh();
+  assert.equal(await inspector.refresh(), false);
+  pending.resolve({ tick: 2 });
+  assert.equal(await refresh, true);
+  assert.deepEqual(shown, [1, 2]);
+  assert.deepEqual(fetched.map(({ live, id }) => [live, id]), [[true, 'Gem-D'], [true, 'Gem-D']]);
+});
+
+test('changing selection cancels a pending live refresh without stale rendering', async () => {
+  const pending = deferred();
+  const shown = [];
+  let signal;
+  const inspector = createLivePersonInspector(
+    (_live, id, currentSignal) => {
+      if (id === 'Gem-D' && shown.length) {
+        signal = currentSignal;
+        return pending.promise;
+      }
+      return Promise.resolve({ id });
+    },
+    (record) => shown.push(record.id),
+    () => assert.fail('unexpected selection failure'),
+    () => assert.fail('unexpected refresh failure'),
+  );
+  await inspector.select('Gem-D', true);
+  const refresh = inspector.refresh();
+  await inspector.select('Gem-K', true);
+  assert.equal(signal.aborted, true);
+  pending.resolve({ id: 'obsolete Gem-D' });
+  await refresh;
+  assert.deepEqual(shown, ['Gem-D', 'Gem-K']);
+});
+
+test('failed live refresh preserves inspected record and retries; stored records do not poll', async () => {
+  const shown = [];
+  const errors = [];
+  let calls = 0;
+  const inspector = createLivePersonInspector(
+    async () => {
+      if (++calls === 3) throw new Error('temporary offline');
+      return { tick: calls };
+    },
+    (record) => shown.push(record.tick),
+    () => assert.fail('unexpected selection failure'),
+    (error) => errors.push(error.message),
+  );
+  await inspector.select('Gem-D', false);
+  assert.equal(await inspector.refresh(), false);
+  await inspector.select('Gem-D', true);
+  assert.equal(await inspector.refresh(), true);
+  assert.equal(await inspector.refresh(), true);
+  assert.deepEqual(shown, [1, 2, 4]);
+  assert.deepEqual(errors, ['temporary offline']);
 });

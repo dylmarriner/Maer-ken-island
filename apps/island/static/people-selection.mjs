@@ -32,6 +32,52 @@ export function createLatestRequest() {
 // latest-wins contract so slow responses cannot rewind the visible timeline.
 export const createPersonSelection = createLatestRequest;
 
+// Live inspection must keep moving with the simulated clock. Polls are
+// non-overlapping, never replace a deliberate selection, and leave the last
+// good snapshot visible if the backend briefly fails.
+export function createLivePersonInspector(fetchRecord, showRecord, showSelectionError, showRefreshError) {
+  const latest = createLatestRequest();
+  let active = null;
+  let pending = false;
+  let revision = 0;
+
+  async function request(refresh) {
+    if (!active || (refresh && (!active.live || pending))) return false;
+    const { live, id } = active;
+    const current = revision;
+    pending = true;
+    try {
+      await latest.load(
+        (signal) => fetchRecord(live, id, signal),
+        (record) => { if (revision === current) showRecord(record); },
+        (error) => {
+          if (revision !== current) return;
+          if (refresh) showRefreshError(error);
+          else showSelectionError(error);
+        },
+      );
+    } finally {
+      if (revision === current) pending = false;
+    }
+    return true;
+  }
+
+  return {
+    select(id, live) {
+      revision += 1;
+      active = { id, live };
+      return request(false);
+    },
+    refresh() { return request(true); },
+    invalidate() {
+      revision += 1;
+      active = null;
+      pending = false;
+      latest.invalidate();
+    },
+  };
+}
+
 // The live island record and the stored human record are different sources.
 // Choose the correct live or stored inspection source. Downloads use the
 // already inspected JSON snapshot rather than fetching the endpoint again.
