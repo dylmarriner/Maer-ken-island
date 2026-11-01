@@ -74,6 +74,9 @@ impl IslandClient {
             token: token.filter(|t| !t.trim().is_empty()),
             agent: ureq::AgentBuilder::new()
                 .timeout(TIMEOUT)
+                // A backend must not redirect requests carrying an owner token
+                // to another origin (or silently move reads/writes elsewhere).
+                .redirects(0)
                 .user_agent(concat!("mk_island_client/", env!("CARGO_PKG_VERSION")))
                 .build(),
         }
@@ -546,6 +549,36 @@ mod human_id_tests {
                 assert!(!err.worth_retrying());
             }
         }
+    }
+
+    #[test]
+    fn redirect_does_not_forward_a_request_or_bearer_token() {
+        use std::io::{Read, Write};
+        use std::net::TcpListener;
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("local test listener");
+        let port = listener.local_addr().expect("listener address").port();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("local request");
+            let mut request = [0u8; 2048];
+            let count = stream.read(&mut request).expect("read request");
+            let headers = String::from_utf8_lossy(&request[..count]);
+            assert!(headers.contains("Bearer local-test-token"));
+            stream
+                .write_all(
+                    b"HTTP/1.1 302 Found\r\nLocation: http://127.0.0.1:1/api/version\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                )
+                .expect("write redirect");
+        });
+
+        let client = IslandClient::new(
+            &format!("http://127.0.0.1:{port}"),
+            Some("local-test-token".into()),
+        );
+        let err = client.version().expect_err("redirect must not be followed");
+        // Following the redirect would produce Unreachable from port 1.
+        assert!(!matches!(err, ClientError::Unreachable { .. }), "{err:?}");
+        server.join().expect("redirect server completed");
     }
 
     #[test]
