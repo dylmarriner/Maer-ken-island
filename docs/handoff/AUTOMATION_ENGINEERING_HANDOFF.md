@@ -104,3 +104,12 @@ Next: inspect slow workflow completion and the exact-SHA CI, then take the next 
 - Regression first failed before implementation (missing exports); **35/35** Node dashboard tests passed afterward, including selection reconciliation, non-overlap, failure preservation and malformed response validation. Both JS syntax checks, Cargo formatting and git diff --check passed on OpenCommander `amd`.
 - [ ] Exact-new-SHA CI including embedded Rust asset serving; [ ] ignored week/year deterministic replay and material/water/carbon ledger audit on capacity-safe runner; [ ] sourced ecology/industry/workforce work from `WORK_REMAINING.md` and deviation/reference-pack evidence; [ ] owner acceptance.
 - Next: verify exact-commit CI, execute slow acceptance without re-pinning digests prematurely, then implement a sourced simulation milestone. No live simulation or canon change.
+
+## 2026-11-02 continuation: cancel obsolete live People roster requests
+
+- Confirmed canonical `dylmarriner/Maer-ken-island`, PR #68, `WORK_REMAINING.md` and the implementation-ready roadmap. Baseline PR #68 CI #41349084330 passed all non-nightly jobs at `07e04dd`; slow week/year acceptance was skipped.
+- Found the five-second live roster poller lacked cancellation/invalidation. A request started in a visible tab could complete after the tab was hidden, applying stale roster data, and an obsolete request could occupy the only pending slot.
+- Added abortable, revision-guarded roster polling and wired visibility/pagehide invalidation. A newly visible tab can refresh without waiting for an obsolete fetch. No Rust single-writer, canon, append-only logs, snapshots, replay, ledgers or owner governance changed.
+- Two new Node regressions failed before the fix; after, **37/37 dashboard Node tests passed**, both JS syntax checks, Cargo fmt and `git diff --check` passed on OpenCommander `amd`.
+- [ ] Exact-new-SHA full CI green; [ ] ignored week/year replay-hash and material/water/carbon ledger acceptance on a capacity-safe runner; [ ] sourced ecology/industry/workforce milestones and deviations; [ ] owner acceptance.
+- Next: verify exact-commit CI, run slow deterministic acceptance without prematurely re-pinning digests, then implement the next sourced roadmap item. No live simulation or deployment changes.
