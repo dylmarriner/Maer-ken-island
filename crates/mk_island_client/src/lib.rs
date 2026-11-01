@@ -314,6 +314,32 @@ impl IslandClient {
 
     // ---- the plumbing ----
 
+    /// Reject malformed or ambiguous backend addresses before any request.
+    /// An origin must not smuggle credentials, a path, query or fragment into
+    /// the URL to which an owner bearer token is attached.
+    fn validate_base(&self) -> Result<(), ClientError> {
+        let invalid = || {
+            ClientError::InvalidRequest {
+            reason: "backend address must be an HTTP(S) origin without credentials, path, query or fragment".into(),
+        }
+        };
+        if self.base.trim() != self.base || self.base.contains('\\') {
+            return Err(invalid());
+        }
+        let parsed = url::Url::parse(&self.base).map_err(|_| invalid())?;
+        if !matches!(parsed.scheme(), "http" | "https")
+            || parsed.host().is_none()
+            || !parsed.username().is_empty()
+            || parsed.password().is_some()
+            || parsed.path() != "/"
+            || parsed.query().is_some()
+            || parsed.fragment().is_some()
+        {
+            return Err(invalid());
+        }
+        Ok(())
+    }
+
     fn url(&self, path: &str) -> String {
         format!("{}{path}", self.base)
     }
@@ -361,6 +387,7 @@ impl IslandClient {
     }
 
     fn text(&self, path: &str) -> Result<String, ClientError> {
+        self.validate_base()?;
         match self.request("GET", path).call() {
             Ok(response) => response
                 .into_string()
@@ -373,6 +400,7 @@ impl IslandClient {
     }
 
     fn bytes(&self, path: &str) -> Result<Vec<u8>, ClientError> {
+        self.validate_base()?;
         match self.request("GET", path).call() {
             Ok(response) => {
                 let mut buffer = Vec::new();
@@ -402,6 +430,7 @@ impl IslandClient {
     }
 
     fn post(&self, path: &str, body: &serde_json::Value) -> Result<Accepted, ClientError> {
+        self.validate_base()?;
         match self.request("POST", path).send_json(body.clone()) {
             Ok(response) => {
                 let url = self.url(path);
@@ -548,6 +577,30 @@ mod human_id_tests {
                 assert!(matches!(err, ClientError::InvalidRequest { .. }), "{err:?}");
                 assert!(!err.worth_retrying());
             }
+        }
+    }
+
+    #[test]
+    fn invalid_backend_origins_are_rejected_locally_without_leaking_credentials() {
+        for base in [
+            "http://user:secret@127.0.0.1:1",
+            "http://127.0.0.1:1/production",
+            "http://127.0.0.1:1?target=production",
+            "http://127.0.0.1:1#fragment",
+            "file:///tmp/island",
+            "http:///",
+        ] {
+            let client = IslandClient::new(base, Some("owner-token".into()));
+            let err = client
+                .version()
+                .expect_err("unsafe origin must not be contacted");
+            assert!(
+                matches!(err, ClientError::InvalidRequest { .. }),
+                "{base}: {err:?}"
+            );
+            assert!(!err.to_string().contains("secret"));
+            assert!(!err.to_string().contains("owner-token"));
+            assert!(!err.worth_retrying());
         }
     }
 
