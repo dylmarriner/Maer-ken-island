@@ -14,7 +14,7 @@ import {
   message,
   reportOffline,
 } from "/static/app.js";
-import { createLivePersonInspector, createLatestRequest, loadPeopleRoster, personRecordPath, personRecordExport } from "/static/people-selection.mjs";
+import { createLivePersonInspector, createLatestRequest, createLiveRosterPoller, reconcileLiveRoster, loadPeopleRoster, personRecordPath, personRecordExport } from "/static/people-selection.mjs";
 
 const rosterEl = document.getElementById("roster");
 const rosterCountEl = document.getElementById("roster-count");
@@ -285,14 +285,7 @@ async function load() {
         "doing, how they feel and how they think. These people are living on " +
         "the island — the readings move as they breathe, sleep and eat.";
       // The world's people in the shape this roster already draws.
-      everyone = roster.people.map((person) => ({
-        agent_id: person.agent_id,
-        name: person.agent_id,
-        human_id: person.agent_id,
-        biological_sex: "",
-        status: person.alive ? "Alive" : "Dead",
-        age_years: person.age_years,
-      }));
+      everyone = reconcileLiveRoster(roster, selected).people;
       statusEl.textContent = describeWorld(roster);
     } else {
       everyone = roster;
@@ -325,6 +318,30 @@ async function load() {
   }
 }
 
+// The selected record already refreshes, but the roster must also reflect
+// arrivals and deaths. Keep the current selection and inspector intact when
+// it still exists; only select a different person when the old one disappears.
+const liveRosterPoller = createLiveRosterPoller(
+  () => getJson("/api/world/humans"),
+  (roster) => {
+    const next = reconcileLiveRoster(roster, selected);
+    everyone = next.people;
+    statusEl.textContent = describeWorld(roster);
+    clearOffline();
+    if (everyone.length === 0) {
+      personInspection.invalidate();
+      selected = null;
+      rosterEl.replaceChildren();
+      rosterCountEl.textContent = "Nobody lives on the island right now.";
+      detailEl.replaceChildren(emptyState("Nobody lives here yet", "The running island has nobody to inspect."));
+      return;
+    }
+    drawRoster();
+    if (next.selectionChanged) void select(next.selected);
+  },
+  (error) => { if (error.status !== 404) reportOffline(error); },
+);
+
 searchEl.addEventListener("input", drawRoster);
 sortEl.addEventListener("change", drawRoster);
 rosterEl.addEventListener("keydown", onRosterKey);
@@ -338,6 +355,12 @@ addEventListener("popstate", () => {
 // token into when the first request comes back 401.
 mountServerChrome();
 load();
+
+// Refresh the roster too: the initial list must not stay frozen while the
+// simulated population changes. Hidden tabs and stored populations do not poll.
+setInterval(() => {
+  if (onTheIsland && !document.hidden) void liveRosterPoller.refresh();
+}, 5000);
 
 // Live human records change on every simulation tick. Refresh the selected
 // person's snapshot without resetting the scroll, URL or loading skeleton.

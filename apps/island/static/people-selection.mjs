@@ -109,3 +109,45 @@ export async function loadPeopleRoster(fetchJson) {
   const roster = await fetchJson(onTheIsland ? '/api/world/humans' : '/api/humans');
   return { status, world, roster, onTheIsland };
 }
+
+
+// The running world's roster changes as people arrive, age and die. Refresh
+// it without reselecting the same person or replacing a valid inspector
+// snapshot. Stored populations remain a separate, non-polled source.
+export function reconcileLiveRoster(roster, currentSelection) {
+  if (!roster || !Array.isArray(roster.people) ||
+      roster.people.some((person) => !person || typeof person.agent_id !== 'string')) {
+    throw new TypeError('Invalid live island roster');
+  }
+  const people = roster.people.map((person) => ({
+    agent_id: person.agent_id,
+    name: person.agent_id,
+    human_id: person.agent_id,
+    biological_sex: '',
+    status: person.alive ? 'Alive' : 'Dead',
+    age_years: person.age_years,
+  }));
+  const selected = people.some((person) => person.agent_id === currentSelection)
+    ? currentSelection
+    : (people[0]?.agent_id ?? null);
+  return { people, selected, selectionChanged: selected !== currentSelection };
+}
+
+export function createLiveRosterPoller(fetchRoster, showRoster, showError) {
+  let pending = false;
+  return {
+    async refresh() {
+      if (pending) return false;
+      pending = true;
+      try {
+        const roster = await fetchRoster();
+        showRoster(roster);
+      } catch (error) {
+        showError(error);
+      } finally {
+        pending = false;
+      }
+      return true;
+    },
+  };
+}
