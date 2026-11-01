@@ -103,3 +103,34 @@ test('a late conversation poll failure cannot hide a newer successful panel', as
   await first;
   assert.deepEqual(visible, [104]);
 });
+
+test('new selection cancels the previous network request without cancelling the newest', async () => {
+  const latest = createLatestRequest();
+  const old = deferred();
+  const signals = [];
+  const shown = [];
+  const first = latest.load((signal) => { signals.push(signal); return old.promise; },
+    (value) => shown.push(value), () => shown.push('old error'));
+  const second = latest.load((signal) => { signals.push(signal); return Promise.resolve('current'); },
+    (value) => shown.push(value), () => shown.push('new error'));
+  await second;
+  assert.equal(signals.length, 2);
+  assert.ok(signals[0] instanceof AbortSignal);
+  assert.equal(signals[0].aborted, true);
+  assert.equal(signals[1].aborted, false);
+  old.reject(new DOMException('aborted', 'AbortError'));
+  await first;
+  assert.deepEqual(shown, ['current']);
+});
+
+test('invalidating the inspector cancels a pending request', async () => {
+  const latest = createLatestRequest();
+  const pending = deferred();
+  let signal;
+  const first = latest.load((s) => { signal = s; return pending.promise; },
+    () => assert.fail('stale result'), () => assert.fail('stale error'));
+  latest.invalidate();
+  assert.equal(signal.aborted, true);
+  pending.reject(new DOMException('aborted', 'AbortError'));
+  await first;
+});

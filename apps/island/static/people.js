@@ -234,7 +234,7 @@ async function select(agentId) {
   loadingPerson();
   const path = personRecordPath(onTheIsland, agentId);
   await personSelection.load(
-    () => getJson(path),
+    (signal) => getJson(path, { signal }),
     (person) => drawPerson(person),
     (error) => {
       detailEl.replaceChildren(
@@ -400,7 +400,7 @@ async function loadConversations() {
   // A slow earlier poll must not replace newer dialogue or hide the panel
   // after a later poll succeeded. Both successes and failures are ordered.
   await conversationRequest.load(
-    () => getJson("/api/conversations"),
+    (signal) => getJson("/api/conversations", { signal }),
     (data) => {
       // Shown rather than paraphrased, like the island page's notes: a reader
       // needs to know these lines are composed from real state and that no

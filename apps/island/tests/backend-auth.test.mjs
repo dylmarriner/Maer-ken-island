@@ -150,3 +150,18 @@ test('same-island reconnect preserves token and deliberate new-island entry is a
   assert.equal(app.tokenForBackendSwitch(oldOrigin, oldOrigin, '  existing  ', false), 'existing');
   assert.equal(app.tokenForBackendSwitch(oldOrigin, 'https://new.example', '  new-secret  ', true), 'new-secret');
 });
+
+test('authenticated JSON requests forward a caller abort signal to fetch', async () => {
+  const app = await setup();
+  app.rememberToken('owner-secret');
+  const controller = new AbortController();
+  let observed;
+  globalThis.fetch = async (_url, options) => {
+    observed = options;
+    return { ok: true, json: async () => ({ ok: true }) };
+  };
+  await app.getJson('/api/conversations', { signal: controller.signal });
+  assert.equal(observed.signal, controller.signal);
+  assert.equal(observed.redirect, 'error');
+  assert.equal(observed.headers.authorization, 'Bearer owner-secret');
+});

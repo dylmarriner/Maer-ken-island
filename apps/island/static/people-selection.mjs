@@ -2,15 +2,27 @@
 // response (including errors) may update the visible state.
 export function createLatestRequest() {
   let generation = 0;
+  let activeController = null;
   return {
-    invalidate() { generation += 1; },
+    invalidate() {
+      generation += 1;
+      activeController?.abort();
+      activeController = null;
+    },
     async load(fetchPerson, showPerson, showError) {
+      // Discarding stale responses alone leaves slow polls and rapid inspector
+      // selections in flight. Cancel their HTTP requests as well.
+      activeController?.abort();
+      const controller = new AbortController();
+      activeController = controller;
       const request = ++generation;
       try {
-        const person = await fetchPerson();
+        const person = await fetchPerson(controller.signal);
         if (request === generation) showPerson(person);
       } catch (error) {
         if (request === generation) showError(error);
+      } finally {
+        if (activeController === controller) activeController = null;
       }
     },
   };
