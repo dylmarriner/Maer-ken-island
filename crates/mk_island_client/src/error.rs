@@ -2,11 +2,11 @@
 //! can act on.
 //!
 //! The distinction that matters is not HTTP's. A frontend needs to tell
-//! apart four things, because the person in front of it does something
-//! different about each: the backend is not there, the backend is there
-//! and said no, the backend is there and is a different version, and the
-//! backend answered something this client could not read. A bare status
-//! code tells none of them apart.
+//! apart five things, because the person in front of it does something
+//! different about each: the backend is unreachable, the backend refused,
+//! the backend is incompatible, the backend sent an unreadable response,
+//! or a local command could not be serialized at all. A bare status code
+//! tells none of them apart.
 
 use mk_island_api::Refusal;
 
