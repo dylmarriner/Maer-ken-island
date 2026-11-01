@@ -95,3 +95,38 @@ test('all JSON, command and image requests reject redirects and keep tokens on t
     assert.ok(call.url.startsWith('/api/'));
   }
 });
+
+test('rejects a poisoned remembered backend before reading or sending the owner token', async () => {
+  const app = await setup();
+  app.rememberToken('owner-secret');
+  localStorage.setItem('island-backend', 'https://attacker.example/redirect');
+  let calls = 0;
+  globalThis.fetch = async () => { calls += 1; throw new Error('must not fetch'); };
+  await assert.rejects(app.getJson('/api/status'), /bare HTTP/);
+  assert.equal(calls, 0);
+});
+
+test('API path validation blocks cross-origin and traversal requests before fetch', async () => {
+  const app = await setup();
+  app.rememberToken('owner-secret');
+  let calls = 0;
+  globalThis.fetch = async () => { calls += 1; throw new Error('must not fetch'); };
+  for (const path of [
+    '//attacker.example/api/world', 'https://attacker.example/api/world',
+    '/api/../admin', '/api/../../other', '/api/world#fragment',
+    '/api/\\\\attacker.example/world', '/not-api/world',
+  ]) {
+    assert.throws(() => app.apiUrl(path), /Island API path must stay on this backend/, path);
+    await assert.rejects(app.getJson(path), /Island API path must stay on this backend/);
+    await assert.rejects(app.postJson(path, { action: 'pause' }, app.storedToken()), /Island API path must stay on this backend/);
+    await assert.rejects(app.getImage(path), /Island API path must stay on this backend/);
+  }
+  assert.equal(calls, 0);
+});
+
+test('valid API query paths remain usable with and without a configured backend', async () => {
+  const app = await setup();
+  assert.equal(app.apiUrl('/api/activity?limit=8'), '/api/activity?limit=8');
+  app.setBackend('http://127.0.0.1:8080');
+  assert.equal(app.apiUrl('/api/activity?limit=8'), 'http://127.0.0.1:8080/api/activity?limit=8');
+});

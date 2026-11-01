@@ -29,3 +29,9 @@ Next: run the slow acceptance suite in an isolated environment, then select the 
 - Added regression tests covering malicious query override, origin switching, legacy tokens, malformed addresses and redirect refusal; CI web dashboard runs the expanded suite.
 - Verification: OpenCommander AMD node --test apps/island/tests/*.test.mjs **10/10 passed**, node --check apps/island/static/app.js, git diff --check passed before commit. Rust simulation tick and ledger code unchanged.
 - Remaining: [ ] exact-SHA full CI; [ ] slow week/year ledger and replay acceptance; [ ] sourced ecology/industry roadmap; [ ] owner acceptance. Next: check CI, execute slow simulation suite, then continue sourced tasks.
+
+## 2026-11-01 continuation: constrain dashboard API paths
+
+- Shared browser apiUrl() now rejects scheme-relative/absolute, non-API, fragment, backslash and traversal paths before any JSON, command or image fetch can carry an owner token. Previously, with a same-host dashboard, a scheme-relative path could be resolved by the browser as a different origin if constructed from untrusted input. Cached backend origins are revalidated instead of trusted from localStorage.
+- OpenCommander amd evidence: Node dashboard tests **13/13 passed**, JavaScript syntax, cargo fmt --all -- --check, git diff --check passed. Added three regressions for poisoned storage, malicious paths across all three fetch helpers and valid API queries. No Rust simulation logic, replay hashes or owner state changed.
+- Remaining: [ ] exact-new-SHA CI; [ ] slow week/year replay, water/carbon/material ledgers and reference-pack acceptance; [ ] sourced ecology/industry roadmap, including serving species and real workforce data; [ ] owner review. Next: inspect the manual slow workflow and exact-commit CI, then advance an unblocked sourced simulation slice. Do not claim slow acceptance until it actually passes.

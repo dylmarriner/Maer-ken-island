@@ -130,7 +130,8 @@ export function backend() {
     return tidy;
   }
   const stored = remembered(BACKEND_KEY);
-  if (stored) return stored;
+  // Local storage is mutable by other scripts; never trust a cached origin.
+  if (stored) return tidyBackend(stored);
   return tidyBackend(window.ISLAND_BACKEND || "");
 }
 
@@ -147,9 +148,22 @@ export function backendIsElsewhere() {
   return base !== "" && base !== location.origin;
 }
 
-/** The full address of one API path. */
+/** The full address of an island API path.
+ * Reject absolute, scheme-relative and traversal paths before attaching a
+ * bearer token. Some paths are assembled from server-provided identifiers. */
 export function apiUrl(path) {
-  return backend() + path;
+  if (typeof path !== "string" || !path.startsWith("/api/") ||
+      path.includes("\\") || path.includes("#")) {
+    throw new Error("Island API path must stay on this backend.");
+  }
+  const base = backend();
+  const expectedOrigin = base || location.origin;
+  const resolved = new URL(path, expectedOrigin);
+  if (resolved.origin !== expectedOrigin || !resolved.pathname.startsWith("/api/")) {
+    throw new Error("Island API path must stay on this backend.");
+  }
+  // Preserve relative URLs when the dashboard and API share a host.
+  return base ? resolved.href : path;
 }
 
 /** The headers every request carries, token included when there is one. */
