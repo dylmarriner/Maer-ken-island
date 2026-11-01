@@ -117,3 +117,20 @@ test('malformed live roster is rejected before replacing the visible population'
   assert.throws(() => reconcileLiveRoster({ people: null }, 'Gem-D'), /Invalid live island roster/);
   assert.throws(() => reconcileLiveRoster({ people: [{ agent_id: null }] }, 'Gem-D'), /Invalid live island roster/);
 });
+
+
+test('live roster rejects duplicate or malformed identities and impossible life fields', () => {
+  const valid = { agent_id: 'Gem-D', alive: true, age_years: 28 };
+  for (const people of [
+    [valid, { ...valid }],
+    [{ ...valid, agent_id: '' }],
+    [{ ...valid, agent_id: '  ' }],
+    [{ ...valid, alive: 'false' }],
+    [{ ...valid, alive: null }],
+    [{ ...valid, age_years: -1 }],
+    [{ ...valid, age_years: Infinity }],
+    [{ ...valid, age_years: '28' }],
+  ]) {
+    assert.throws(() => reconcileLiveRoster({ people }, 'Gem-D'), /Invalid live island roster/);
+  }
+});

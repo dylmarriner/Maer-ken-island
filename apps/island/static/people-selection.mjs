@@ -115,9 +115,22 @@ export async function loadPeopleRoster(fetchJson) {
 // it without reselecting the same person or replacing a valid inspector
 // snapshot. Stored populations remain a separate, non-polled source.
 export function reconcileLiveRoster(roster, currentSelection) {
-  if (!roster || !Array.isArray(roster.people) ||
-      roster.people.some((person) => !person || typeof person.agent_id !== 'string')) {
+  if (!roster || !Array.isArray(roster.people)) {
     throw new TypeError('Invalid live island roster');
+  }
+  // Do not turn malformed simulation data into a plausible-looking dashboard.
+  // In particular, a truthy string "false" must never be shown as alive, and
+  // duplicate IDs would make selection/inspection ambiguous.
+  const ids = new Set();
+  for (const person of roster.people) {
+    if (!person || typeof person.agent_id !== 'string' ||
+        !person.agent_id.trim() || person.agent_id !== person.agent_id.trim() ||
+        ids.has(person.agent_id) || typeof person.alive !== 'boolean' ||
+        typeof person.age_years !== 'number' ||
+        !Number.isFinite(person.age_years) || person.age_years < 0) {
+      throw new TypeError('Invalid live island roster');
+    }
+    ids.add(person.agent_id);
   }
   const people = roster.people.map((person) => ({
     agent_id: person.agent_id,
