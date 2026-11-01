@@ -36,6 +36,7 @@ use mk_island_api::{
     CreatorOptions, Economy, InterventionRequest, Outcome, Property, Refusal, ServerVersion,
     Terrain, TimelineEntry, Trees, World,
 };
+use std::io::Read;
 use std::time::Duration;
 
 /// How long to wait for the backend before calling it unreachable.
@@ -44,6 +45,31 @@ use std::time::Duration;
 /// the terrain: 5.8 MB on the real island, which is a second or two on a
 /// slow link and should not be mistaken for a dead server.
 const TIMEOUT: Duration = Duration::from_secs(30);
+
+// The backend is a network peer, not an unbounded allocation source.
+// Terrain is ~5.8 MiB today; keep ample headroom for larger maps.
+const MAX_JSON_BYTES: u64 = 16 * 1024 * 1024;
+const MAX_BINARY_BYTES: u64 = 64 * 1024 * 1024;
+const MAX_ERROR_BYTES: u64 = 16 * 1024;
+
+/// Read at most max + 1 bytes to detect an oversized response without
+/// trusting Content-Length (which can be absent or false).
+fn read_limited(reader: impl Read, max: u64) -> std::io::Result<Vec<u8>> {
+    let mut bytes = Vec::new();
+    reader.take(max + 1).read_to_end(&mut bytes)?;
+    if bytes.len() as u64 > max {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "response exceeds client size limit",
+        ));
+    }
+    Ok(bytes)
+}
+
+fn read_text_limited(reader: impl Read, max: u64) -> Result<String, String> {
+    let bytes = read_limited(reader, max).map_err(|err| err.to_string())?;
+    String::from_utf8(bytes).map_err(|err| err.to_string())
+}
 
 /// A backend, and how to reach it.
 #[derive(Clone)]
@@ -396,12 +422,14 @@ impl IslandClient {
     fn text(&self, path: &str) -> Result<String, ClientError> {
         self.validate_base()?;
         match self.request("GET", path).call() {
-            Ok(response) => response
-                .into_string()
-                .map_err(|err| ClientError::Malformed {
-                    url: self.url(path),
-                    reason: err.to_string(),
-                }),
+            Ok(response) => {
+                read_text_limited(response.into_reader(), MAX_JSON_BYTES).map_err(|reason| {
+                    ClientError::Malformed {
+                        url: self.url(path),
+                        reason,
+                    }
+                })
+            }
             Err(err) => Err(self.failure(path, err)),
         }
     }
@@ -409,16 +437,12 @@ impl IslandClient {
     fn bytes(&self, path: &str) -> Result<Vec<u8>, ClientError> {
         self.validate_base()?;
         match self.request("GET", path).call() {
-            Ok(response) => {
-                let mut buffer = Vec::new();
-                std::io::Read::read_to_end(&mut response.into_reader(), &mut buffer).map_err(
-                    |err| ClientError::Malformed {
-                        url: self.url(path),
-                        reason: err.to_string(),
-                    },
-                )?;
-                Ok(buffer)
-            }
+            Ok(response) => read_limited(response.into_reader(), MAX_BINARY_BYTES).map_err(|err| {
+                ClientError::Malformed {
+                    url: self.url(path),
+                    reason: err.to_string(),
+                }
+            }),
             Err(err) => Err(self.failure(path, err)),
         }
     }
@@ -441,12 +465,12 @@ impl IslandClient {
         match self.request("POST", path).send_json(body.clone()) {
             Ok(response) => {
                 let url = self.url(path);
-                let text = response
-                    .into_string()
-                    .map_err(|err| ClientError::Malformed {
+                let text = read_text_limited(response.into_reader(), MAX_JSON_BYTES).map_err(
+                    |reason| ClientError::Malformed {
                         url: url.clone(),
-                        reason: err.to_string(),
-                    })?;
+                        reason,
+                    },
+                )?;
                 serde_json::from_str(&text).map_err(|err| ClientError::Malformed {
                     url,
                     reason: err.to_string(),
@@ -468,7 +492,7 @@ impl IslandClient {
                 // empty string and then report it as "not the island's
                 // JSON: ", with nothing after the colon -- a message that
                 // blames the wrong thing and shows no evidence for it.
-                let body = match response.into_string() {
+                let body = match read_text_limited(response.into_reader(), MAX_ERROR_BYTES) {
                     Ok(body) => body,
                     Err(e) => {
                         return ClientError::Refused {
@@ -530,6 +554,27 @@ fn human_path(agent_id: &str) -> Option<String> {
         return None;
     }
     Some(format!("/api/world/humans/{agent_id}"))
+}
+
+#[cfg(test)]
+mod response_limits_tests {
+    use super::{read_limited, read_text_limited};
+    use std::io::Cursor;
+
+    #[test]
+    fn accepts_exact_boundary_and_rejects_one_extra_byte() {
+        assert_eq!(read_limited(Cursor::new(b"abcd"), 4).unwrap(), b"abcd");
+        let error = read_limited(Cursor::new(b"abcde"), 4).unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
+        assert!(error.to_string().contains("size limit"));
+    }
+
+    #[test]
+    fn detects_invalid_utf8_without_lossy_replacement() {
+        assert!(read_text_limited(Cursor::new(b"ok"), 2).is_ok());
+        assert!(read_text_limited(Cursor::new([0xff]), 2).is_err());
+        assert!(read_text_limited(Cursor::new(b"oversized"), 4).is_err());
+    }
 }
 
 #[cfg(test)]

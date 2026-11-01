@@ -1,0 +1,16 @@
+# Island engineering continuation (2026-11-01)
+
+Canonical repo: `dylmarriner/Maer-ken-island` (not the separate Maer-Ken repository). Branch `fix/island-client-human-id-20261101`, PR #68. Source-of-truth: `WORK_REMAINING.md`, `HANDOFF.md`, `docs/IMPLEMENTATION_READY_ROADMAP.md` and cited reference packs.
+
+## This iteration
+- Blocking HTTP client now limits successful JSON bodies to 16 MiB, binary map/terrain/cover responses to 64 MiB and error responses to 16 KiB. The stream reader detects overflow even without a trustworthy Content-Length. No simulation or canonical tick logic changed.
+- New boundary and UTF-8 regression tests. On OpenCommander `amd`: `cargo test -q -p mk_island_client --lib --offline --locked` **8/8 passed**; `cargo clippy -q -p mk_island_client --all-targets --offline --locked -- -D warnings`, `cargo fmt --all`, and `git diff --check` passed.
+- This is client resource-exhaustion hardening, not evidence that long-running world simulation is complete.
+
+## Remaining acceptance checklist
+- [ ] Exact-SHA PR #68 full CI green.
+- [ ] Nightly week/year simulation acceptance, material/water/carbon ledgers and deterministic replay hashes verified.
+- [ ] Sourced realism and industry tasks in `WORK_REMAINING.md` implemented with reference packs, deviation records and replay evidence.
+- [ ] No owner-governed changes or upstream divergence without required approvals.
+
+Next: run the slow acceptance suite in an isolated environment, then select the next unblocked sourced simulation slice. Keep Rust single-writer and append-only replay invariants.
