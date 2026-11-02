@@ -114,6 +114,9 @@ test('API path validation blocks cross-origin and traversal requests before fetc
   for (const path of [
     '//attacker.example/api/world', 'https://attacker.example/api/world',
     '/api/../admin', '/api/../../other', '/api/world#fragment',
+    '/api/world/humans/../status', '/api/world/humans/%2e%2e/status',
+    '/api/world/humans/.%2e/status', '/api/world/humans/%2e./status',
+    '/api/world/humans/./Gem-D', '/api/status\n',
     '/api/\\\\attacker.example/world', '/not-api/world',
   ]) {
     assert.throws(() => app.apiUrl(path), /Island API path must stay on this backend/, path);
