@@ -97,6 +97,36 @@ test('live roster refresh never overlaps and preserves last good roster after er
 });
 
 
+test('live roster polling rejects an older simulation tick rather than rewinding the dashboard', async () => {
+  const ticks = [12, 11, 13];
+  const shown = [];
+  const errors = [];
+  const poller = createLiveRosterPoller(
+    async () => ({ tick: ticks.shift(), people: [] }),
+    (roster) => shown.push(roster.tick),
+    (error) => errors.push(error.message),
+  );
+  await poller.refresh();
+  await poller.refresh();
+  await poller.refresh();
+  assert.deepEqual(shown, [12, 13]);
+  assert.match(errors[0], /stale.*tick/i);
+});
+
+test('invalidating a live roster poller permits a fresh simulation epoch', async () => {
+  const ticks = [12, 1];
+  const shown = [];
+  const poller = createLiveRosterPoller(
+    async () => ({ tick: ticks.shift(), people: [] }),
+    (roster) => shown.push(roster.tick),
+    (error) => assert.fail(error.message),
+  );
+  await poller.refresh();
+  poller.invalidate();
+  await poller.refresh();
+  assert.deepEqual(shown, [12, 1]);
+});
+
 test('hidden-tab invalidation aborts the old roster and cannot overwrite a fresh roster', async () => {
   let oldResolve;
   const old = new Promise((resolve) => { oldResolve = resolve; });

@@ -201,12 +201,15 @@ export function preparePeopleRoster(roster, onTheIsland, currentSelection) {
 export function createLiveRosterPoller(fetchRoster, showRoster, showError) {
   let pending = false;
   let revision = 0;
+  let lastRenderedTick = null;
   let controller = null;
   return {
     invalidate() {
       // A hidden or unloading tab must not apply an obsolete roster. Abort
       // the fetch and allow a fresh one when the tab becomes visible again.
       revision += 1;
+      // A new simulation epoch may start after the page is hidden or reloaded.
+      lastRenderedTick = null;
       controller?.abort();
       controller = null;
       pending = false;
@@ -219,7 +222,16 @@ export function createLiveRosterPoller(fetchRoster, showRoster, showError) {
       pending = true;
       try {
         const roster = await fetchRoster(currentController.signal);
-        if (request === revision) showRoster(roster);
+        if (request === revision) {
+          // A proxy or delayed server snapshot must not make the visible
+          // simulation clock run backwards between completed polls.
+          if (Number.isSafeInteger(roster?.tick) &&
+              lastRenderedTick !== null && roster.tick < lastRenderedTick) {
+            throw new Error('Stale live island roster tick');
+          }
+          showRoster(roster);
+          if (Number.isSafeInteger(roster?.tick)) lastRenderedTick = roster.tick;
+        }
       } catch (error) {
         if (request === revision) showError(error);
       } finally {

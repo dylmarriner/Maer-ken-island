@@ -204,3 +204,14 @@ Next: inspect CI, execute slow deterministic acceptance without changing pinned 
 - [ ] Verify exact-head CI after this commit; slow ignored week/year replay hashes and carbon/water/material ledger audits remain unverified and must run on a capacity-safe runner.
 - [ ] Continue sourced ecology/industry/workforce milestones with reference-pack/deviation evidence and obtain owner acceptance.
 - Next: verify CI, then run slow deterministic acceptance before any simulation behaviour change. No tick, single-writer, append-only log, snapshot, canon, digest, live simulation or governance change was made.
+
+
+## 2026-11-02 23:44 NZDT continuation: monotonic live roster polling
+
+- Verified exact `dylmarriner/Maer-ken-island` PR #68 (not the separate Maer-Ken repository), WORK_REMAINING.md, canonical roadmap and exact-head CI #41424241287 (all seven non-nightly jobs green; slow deterministic acceptance still skipped).
+- Defect: even non-overlapping authenticated roster polls could adopt an older server tick after a newer tick, making the displayed simulation clock and population move backwards. The poller now rejects tick regressions before rendering; last accepted tick advances only after successful rendering. Invalidation resets the epoch guard for a newly started simulation.
+- RED: new test showed [12,11,13] rather than [12,13] (one failure). GREEN: **49/49** dashboard Node tests, **8/8** Rust island client tests, JS syntax, Cargo formatting and Git whitespace checks passed on OpenCommander AMD. No Rust single-writer, append-only log, snapshot, replay hash, pinned digest, ledger or governance logic was modified.
+- [ ] Verify new exact-head full CI (dashboard, Rust, desktop, installed backend, dependency audit).
+- [ ] Run capacity-safe ignored week/year deterministic replay-hash equality and material/water/carbon ledger closure without re-pinning digests.
+- [ ] Continue sourced ecology, industry and workforce milestones with reference-pack/deviation records and obtain owner acceptance.
+- Next: verify CI, then run slow deterministic replay/ledger acceptance on an isolated adequately resourced runner. No live simulation or governance modification authorized.
