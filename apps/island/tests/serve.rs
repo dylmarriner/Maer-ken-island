@@ -114,6 +114,16 @@ async fn the_server_serves_its_pages_and_its_api_on_a_real_port() {
     assert_eq!(status, 200);
     assert!(body.contains("Gem-D") && body.contains("Gem-K"), "{body}");
 
+    // Dynamic human records must not be cached by browsers or intermediaries.
+    let (status, headers, _) = get_bytes(port, "/api/humans").await;
+    assert_eq!(status, 200);
+    assert!(
+        headers
+            .to_ascii_lowercase()
+            .contains("cache-control: no-store"),
+        "{headers}"
+    );
+
     let (status, body) = get(port, "/api/humans/Gem-K").await;
     assert_eq!(status, 200);
     assert!(body.contains("\"id\":\"identity\""), "{body}");

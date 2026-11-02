@@ -186,7 +186,7 @@ function headersFor(extra) {
 
 export async function getJson(path, { signal } = {}) {
   const url = apiUrl(path);
-  const response = await fetch(url, { headers: headersFor(), redirect: "error", signal });
+  const response = await fetch(url, { headers: headersFor(), redirect: "error", cache: "no-store", signal });
   if (!response.ok) {
     // The code travels with the error. Without it a caller could only match
     // on the message, and `island.js` had a `error.status === 404` branch

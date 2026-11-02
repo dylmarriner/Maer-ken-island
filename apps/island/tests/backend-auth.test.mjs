@@ -165,3 +165,21 @@ test('authenticated JSON requests forward a caller abort signal to fetch', async
   assert.equal(observed.redirect, 'error');
   assert.equal(observed.headers.authorization, 'Bearer owner-secret');
 });
+
+test('dynamic island JSON reads bypass browser caches even with an owner token', async () => {
+  const app = await setup();
+  app.rememberToken('owner-secret');
+  const calls = [];
+  globalThis.fetch = async (url, options) => {
+    calls.push({ url, options });
+    return { ok: true, json: async () => ({ tick: calls.length }) };
+  };
+  const first = await app.getJson('/api/world/humans');
+  const second = await app.getJson('/api/world/humans');
+  assert.deepEqual([first.tick, second.tick], [1, 2]);
+  assert.equal(calls.length, 2);
+  for (const call of calls) {
+    assert.equal(call.options.cache, 'no-store');
+    assert.equal(call.options.headers.authorization, 'Bearer owner-secret');
+  }
+});
