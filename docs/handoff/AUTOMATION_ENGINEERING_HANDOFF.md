@@ -173,3 +173,15 @@ Next: verify PR #68 after the merge-main reconciliation, then run the slow deter
 - [ ] New exact-head CI green (Rust, installed backend, dashboard, audit); [ ] ignored week/year replay hashes and material/water/carbon ledger closure on capacity-safe runner; [ ] sourced ecology/industry/workforce roadmap and deviations; [ ] owner acceptance.
 
 Next: inspect CI, execute slow deterministic acceptance without changing pinned digests, then implement a sourced roadmap slice. No live simulation or governance changes.
+
+
+## 2026-11-02 continuation: conversation snapshot integrity and hidden-tab budget
+
+- Verified canonical dylmarriner/Maer-ken-island PR #68 (not separate Maer-Ken), WORK_REMAINING.md, HANDOFF.md, implementation roadmap and Rust Conversation wire schema. Prior exact-head CI [#41390572782](https://github.com/dylmarriner/Maer-ken-island/actions/runs/41390572782) passed all seven non-nightly jobs including desktop, installed backend, Rust and dependency audit; slow tests skipped.
+- The People dialogue panel previously adopted unvalidated conversation feeds. Malformed clock spans, invalid line counts or missing speaker/text could crash rendering or misrepresent simulated speech. Added fail-closed whole-snapshot validation before DOM changes, including legacy zero-valued counters.
+- Hidden People tabs continued polling dialogue every five seconds. Now skip hidden-tab requests, abort an in-flight request on hide/pagehide, and refresh on visibility restoration. This reduces unnecessary authenticated reads and prevents obsolete hidden-tab responses.
+- RED: newly added tests failed before implementation because the validator was absent. GREEN: **45/45** dashboard Node tests passed; both changed JS syntax checks, cargo fmt --all -- --check and git diff --check passed on OpenCommander AMD.
+- [ ] Verify new exact-head CI for browser/Rust embedded-asset compatibility and dependency audit.
+- [ ] Run capacity-safe ignored week/year replay-hash equality and water/carbon/material ledger acceptance; never re-pin without full audit.
+- [ ] Continue sourced ecology, industry and workforce milestones with deviation/reference-pack evidence from WORK_REMAINING.md; owner acceptance remains outstanding.
+- Next: complete CI, execute slow deterministic replay/ledger acceptance on a capable runner, then implement the next sourced simulation milestone. No Rust tick, single-writer, append-only logs, snapshots, canon, replay digests, live simulation or governance changed.

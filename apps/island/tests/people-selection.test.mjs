@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createPersonSelection, createLatestRequest, createLivePersonInspector, personRecordPath, personRecordExport } from '../static/people-selection.mjs';
+import { createPersonSelection, createLatestRequest, createLivePersonInspector, personRecordPath, personRecordExport, validateConversationFeed } from '../static/people-selection.mjs';
 
 function deferred() {
   let resolve;
@@ -202,4 +202,36 @@ test('failed live refresh preserves inspected record and retries; stored records
   assert.equal(await inspector.refresh(), true);
   assert.deepEqual(shown, [1, 2, 4]);
   assert.deepEqual(errors, ['temporary offline']);
+});
+
+
+test('conversation feed accepts a real engine exchange and older optional counters', () => {
+  const valid = { note: 'No language model', conversations: [{
+    tick: 41, last_tick: 43, lines_said: 2, relationship: 'founders',
+    lines: [{ speaker_name: 'Gem-D', text: 'Kia ora' }, { speaker_name: 'Gem-K', text: 'Hello' }],
+  }] };
+  assert.equal(validateConversationFeed(valid), valid);
+  const legacy = { note: 'Older engine', conversations: [{
+    tick: 41, last_tick: 0, lines_said: 0, relationship: 'founders', lines: [{ speaker_name: 'Gem-D', text: 'Hello' }],
+  }] };
+  assert.equal(validateConversationFeed(legacy), legacy);
+});
+
+test('conversation feed rejects invalid clocks, missing speakers and dishonest line counts', () => {
+  const base = { note: 'No language model', conversations: [{
+    tick: 41, last_tick: 43, lines_said: 2, relationship: 'founders',
+    lines: [{ speaker_name: 'Gem-D', text: 'Kia ora' }],
+  }] };
+  const invalid = [
+    null, { conversations: [] }, { note: 'n', conversations: null },
+    { ...base, conversations: [{ ...base.conversations[0], tick: -1 }] },
+    { ...base, conversations: [{ ...base.conversations[0], last_tick: 40 }] },
+    { ...base, conversations: [{ ...base.conversations[0], lines_said: 0.5 }] },
+    { ...base, conversations: [{ ...base.conversations[0], lines_said: -1 }] },
+    { ...base, conversations: [{ ...base.conversations[0], lines: [{ speaker_name: '', text: 'hello' }] }] },
+    { ...base, conversations: [{ ...base.conversations[0], lines: [{ speaker_name: 'Gem-D', text: '   ' }] }] },
+  ];
+  for (const feed of invalid) {
+    assert.throws(() => validateConversationFeed(feed), /Invalid conversation feed/);
+  }
 });

@@ -216,3 +216,26 @@ export function createLiveRosterPoller(fetchRoster, showRoster, showError) {
     },
   };
 }
+
+
+// Validate the complete dialogue snapshot before updating any visible card.
+// A malformed clock or missing speaker must not masquerade as simulated speech.
+export function validateConversationFeed(feed) {
+  const invalid = () => { throw new TypeError('Invalid conversation feed'); };
+  if (!feed || typeof feed.note !== 'string' || !Array.isArray(feed.conversations)) invalid();
+  for (const conversation of feed.conversations) {
+    if (!conversation || !Number.isSafeInteger(conversation.tick) || conversation.tick < 0 ||
+        (conversation.last_tick != null && conversation.last_tick !== 0 &&
+          (!Number.isSafeInteger(conversation.last_tick) || conversation.last_tick < conversation.tick)) ||
+        typeof conversation.relationship !== 'string' || !conversation.relationship.trim() ||
+        !Array.isArray(conversation.lines) ||
+        (conversation.lines_said != null &&
+          (!Number.isSafeInteger(conversation.lines_said) || conversation.lines_said < 0 ||
+            (conversation.lines_said > 0 && conversation.lines_said < conversation.lines.length)))) invalid();
+    for (const line of conversation.lines) {
+      if (!line || typeof line.speaker_name !== 'string' || !line.speaker_name.trim() ||
+          typeof line.text !== 'string' || !line.text.trim()) invalid();
+    }
+  }
+  return feed;
+}

@@ -14,7 +14,7 @@ import {
   message,
   reportOffline,
 } from "/static/app.js";
-import { createLivePersonInspector, createLatestRequest, createLiveRosterPoller, reconcileLiveRoster, loadPeopleRoster, preparePeopleRoster, personRecordPath, personRecordExport } from "/static/people-selection.mjs";
+import { createLivePersonInspector, createLatestRequest, createLiveRosterPoller, reconcileLiveRoster, loadPeopleRoster, preparePeopleRoster, personRecordPath, personRecordExport, validateConversationFeed } from "/static/people-selection.mjs";
 
 const rosterEl = document.getElementById("roster");
 const rosterCountEl = document.getElementById("roster-count");
@@ -441,11 +441,14 @@ function conversationCard(conversation) {
 const conversationRequest = createLatestRequest();
 
 async function loadConversations() {
+  if (document.hidden) return;
   // A slow earlier poll must not replace newer dialogue or hide the panel
   // after a later poll succeeded. Both successes and failures are ordered.
   await conversationRequest.load(
     (signal) => getJson("/api/conversations", { signal }),
     (data) => {
+      // Reject malformed snapshots before changing the note or dialogue cards.
+      validateConversationFeed(data);
       // Shown rather than paraphrased, like the island page's notes: a reader
       // needs to know these lines are composed from real state and that no
       // language model wrote them.
@@ -475,4 +478,11 @@ async function loadConversations() {
 loadConversations();
 // People keep talking while the page is open, so this refreshes. Five
 // seconds matches the island page's own cadence.
-setInterval(loadConversations, 5000);
+setInterval(() => {
+  if (!document.hidden) void loadConversations();
+}, 5000);
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) conversationRequest.invalidate();
+  else void loadConversations();
+});
+addEventListener("pagehide", () => conversationRequest.invalidate());
