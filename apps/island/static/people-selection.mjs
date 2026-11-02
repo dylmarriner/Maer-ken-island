@@ -40,6 +40,8 @@ export function createLivePersonInspector(fetchRecord, showRecord, showSelection
   let active = null;
   let pending = false;
   let revision = 0;
+  let lastTick = null;
+  let lastRecordsAtTick = null;
 
   async function request(refresh) {
     if (!active || (refresh && (!active.live || pending))) return false;
@@ -49,7 +51,30 @@ export function createLivePersonInspector(fetchRecord, showRecord, showSelection
     try {
       await latest.load(
         (signal) => fetchRecord(live, id, signal),
-        (record) => { if (revision === current) showRecord(record); },
+        (record) => {
+          if (revision !== current) return;
+          if (live) {
+            // Live human records carry the published world clock and the
+            // last tick at which full human records were copied. A delayed
+            // projection must not rewind an inspected person's state.
+            const tick = record?.tick;
+            const recordsAtTick = record?.records_at_tick;
+            if (!Number.isSafeInteger(tick) || tick < 0 ||
+                !Number.isSafeInteger(recordsAtTick) || recordsAtTick < 0 ||
+                recordsAtTick > tick) {
+              throw new TypeError('Invalid live person record clock');
+            }
+            if (lastTick !== null &&
+                (tick < lastTick || (tick === lastTick && recordsAtTick < lastRecordsAtTick))) {
+              throw new Error('Stale live person record');
+            }
+            showRecord(record);
+            lastTick = tick;
+            lastRecordsAtTick = recordsAtTick;
+          } else {
+            showRecord(record);
+          }
+        },
         (error) => {
           if (revision !== current) return;
           if (refresh) showRefreshError(error);
@@ -65,6 +90,12 @@ export function createLivePersonInspector(fetchRecord, showRecord, showSelection
   return {
     select(id, live) {
       revision += 1;
+      // Reselecting the same person must not reset its accepted clock.
+      // Only a genuinely different person/source starts a new stream.
+      if (!active || active.id !== id || active.live !== live) {
+        lastTick = null;
+        lastRecordsAtTick = null;
+      }
       active = { id, live };
       return request(false);
     },
@@ -73,6 +104,8 @@ export function createLivePersonInspector(fetchRecord, showRecord, showSelection
       revision += 1;
       active = null;
       pending = false;
+      lastTick = null;
+      lastRecordsAtTick = null;
       latest.invalidate();
     },
   };

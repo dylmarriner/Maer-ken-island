@@ -156,7 +156,7 @@ test('live inspector refreshes the same person without overlapping requests', as
   const inspector = createLivePersonInspector(
     (live, id, signal) => {
       fetched.push({ live, id, signal });
-      return fetched.length === 2 ? pending.promise : Promise.resolve({ tick: fetched.length });
+      return fetched.length === 2 ? pending.promise : Promise.resolve({ tick: fetched.length, records_at_tick: fetched.length });
     },
     (record) => shown.push(record.tick),
     () => assert.fail('unexpected selection failure'),
@@ -165,7 +165,7 @@ test('live inspector refreshes the same person without overlapping requests', as
   await inspector.select('Gem-D', true);
   const refresh = inspector.refresh();
   assert.equal(await inspector.refresh(), false);
-  pending.resolve({ tick: 2 });
+  pending.resolve({ tick: 2, records_at_tick: 2 });
   assert.equal(await refresh, true);
   assert.deepEqual(shown, [1, 2]);
   assert.deepEqual(fetched.map(({ live, id }) => [live, id]), [[true, 'Gem-D'], [true, 'Gem-D']]);
@@ -181,7 +181,7 @@ test('changing selection cancels a pending live refresh without stale rendering'
         signal = currentSignal;
         return pending.promise;
       }
-      return Promise.resolve({ id });
+      return Promise.resolve({ id, tick: 1, records_at_tick: 1 });
     },
     (record) => shown.push(record.id),
     () => assert.fail('unexpected selection failure'),
@@ -203,7 +203,7 @@ test('failed live refresh preserves inspected record and retries; stored records
   const inspector = createLivePersonInspector(
     async () => {
       if (++calls === 3) throw new Error('temporary offline');
-      return { tick: calls };
+      return { tick: calls, records_at_tick: calls };
     },
     (record) => shown.push(record.tick),
     () => assert.fail('unexpected selection failure'),
@@ -324,4 +324,61 @@ test('conversation projection clock never rewinds on delayed polls or tab restor
   for (const tick of [-1, 1.5, Number.MAX_SAFE_INTEGER + 1, NaN]) {
     assert.throws(() => clock.accept({ tick }), /Invalid conversation clock/);
   }
+});
+
+test('live inspector rejects stale or impossible person clocks without rewinding the visible record', async () => {
+  const shown = [];
+  const errors = [];
+  const responses = [
+    { tick: 100, records_at_tick: 99 },
+    { tick: 99, records_at_tick: 99 },
+    { tick: 100, records_at_tick: 98 },
+    { tick: 100, records_at_tick: 101 },
+    { tick: 100, records_at_tick: 100 },
+    { tick: 101, records_at_tick: 101 },
+  ];
+  const inspector = createLivePersonInspector(
+    async () => responses.shift(),
+    (record) => shown.push([record.tick, record.records_at_tick]),
+    (error) => errors.push(error.message),
+    (error) => errors.push(error.message),
+  );
+  await inspector.select('Gem-D', true);
+  for (let i = 1; i < 6; i++) await inspector.refresh();
+  assert.deepEqual(shown, [[100, 99], [100, 100], [101, 101]]);
+  assert.deepEqual(errors, [
+    'Stale live person record',
+    'Stale live person record',
+    'Invalid live person record clock',
+  ]);
+});
+
+test('switching inspected people resets the live record clock without accepting old selection responses', async () => {
+  const shown = [];
+  const inspector = createLivePersonInspector(
+    async (_live, id) => ({ id, tick: id === 'Gem-D' ? 500 : 1, records_at_tick: 1 }),
+    (record) => shown.push(record.id),
+    (error) => assert.fail(error.message),
+    (error) => assert.fail(error.message),
+  );
+  await inspector.select('Gem-D', true);
+  await inspector.select('Gem-K', true);
+  assert.deepEqual(shown, ['Gem-D', 'Gem-K']);
+});
+
+
+test('reselecting the same live person does not reset its accepted simulation clock', async () => {
+  const shown = [];
+  const errors = [];
+  let tick = 50;
+  const inspector = createLivePersonInspector(
+    async () => ({ tick: tick--, records_at_tick: tick + 1 }),
+    (record) => shown.push(record.tick),
+    (error) => errors.push(error.message),
+    (error) => errors.push(error.message),
+  );
+  await inspector.select('Gem-D', true);
+  await inspector.select('Gem-D', true);
+  assert.deepEqual(shown, [50]);
+  assert.deepEqual(errors, ['Stale live person record']);
 });
