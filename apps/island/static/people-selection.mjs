@@ -289,11 +289,14 @@ export function createConversationClockGuard() {
 // A malformed clock or missing speaker must not masquerade as simulated speech.
 export function validateConversationFeed(feed) {
   const invalid = () => { throw new TypeError('Invalid conversation feed'); };
+  // Bound both the number of DOM nodes and their text size; a signed-in
+  // endpoint returning enormous strings must not exhaust the browser.
   // The Rust projection deliberately publishes at most 40 recent exchanges
   // and 12 lines per exchange (CONVERSATIONS_SHOWN / LINES_SHOWN). Enforce
   // that same UI budget before creating DOM nodes, even for a malformed or
   // unexpectedly oversized authenticated response.
-  if (!feed || typeof feed.note !== 'string' || !Array.isArray(feed.conversations) ||
+  if (!feed || typeof feed.note !== 'string' || feed.note.length > 2048 ||
+      !Array.isArray(feed.conversations) ||
       feed.conversations.length > 40 ||
       (feed.tick !== undefined && (!Number.isSafeInteger(feed.tick) || feed.tick < 0))) invalid();
   for (const conversation of feed.conversations) {
@@ -304,13 +307,15 @@ export function validateConversationFeed(feed) {
         (conversation.last_tick != null && conversation.last_tick !== 0 &&
           (!Number.isSafeInteger(conversation.last_tick) || conversation.last_tick < conversation.tick)) ||
         typeof conversation.relationship !== 'string' || !conversation.relationship.trim() ||
+        conversation.relationship.length > 128 ||
         !Array.isArray(conversation.lines) || conversation.lines.length > 12 ||
         (conversation.lines_said != null &&
           (!Number.isSafeInteger(conversation.lines_said) || conversation.lines_said < 0 ||
             (conversation.lines_said > 0 && conversation.lines_said < conversation.lines.length)))) invalid();
     for (const line of conversation.lines) {
       if (!line || typeof line.speaker_name !== 'string' || !line.speaker_name.trim() ||
-          typeof line.text !== 'string' || !line.text.trim()) invalid();
+          line.speaker_name.length > 256 ||
+          typeof line.text !== 'string' || !line.text.trim() || line.text.length > 4096) invalid();
     }
   }
   return feed;

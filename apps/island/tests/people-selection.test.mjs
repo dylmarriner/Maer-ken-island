@@ -278,6 +278,21 @@ test('conversation feed rejects malformed and future projection clocks', () => {
   }), /Invalid conversation feed/);
 });
 
+test('conversation feed bounds text payloads before creating dashboard DOM', () => {
+  const line = { speaker_name: 'A', text: 'hello' };
+  const conversation = { tick: 1, relationship: 'friends', lines: [line] };
+  const feed = { tick: 1, note: 'engine', conversations: [conversation] };
+  assert.equal(validateConversationFeed(feed), feed);
+  for (const invalid of [
+    { ...feed, note: 'n'.repeat(2049) },
+    { ...feed, conversations: [{ ...conversation, relationship: 'r'.repeat(129) }] },
+    { ...feed, conversations: [{ ...conversation, lines: [{ ...line, speaker_name: 'n'.repeat(257) }] }] },
+    { ...feed, conversations: [{ ...conversation, lines: [{ ...line, text: 'x'.repeat(4097) }] }] },
+  ]) {
+    assert.throws(() => validateConversationFeed(invalid), /Invalid conversation feed/);
+  }
+});
+
 test('conversation projection clock never rewinds on delayed polls or tab restoration', () => {
   const clock = createConversationClockGuard();
   assert.equal(clock.accept({ tick: 102 }), true);
