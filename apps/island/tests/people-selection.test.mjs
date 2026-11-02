@@ -333,6 +333,7 @@ test('live inspector rejects stale or impossible person clocks without rewinding
     { tick: 100, records_at_tick: 99 },
     { tick: 99, records_at_tick: 99 },
     { tick: 100, records_at_tick: 98 },
+    { tick: 101, records_at_tick: 98 },
     { tick: 100, records_at_tick: 101 },
     { tick: 100, records_at_tick: 100 },
     { tick: 101, records_at_tick: 101 },
@@ -344,9 +345,10 @@ test('live inspector rejects stale or impossible person clocks without rewinding
     (error) => errors.push(error.message),
   );
   await inspector.select('Gem-D', true);
-  for (let i = 1; i < 6; i++) await inspector.refresh();
+  for (let i = 1; i < 7; i++) await inspector.refresh();
   assert.deepEqual(shown, [[100, 99], [100, 100], [101, 101]]);
   assert.deepEqual(errors, [
+    'Stale live person record',
     'Stale live person record',
     'Stale live person record',
     'Invalid live person record clock',

@@ -6,7 +6,7 @@
 - Preserve deterministic Rust single-writer, append-only log/snapshot, replay hash, optional LLM, fail-fast invariants, offline and budget limits. This slice changes dashboard reads only, not the simulation.
 
 ## Implementation and verification
-- Live person inspector now rejects malformed `tick`/`records_at_tick` and projections older than the last accepted person snapshot. Equal world ticks cannot regress the record-copy tick. A different person/source starts a fresh clock; reselecting the same person retains the guard; invalidate resets it.
+- Live person inspector now rejects malformed `tick`/`records_at_tick` and projections older than the last accepted person snapshot. The record-copy tick cannot regress even when the world tick advances. A different person/source starts a fresh clock; reselecting the same person retains the guard; invalidate resets it.
 - `records_at_tick` and `tick` are fields of the real `/api/world/humans/:id` response in `apps/island/src/serve/server.rs`, not invented client-only metadata.
 - RED regression: stale and impossible projections were all rendered before the fix. GREEN: 60/60 dashboard Node tests and 9/9 Python repository tests; JavaScript syntax and `git diff --check` passed.
 - The checkout and tests ran through OpenCommander `kubuntux` on `/dev/shm`, avoiding its full root filesystem. No live simulation state or persistent data changed.

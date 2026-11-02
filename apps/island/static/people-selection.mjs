@@ -64,8 +64,11 @@ export function createLivePersonInspector(fetchRecord, showRecord, showSelection
                 recordsAtTick > tick) {
               throw new TypeError('Invalid live person record clock');
             }
+            // Both clocks are monotonic independently. A newer world tick
+            // can still carry an older full-record projection from a lagging
+            // reader, which must not replace the inspected human.
             if (lastTick !== null &&
-                (tick < lastTick || (tick === lastTick && recordsAtTick < lastRecordsAtTick))) {
+                (tick < lastTick || recordsAtTick < lastRecordsAtTick)) {
               throw new Error('Stale live person record');
             }
             showRecord(record);
