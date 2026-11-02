@@ -262,6 +262,22 @@ test('conversation feed rejects invalid clocks, missing speakers and dishonest l
 });
 
 
+test('conversation feed rejects malformed and future projection clocks', () => {
+  const conversation = {
+    tick: 41, last_tick: 43, lines_said: 1, relationship: 'founders',
+    lines: [{ speaker_name: 'Gem-D', text: 'Kia ora' }],
+  };
+  const valid = { tick: 43, note: 'Composed dialogue', conversations: [conversation] };
+  assert.equal(validateConversationFeed(valid), valid);
+  for (const tick of [-1, 1.5, Number.MAX_SAFE_INTEGER + 1, NaN, '43']) {
+    assert.throws(() => validateConversationFeed({ ...valid, tick }), /Invalid conversation feed/);
+  }
+  assert.throws(() => validateConversationFeed({ ...valid, tick: 40 }), /Invalid conversation feed/);
+  assert.throws(() => validateConversationFeed({
+    ...valid, conversations: [{ ...conversation, last_tick: 44 }],
+  }), /Invalid conversation feed/);
+});
+
 test('conversation projection clock never rewinds on delayed polls or tab restoration', () => {
   const clock = createConversationClockGuard();
   assert.equal(clock.accept({ tick: 102 }), true);

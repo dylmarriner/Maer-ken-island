@@ -294,9 +294,13 @@ export function validateConversationFeed(feed) {
   // that same UI budget before creating DOM nodes, even for a malformed or
   // unexpectedly oversized authenticated response.
   if (!feed || typeof feed.note !== 'string' || !Array.isArray(feed.conversations) ||
-      feed.conversations.length > 40) invalid();
+      feed.conversations.length > 40 ||
+      (feed.tick !== undefined && (!Number.isSafeInteger(feed.tick) || feed.tick < 0))) invalid();
   for (const conversation of feed.conversations) {
     if (!conversation || !Number.isSafeInteger(conversation.tick) || conversation.tick < 0 ||
+        (feed.tick !== undefined && conversation.tick > feed.tick) ||
+        (feed.tick !== undefined && conversation.last_tick != null && conversation.last_tick !== 0 &&
+          conversation.last_tick > feed.tick) ||
         (conversation.last_tick != null && conversation.last_tick !== 0 &&
           (!Number.isSafeInteger(conversation.last_tick) || conversation.last_tick < conversation.tick)) ||
         typeof conversation.relationship !== 'string' || !conversation.relationship.trim() ||
