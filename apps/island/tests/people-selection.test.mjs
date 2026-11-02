@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createPersonSelection, createLatestRequest, createLivePersonInspector, personRecordPath, personRecordExport, validateConversationFeed } from '../static/people-selection.mjs';
+import { createPersonSelection, createLatestRequest, createLivePersonInspector, personRecordPath, personRecordExport, validateConversationFeed, createConversationClockGuard } from '../static/people-selection.mjs';
 
 function deferred() {
   let resolve;
@@ -258,5 +258,22 @@ test('conversation feed rejects invalid clocks, missing speakers and dishonest l
   ];
   for (const feed of invalid) {
     assert.throws(() => validateConversationFeed(feed), /Invalid conversation feed/);
+  }
+});
+
+
+test('conversation projection clock never rewinds on delayed polls or tab restoration', () => {
+  const clock = createConversationClockGuard();
+  assert.equal(clock.accept({ tick: 102 }), true);
+  assert.equal(clock.accept({ tick: 101 }), false);
+  assert.equal(clock.accept({ tick: 102 }), true);
+  assert.equal(clock.accept({ tick: 103 }), true);
+  // Hiding the tab does not reset the accepted clock.
+  assert.equal(clock.accept({ tick: 99 }), false);
+  // An observed 404 (no running island) permits the next island epoch.
+  clock.reset();
+  assert.equal(clock.accept({ tick: 0 }), true);
+  for (const tick of [-1, 1.5, Number.MAX_SAFE_INTEGER + 1, NaN]) {
+    assert.throws(() => clock.accept({ tick }), /Invalid conversation clock/);
   }
 });

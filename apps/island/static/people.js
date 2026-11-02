@@ -14,7 +14,7 @@ import {
   message,
   reportOffline,
 } from "/static/app.js";
-import { createLivePersonInspector, createLatestRequest, createLiveRosterPoller, reconcileLiveRoster, loadPeopleRoster, preparePeopleRoster, personRecordPath, personRecordExport, validateConversationFeed } from "/static/people-selection.mjs";
+import { createLivePersonInspector, createLatestRequest, createLiveRosterPoller, reconcileLiveRoster, loadPeopleRoster, preparePeopleRoster, personRecordPath, personRecordExport, validateConversationFeed, createConversationClockGuard } from "/static/people-selection.mjs";
 
 const rosterEl = document.getElementById("roster");
 const rosterCountEl = document.getElementById("roster-count");
@@ -439,6 +439,7 @@ function conversationCard(conversation) {
 }
 
 const conversationRequest = createLatestRequest();
+const conversationClock = createConversationClockGuard();
 
 async function loadConversations() {
   if (document.hidden) return;
@@ -449,6 +450,9 @@ async function loadConversations() {
     (data) => {
       // Reject malformed snapshots before changing the note or dialogue cards.
       validateConversationFeed(data);
+      // A later HTTP response can still carry an older simulation projection.
+      // Ignore it without hiding the last good dialogue or rewinding the clock.
+      if (!conversationClock.accept(data)) return;
       // Shown rather than paraphrased, like the island page's notes: a reader
       // needs to know these lines are composed from real state and that no
       // language model wrote them.
@@ -469,7 +473,8 @@ async function loadConversations() {
       // A missing island is not an error worth shouting about here: the page
       // already says there is no world. Any other failure hides the panel
       // rather than showing an empty one that looks like silence.
-      if (error.status !== 404) reportOffline(error);
+      if (error.status === 404) conversationClock.reset();
+      else reportOffline(error);
       talkPanelEl.hidden = true;
     },
   );

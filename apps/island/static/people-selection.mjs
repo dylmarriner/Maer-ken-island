@@ -263,6 +263,28 @@ export function createLiveRosterPoller(fetchRoster, showRoster, showError) {
 }
 
 
+// Responses can arrive in request order yet contain older published simulation
+// projections (e.g. a proxy cache or lagging read). Preserve the last accepted
+// clock across hidden-tab suspension. Reset only after an observed no-island
+// response, which marks a new simulation epoch.
+export function createConversationClockGuard() {
+  let lastTick = null;
+  return {
+    accept(feed) {
+      // Legacy stored snapshots may not expose the clock; only the live Rust
+      // endpoint guarantees one. Never let an absent tick reset the guard.
+      if (feed?.tick === undefined) return true;
+      if (!Number.isSafeInteger(feed?.tick) || feed.tick < 0) {
+        throw new TypeError('Invalid conversation clock');
+      }
+      if (lastTick !== null && feed.tick < lastTick) return false;
+      lastTick = feed.tick;
+      return true;
+    },
+    reset() { lastTick = null; },
+  };
+}
+
 // Validate the complete dialogue snapshot before updating any visible card.
 // A malformed clock or missing speaker must not masquerade as simulated speech.
 export function validateConversationFeed(feed) {
