@@ -162,6 +162,15 @@ export function apiUrl(path) {
       path.includes("\\") || path.includes("#")) {
     throw new Error("Island API path must stay on this backend.");
   }
+  // URL() silently removes dot segments (including percent-encoded ones)
+  // and ASCII newlines. That can turn a record URL into another privileged
+  // /api/ endpoint while still passing the origin and /api/ prefix checks.
+  // Reject non-canonical caller paths before resolving or attaching a token.
+  const rawPath = path.split("?")[0];
+  if (/[\x00-\x1f\x7f]/.test(path) ||
+      /(?:^|\/)(?:\.|%2e){1,2}(?=\/|$)/i.test(rawPath)) {
+    throw new Error("Island API path must stay on this backend.");
+  }
   const base = backend();
   const expectedOrigin = base || location.origin;
   const resolved = new URL(path, expectedOrigin);
