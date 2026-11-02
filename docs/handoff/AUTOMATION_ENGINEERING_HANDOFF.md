@@ -235,3 +235,7 @@ Next: inspect CI, execute slow deterministic acceptance without changing pinned 
 - [ ] Run capacity-safe ignored week/year deterministic replay-hash equality and water/carbon/material ledger acceptance; do not re-pin digests prematurely.
 - [ ] Complete sourced ecology/industry/workforce milestones with reference-pack/deviation evidence and owner acceptance.
 - Next: check new CI, run slow deterministic replay/ledger acceptance on a capable isolated runner, and coordinate independent PR #70. No simulation tick, single-writer, append-only log, snapshot, replay digest, canon, live simulation or governance change.
+
+## 2026-11-03 continuation: conversation projection budget
+
+See [`CONVERSATION_PROJECTION_BUDGET_20261103.md`](CONVERSATION_PROJECTION_BUDGET_20261103.md) for code, RED/GREEN evidence, CI and remaining checklist. New client guard enforces the Rust 40-conversation / 12-line projection budget; no simulation or canon changes.

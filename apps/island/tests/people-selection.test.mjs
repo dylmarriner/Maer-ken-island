@@ -231,6 +231,17 @@ test('conversation feed accepts a real engine exchange and older optional counte
   assert.equal(validateConversationFeed(legacy), legacy);
 });
 
+test('conversation feed enforces the engine projection budget before rendering', () => {
+  // Must match CONVERSATIONS_SHOWN=40 and LINES_SHOWN=12 in projection.rs.
+  const line = { speaker_name: 'Gem-D', text: 'Kia ora' };
+  const conversation = { tick: 41, last_tick: 43, lines_said: 13,
+    relationship: 'founders', lines: Array.from({ length: 12 }, () => ({ ...line })) };
+  const feed = { note: 'No language model', conversations: Array.from({ length: 40 }, () => ({ ...conversation })) };
+  assert.equal(validateConversationFeed(feed), feed);
+  assert.throws(() => validateConversationFeed({ ...feed, conversations: [...feed.conversations, conversation] }), /Invalid conversation feed/);
+  assert.throws(() => validateConversationFeed({ ...feed, conversations: [{ ...conversation, lines: [...conversation.lines, line] }] }), /Invalid conversation feed/);
+});
+
 test('conversation feed rejects invalid clocks, missing speakers and dishonest line counts', () => {
   const base = { note: 'No language model', conversations: [{
     tick: 41, last_tick: 43, lines_said: 2, relationship: 'founders',

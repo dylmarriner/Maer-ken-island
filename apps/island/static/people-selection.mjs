@@ -267,13 +267,18 @@ export function createLiveRosterPoller(fetchRoster, showRoster, showError) {
 // A malformed clock or missing speaker must not masquerade as simulated speech.
 export function validateConversationFeed(feed) {
   const invalid = () => { throw new TypeError('Invalid conversation feed'); };
-  if (!feed || typeof feed.note !== 'string' || !Array.isArray(feed.conversations)) invalid();
+  // The Rust projection deliberately publishes at most 40 recent exchanges
+  // and 12 lines per exchange (CONVERSATIONS_SHOWN / LINES_SHOWN). Enforce
+  // that same UI budget before creating DOM nodes, even for a malformed or
+  // unexpectedly oversized authenticated response.
+  if (!feed || typeof feed.note !== 'string' || !Array.isArray(feed.conversations) ||
+      feed.conversations.length > 40) invalid();
   for (const conversation of feed.conversations) {
     if (!conversation || !Number.isSafeInteger(conversation.tick) || conversation.tick < 0 ||
         (conversation.last_tick != null && conversation.last_tick !== 0 &&
           (!Number.isSafeInteger(conversation.last_tick) || conversation.last_tick < conversation.tick)) ||
         typeof conversation.relationship !== 'string' || !conversation.relationship.trim() ||
-        !Array.isArray(conversation.lines) ||
+        !Array.isArray(conversation.lines) || conversation.lines.length > 12 ||
         (conversation.lines_said != null &&
           (!Number.isSafeInteger(conversation.lines_said) || conversation.lines_said < 0 ||
             (conversation.lines_said > 0 && conversation.lines_said < conversation.lines.length)))) invalid();
