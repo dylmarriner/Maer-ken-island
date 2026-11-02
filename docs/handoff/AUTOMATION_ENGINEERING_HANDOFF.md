@@ -185,3 +185,13 @@ Next: inspect CI, execute slow deterministic acceptance without changing pinned 
 - [ ] Run capacity-safe ignored week/year replay-hash equality and water/carbon/material ledger acceptance; never re-pin without full audit.
 - [ ] Continue sourced ecology, industry and workforce milestones with deviation/reference-pack evidence from WORK_REMAINING.md; owner acceptance remains outstanding.
 - Next: complete CI, execute slow deterministic replay/ledger acceptance on a capable runner, then implement the next sourced simulation milestone. No Rust tick, single-writer, append-only logs, snapshots, canon, replay digests, live simulation or governance changed.
+
+## 2026-11-02 continuation: reject ambiguous stored-human identities
+
+- Code commit `f4f8f3a`: stored-population validation now rejects duplicate `human_id` values even when agent IDs differ, padded human IDs and control bytes in either identity field. Previously those malformed records could be adopted as a valid population and expose ambiguous inspector/selection identity.
+- RED before fix: stored-roster regression failed (12/13 roster tests passed). GREEN: **46/46** dashboard Node tests passed; JavaScript syntax, Cargo formatting and Git whitespace checks passed on OpenCommander AMD.
+- Previous exact-head non-nightly CI #41402436003 succeeded for PR #68; new head requires its own full CI.
+- [ ] Exact-new-head CI including Rust, installed backend, dependency audit, web dashboard.
+- [ ] Capacity-safe ignored week/year deterministic replay-hash and material/water/carbon ledger acceptance; never re-pin digests without evidence.
+- [ ] Sourced ecology, industry and workforce roadmap milestones, reference-pack deviations and owner acceptance.
+- Next: inspect exact-head CI and run slow replay/ledger acceptance in a capacity-safe isolated environment. Rust single-writer, append-only logs, snapshots, canonical tick, replay hashes and live state untouched.
