@@ -278,6 +278,7 @@ async function load() {
     // Validate the complete source before changing visible mode or people.
     // A malformed response must leave the previous valid roster intact.
     const nextPeople = preparePeopleRoster(roster, live, selected);
+    if (live) liveRosterPoller.seed(roster);
     clearOffline();
     onTheIsland = live;
     if (onTheIsland) {

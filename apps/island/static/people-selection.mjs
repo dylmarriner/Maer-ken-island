@@ -246,6 +246,19 @@ export function createLiveRosterPoller(fetchRoster, showRoster, showError) {
     pending = false;
   }
   return {
+    seed(roster) {
+      // The initial page load already rendered a live snapshot before polling
+      // begins. Without its clock, the first cached poll can rewind that UI.
+      // Validate here too: callers must not be able to seed an invalid clock.
+      reconcileLiveRoster(roster, null);
+      if (lastRenderedTick !== null &&
+          (roster.tick < lastRenderedTick ||
+           roster.records_at_tick < lastRenderedRecordsAtTick)) {
+        throw new Error('Stale live island roster seed');
+      }
+      lastRenderedTick = roster.tick;
+      lastRenderedRecordsAtTick = roster.records_at_tick;
+    },
     suspend() {
       // Hiding the page aborts stale HTTP work, but does not prove the
       // simulation restarted. Keep the last accepted clock across visibility
