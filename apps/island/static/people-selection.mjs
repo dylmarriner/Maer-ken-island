@@ -81,13 +81,19 @@ export function createLivePersonInspector(fetchRecord, showRecord, showSelection
 // The live island record and the stored human record are different sources.
 // Choose the correct live or stored inspection source. Downloads use the
 // already inspected JSON snapshot rather than fetching the endpoint again.
+function isInspectablePersonId(agentId) {
+  // Keep both roster sources consistent with the authenticated inspector.
+  // Dot segments navigate away from the intended endpoint after URL resolution.
+  return typeof agentId === 'string' && agentId.trim().length > 0 &&
+    agentId === agentId.trim() && agentId !== '.' && agentId !== '..' &&
+    !/[\u0000-\u001f\u007f]/u.test(agentId);
+}
+
 export function personRecordPath(onTheIsland, agentId) {
   // encodeURIComponent leaves "." untouched. URL resolution treats "." and
   // ".." as navigation, so a malformed roster ID could redirect an
   // authenticated inspection away from the intended human endpoint.
-  if (typeof agentId !== 'string' || !agentId.trim() ||
-      agentId !== agentId.trim() || agentId === '.' || agentId === '..' ||
-      /[\u0000-\u001f\u007f]/u.test(agentId)) {
+  if (!isInspectablePersonId(agentId)) {
     throw new TypeError('Invalid person identifier');
   }
   return (onTheIsland ? '/api/world/humans/' : '/api/humans/') +
@@ -142,8 +148,7 @@ export function reconcileLiveRoster(roster, currentSelection) {
   // duplicate IDs would make selection/inspection ambiguous.
   const ids = new Set();
   for (const person of roster.people) {
-    if (!person || typeof person.agent_id !== 'string' ||
-        !person.agent_id.trim() || person.agent_id !== person.agent_id.trim() ||
+    if (!person || !isInspectablePersonId(person.agent_id) ||
         ids.has(person.agent_id) || typeof person.alive !== 'boolean' ||
         typeof person.age_years !== 'number' ||
         !Number.isFinite(person.age_years) || person.age_years < 0) {
@@ -175,9 +180,7 @@ export function preparePeopleRoster(roster, onTheIsland, currentSelection) {
   const humanIds = new Set();
   for (const person of roster) {
     if (!person || typeof person !== 'object' ||
-        typeof person.agent_id !== 'string' || !person.agent_id.trim() ||
-        person.agent_id !== person.agent_id.trim() || ids.has(person.agent_id) ||
-        /[\u0000-\u001f\u007f]/u.test(person.agent_id) ||
+        !isInspectablePersonId(person.agent_id) || ids.has(person.agent_id) ||
         typeof person.name !== 'string' ||
         typeof person.human_id !== 'string' || !person.human_id.trim() ||
         person.human_id !== person.human_id.trim() || humanIds.has(person.human_id) ||

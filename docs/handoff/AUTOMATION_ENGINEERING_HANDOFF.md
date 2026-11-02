@@ -195,3 +195,12 @@ Next: inspect CI, execute slow deterministic acceptance without changing pinned 
 - [ ] Capacity-safe ignored week/year deterministic replay-hash and material/water/carbon ledger acceptance; never re-pin digests without evidence.
 - [ ] Sourced ecology, industry and workforce roadmap milestones, reference-pack deviations and owner acceptance.
 - Next: inspect exact-head CI and run slow replay/ledger acceptance in a capacity-safe isolated environment. Rust single-writer, append-only logs, snapshots, canonical tick, replay hashes and live state untouched.
+
+## 2026-11-02 continuation: reject uninspectable roster identities
+
+- Rechecked the canonical Maer-ken-island repo, PR #68, HANDOFF.md, WORK_REMAINING.md and current hosted CI (seven non-nightly jobs green on prior head; slow nightly skipped).
+- Both live and stored People rosters could accept '.' or '..' as agent IDs, and live rosters could accept control bytes, even though authenticated person inspection rejected them. Shared the existing path safety predicate across both roster validators and the inspector URL builder, so malformed identities cannot be adopted into the visible population.
+- RED: new live/stored regression failed on a dot-segment ID (13/14 roster tests passed). GREEN: **47/47** dashboard Node tests, **8/8** Rust island client library tests, JS syntax, Cargo formatting and Git whitespace checks passed on OpenCommander AMD.
+- [ ] Verify exact-head CI after this commit; slow ignored week/year replay hashes and carbon/water/material ledger audits remain unverified and must run on a capacity-safe runner.
+- [ ] Continue sourced ecology/industry/workforce milestones with reference-pack/deviation evidence and obtain owner acceptance.
+- Next: verify CI, then run slow deterministic acceptance before any simulation behaviour change. No tick, single-writer, append-only log, snapshot, canon, digest, live simulation or governance change was made.
