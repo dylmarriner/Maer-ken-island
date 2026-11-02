@@ -14,7 +14,7 @@ import {
   message,
   reportOffline,
 } from "/static/app.js";
-import { createLivePersonInspector, createLatestRequest, createLiveRosterPoller, reconcileLiveRoster, loadPeopleRoster, personRecordPath, personRecordExport } from "/static/people-selection.mjs";
+import { createLivePersonInspector, createLatestRequest, createLiveRosterPoller, reconcileLiveRoster, loadPeopleRoster, preparePeopleRoster, personRecordPath, personRecordExport } from "/static/people-selection.mjs";
 
 const rosterEl = document.getElementById("roster");
 const rosterCountEl = document.getElementById("roster-count");
@@ -275,6 +275,9 @@ function describeWorld(world) {
 async function load() {
   try {
     const { status, roster, onTheIsland: live } = await loadPeopleRoster(getJson);
+    // Validate the complete source before changing visible mode or people.
+    // A malformed response must leave the previous valid roster intact.
+    const nextPeople = preparePeopleRoster(roster, live, selected);
     clearOffline();
     onTheIsland = live;
     if (onTheIsland) {
@@ -285,10 +288,10 @@ async function load() {
         "doing, how they feel and how they think. These people are living on " +
         "the island — the readings move as they breathe, sleep and eat.";
       // The world's people in the shape this roster already draws.
-      everyone = reconcileLiveRoster(roster, selected).people;
+      everyone = nextPeople;
       statusEl.textContent = describeWorld(roster);
     } else {
-      everyone = roster;
+      everyone = nextPeople;
       statusEl.textContent = describeStatus(status);
     }
     fillChrome(status);

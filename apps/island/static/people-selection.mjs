@@ -157,6 +157,31 @@ export function reconcileLiveRoster(roster, currentSelection) {
   return { people, selected, selectionChanged: selected !== currentSelection };
 }
 
+// Validate either source before the page adopts it. The stored population
+// comes from HumanSummary in population.rs; unlike live snapshots, it has no
+// simulation tick, but still must not silently display corrupt identities.
+export function preparePeopleRoster(roster, onTheIsland, currentSelection) {
+  if (onTheIsland) return reconcileLiveRoster(roster, currentSelection).people;
+  if (!Array.isArray(roster)) throw new TypeError('Invalid stored people roster');
+  const ids = new Set();
+  for (const person of roster) {
+    if (!person || typeof person !== 'object' ||
+        typeof person.agent_id !== 'string' || !person.agent_id.trim() ||
+        person.agent_id !== person.agent_id.trim() || ids.has(person.agent_id) ||
+        typeof person.name !== 'string' ||
+        typeof person.human_id !== 'string' || !person.human_id.trim() ||
+        typeof person.biological_sex !== 'string' ||
+        !['male', 'female', 'neutral'].includes(person.biological_sex) ||
+        !['alive', 'dead', 'dormant'].includes(person.status) ||
+        typeof person.age_years !== 'number' ||
+        !Number.isFinite(person.age_years) || person.age_years < 0) {
+      throw new TypeError('Invalid stored people roster');
+    }
+    ids.add(person.agent_id);
+  }
+  return roster;
+}
+
 export function createLiveRosterPoller(fetchRoster, showRoster, showError) {
   let pending = false;
   let revision = 0;

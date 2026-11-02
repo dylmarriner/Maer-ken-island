@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { loadPeopleRoster, reconcileLiveRoster, createLiveRosterPoller } from '../static/people-selection.mjs';
+import { loadPeopleRoster, reconcileLiveRoster, createLiveRosterPoller, preparePeopleRoster } from '../static/people-selection.mjs';
 
 test('live island roster does not depend on stale or inaccessible stored population', async () => {
   const requested = [];
@@ -165,4 +165,26 @@ test('live roster rejects impossible simulation clock and record freshness befor
       `invalid tick=${tick} records_at_tick=${records_at_tick}`,
     );
   }
+});
+
+
+test('stored summaries are validated before the dashboard replaces its current roster', () => {
+  const valid = {
+    agent_id: 'HUM-000001', name: 'Kauri', human_id: 'human-1',
+    biological_sex: 'male', status: 'alive', age_years: 30,
+  };
+  assert.deepEqual(preparePeopleRoster([valid], false, null), [valid]);
+  for (const roster of [
+    null, {}, [valid, { ...valid }], [{ ...valid, age_years: '30' }],
+    [{ ...valid, age_years: Infinity }], [{ ...valid, status: 'missing' }],
+    [{ ...valid, agent_id: ' ' }], [{ ...valid, human_id: '' }],
+  ]) {
+    assert.throws(() => preparePeopleRoster(roster, false, null), /Invalid stored people roster/);
+  }
+});
+
+test('live roster is validated before the dashboard adopts its population', () => {
+  const valid = { tick: 7, records_at_tick: 7, people: [{ agent_id: 'Gem-D', alive: true, age_years: 28 }] };
+  assert.equal(preparePeopleRoster(valid, true, 'Gem-D')[0].agent_id, 'Gem-D');
+  assert.throws(() => preparePeopleRoster({ ...valid, tick: '7' }, true, 'Gem-D'), /Invalid live island roster/);
 });

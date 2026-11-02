@@ -164,3 +164,12 @@ Next: inspect slow workflow completion and the exact-SHA CI, then take the next 
 - [ ] Complete owner acceptance. No live simulation, canon, single-writer, event log, snapshots or governance changed.
 
 Next: verify PR #68 after the merge-main reconciliation, then run the slow deterministic ledger/replay gate before implementing the next sourced simulation slice.
+
+## 2026-11-02 continuation: validate stored population before adoption
+
+- Confirmed `dylmarriner/Maer-ken-island` PR #68 and `WORK_REMAINING.md`/implementation-ready roadmap, not the similarly named Maer-Ken repository. Previous non-nightly exact-head CI #41385796860 passed; slow week/year suite skipped.
+- The People page previously adopted the new source mode and rendered roster before validating a stored population. Malformed/duplicate stored summaries could produce misleading identities, invalid age sorting, or a half-updated UI after failure. New shared `preparePeopleRoster` validates live tick/roster or stored `HumanSummary` shape, identity uniqueness, status, sex and finite age **before** the page changes source or population.
+- Regression evidence on OpenCommander AMD: new tests **failed before** implementation (missing helper); after, dashboard Node suite **43/43** passed. Both JS syntax checks, Cargo fmt and Git whitespace checks passed. No Rust simulation code or digest changed.
+- [ ] New exact-head CI green (Rust, installed backend, dashboard, audit); [ ] ignored week/year replay hashes and material/water/carbon ledger closure on capacity-safe runner; [ ] sourced ecology/industry/workforce roadmap and deviations; [ ] owner acceptance.
+
+Next: inspect CI, execute slow deterministic acceptance without changing pinned digests, then implement a sourced roadmap slice. No live simulation or governance changes.
