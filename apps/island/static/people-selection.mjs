@@ -203,17 +203,25 @@ export function createLiveRosterPoller(fetchRoster, showRoster, showError) {
   let lastRenderedTick = null;
   let lastRenderedRecordsAtTick = null;
   let controller = null;
+  function cancelPending() {
+    revision += 1;
+    controller?.abort();
+    controller = null;
+    pending = false;
+  }
   return {
+    suspend() {
+      // Hiding the page aborts stale HTTP work, but does not prove the
+      // simulation restarted. Keep the last accepted clock across visibility
+      // changes so a delayed older roster cannot rewind the dashboard.
+      cancelPending();
+    },
     invalidate() {
-      // A hidden or unloading tab must not apply an obsolete roster. Abort
-      // the fetch and allow a fresh one when the tab becomes visible again.
-      revision += 1;
-      // A new simulation epoch may start after the page is hidden or reloaded.
+      // Explicit new-epoch reset: only use when the simulation is known to
+      // have restarted, not for visibility/pagehide.
+      cancelPending();
       lastRenderedTick = null;
       lastRenderedRecordsAtTick = null;
-      controller?.abort();
-      controller = null;
-      pending = false;
     },
     async refresh() {
       if (pending) return false;

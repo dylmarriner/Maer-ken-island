@@ -146,7 +146,28 @@ test('invalidating a live roster poller permits a fresh simulation epoch', async
   assert.deepEqual(shown, [12, 1]);
 });
 
-test('hidden-tab invalidation aborts the old roster and cannot overwrite a fresh roster', async () => {
+test('suspending a hidden tab preserves the last accepted simulation clock', async () => {
+  const samples = [
+    { tick: 12, records_at_tick: 12, people: [] },
+    { tick: 11, records_at_tick: 11, people: [] },
+    { tick: 13, records_at_tick: 13, people: [] },
+  ];
+  const shown = [];
+  const errors = [];
+  const poller = createLiveRosterPoller(
+    async () => samples.shift(),
+    (roster) => shown.push(roster.tick),
+    (error) => errors.push(error.message),
+  );
+  await poller.refresh();
+  poller.suspend(); // visibilitychange, not a new simulation epoch
+  await poller.refresh();
+  await poller.refresh();
+  assert.deepEqual(shown, [12, 13]);
+  assert.match(errors[0], /stale.*tick/i);
+});
+
+test('hidden-tab suspension aborts the old roster and cannot overwrite a fresh roster', async () => {
   let oldResolve;
   const old = new Promise((resolve) => { oldResolve = resolve; });
   const seen = [];
@@ -157,7 +178,7 @@ test('hidden-tab invalidation aborts the old roster and cannot overwrite a fresh
     return ++calls === 1 ? old : Promise.resolve({ tick: 20, people: [] });
   }, (value) => seen.push(value.tick), (error) => seen.push(error.message));
   const first = poller.refresh();
-  poller.invalidate();
+  poller.suspend();
   assert.equal(signals[0].aborted, true);
   assert.equal(await poller.refresh(), true);
   oldResolve({ tick: 19, people: [] });

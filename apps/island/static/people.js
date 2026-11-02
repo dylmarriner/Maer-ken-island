@@ -368,9 +368,9 @@ setInterval(() => {
 // A request started while visible can finish after the tab is hidden. Stop
 // that request so its stale roster cannot replace the last inspected state.
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden) liveRosterPoller.invalidate();
+  if (document.hidden) liveRosterPoller.suspend();
 });
-addEventListener("pagehide", () => liveRosterPoller.invalidate());
+addEventListener("pagehide", () => liveRosterPoller.suspend());
 
 // Live human records change on every simulation tick. Refresh the selected
 // person's snapshot without resetting the scroll, URL or loading skeleton.
