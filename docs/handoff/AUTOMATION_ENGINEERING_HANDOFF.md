@@ -150,3 +150,17 @@ Next: inspect slow workflow completion and the exact-SHA CI, then take the next 
 - [ ] Capacity-safe week/year ignored simulation tests with replay-hash equality and material/water/carbon ledger closure; do not re-pin digests before audit.
 - [ ] Sourced ecology/industry/workforce milestones and reference-pack/deviation records in `WORK_REMAINING.md`; owner acceptance.
 - Next: verify exact-head CI, then execute slow deterministic simulation acceptance on a capacity-safe isolated runner. No live simulation or canon modifications.
+
+
+## 2026-11-02: merge audited dependency fix and reconcile island feature branch
+
+- Canonical repository `dylmarriner/Maer-ken-island`, not `Maer-Ken`; checked `WORK_REMAINING.md`, `docs/IMPLEMENTATION_READY_ROADMAP.md`, PR #68 and the separate dependency PR #69.
+- Security PR #69 refreshed only `services/computer-service/package-lock.json` to remove six moderate npm audit advisories without changing direct dependencies. Exact-head CI [#41379462541](https://github.com/dylmarriner/Maer-ken-island/actions/runs/41379462541) passed all seven non-nightly jobs, including dependency audit. PR #69 was safely squash-merged to main as `6467b1f876c29ce6670b67daaa646fb78e9d65c2`.
+- The existing PR #68 was based on the old main. Deepened a shallow OpenCommander checkout to recover its true merge base, then reconciled new main into the feature branch without content conflicts; the same lockfile pruning was already present on the feature branch.
+- On OpenCommander AMD after reconciliation: `node --test apps/island/tests/*.test.mjs` **41/41 passed**; `cargo test -q -p mk_island_client --lib --offline --locked` **8/8 passed**; `cargo fmt --all -- --check` and `git diff --check` passed. The ignored week/year slow simulation, replay-hash and material/water/carbon acceptance remains **unverified**. A separate `cargo test -p mk_engine --test island_replay --offline --locked -- --test-threads=1` attempt was terminated (exit -9) during dependency compilation before any test assertions; it is **not** a passing replay result.
+- [ ] Verify exact-merge-head PR #68 CI and confirm no regression in npm audit.
+- [ ] Run the ignored week/year deterministic replay and ledger audits on a capacity-safe isolated runner, and record pinned digests without changing them prematurely.
+- [ ] Continue sourced ecology/industry/workforce milestones and deviation/reference-pack evidence from `WORK_REMAINING.md`.
+- [ ] Complete owner acceptance. No live simulation, canon, single-writer, event log, snapshots or governance changed.
+
+Next: verify PR #68 after the merge-main reconciliation, then run the slow deterministic ledger/replay gate before implementing the next sourced simulation slice.
