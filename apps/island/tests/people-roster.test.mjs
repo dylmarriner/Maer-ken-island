@@ -178,6 +178,9 @@ test('stored summaries are validated before the dashboard replaces its current r
     null, {}, [valid, { ...valid }], [{ ...valid, age_years: '30' }],
     [{ ...valid, age_years: Infinity }], [{ ...valid, status: 'missing' }],
     [{ ...valid, agent_id: ' ' }], [{ ...valid, human_id: '' }],
+    [valid, { ...valid, agent_id: 'HUM-000002' }],
+    [{ ...valid, human_id: ' human-1' }],
+    [{ ...valid, agent_id: 'HUM-000001\u0000' }],
   ]) {
     assert.throws(() => preparePeopleRoster(roster, false, null), /Invalid stored people roster/);
   }

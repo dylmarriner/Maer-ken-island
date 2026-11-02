@@ -172,12 +172,16 @@ export function preparePeopleRoster(roster, onTheIsland, currentSelection) {
   if (onTheIsland) return reconcileLiveRoster(roster, currentSelection).people;
   if (!Array.isArray(roster)) throw new TypeError('Invalid stored people roster');
   const ids = new Set();
+  const humanIds = new Set();
   for (const person of roster) {
     if (!person || typeof person !== 'object' ||
         typeof person.agent_id !== 'string' || !person.agent_id.trim() ||
         person.agent_id !== person.agent_id.trim() || ids.has(person.agent_id) ||
+        /[\u0000-\u001f\u007f]/u.test(person.agent_id) ||
         typeof person.name !== 'string' ||
         typeof person.human_id !== 'string' || !person.human_id.trim() ||
+        person.human_id !== person.human_id.trim() || humanIds.has(person.human_id) ||
+        /[\u0000-\u001f\u007f]/u.test(person.human_id) ||
         typeof person.biological_sex !== 'string' ||
         !['male', 'female', 'neutral'].includes(person.biological_sex) ||
         !['alive', 'dead', 'dormant'].includes(person.status) ||
@@ -186,6 +190,7 @@ export function preparePeopleRoster(roster, onTheIsland, currentSelection) {
       throw new TypeError('Invalid stored people roster');
     }
     ids.add(person.agent_id);
+    humanIds.add(person.human_id);
   }
   return roster;
 }
