@@ -113,6 +113,25 @@ test('live roster polling rejects an older simulation tick rather than rewinding
   assert.match(errors[0], /stale.*tick/i);
 });
 
+test('same-tick roster polling cannot replace newer records with an older projection', async () => {
+  const samples = [
+    { tick: 12, records_at_tick: 12, people: [] },
+    { tick: 12, records_at_tick: 11, people: [] },
+    { tick: 12, records_at_tick: 12, people: [] },
+    { tick: 13, records_at_tick: 11, people: [] },
+  ];
+  const shown = [];
+  const errors = [];
+  const poller = createLiveRosterPoller(
+    async () => samples.shift(),
+    (roster) => shown.push([roster.tick, roster.records_at_tick]),
+    (error) => errors.push(error.message),
+  );
+  for (let i = 0; i < 4; i++) await poller.refresh();
+  assert.deepEqual(shown, [[12, 12], [12, 12], [13, 11]]);
+  assert.match(errors[0], /stale.*roster/i);
+});
+
 test('invalidating a live roster poller permits a fresh simulation epoch', async () => {
   const ticks = [12, 1];
   const shown = [];

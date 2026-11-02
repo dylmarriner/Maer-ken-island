@@ -225,3 +225,13 @@ Next: inspect CI, execute slow deterministic acceptance without changing pinned 
 - [ ] Capacity-safe ignored week/year deterministic replay-hash equality and water/carbon/material ledger closure; do not re-pin hashes without evidence.
 - [ ] Sourced ecology/industry/workforce milestones, deviation/reference pack and owner acceptance.
 - Next: check exact-head CI, then execute slow replay/ledger acceptance on an adequately resourced isolated runner. No Rust tick, single-writer, append-only log, snapshot, digest, live simulation or governance changes.
+
+## 2026-11-03 01:45 NZDT continuation: same-tick projection freshness
+
+- Canonical repo: `dylmarriner/Maer-ken-island` PR #68, separate town-dashboard PR #70; checked roadmap and non-nightly CI (green on previous head, slow simulation skipped).
+- Defect: the live People poller rejected decreasing simulation ticks but could replace a newer roster with older `records_at_tick` data at the *same* tick. It now enforces monotonic `(tick, records_at_tick)` ordering within an active epoch, while allowing the projection to lag when the simulation tick advances; invalidation resets both guards.
+- RED: new Node regression showed the stale same-tick roster rendered. GREEN: **51/51** dashboard Node tests, **8/8** Rust island-client tests, JS syntax, Cargo formatting and Git whitespace checks passed on OpenCommander AMD.
+- [ ] Verify exact-new-head CI including Rust, desktop, installed backend, dashboard and audit.
+- [ ] Run capacity-safe ignored week/year deterministic replay-hash equality and water/carbon/material ledger acceptance; do not re-pin digests prematurely.
+- [ ] Complete sourced ecology/industry/workforce milestones with reference-pack/deviation evidence and owner acceptance.
+- Next: check new CI, run slow deterministic replay/ledger acceptance on a capable isolated runner, and coordinate independent PR #70. No simulation tick, single-writer, append-only log, snapshot, replay digest, canon, live simulation or governance change.

@@ -201,6 +201,7 @@ export function createLiveRosterPoller(fetchRoster, showRoster, showError) {
   let pending = false;
   let revision = 0;
   let lastRenderedTick = null;
+  let lastRenderedRecordsAtTick = null;
   let controller = null;
   return {
     invalidate() {
@@ -209,6 +210,7 @@ export function createLiveRosterPoller(fetchRoster, showRoster, showError) {
       revision += 1;
       // A new simulation epoch may start after the page is hidden or reloaded.
       lastRenderedTick = null;
+      lastRenderedRecordsAtTick = null;
       controller?.abort();
       controller = null;
       pending = false;
@@ -224,12 +226,20 @@ export function createLiveRosterPoller(fetchRoster, showRoster, showError) {
         if (request === revision) {
           // A proxy or delayed server snapshot must not make the visible
           // simulation clock run backwards between completed polls.
-          if (Number.isSafeInteger(roster?.tick) &&
-              lastRenderedTick !== null && roster.tick < lastRenderedTick) {
-            throw new Error('Stale live island roster tick');
+          if (Number.isSafeInteger(roster?.tick) && lastRenderedTick !== null &&
+              (roster.tick < lastRenderedTick ||
+               (roster.tick === lastRenderedTick &&
+                Number.isSafeInteger(roster.records_at_tick) &&
+                lastRenderedRecordsAtTick !== null &&
+                roster.records_at_tick < lastRenderedRecordsAtTick))) {
+            throw new Error('Stale live island roster tick or projection');
           }
           showRoster(roster);
-          if (Number.isSafeInteger(roster?.tick)) lastRenderedTick = roster.tick;
+          if (Number.isSafeInteger(roster?.tick)) {
+            lastRenderedTick = roster.tick;
+            lastRenderedRecordsAtTick = Number.isSafeInteger(roster.records_at_tick)
+              ? roster.records_at_tick : null;
+          }
         }
       } catch (error) {
         if (request === revision) showError(error);
