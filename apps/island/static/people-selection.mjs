@@ -270,10 +270,12 @@ export function createLiveRosterPoller(fetchRoster, showRoster, showError) {
         if (request === revision) {
           // A proxy or delayed server snapshot must not make the visible
           // simulation clock run backwards between completed polls.
+          // The world clock and the last full-record projection clock must
+          // advance independently. A later world tick may still come from a
+          // lagging reader whose human records are older than those shown.
           if (Number.isSafeInteger(roster?.tick) && lastRenderedTick !== null &&
               (roster.tick < lastRenderedTick ||
-               (roster.tick === lastRenderedTick &&
-                Number.isSafeInteger(roster.records_at_tick) &&
+               (Number.isSafeInteger(roster.records_at_tick) &&
                 lastRenderedRecordsAtTick !== null &&
                 roster.records_at_tick < lastRenderedRecordsAtTick))) {
             throw new Error('Stale live island roster tick or projection');

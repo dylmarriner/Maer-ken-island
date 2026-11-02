@@ -113,12 +113,13 @@ test('live roster polling rejects an older simulation tick rather than rewinding
   assert.match(errors[0], /stale.*tick/i);
 });
 
-test('same-tick roster polling cannot replace newer records with an older projection', async () => {
+test('roster polling cannot replace newer records with an older projection even if world tick advances', async () => {
   const samples = [
     { tick: 12, records_at_tick: 12, people: [] },
     { tick: 12, records_at_tick: 11, people: [] },
     { tick: 12, records_at_tick: 12, people: [] },
     { tick: 13, records_at_tick: 11, people: [] },
+    { tick: 14, records_at_tick: 13, people: [] },
   ];
   const shown = [];
   const errors = [];
@@ -127,8 +128,9 @@ test('same-tick roster polling cannot replace newer records with an older projec
     (roster) => shown.push([roster.tick, roster.records_at_tick]),
     (error) => errors.push(error.message),
   );
-  for (let i = 0; i < 4; i++) await poller.refresh();
-  assert.deepEqual(shown, [[12, 12], [12, 12], [13, 11]]);
+  for (let i = 0; i < 5; i++) await poller.refresh();
+  assert.deepEqual(shown, [[12, 12], [12, 12], [14, 13]]);
+  assert.equal(errors.length, 2);
   assert.match(errors[0], /stale.*roster/i);
 });
 
