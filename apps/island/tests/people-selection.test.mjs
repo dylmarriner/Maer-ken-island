@@ -293,6 +293,23 @@ test('conversation feed bounds text payloads before creating dashboard DOM', () 
   }
 });
 
+test('conversation identity metadata rejects invisible controls and invalid speaker IDs', () => {
+  const line = { speaker_id: 'Gem-D', speaker_name: 'Gem-D', text: 'Kia ora' };
+  const conversation = { tick: 2, relationship: 'friends', lines: [line] };
+  const feed = { tick: 2, note: 'engine', conversations: [conversation] };
+  assert.equal(validateConversationFeed(feed), feed);
+  for (const invalid of [
+    { ...conversation, relationship: 'friends\u202e' },
+    { ...conversation, lines: [{ ...line, speaker_name: 'Gem\u200b-D' }] },
+    { ...conversation, lines: [{ ...line, speaker_id: ' .. ' }] },
+    { ...conversation, lines: [{ ...line, speaker_id: '.' }] },
+    { ...conversation, lines: [{ ...line, speaker_id: 7 }] },
+    { ...conversation, lines: [{ ...line, speaker_id: null }] },
+  ]) {
+    assert.throws(() => validateConversationFeed({ ...feed, conversations: [invalid] }), /Invalid conversation feed/);
+  }
+});
+
 test('conversation projection clock never rewinds on delayed polls or tab restoration', () => {
   const clock = createConversationClockGuard();
   assert.equal(clock.accept({ tick: 102 }), true);

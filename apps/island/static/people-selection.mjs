@@ -306,15 +306,18 @@ export function validateConversationFeed(feed) {
           conversation.last_tick > feed.tick) ||
         (conversation.last_tick != null && conversation.last_tick !== 0 &&
           (!Number.isSafeInteger(conversation.last_tick) || conversation.last_tick < conversation.tick)) ||
-        typeof conversation.relationship !== 'string' || !conversation.relationship.trim() ||
+        // Relationship labels and speaker identities are operator-visible
+        // attribution. Reject bidi/format controls and malformed IDs instead
+        // of allowing an authenticated but corrupt feed to impersonate people.
+        !isInspectablePersonId(conversation.relationship) ||
         conversation.relationship.length > 128 ||
         !Array.isArray(conversation.lines) || conversation.lines.length > 12 ||
         (conversation.lines_said != null &&
           (!Number.isSafeInteger(conversation.lines_said) || conversation.lines_said < 0 ||
             (conversation.lines_said > 0 && conversation.lines_said < conversation.lines.length)))) invalid();
     for (const line of conversation.lines) {
-      if (!line || typeof line.speaker_name !== 'string' || !line.speaker_name.trim() ||
-          line.speaker_name.length > 256 ||
+      if (!line || !isInspectablePersonId(line.speaker_name) ||
+          (line.speaker_id !== undefined && !isInspectablePersonId(line.speaker_id)) ||
           typeof line.text !== 'string' || !line.text.trim() || line.text.length > 4096) invalid();
     }
   }
