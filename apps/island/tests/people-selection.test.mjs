@@ -2,6 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createPersonSelection, createLatestRequest, createLivePersonInspector, personRecordPath, personRecordExport, validateConversationFeed, createConversationClockGuard } from '../static/people-selection.mjs';
 
+function liveRecord(tick, records_at_tick, agent_id = 'Gem-D') {
+  return { tick, records_at_tick, summary: { agent_id } };
+}
+
 function deferred() {
   let resolve;
   let reject;
@@ -156,7 +160,7 @@ test('live inspector refreshes the same person without overlapping requests', as
   const inspector = createLivePersonInspector(
     (live, id, signal) => {
       fetched.push({ live, id, signal });
-      return fetched.length === 2 ? pending.promise : Promise.resolve({ tick: fetched.length, records_at_tick: fetched.length });
+      return fetched.length === 2 ? pending.promise : Promise.resolve(liveRecord(fetched.length, fetched.length));
     },
     (record) => shown.push(record.tick),
     () => assert.fail('unexpected selection failure'),
@@ -165,7 +169,7 @@ test('live inspector refreshes the same person without overlapping requests', as
   await inspector.select('Gem-D', true);
   const refresh = inspector.refresh();
   assert.equal(await inspector.refresh(), false);
-  pending.resolve({ tick: 2, records_at_tick: 2 });
+  pending.resolve(liveRecord(2, 2));
   assert.equal(await refresh, true);
   assert.deepEqual(shown, [1, 2]);
   assert.deepEqual(fetched.map(({ live, id }) => [live, id]), [[true, 'Gem-D'], [true, 'Gem-D']]);
@@ -181,7 +185,7 @@ test('changing selection cancels a pending live refresh without stale rendering'
         signal = currentSignal;
         return pending.promise;
       }
-      return Promise.resolve({ id, tick: 1, records_at_tick: 1 });
+      return Promise.resolve({ ...liveRecord(1, 1, id), id });
     },
     (record) => shown.push(record.id),
     () => assert.fail('unexpected selection failure'),
@@ -203,7 +207,7 @@ test('failed live refresh preserves inspected record and retries; stored records
   const inspector = createLivePersonInspector(
     async () => {
       if (++calls === 3) throw new Error('temporary offline');
-      return { tick: calls, records_at_tick: calls };
+      return liveRecord(calls, calls);
     },
     (record) => shown.push(record.tick),
     () => assert.fail('unexpected selection failure'),
@@ -339,7 +343,7 @@ test('live inspector rejects stale or impossible person clocks without rewinding
     { tick: 101, records_at_tick: 101 },
   ];
   const inspector = createLivePersonInspector(
-    async () => responses.shift(),
+    async () => ({ ...responses.shift(), summary: { agent_id: 'Gem-D' } }),
     (record) => shown.push([record.tick, record.records_at_tick]),
     (error) => errors.push(error.message),
     (error) => errors.push(error.message),
@@ -355,10 +359,31 @@ test('live inspector rejects stale or impossible person clocks without rewinding
   ]);
 });
 
+test('live inspector rejects a mismatched or missing human identity without replacing the inspected person', async () => {
+  const shown = [];
+  const errors = [];
+  const responses = [
+    { tick: 7, records_at_tick: 7, summary: { agent_id: 'Gem-D' } },
+    { tick: 8, records_at_tick: 8, summary: { agent_id: 'Gem-K' } },
+    { tick: 9, records_at_tick: 9 },
+    { tick: 10, records_at_tick: 10, summary: { agent_id: 'Gem-D' } },
+  ];
+  const inspector = createLivePersonInspector(
+    async () => responses.shift(),
+    (record) => shown.push(record.tick),
+    (error) => errors.push(error.message),
+    (error) => errors.push(error.message),
+  );
+  await inspector.select('Gem-D', true);
+  for (let i = 0; i < 3; i++) await inspector.refresh();
+  assert.deepEqual(shown, [7, 10]);
+  assert.deepEqual(errors, ['Mismatched live person identity', 'Mismatched live person identity']);
+});
+
 test('switching inspected people resets the live record clock without accepting old selection responses', async () => {
   const shown = [];
   const inspector = createLivePersonInspector(
-    async (_live, id) => ({ id, tick: id === 'Gem-D' ? 500 : 1, records_at_tick: 1 }),
+    async (_live, id) => ({ ...liveRecord(id === 'Gem-D' ? 500 : 1, 1, id), id }),
     (record) => shown.push(record.id),
     (error) => assert.fail(error.message),
     (error) => assert.fail(error.message),
@@ -374,7 +399,7 @@ test('reselecting the same live person does not reset its accepted simulation cl
   const errors = [];
   let tick = 50;
   const inspector = createLivePersonInspector(
-    async () => ({ tick: tick--, records_at_tick: tick + 1 }),
+    async () => liveRecord(tick--, tick + 1),
     (record) => shown.push(record.tick),
     (error) => errors.push(error.message),
     (error) => errors.push(error.message),

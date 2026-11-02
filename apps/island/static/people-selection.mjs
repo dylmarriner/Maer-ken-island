@@ -54,6 +54,12 @@ export function createLivePersonInspector(fetchRecord, showRecord, showSelection
         (record) => {
           if (revision !== current) return;
           if (live) {
+            // A lagging or misrouted API response must never display another
+            // person's private record under the currently selected identity.
+            // The Rust inspector always publishes summary.agent_id.
+            if (record?.summary?.agent_id !== id) {
+              throw new Error('Mismatched live person identity');
+            }
             // Live human records carry the published world clock and the
             // last tick at which full human records were copied. A delayed
             // projection must not rewind an inspected person's state.
