@@ -84,9 +84,10 @@ export function createLivePersonInspector(fetchRecord, showRecord, showSelection
 function isInspectablePersonId(agentId) {
   // Keep both roster sources consistent with the authenticated inspector.
   // Dot segments navigate away from the intended endpoint after URL resolution.
-  return typeof agentId === 'string' && agentId.trim().length > 0 &&
+  return typeof agentId === 'string' && agentId.length <= 256 && agentId.trim().length > 0 &&
     agentId === agentId.trim() && agentId !== '.' && agentId !== '..' &&
-    !/[\u0000-\u001f\u007f]/u.test(agentId);
+    // Unicode format/bidi controls and C1 controls can spoof visible identities.
+    !/[\u0000-\u001f\u007f-\u009f\p{Cf}]/u.test(agentId);
 }
 
 export function personRecordPath(onTheIsland, agentId) {
@@ -182,9 +183,7 @@ export function preparePeopleRoster(roster, onTheIsland, currentSelection) {
     if (!person || typeof person !== 'object' ||
         !isInspectablePersonId(person.agent_id) || ids.has(person.agent_id) ||
         typeof person.name !== 'string' ||
-        typeof person.human_id !== 'string' || !person.human_id.trim() ||
-        person.human_id !== person.human_id.trim() || humanIds.has(person.human_id) ||
-        /[\u0000-\u001f\u007f]/u.test(person.human_id) ||
+        !isInspectablePersonId(person.human_id) || humanIds.has(person.human_id) ||
         typeof person.biological_sex !== 'string' ||
         !['male', 'female', 'neutral'].includes(person.biological_sex) ||
         !['alive', 'dead', 'dormant'].includes(person.status) ||

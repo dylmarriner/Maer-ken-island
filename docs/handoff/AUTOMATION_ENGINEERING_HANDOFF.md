@@ -215,3 +215,13 @@ Next: inspect CI, execute slow deterministic acceptance without changing pinned 
 - [ ] Run capacity-safe ignored week/year deterministic replay-hash equality and material/water/carbon ledger closure without re-pinning digests.
 - [ ] Continue sourced ecology, industry and workforce milestones with reference-pack/deviation records and obtain owner acceptance.
 - Next: verify CI, then run slow deterministic replay/ledger acceptance on an isolated adequately resourced runner. No live simulation or governance modification authorized.
+
+## 2026-11-03 00:47 NZDT continuation: non-spoofable roster identities
+
+- Verified exact `dylmarriner/Maer-ken-island` PR #68, separate town-dashboard PR #70, WORK_REMAINING.md, implementation roadmap and previous exact-head CI #41432177750 (seven non-nightly jobs passed; slow simulation acceptance skipped).
+- Defect: the shared live/stored roster inspector accepted Unicode format/bidirectional controls, C1 control bytes and unbounded person identifiers, allowing visually deceptive IDs or impractical authenticated inspection URLs. The shared identity validator now rejects those bytes and caps IDs at 256 characters, including stored human IDs.
+- RED: added regression failed (16/17 roster tests passed) before fix. GREEN: **50/50** dashboard Node tests, **8/8** Rust island client tests, Cargo formatting and Git diff check passed on OpenCommander AMD.
+- [ ] Verify new exact-head CI (dashboard, Rust, desktop, installed backend, dependency audit).
+- [ ] Capacity-safe ignored week/year deterministic replay-hash equality and water/carbon/material ledger closure; do not re-pin hashes without evidence.
+- [ ] Sourced ecology/industry/workforce milestones, deviation/reference pack and owner acceptance.
+- Next: check exact-head CI, then execute slow replay/ledger acceptance on an adequately resourced isolated runner. No Rust tick, single-writer, append-only log, snapshot, digest, live simulation or governance changes.

@@ -200,6 +200,19 @@ test('live and stored rosters reject uninspectable dot-segment and control-byte 
   }
 });
 
+test('roster and inspector reject invisible, bidi and oversized person identifiers', () => {
+  const live = { tick: 5, records_at_tick: 5, people: [{ agent_id: 'Gem-D', alive: true, age_years: 28 }] };
+  const stored = {
+    agent_id: 'HUM-000001', name: 'Kauri', human_id: 'human-1',
+    biological_sex: 'male', status: 'alive', age_years: 30,
+  };
+  for (const id of ['Gem\u202eD', 'Gem\u2066D', 'Gem\u0085D', 'x'.repeat(257)]) {
+    assert.throws(() => reconcileLiveRoster({ ...live, people: [{ ...live.people[0], agent_id: id }] }, null), /Invalid live island roster/);
+    assert.throws(() => preparePeopleRoster([{ ...stored, agent_id: id }], false, null), /Invalid stored people roster/);
+    assert.throws(() => preparePeopleRoster([{ ...stored, human_id: id }], false, null), /Invalid stored people roster/);
+  }
+});
+
 test('live roster rejects impossible simulation clock and record freshness before display', () => {
   const people = [{ agent_id: 'Gem-D', alive: true, age_years: 28 }];
   const valid = { tick: 102, records_at_tick: 100, people };
