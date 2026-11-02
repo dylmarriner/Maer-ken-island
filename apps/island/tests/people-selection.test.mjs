@@ -61,6 +61,20 @@ test('record download and inspector share the correct live or stored source', ()
   assert.equal(personRecordPath(true, 'person/name?x=1'), '/api/world/humans/person%2Fname%3Fx%3D1');
 });
 
+test('person inspection rejects dot-segment and malformed identifiers before building authenticated URLs', () => {
+  for (const id of ['.', '..', '', '  ', ' Gem-D', 'Gem-D ', 'Gem\u0000D', null, 7]) {
+    assert.throws(() => personRecordPath(true, id), /Invalid person identifier/, String(id));
+    assert.throws(() => personRecordPath(false, id), /Invalid person identifier/, String(id));
+  }
+  for (const live of [true, false]) {
+    const path = personRecordPath(live, 'Gem-D/other?mode=1#fragment');
+    const url = new URL(path, 'https://island.example');
+    assert.equal(url.pathname, (live ? '/api/world/humans/' : '/api/humans/') + 'Gem-D%2Fother%3Fmode%3D1%23fragment');
+    assert.equal(url.search, '');
+    assert.equal(url.hash, '');
+  }
+});
+
 test('download exports exactly the inspected snapshot without a second HTTP request', () => {
   const person = { summary: { agent_id: 'Gem-D' }, human: { tick: 42, alive: true, nested: { mood: 'resting' } } };
   const result = personRecordExport(person);

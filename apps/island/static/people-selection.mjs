@@ -82,6 +82,14 @@ export function createLivePersonInspector(fetchRecord, showRecord, showSelection
 // Choose the correct live or stored inspection source. Downloads use the
 // already inspected JSON snapshot rather than fetching the endpoint again.
 export function personRecordPath(onTheIsland, agentId) {
+  // encodeURIComponent leaves "." untouched. URL resolution treats "." and
+  // ".." as navigation, so a malformed roster ID could redirect an
+  // authenticated inspection away from the intended human endpoint.
+  if (typeof agentId !== 'string' || !agentId.trim() ||
+      agentId !== agentId.trim() || agentId === '.' || agentId === '..' ||
+      /[\u0000-\u001f\u007f]/u.test(agentId)) {
+    throw new TypeError('Invalid person identifier');
+  }
   return (onTheIsland ? '/api/world/humans/' : '/api/humans/') +
     encodeURIComponent(agentId);
 }
