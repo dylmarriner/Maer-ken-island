@@ -1499,6 +1499,13 @@ async fn properties_economy_and_timeline_serve_what_the_island_really_holds() {
         "a note read by a person carries no markup: {note}"
     );
 
+    // The Town panel is actually in the served page, not just an API
+    // nobody can find. Browser rendering uses text nodes, not HTML data.
+    let (status, page) = get(port, "/island").await;
+    assert_eq!(status, 200, "{page}");
+    assert!(page.contains("id=\"town-panel\""), "{page}");
+    assert!(page.contains("id=\"town-note\""), "{page}");
+
     // Timeline: nothing has reached this island yet.
     let (status, response) = get(port, "/api/timeline").await;
     assert_eq!(status, 200, "{response}");
@@ -1515,6 +1522,31 @@ async fn properties_economy_and_timeline_serve_what_the_island_really_holds() {
         assert_eq!(industry["money_closes"], true, "{body}");
     }
     assert!(industry["payslips"].is_array(), "{body}");
+
+    // Town: a real projection of the people and businesses founded on this
+    // island, not a static description in the browser.
+    let (status, response) = get(port, "/api/town").await;
+    assert_eq!(status, 200, "{response}");
+    let body: serde_json::Value = serde_json::from_str(body_of(&response)).unwrap();
+    let town = &body["town"];
+    assert!(town["residents"].is_u64(), "{body}");
+    assert!(town["present"].is_u64(), "{body}");
+    assert!(town["enterprises"].is_array(), "{body}");
+    assert_eq!(town["founded"], town["cell"].is_array(), "{body}");
+    assert!(
+        town["present"].as_u64().unwrap() <= town["residents"].as_u64().unwrap(),
+        "people at the town cannot exceed its registered residents: {body}"
+    );
+    if town["founded"] == true {
+        assert!(town["residents"].as_u64().unwrap() > 0, "{body}");
+        let businesses = town["enterprises"].as_array().unwrap();
+        assert!(businesses.len() >= 2, "the school and GP practice: {body}");
+        assert!(
+            businesses.iter().all(|e| e["unpaid_hours"].is_number()),
+            "{body}"
+        );
+    }
+    assert!(body["tick"].is_u64(), "{body}");
 
     // Power: the estate's batteries hold no more than they can.
     let (status, response) = get(port, "/api/power").await;
@@ -1738,6 +1770,7 @@ async fn the_three_views_need_an_island() {
         "/api/properties",
         "/api/economy",
         "/api/industry",
+        "/api/town",
         "/api/power",
         "/api/timber",
         "/api/food",

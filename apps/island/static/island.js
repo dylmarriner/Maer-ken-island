@@ -25,6 +25,7 @@ const panels = {
   properties: document.getElementById("properties-panel"),
   economy: document.getElementById("economy-panel"),
   industry: document.getElementById("industry-panel"),
+  town: document.getElementById("town-panel"),
   power: document.getElementById("power-panel"),
   timber: document.getElementById("timber-panel"),
   food: document.getElementById("food-panel"),
@@ -34,6 +35,7 @@ const bodies = {
   properties: document.getElementById("properties"),
   economy: document.getElementById("economy"),
   industry: document.getElementById("industry"),
+  town: document.getElementById("town"),
   power: document.getElementById("power"),
   timber: document.getElementById("timber"),
   food: document.getElementById("food"),
@@ -43,6 +45,7 @@ const notes = {
   properties: document.getElementById("properties-note"),
   economy: document.getElementById("economy-note"),
   industry: document.getElementById("industry-note"),
+  town: document.getElementById("town-note"),
   power: document.getElementById("power-note"),
   timber: document.getElementById("timber-note"),
   food: document.getElementById("food-note"),
@@ -312,6 +315,40 @@ async function showIndustry() {
   parts.append(el("p", `Current as of tick ${tick.toLocaleString()}.`, { class: "panel-note" }));
   bodies.industry.replaceChildren(parts);
   panels.industry.hidden = false;
+}
+
+/** The town's residents and enterprise payroll, read from the same tick. */
+async function showTown() {
+  const { town: data, tick } = await getJson("/api/town");
+  const parts = el("div");
+  if (!data.founded) {
+    notes.town.textContent =
+      "No town has been founded on this island. A suitable hydro site is required.";
+    parts.append(emptyState("No town yet", "The island has not founded a town at a suitable hydro site."));
+  } else {
+    notes.town.textContent =
+      `At medium-grid cell ${data.cell[0]}, ${data.cell[1]}.`;
+    parts.append(pair("Living residents", data.residents.toLocaleString()));
+    parts.append(pair("Residents present in town", data.present.toLocaleString()));
+    if (data.enterprises.length) {
+      parts.append(
+        table(
+          ["Enterprise", "Employed people", "Hours since last pay run", "Payslips issued"],
+          data.enterprises.map((e) => [
+            e.name,
+            e.staff.toLocaleString(),
+            qty(e.unpaid_hours),
+            e.payslips.toLocaleString(),
+          ]),
+        ),
+      );
+    } else {
+      parts.append(emptyState("No businesses yet", "No town enterprises have been established."));
+    }
+  }
+  parts.append(el("p", `Current as of tick ${tick.toLocaleString()}.`, { class: "panel-note" }));
+  bodies.town.replaceChildren(parts);
+  panels.town.hidden = false;
 }
 
 async function showPower() {
@@ -1068,7 +1105,7 @@ async function showTimeline() {
 /// they hold was true once and is not now, and leaving a write form up for
 /// a stopped island invites an operator to act on it.
 function hidePanels() {
-  for (const id of ["intervene-panel", "map-panel", "properties-panel", "economy-panel", "industry-panel", "power-panel", "timber-panel", "food-panel", "timeline-panel"]) {
+  for (const id of ["intervene-panel", "map-panel", "properties-panel", "economy-panel", "industry-panel", "town-panel", "power-panel", "timber-panel", "food-panel", "timeline-panel"]) {
     const panel = document.getElementById(id);
     if (panel) panel.hidden = true;
   }
@@ -1129,6 +1166,7 @@ async function load() {
       showProperties(),
       showEconomy(),
       showIndustry(),
+      showTown(),
       showPower(),
       showTimber(),
       showFood(),

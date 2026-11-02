@@ -144,6 +144,9 @@ pub struct IslandProjection {
     /// The household's food and water; `/api/food` serves it.
     #[serde(skip)]
     pub food: Arc<Food>,
+    /// The town and its actual payroll-bearing businesses. Served separately.
+    #[serde(skip)]
+    pub town: Arc<TownView>,
     /// The canonical state digest, and the tick it was taken at.
     ///
     /// Two islands showing the same digest at the same tick are the same
@@ -531,6 +534,7 @@ impl IslandProjection {
             power: Arc::new(power(life)),
             timber: Arc::new(timber(life)),
             food: Arc::new(food(life)),
+            town: Arc::new(town(life)),
             // Current only if it was taken at this tick *and* nothing has
             // changed the island since: a command applies without moving
             // the clock, so the tick alone cannot tell (`run_island` clears
@@ -1093,6 +1097,74 @@ fn food(life: &IslandLife) -> Food {
         water_shortfalls: life.shortfalls.water,
         foraging: life.foraging.keys().cloned().collect(),
         fetching_water: life.water_trips.keys().cloned().collect(),
+    }
+}
+
+/// The town dashboard is a read-only projection of the simulation, not a
+/// separate roster. The founders' estate and the town never share residents.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct TownView {
+    /// False on an island where no town-sized hydro site could be founded.
+    pub founded: bool,
+    /// Medium-grid location of the town, when it exists.
+    pub cell: Option<(usize, usize)>,
+    /// Living registered townsfolk, whether currently at home or away.
+    pub residents: usize,
+    /// Living residents physically standing on the town's cell at this tick.
+    pub present: usize,
+    /// Town employers with real staff and real accrued hours.
+    pub enterprises: Vec<TownEmployer>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct TownEmployer {
+    pub name: String,
+    pub staff: usize,
+    /// Hours accrued since the last payroll run, not lifetime work.
+    pub unpaid_hours: f64,
+    pub payslips: usize,
+}
+
+fn town(life: &IslandLife) -> TownView {
+    use mk_core::human::HumanStatus;
+    use mk_engine::regional::town::{HEALTH, SCHOOL};
+
+    let residents: Vec<_> = life
+        .humans
+        .registry
+        .iter()
+        .filter(|h| life.townsfolk.contains(h.agent_id()))
+        .filter(|h| matches!(h.profile.status, HumanStatus::Alive))
+        .collect();
+    let present = life.town_cell.map_or(0, |(row, col)| {
+        residents
+            .iter()
+            .filter(|h| h.position.row == row as i32 && h.position.col == col as i32)
+            .count()
+    });
+    let enterprises = life
+        .money
+        .as_ref()
+        .map(|money| {
+            money
+                .enterprises
+                .iter()
+                .filter(|e| e.name == HEALTH || e.name == SCHOOL)
+                .map(|e| TownEmployer {
+                    name: e.name.clone(),
+                    staff: e.staff.len(),
+                    unpaid_hours: e.staff.iter().map(|employee| employee.hours_unpaid).sum(),
+                    payslips: e.payslips.len(),
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    TownView {
+        founded: life.town_cell.is_some(),
+        cell: life.town_cell,
+        residents: residents.len(),
+        present,
+        enterprises,
     }
 }
 
