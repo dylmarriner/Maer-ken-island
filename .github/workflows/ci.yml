@@ -39,6 +39,14 @@ jobs:
     # The complete backend fast suite exceeded 45 minutes on PR #67;
     # it was still passing tests when GitHub cancelled the job.
     timeout-minutes: 90
+    # The 2026-11-03 hosted fast-test run exhausted the runner disk while
+    # linking debug-heavy test binaries (rust-lld SIGBUS / ENOSPC).
+    # Keep assertions, optimizations and the full test selection unchanged;
+    # strip only debug symbols and bound concurrent linker processes.
+    env:
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_BUILD_JOBS: "2"
     steps:
       - uses: actions/checkout@v4
       # Installs the toolchain pinned in rust-toolchain.toml.
