@@ -124,3 +124,11 @@ Next: inspect slow workflow completion and the exact-SHA CI, then take the next 
 - [ ] Capacity-safe ignored week/year deterministic replay-hash and material/water/carbon ledger acceptance before any digest re-pin.
 - [ ] Sourced ecology/industry/workforce milestones from `WORK_REMAINING.md`, reference packs/deviation records and owner acceptance.
 - Next: inspect CI, execute slow deterministic acceptance without changing pinned digests, then implement the highest-impact sourced roadmap item. No live deployment or governance changes.
+
+## 2026-11-02: fail closed on ambiguous live/stored population source
+
+- Canonical dylmarriner/Maer-ken-island PR #68, not the separate Maer-Ken project. Reviewed WORK_REMAINING.md, its source-pack/ledger rules and the prior island handoff. Previous exact-head non-nightly CI passed at 42dbfa0; slow week/year tests were skipped.
+- loadPeopleRoster previously treated a missing/null/string/number /api/world.running flag as a stopped world, silently substituting stored people for a potentially live population. It now requires a real boolean before requesting either roster; malformed state is surfaced as an error without requesting unrelated stored people.
+- New regression failed before the fix (10 passed/1 failed), then **40/40 dashboard Node tests passed**. Both changed JS syntax checks, Cargo formatting and Git whitespace checks passed on OpenCommander AMD. No Rust single-writer, event log, snapshots, replay, ledger, reference packs, pinned digest or live simulation modified.
+- [ ] Exact-new-SHA CI including installed backend green; [ ] ignored week/year replay-hash and material/water/carbon ledger acceptance; [ ] sourced ecology, industry and workforce milestones/deviation records from WORK_REMAINING.md; [ ] owner acceptance.
+- Next: inspect exact-head CI and run slow deterministic acceptance on a capacity-safe isolated runner. Never re-pin digests without the full reference-pack/ledger audit.

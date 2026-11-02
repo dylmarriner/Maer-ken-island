@@ -105,7 +105,12 @@ export async function loadPeopleRoster(fetchJson) {
     fetchJson('/api/status'),
     fetchJson('/api/world'),
   ]);
-  const onTheIsland = world?.running === true;
+  // An absent or malformed running flag is not proof that the world stopped.
+  // Never replace a live population with unrelated stored records on bad data.
+  if (!world || typeof world.running !== 'boolean') {
+    throw new TypeError('Invalid island world status');
+  }
+  const onTheIsland = world.running;
   const roster = await fetchJson(onTheIsland ? '/api/world/humans' : '/api/humans');
   return { status, world, roster, onTheIsland };
 }

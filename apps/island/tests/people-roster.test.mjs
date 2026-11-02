@@ -18,6 +18,21 @@ test('live island roster does not depend on stale or inaccessible stored populat
   assert.equal(requested.includes('/api/humans'), false);
 });
 
+test('malformed world status cannot silently substitute unrelated stored people', async () => {
+  for (const world of [null, {}, { running: 'false' }, { running: 0 }, { running: null }]) {
+    const requested = [];
+    const fetch = async (path) => {
+      requested.push(path);
+      if (path === '/api/status') return { population: 3 };
+      if (path === '/api/world') return world;
+      if (path === '/api/humans') return [{ agent_id: 'stale-person' }];
+      throw new Error('unexpected live request');
+    };
+    await assert.rejects(loadPeopleRoster(fetch), /Invalid island world status/);
+    assert.deepEqual(requested.sort(), ['/api/status', '/api/world']);
+  }
+});
+
 test('stored-only population is loaded when there is no running island', async () => {
   const requested = [];
   const fetch = async (path) => {
