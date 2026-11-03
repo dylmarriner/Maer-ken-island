@@ -108,6 +108,12 @@ pub enum IslandReplayError {
     NotALog(String, String),
     /// A log written by a format this build does not know.
     Version(u32),
+    /// A tick's command sequence is duplicated or skips an expected entry.
+    InvalidSequence {
+        tick: u64,
+        expected: u64,
+        actual: u64,
+    },
     /// The log belongs to a different scenario. Replaying it here would
     /// reproduce nothing and look like it had.
     WrongScenario {
@@ -133,6 +139,14 @@ impl std::fmt::Display for IslandReplayError {
             Self::Version(v) => write!(
                 f,
                 "that log is format {v}; this build reads {REPLAY_LOG_VERSION}"
+            ),
+            Self::InvalidSequence {
+                tick,
+                expected,
+                actual,
+            } => write!(
+                f,
+                "the command at tick {tick} has sequence {actual}; expected {expected}"
             ),
             Self::WrongScenario { log, scenario } => write!(
                 f,
@@ -185,6 +199,27 @@ pub fn replay_island(
         .filter(|e| e.tick <= until_tick)
         .collect();
     entries.sort_by_key(|e| (e.tick, e.sequence));
+
+    // `record` assigns a zero-based, contiguous sequence to commands at a
+    // tick. A duplicate or missing sequence makes same-tick ordering
+    // ambiguous after a log is serialized and reordered, so refuse the log
+    // before applying any of its commands rather than guessing.
+    let mut current_tick = None;
+    let mut expected_sequence = 0_u64;
+    for entry in &entries {
+        if current_tick != Some(entry.tick) {
+            current_tick = Some(entry.tick);
+            expected_sequence = 0;
+        }
+        if entry.sequence != expected_sequence {
+            return Err(IslandReplayError::InvalidSequence {
+                tick: entry.tick,
+                expected: expected_sequence,
+                actual: entry.sequence,
+            });
+        }
+        expected_sequence += 1;
+    }
 
     let step = life.scenario.cadences.human_seconds;
     for entry in entries {

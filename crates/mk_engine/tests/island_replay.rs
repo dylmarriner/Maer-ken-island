@@ -298,3 +298,54 @@ fn a_shuffled_log_still_reproduces_the_run() {
         "a reordered log reproduced a different island"
     );
 }
+
+/// A serialized log must not contain two commands claiming the same order
+/// within one tick. Guessing would make the replay depend on file ordering.
+#[test]
+fn replay_refuses_duplicate_command_sequences_at_same_tick() {
+    let mut log = two_command_log();
+    log.entries[1].sequence = 0;
+
+    match replay_island(canon(), scenario(), &log, 0) {
+        Err(IslandReplayError::InvalidSequence {
+            tick,
+            expected,
+            actual,
+        }) => assert_eq!((tick, expected, actual), (0, 1, 0)),
+        Err(other) => panic!("the wrong refusal for a duplicate sequence: {other}"),
+        Ok(_) => panic!("a log with duplicate command sequences was accepted"),
+    }
+}
+
+/// A sequence gap means at least one command record is missing. The replay
+/// must fail closed instead of presenting the remaining commands as a whole log.
+#[test]
+fn replay_refuses_gaps_in_command_sequences_at_same_tick() {
+    let mut log = two_command_log();
+    log.entries[1].sequence = 2;
+
+    match replay_island(canon(), scenario(), &log, 0) {
+        Err(IslandReplayError::InvalidSequence {
+            tick,
+            expected,
+            actual,
+        }) => assert_eq!((tick, expected, actual), (0, 1, 2)),
+        Err(other) => panic!("the wrong refusal for a sequence gap: {other}"),
+        Ok(_) => panic!("a log with a command sequence gap was accepted"),
+    }
+}
+
+fn two_command_log() -> IslandReplayLog {
+    let mut life = island();
+    let space = life
+        .placed
+        .layout
+        .spaces_outside_house()
+        .next()
+        .expect("a space outside the founders' house exists")
+        .id
+        .0;
+    life.apply_command(somebody("Rua", space)).unwrap();
+    life.apply_command(somebody("Toru", space)).unwrap();
+    life.replay_log().clone()
+}
