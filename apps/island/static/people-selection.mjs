@@ -157,6 +157,11 @@ export function personRecordExport(person) {
   if (!isInspectablePersonId(person.summary?.agent_id)) {
     throw new TypeError("Invalid exported person identifier");
   }
+  // A record carrying its own agent identity must agree with the inspected
+  // summary. Never export another person's data under the selected person's name.
+  if (person.human.agent_id !== undefined && person.human.agent_id !== agentId) {
+    throw new TypeError("Exported human identity does not match summary");
+  }
   const safeName = agentId.replace(/[^A-Za-z0-9._-]/g, "_").replace(/^\.+$/, "_").slice(0, 100) || "person";
   return { filename: safeName + ".json", json: JSON.stringify(person.human, null, 2) };
 }

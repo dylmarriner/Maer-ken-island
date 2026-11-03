@@ -96,6 +96,15 @@ test('person export rejects absent and spoofed identities before downloading', (
   }
 });
 
+test('person export rejects a human payload belonging to another identity', () => {
+  assert.throws(() => personRecordExport({
+    summary: { agent_id: 'Gem-D' }, human: { agent_id: 'Other-D', tick: 2 },
+  }), /identity does not match summary/);
+  assert.equal(JSON.parse(personRecordExport({
+    summary: { agent_id: 'Gem-D' }, human: { agent_id: 'Gem-D', tick: 2 },
+  }).json).agent_id, 'Gem-D');
+});
+
 test('download filenames cannot contain path separators or reserved characters', () => {
   const person = { summary: { agent_id: '../weird/name?x=1' }, human: { id: 1 } };
   assert.equal(personRecordExport(person).filename, '.._weird_name_x_1.json');
