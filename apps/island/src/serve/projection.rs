@@ -1123,6 +1123,20 @@ pub struct TownEmployer {
     /// Hours accrued since the last payroll run, not lifetime work.
     pub unpaid_hours: f64,
     pub payslips: usize,
+    /// The actual roster, rather than inferred positions or expected staff.
+    pub workers: Vec<TownWorker>,
+}
+
+/// A person currently on the town business's employment register. The
+/// amounts and hours come straight from the payroll ledger, not estimates.
+#[derive(Debug, Clone, Serialize)]
+pub struct TownWorker {
+    pub person: String,
+    pub hourly_cents: i64,
+    /// Hours worked since the last pay run, not total hours in their life.
+    pub hours_unpaid: f64,
+    /// Past earnings still owed, without counting hours yet to be paid.
+    pub wages_owed_cents: i64,
 }
 
 fn town(life: &IslandLife) -> TownView {
@@ -1155,6 +1169,16 @@ fn town(life: &IslandLife) -> TownView {
                     staff: e.staff.len(),
                     unpaid_hours: e.staff.iter().map(|employee| employee.hours_unpaid).sum(),
                     payslips: e.payslips.len(),
+                    workers: e
+                        .staff
+                        .iter()
+                        .map(|worker| TownWorker {
+                            person: worker.person.clone(),
+                            hourly_cents: worker.hourly_cents,
+                            hours_unpaid: worker.hours_unpaid,
+                            wages_owed_cents: worker.wages_owed,
+                        })
+                        .collect(),
                 })
                 .collect()
         })

@@ -17,6 +17,7 @@ import {
   getJson,
   readIfAvailable,
   mediumCellCentre,
+  townWorkerRows,
   message,
   postJson,
   reportOffline,
@@ -358,6 +359,22 @@ async function showTown() {
           ]),
         ),
       );
+      const workers = townWorkerRows(data.enterprises);
+      if (workers.length) {
+        parts.append(el("h3", "Town workforce"));
+        parts.append(
+          table(
+            ["Person ID", "Employer", "Hourly pay", "Hours since last pay run", "Past wages owed"],
+            workers.map((worker) => [
+              worker.person,
+              worker.enterprise,
+              dollars(worker.hourly_cents),
+              qty(worker.hours_unpaid),
+              dollars(worker.wages_owed_cents),
+            ]),
+          ),
+        );
+      }
     } else {
       parts.append(emptyState("No businesses yet", "No town enterprises have been established."));
     }

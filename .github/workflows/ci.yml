@@ -229,6 +229,8 @@ jobs:
         run: node --test scripts/tests/town_compat.test.mjs
       - name: Town map uses domain coordinates and refuses invalid points
         run: node --test scripts/tests/town_map.test.mjs
+      - name: Town workforce lists real employees, not inferred ones
+        run: node --test scripts/tests/town_workers.test.mjs
 
   # Known vulnerabilities in what the island depends on: the Rust lockfile
   # against the RustSec advisory database, and the computer service's npm
