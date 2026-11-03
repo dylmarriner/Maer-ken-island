@@ -16,6 +16,7 @@ import {
   getImage,
   getJson,
   readIfAvailable,
+  mediumCellCentre,
   message,
   postJson,
   reportOffline,
@@ -322,6 +323,7 @@ async function showIndustry() {
 async function showTown() {
   const response = await readIfAvailable(getJson, "/api/town");
   if (response === null) {
+    setTownLocation(null);
     // The frontend can be newer than the backend it is pointed at. A 404
     // here means this particular view is unavailable, not that the island
     // has stopped. Leave every other panel visible and polling normally.
@@ -333,6 +335,7 @@ async function showTown() {
     return;
   }
   const { town: data, tick } = response;
+  setTownLocation(data.founded ? data.cell : null);
   const parts = el("div");
   if (!data.founded) {
     notes.town.textContent =
@@ -512,6 +515,16 @@ let treeAgain = false;
 
 // What the map draws on top of the ground, refreshed by the poll loop.
 let mapWorld = null;
+// Town is not in /api/world: /api/town supplies its location if the backend
+// supports the feature. Null also means the island has no founded town.
+let townPoint = null;
+
+function setTownLocation(cell) {
+  townPoint = mediumCellCentre(cell, ground.cellM);
+  const button = document.getElementById("map-town");
+  if (button) button.disabled = townPoint === null;
+  if (view.ready) draw();
+}
 
 // How close you must be before asking for trees at all. Below this the
 // whole individually-modelled wood is a couple of pixels across, and four
@@ -741,6 +754,23 @@ function draw() {
     ctx.strokeRect(sx - side / 2, sy - side / 2, side, side);
   }
 
+  // A town is a place, not one of the estate's structures or its people.
+  // A cyan diamond distinguishes it from those marks at every zoom.
+  if (townPoint) {
+    const [tx, ty] = toScreen(canvas, townPoint[0], townPoint[1]);
+    ctx.fillStyle = "#25bdb3";
+    ctx.strokeStyle = "#063b42";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(tx, ty - 9);
+    ctx.lineTo(tx + 9, ty);
+    ctx.lineTo(tx, ty + 9);
+    ctx.lineTo(tx - 9, ty);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  }
+
   for (const s of lastStructures) {
     const [r, c] = s.cell;
     const [sx, sy] = toScreen(canvas, (c + 0.5) * ground.cellM, (r + 0.5) * ground.cellM);
@@ -854,6 +884,10 @@ function sayScale(canvas) {
     document.createTextNode(" in yellow, "),
     el("span", `${count(lastStructures.length, "structure", "structures")}`, { class: "map-key-structure" }),
     document.createTextNode(" in orange, the estate boxed in white."),
+    ...(townPoint
+      ? [document.createTextNode(" "), el("span", "The town", { class: "map-key-town" }),
+         document.createTextNode(" in turquoise.")]
+      : []),
   ];
   const where =
     treesShown &&
@@ -1016,6 +1050,12 @@ function wireMap() {
     // Four kilometres across: the whole high-detail patch in frame.
     goTo((c + 0.5) * ground.cellM, (r + 0.5) * ground.cellM, 4000 / (canvas.clientWidth || 1));
   });
+  document.getElementById("map-town").addEventListener("click", () => {
+    if (!townPoint) return;
+    // Eight medium cells across: enough context to see the town's river,
+    // unlike a close-up of one cell that fills the frame with one pixel.
+    goTo(townPoint[0], townPoint[1], 8 * ground.cellM / (canvas.clientWidth || 1));
+  });
   document.getElementById("map-trees").addEventListener("click", () => {
     // Aimed at a stem that is actually there, not at the middle of the
     // wood. The individual radius is measured from the centre of the
@@ -1118,6 +1158,10 @@ async function showTimeline() {
 /// they hold was true once and is not now, and leaving a write form up for
 /// a stopped island invites an operator to act on it.
 function hidePanels() {
+  // A stopped or replaced island must not keep a previous town's marker.
+  townPoint = null;
+  const townButton = document.getElementById("map-town");
+  if (townButton) townButton.disabled = true;
   for (const id of ["intervene-panel", "map-panel", "properties-panel", "economy-panel", "industry-panel", "town-panel", "power-panel", "timber-panel", "food-panel", "timeline-panel"]) {
     const panel = document.getElementById(id);
     if (panel) panel.hidden = true;

@@ -1505,6 +1505,10 @@ async fn properties_economy_and_timeline_serve_what_the_island_really_holds() {
     assert_eq!(status, 200, "{page}");
     assert!(page.contains("id=\"town-panel\""), "{page}");
     assert!(page.contains("id=\"town-note\""), "{page}");
+    assert!(
+        page.contains("id=\"map-town\""),
+        "the map needs a town shortcut: {page}"
+    );
 
     // Timeline: nothing has reached this island yet.
     let (status, response) = get(port, "/api/timeline").await;

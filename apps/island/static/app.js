@@ -44,6 +44,17 @@ export function roundTo(value, places) {
     : "—";
 }
 
+/** Centre of a regional medium-grid cell, in domain metres (east, north).
+ * Invalid or absent positions must never paint a fictional marker.
+ */
+export function mediumCellCentre(cell, cellSizeM) {
+  if (!Array.isArray(cell) || cell.length !== 2 ||
+      !cell.every((n) => Number.isSafeInteger(n) && n >= 0) ||
+      !Number.isFinite(cellSizeM) || cellSizeM <= 0) return null;
+  const [row, col] = cell;
+  return [(col + 0.5) * cellSizeM, (row + 0.5) * cellSizeM];
+}
+
 /** A sentence a person can act on, whatever the fetch failure was. */
 export function explain(error) {
   const message = error && error.message ? error.message : String(error);
