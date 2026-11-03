@@ -110,11 +110,16 @@ pub fn read(reply: &serde_json::Value) -> Result<Person, String> {
                 .ok_or_else(|| format!("invalid {key}: expected a nonnegative integer")),
         }
     };
+    let records_at_tick = read_tick("records_at_tick")?;
+    let tick = read_tick("tick")?;
+    if matches!((records_at_tick, tick), (Some(record), Some(now)) if record > now) {
+        return Err("records_at_tick exceeds island tick".to_string());
+    }
     Ok(Person {
         sections,
         whereabouts,
-        records_at_tick: read_tick("records_at_tick")?,
-        tick: read_tick("tick")?,
+        records_at_tick,
+        tick,
     })
 }
 
@@ -159,6 +164,15 @@ mod tests {
             "records_at_tick": 120,
             "tick": 150
         })
+    }
+
+    #[test]
+    fn future_record_ticks_are_rejected_instead_of_appearing_fresh() {
+        let mut payload = reply();
+        payload["records_at_tick"] = serde_json::json!(151);
+        assert!(read(&payload)
+            .unwrap_err()
+            .contains("records_at_tick exceeds island tick"));
     }
 
     #[test]
