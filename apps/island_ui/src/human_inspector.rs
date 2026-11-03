@@ -83,11 +83,21 @@ pub fn read(reply: &serde_json::Value) -> Result<Person, String> {
                 .map_err(|e| format!("the person's whereabouts could not be read: {e}"))
         })
         .transpose()?;
+    // Present-but-invalid clocks must not silently look like absent clocks.
+    let read_tick = |key: &str| -> Result<Option<u64>, String> {
+        match reply.get(key) {
+            None | Some(serde_json::Value::Null) => Ok(None),
+            Some(value) => value
+                .as_u64()
+                .map(Some)
+                .ok_or_else(|| format!("invalid {key}: expected a nonnegative integer")),
+        }
+    };
     Ok(Person {
         sections,
         whereabouts,
-        records_at_tick: reply.get("records_at_tick").and_then(|t| t.as_u64()),
-        tick: reply.get("tick").and_then(|t| t.as_u64()),
+        records_at_tick: read_tick("records_at_tick")?,
+        tick: read_tick("tick")?,
     })
 }
 
@@ -171,6 +181,19 @@ mod tests {
         let mut corrupt = reply();
         corrupt["where"] = serde_json::json!({"asleep": false, "body_carbon_kg": "unknown"});
         assert!(read(&corrupt).unwrap_err().contains("whereabouts"));
+    }
+
+    #[test]
+    fn malformed_tick_fields_are_rejected_instead_of_hidden() {
+        for (field, invalid) in [
+            ("tick", serde_json::json!(-1)),
+            ("records_at_tick", serde_json::json!("120")),
+            ("tick", serde_json::json!(1.5)),
+        ] {
+            let mut corrupt = reply();
+            corrupt[field] = invalid;
+            assert!(read(&corrupt).unwrap_err().contains(field));
+        }
     }
 
     #[test]
