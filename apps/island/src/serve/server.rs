@@ -1123,6 +1123,28 @@ pub fn routes_with_config(
             }
         });
 
+    // Phase 4b Task 9: where the town stands, who lives there and the
+    // staffed practice and school. Reads the same published tick as /api/world.
+    let get_town = warp::path!("api" / "town")
+        .and(read())
+        .and(with(world.clone()))
+        .map(|world: Option<SimHandle>| match world {
+            None => json(
+                StatusCode::NOT_FOUND,
+                &serde_json::json!({ "errors": ["No island is running, so it has no town. Start the server with --scenario."] }),
+            ),
+            Some(world) => {
+                let current = world.projection();
+                json(
+                    StatusCode::OK,
+                    &serde_json::json!({
+                        "town": &*current.town,
+                        "tick": current.clock.tick,
+                    }),
+                )
+            }
+        });
+
     // The estate's power, fuel and vehicles (Phase 4b Task 9's power page).
     let get_power = warp::path!("api" / "power")
         .and(read())
@@ -1693,6 +1715,7 @@ pub fn routes_with_config(
         .or(get_properties)
         .or(get_economy)
         .or(get_industry)
+        .or(get_town)
         .or(get_power)
         .or(get_timber)
         .or(get_food)

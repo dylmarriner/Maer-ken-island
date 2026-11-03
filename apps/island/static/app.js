@@ -172,6 +172,21 @@ export async function getJson(path) {
   return response.json();
 }
 
+/** Read an endpoint added by a newer island backend.
+ *
+ * A dashboard can be served from a separate host and pointed at an older
+ * backend. Missing optional views should not make a running world look dead.
+ * Other failures (including auth and network errors) remain real errors.
+ */
+export async function readIfAvailable(fetcher, path) {
+  try {
+    return await fetcher(path);
+  } catch (error) {
+    if (error && error.status === 404) return null;
+    throw error;
+  }
+}
+
 export async function postJson(path, body, token) {
   const headers = headersFor({ "content-type": "application/json" });
   // An explicitly-passed token wins, so a page can send one somebody has
