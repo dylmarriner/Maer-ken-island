@@ -658,6 +658,7 @@ button.link {
 
 /* Markers over the map, in the picture's own coordinate space. */
 #map-frame { position: relative; display: block; max-width: 100%; }
-.map-key-person, .map-key-structure, .map-key-estate { font-weight: 600; }
+.map-key-person, .map-key-structure, .map-key-estate, .map-key-town { font-weight: 600; }
 .map-key-person { color: #8a6b00; }
 .map-key-structure { color: #a43c18; }
+.map-key-town { color: #067a73; }
