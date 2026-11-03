@@ -60,6 +60,8 @@ test('latest failure remains visible and invalidation suppresses an obsolete res
 });
 
 test('record download and inspector share the correct live or stored source', () => {
+  assert.throws(() => personRecordPath(true, '\uD800'), /Invalid person identifier/);
+  assert.throws(() => personRecordPath(false, '\uDC00'), /Invalid person identifier/);
   assert.equal(personRecordPath(true, 'Gem-D'), '/api/world/humans/Gem-D');
   assert.equal(personRecordPath(false, 'Gem-D'), '/api/humans/Gem-D');
   assert.equal(personRecordPath(true, 'person/name?x=1'), '/api/world/humans/person%2Fname%3Fx%3D1');

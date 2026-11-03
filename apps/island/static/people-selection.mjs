@@ -128,6 +128,8 @@ function isInspectablePersonId(agentId) {
   // Dot segments navigate away from the intended endpoint after URL resolution.
   return typeof agentId === 'string' && agentId.length <= 256 && agentId.trim().length > 0 &&
     agentId === agentId.trim() && agentId === agentId.normalize('NFC') && agentId !== '.' && agentId !== '..' &&
+    // Reject lone UTF-16 surrogates before encodeURIComponent can throw a URIError.
+    !/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/u.test(agentId) &&
     // Unicode format/bidi controls and C1 controls can spoof visible identities.
     !/[\u0000-\u001f\u007f-\u009f\p{Cf}]/u.test(agentId);
 }
