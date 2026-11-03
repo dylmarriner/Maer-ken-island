@@ -10,6 +10,8 @@
 //! That is what makes the digest worth printing. A run that could not be
 //! reproduced would be a number about one afternoon on one machine.
 
+use std::fs::{self, OpenOptions};
+use std::io::{self, Write};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -84,18 +86,47 @@ impl IslandReplayLog {
         Ok(log)
     }
 
-    /// Write a log, whole or not at all.
+    /// Write a log atomically, using a unique temporary file for each writer.
+    ///
+    /// Exclusive file creation matters even with a single simulation writer: a
+    /// stale temp file or concurrent save must never be truncated before rename.
     pub fn save(&self, path: &Path) -> Result<(), IslandReplayError> {
         let text = serde_json::to_vec_pretty(self)
             .map_err(|e| IslandReplayError::NotALog(path.display().to_string(), e.to_string()))?;
-        let temp = path.with_extension(format!("tmp-{}", std::process::id()));
-        let write = (|| -> std::io::Result<()> {
-            std::fs::write(&temp, &text)?;
-            std::fs::rename(&temp, path)
-        })();
-        if let Err(e) = write {
-            std::fs::remove_file(&temp).ok();
-            return Err(IslandReplayError::Io(path.display().to_string(), e));
+
+        let mut candidate = None;
+        for sequence in 0..128 {
+            let temp = path.with_extension(format!("tmp-{}-{sequence}", std::process::id()));
+            match OpenOptions::new().write(true).create_new(true).open(&temp) {
+                Ok(file) => {
+                    candidate = Some((temp, file));
+                    break;
+                }
+                Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
+                Err(error) => return Err(IslandReplayError::Io(path.display().to_string(), error)),
+            }
+        }
+
+        let Some((temp, mut file)) = candidate else {
+            return Err(IslandReplayError::Io(
+                path.display().to_string(),
+                io::Error::new(
+                    io::ErrorKind::AlreadyExists,
+                    "could not allocate a unique temporary replay file",
+                ),
+            ));
+        };
+
+        if let Err(error) = file.write_all(&text).and_then(|()| file.sync_all()) {
+            drop(file);
+            let _ = fs::remove_file(&temp);
+            return Err(IslandReplayError::Io(path.display().to_string(), error));
+        }
+        drop(file);
+
+        if let Err(error) = fs::rename(&temp, path) {
+            let _ = fs::remove_file(&temp);
+            return Err(IslandReplayError::Io(path.display().to_string(), error));
         }
         Ok(())
     }

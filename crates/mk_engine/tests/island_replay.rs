@@ -251,7 +251,23 @@ fn a_log_round_trips_through_a_file() {
 
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("run.log.json");
+    // A stale temp file from an earlier process must not be truncated or
+    // mistaken for this save's own staging file.
+    let stale_temp = path.with_extension(format!("tmp-{}", std::process::id()));
+    let occupied_candidate = path.with_extension(format!("tmp-{}-0", std::process::id()));
+    std::fs::write(&stale_temp, b"owned by another writer").unwrap();
+    std::fs::write(&occupied_candidate, b"another save owns this candidate").unwrap();
     live.replay_log().save(&path).unwrap();
+    assert_eq!(
+        std::fs::read(&stale_temp).unwrap(),
+        b"owned by another writer",
+        "saving a replay must not reuse the legacy temp path"
+    );
+    assert_eq!(
+        std::fs::read(&occupied_candidate).unwrap(),
+        b"another save owns this candidate",
+        "exclusive temp creation must skip an occupied candidate"
+    );
     let back = IslandReplayLog::load(&path).expect("the log reads back");
 
     assert_eq!(back.entries.len(), live.replay_log().entries.len());
