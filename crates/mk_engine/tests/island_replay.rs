@@ -232,6 +232,27 @@ fn a_log_from_another_island_is_refused() {
     }
 }
 
+/// Recording commands for an earlier tick must continue that tick's sequence
+/// even if another tick was appended in between. Replay sorts by tick, so
+/// duplicate sequence IDs here would make the public recorder emit an invalid log.
+#[test]
+fn record_keeps_sequences_contiguous_when_ticks_are_interleaved() {
+    let mut log = IslandReplayLog::new("scenario".to_string());
+    log.record(1, somebody("Rua", 1));
+    log.record(2, somebody("Toru", 1));
+    log.record(1, somebody("Hana", 1));
+
+    let tick_one_sequences: Vec<u64> = log
+        .entries
+        .iter()
+        .filter(|entry| entry.tick == 1)
+        .map(|entry| entry.sequence)
+        .collect();
+
+    assert_eq!(tick_one_sequences, vec![0, 1]);
+    assert_eq!(log.entries[1].sequence, 0);
+}
+
 /// A log survives a trip through a file, order and all.
 #[test]
 fn a_log_round_trips_through_a_file() {
