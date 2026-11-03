@@ -71,7 +71,11 @@ pub fn read(reply: &serde_json::Value) -> Result<Person, String> {
         .ok_or("this backend serves no sections for a person")?;
     let sections: Vec<Section> = serde_json::from_value(sections.clone())
         .map_err(|e| format!("the person's sections could not be read: {e}"))?;
+    let mut section_ids = std::collections::HashSet::new();
     for section in &sections {
+        if section.id.trim().is_empty() || !section_ids.insert(section.id.as_str()) {
+            return Err("person sections have an empty or duplicate id".to_string());
+        }
         for reading in &section.readings {
             if let Some(meter) = reading.meter {
                 if !meter.is_finite() || !(0.0..=1.0).contains(&meter) {
@@ -84,7 +88,7 @@ pub fn read(reply: &serde_json::Value) -> Result<Person, String> {
         return Err("this backend served a person with no sections".to_string());
     }
     // A malformed live location is a wire-contract error, not offline state.
-    let whereabouts = reply
+    let whereabouts: Option<Whereabouts> = reply
         .get("where")
         .filter(|w| !w.is_null())
         .map(|w| {
@@ -164,6 +168,16 @@ mod tests {
             "records_at_tick": 120,
             "tick": 150
         })
+    }
+
+    #[test]
+    fn duplicate_and_empty_section_ids_are_rejected() {
+        let mut duplicate = reply();
+        duplicate["sections"][1]["id"] = serde_json::json!("needs");
+        assert!(read(&duplicate).unwrap_err().contains("duplicate id"));
+        let mut empty = reply();
+        empty["sections"][0]["id"] = serde_json::json!("  ");
+        assert!(read(&empty).unwrap_err().contains("empty or duplicate id"));
     }
 
     #[test]
