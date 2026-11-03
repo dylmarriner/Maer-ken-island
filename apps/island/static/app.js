@@ -55,6 +55,26 @@ export function mediumCellCentre(cell, cellSizeM) {
   return [(col + 0.5) * cellSizeM, (row + 0.5) * cellSizeM];
 }
 
+/** Detailed employment from the town's actual enterprise rosters.
+ * Missing fields on an older backend must not create fictional workers.
+ * A stable order makes the panel easier to scan between live updates.
+ */
+export function townWorkerRows(enterprises) {
+  return enterprises
+    .flatMap((enterprise) =>
+      (enterprise.workers || []).map((worker) => ({
+        enterprise: enterprise.name,
+        person: worker.person,
+        hourly_cents: worker.hourly_cents,
+        hours_unpaid: worker.hours_unpaid,
+        wages_owed_cents: worker.wages_owed_cents,
+      })),
+    )
+    .sort((a, b) =>
+      a.enterprise.localeCompare(b.enterprise) || a.person.localeCompare(b.person),
+    );
+}
+
 /** A sentence a person can act on, whatever the fetch failure was. */
 export function explain(error) {
   const message = error && error.message ? error.message : String(error);

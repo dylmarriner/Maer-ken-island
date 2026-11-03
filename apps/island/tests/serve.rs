@@ -1549,6 +1549,35 @@ async fn properties_economy_and_timeline_serve_what_the_island_really_holds() {
             businesses.iter().all(|e| e["unpaid_hours"].is_number()),
             "{body}"
         );
+        for employer in businesses {
+            let workers = employer["workers"]
+                .as_array()
+                .expect("real town staff roster");
+            assert_eq!(
+                workers.len() as u64,
+                employer["staff"].as_u64().expect("employee count"),
+                "staff total and individual worker records must agree: {employer}"
+            );
+            let sum: f64 = workers
+                .iter()
+                .map(|w| {
+                    assert!(w["person"].is_string(), "{w}");
+                    assert!(w["hourly_cents"].as_i64().is_some_and(|c| c > 0), "{w}");
+                    assert!(
+                        w["wages_owed_cents"].as_i64().is_some_and(|c| c >= 0),
+                        "{w}"
+                    );
+                    w["hours_unpaid"]
+                        .as_f64()
+                        .expect("hours, never a guessed status")
+                })
+                .sum();
+            let total = employer["unpaid_hours"].as_f64().unwrap();
+            assert!(
+                (sum - total).abs() < 1e-7,
+                "the roster must reconcile: {employer}"
+            );
+        }
     }
     assert!(body["tick"].is_u64(), "{body}");
 
