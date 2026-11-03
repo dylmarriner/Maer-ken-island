@@ -311,6 +311,19 @@ test('stored summaries are validated before the dashboard replaces its current r
   }
 });
 
+test('stored display names cannot spoof identities using invisible controls or padding', () => {
+  const valid = {
+    agent_id: 'HUM-000001', name: 'Kauri Te Aroha', human_id: 'human-1',
+    biological_sex: 'male', status: 'alive', age_years: 30,
+  };
+  assert.deepEqual(preparePeopleRoster([valid], false, null), [valid]);
+  for (const name of ['', ' ', ' Kauri', 'Kauri ', 'Kauri\u202e', 'Kauri\u200b',
+    'Kauri\nAdmin', 'x'.repeat(257), 42]) {
+    assert.throws(() => preparePeopleRoster([{ ...valid, name }], false, null),
+      /Invalid stored people roster/, String(name));
+  }
+});
+
 test('live roster is validated before the dashboard adopts its population', () => {
   const valid = { tick: 7, records_at_tick: 7, people: [{ agent_id: 'Gem-D', alive: true, age_years: 28 }] };
   assert.equal(preparePeopleRoster(valid, true, 'Gem-D')[0].agent_id, 'Gem-D');

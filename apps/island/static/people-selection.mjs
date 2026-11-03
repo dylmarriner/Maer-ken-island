@@ -224,7 +224,9 @@ export function preparePeopleRoster(roster, onTheIsland, currentSelection) {
   for (const person of roster) {
     if (!person || typeof person !== 'object' ||
         !isInspectablePersonId(person.agent_id) || ids.has(person.agent_id) ||
-        typeof person.name !== 'string' ||
+        // Stored names are operator-visible attribution, just like live IDs.
+        // Refuse invisible/bidi controls, ambiguous padding and empty labels.
+        !isInspectablePersonId(person.name) ||
         !isInspectablePersonId(person.human_id) || humanIds.has(person.human_id) ||
         typeof person.biological_sex !== 'string' ||
         !['male', 'female', 'neutral'].includes(person.biological_sex) ||
