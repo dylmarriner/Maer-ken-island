@@ -66,7 +66,7 @@ test('record download and inspector share the correct live or stored source', ()
 });
 
 test('person inspection rejects dot-segment and malformed identifiers before building authenticated URLs', () => {
-  for (const id of ['.', '..', '', '  ', ' Gem-D', 'Gem-D ', 'Gem\u0000D', null, 7]) {
+  for (const id of ['.', '..', '', '  ', ' Gem-D', 'Gem-D ', 'Gem\u0000D', 'Cafe\u0301', null, 7]) {
     assert.throws(() => personRecordPath(true, id), /Invalid person identifier/, String(id));
     assert.throws(() => personRecordPath(false, id), /Invalid person identifier/, String(id));
   }

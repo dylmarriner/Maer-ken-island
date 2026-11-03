@@ -127,7 +127,7 @@ function isInspectablePersonId(agentId) {
   // Keep both roster sources consistent with the authenticated inspector.
   // Dot segments navigate away from the intended endpoint after URL resolution.
   return typeof agentId === 'string' && agentId.length <= 256 && agentId.trim().length > 0 &&
-    agentId === agentId.trim() && agentId !== '.' && agentId !== '..' &&
+    agentId === agentId.trim() && agentId === agentId.normalize('NFC') && agentId !== '.' && agentId !== '..' &&
     // Unicode format/bidi controls and C1 controls can spoof visible identities.
     !/[\u0000-\u001f\u007f-\u009f\p{Cf}]/u.test(agentId);
 }
