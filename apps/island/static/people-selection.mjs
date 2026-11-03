@@ -150,6 +150,11 @@ export function personRecordExport(person) {
     throw new TypeError("Person export requires an inspected human record");
   }
   const agentId = String(person.summary?.agent_id ?? "");
+  // Do not silently turn a missing or spoofed identity into a plausible
+  // downloaded filename; exports must be attributable to the inspected human.
+  if (!isInspectablePersonId(person.summary?.agent_id)) {
+    throw new TypeError("Invalid exported person identifier");
+  }
   const safeName = agentId.replace(/[^A-Za-z0-9._-]/g, "_").replace(/^\.+$/, "_").slice(0, 100) || "person";
   return { filename: safeName + ".json", json: JSON.stringify(person.human, null, 2) };
 }

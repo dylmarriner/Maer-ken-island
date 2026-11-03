@@ -88,6 +88,12 @@ test('download exports exactly the inspected snapshot without a second HTTP requ
   assert.equal(JSON.parse(result.json).tick, 42);
 });
 
+test('person export rejects absent and spoofed identities before downloading', () => {
+  for (const agent_id of [undefined, null, '', '  ', ' Gem-D', 'Gem-D\u202e', 'Gem-D\u0000']) {
+    assert.throws(() => personRecordExport({ summary: { agent_id }, human: { tick: 2 } }), /Invalid exported person identifier/);
+  }
+});
+
 test('download filenames cannot contain path separators or reserved characters', () => {
   const person = { summary: { agent_id: '../weird/name?x=1' }, human: { id: 1 } };
   assert.equal(personRecordExport(person).filename, '.._weird_name_x_1.json');
