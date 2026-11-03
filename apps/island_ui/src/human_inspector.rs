@@ -71,6 +71,15 @@ pub fn read(reply: &serde_json::Value) -> Result<Person, String> {
         .ok_or("this backend serves no sections for a person")?;
     let sections: Vec<Section> = serde_json::from_value(sections.clone())
         .map_err(|e| format!("the person's sections could not be read: {e}"))?;
+    for section in &sections {
+        for reading in &section.readings {
+            if let Some(meter) = reading.meter {
+                if !meter.is_finite() || !(0.0..=1.0).contains(&meter) {
+                    return Err(format!("invalid meter in section {}", section.id));
+                }
+            }
+        }
+    }
     if sections.is_empty() {
         return Err("this backend served a person with no sections".to_string());
     }
@@ -83,6 +92,14 @@ pub fn read(reply: &serde_json::Value) -> Result<Person, String> {
                 .map_err(|e| format!("the person's whereabouts could not be read: {e}"))
         })
         .transpose()?;
+    if let Some(ref location) = whereabouts {
+        if location
+            .body_carbon_kg
+            .is_some_and(|kg| !kg.is_finite() || kg < 0.0)
+        {
+            return Err("invalid whereabouts body_carbon_kg".to_string());
+        }
+    }
     // Present-but-invalid clocks must not silently look like absent clocks.
     let read_tick = |key: &str| -> Result<Option<u64>, String> {
         match reply.get(key) {
@@ -194,6 +211,18 @@ mod tests {
             corrupt[field] = invalid;
             assert!(read(&corrupt).unwrap_err().contains(field));
         }
+    }
+
+    #[test]
+    fn invalid_meters_and_negative_carbon_are_rejected() {
+        for invalid in [serde_json::json!(-0.1), serde_json::json!(1.01)] {
+            let mut corrupt = reply();
+            corrupt["sections"][0]["fields"][0]["meter"] = invalid;
+            assert!(read(&corrupt).unwrap_err().contains("meter"));
+        }
+        let mut corrupt = reply();
+        corrupt["where"]["body_carbon_kg"] = serde_json::json!(-0.5);
+        assert!(read(&corrupt).unwrap_err().contains("body_carbon_kg"));
     }
 
     #[test]
