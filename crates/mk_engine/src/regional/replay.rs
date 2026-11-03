@@ -61,12 +61,15 @@ impl IslandReplayLog {
 
     /// Append a command applied at `tick`.
     pub fn record(&mut self, tick: u64, command: IslandCommand) {
+        // Entries may be appended out of tick order before replay sorts them.
+        // Continue the last sequence for this tick, not merely the contiguous
+        // suffix, or an interleaved tick would create duplicate sequence IDs.
         let sequence = self
             .entries
             .iter()
             .rev()
-            .take_while(|e| e.tick == tick)
-            .count() as u64;
+            .find(|entry| entry.tick == tick)
+            .map_or(0, |entry| entry.sequence + 1);
         self.entries.push(IslandReplayEntry {
             tick,
             sequence,
