@@ -15,6 +15,7 @@ import {
   fillChrome,
   getImage,
   getJson,
+  readIfAvailable,
   message,
   postJson,
   reportOffline,
@@ -319,7 +320,19 @@ async function showIndustry() {
 
 /** The town's residents and enterprise payroll, read from the same tick. */
 async function showTown() {
-  const { town: data, tick } = await getJson("/api/town");
+  const response = await readIfAvailable(getJson, "/api/town");
+  if (response === null) {
+    // The frontend can be newer than the backend it is pointed at. A 404
+    // here means this particular view is unavailable, not that the island
+    // has stopped. Leave every other panel visible and polling normally.
+    notes.town.textContent = "This island backend does not provide the Town view yet.";
+    bodies.town.replaceChildren(
+      emptyState("Town view unavailable", "Update the island backend to see its town and workforce."),
+    );
+    panels.town.hidden = false;
+    return;
+  }
+  const { town: data, tick } = response;
   const parts = el("div");
   if (!data.founded) {
     notes.town.textContent =
