@@ -125,7 +125,7 @@ the log's last water is booked to the air at that moment rather than when the wo
 Done 2026-10-14 (`regional/species.rs`, D55): upstream's founding species placed on the island's
 habitats, plants and grazers as shares of the island's carbon fields, other guilds at upstream's
 density times the island's habitat area. **Left:** Earth-calibrated densities and a carbon pool
-for each consumer guild (realism R8, R10); serving the species to the map and the cell inspector;
+for each consumer guild (realism R8, R10); serving the species to the map and the cell inspector (the 2026-11-01 read-only cell inspector now shows biome, annual climate and terrestrial NPP, **not species**);
 animal and fish resource nodes (done 2026-10-23, §2b).
 
 ### 2b. Phase 3 Task 2: every resource and material
@@ -632,3 +632,19 @@ invertebrate densities, fire danger indices (see each report's "unsourced" secti
   sources; the container's own network blocks most hosts.
 - **Persist digests.** `WEEK_DIGEST` is `577e4215…540a`; the planetary topology pin is
   `e4ece246…73e2`. Any change that moves either is a behaviour change and must say so.
+
+
+## 2026-11-02 continuation: live People inspector refresh
+- The People inspector formerly loaded each person's record only on selection, even while the island clock continued ticking. It now refreshes the selected **live** record every five seconds without a loading skeleton or URL change; hidden tabs and stored-only populations do not poll.
+- Added a non-overlapping inspector controller: a new selection aborts a pending refresh, stale responses cannot overwrite a different person, and a transient poll error preserves the last successful record. JSON export continues to represent the exact displayed snapshot. No simulation logic, deterministic replay hashes, ledgers or source packs changed.
+- OpenCommander `amd`: **29/29** targeted Node tests passed (three new inspector tests), JS syntax, `cargo fmt --all -- --check`, and `git diff --check` passed. Rust and full CI on the new SHA are pending.
+- [ ] Exact-SHA CI; [ ] slow week/year deterministic replay and carbon/water/material ledger acceptance; [ ] sourced ecology/industry and human autonomy milestones. Next: verify CI and run slow tests, then advance a sourced physics/industry slice.
+
+
+## 2026-11-02 continuation: live People roster independent of stored population
+
+- Verified the canonical dylmarriner/Maer-ken-island remote and PR #68; previous exact-head [CI #41333346433](https://github.com/dylmarriner/Maer-ken-island/actions/runs/41333346433) **passed**.
+- Found the live People page eagerly fetched /api/humans (stored Phase-0b population) before choosing /api/world/humans (running island). A stale or inaccessible stored endpoint could blank the **live** roster even though the running island was healthy. Now selects the source first and fetches only the relevant roster; a failed live request is not silently replaced by unrelated stored records.
+- Regression tests failed before the change (missing roster-source helper), then **32/32** Node dashboard tests passed including three new source-isolation cases. JS syntax, Cargo formatting and Git diff checks passed on OpenCommander amd. No simulation, ledger, snapshot, seed, source pack or replay digest changed.
+- [ ] Exact-new-SHA CI green. [ ] Slow week/year replay hashes and water/carbon/material ledger acceptance. [ ] Sourced ecology/industry, autonomy and open owner decisions.
+- Next: confirm CI and run the capacity-safe slow simulation acceptance; then advance a sourced physics/industry milestone.

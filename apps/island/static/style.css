@@ -655,6 +655,7 @@ button.link {
 #map-cell { margin-top: 0.6rem; min-height: 3rem; }
 #map-cell .cell-where { margin: 0 0 0.2rem; font-variant-numeric: tabular-nums; }
 #map-cell .cell-what { margin: 0; color: var(--ink-soft); }
+#map-cell .cell-what + .cell-what { margin-top: 0.25rem; }
 
 /* Markers over the map, in the picture's own coordinate space. */
 #map-frame { position: relative; display: block; max-width: 100%; }

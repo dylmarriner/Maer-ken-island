@@ -23,6 +23,9 @@ thing feels to use or what it costs on a real GPU — every frame so far was ras
 CPU. See `docs/island/RENDER_STACK.md`, which also records that an earlier version of this
 document was wrong about whether rendering here was possible at all.
 
+## 2026-11-01 dashboard inspector increment
+The island web map's clicked-cell inspector now renders the existing `/api/cell` biome, mean annual air temperature, annual precipitation and **terrestrial** net primary production fields. It omits missing/non-finite measurements and does not present marine NPP's unmodelled zero as an ecological observation. This is read-only UI; no tick, seed, snapshot, ledger, reference pack or replay hash changed. The species-in-cell work and D55's density limitations remain open. Evidence: `apps/island/tests/cell-details.test.mjs` (3 Node tests), `apps/island/src/serve/pages.rs` asset-route regression; full Rust server tests await dependencies/CI.
+
 ## Implemented
 
 | System | State | Evidence |
@@ -379,3 +382,19 @@ cost the resting baseline (D22).
 - The five-year run was made before meals and drinks were booked where people stand; it has not been repeated on the new bookkeeping, so its end state describes the earlier one. It also predates the merge with `main`.
 - Children: they are small, grow on the WHO curves, eat what their own respiration burned, and under five years old stay with their mother. Older children choose their own actions, but not an adult's: under 12 they do not mine, build, craft, code or use email and search, and under 16 they take no part in harm or intimacy (`humans/autonomy.rs` `age_substitute`; the thresholds are round numbers, not sourced); a child whose mother has died is not cared for; schooling and play are not modelled.
 - Upstream pull requests for every divergence in `UPSTREAM.md`.
+
+
+## 2026-11-02 continuation: live People inspector refresh
+- The People inspector formerly loaded each person's record only on selection, even while the island clock continued ticking. It now refreshes the selected **live** record every five seconds without a loading skeleton or URL change; hidden tabs and stored-only populations do not poll.
+- Added a non-overlapping inspector controller: a new selection aborts a pending refresh, stale responses cannot overwrite a different person, and a transient poll error preserves the last successful record. JSON export continues to represent the exact displayed snapshot. No simulation logic, deterministic replay hashes, ledgers or source packs changed.
+- OpenCommander `amd`: **29/29** targeted Node tests passed (three new inspector tests), JS syntax, `cargo fmt --all -- --check`, and `git diff --check` passed. Rust and full CI on the new SHA are pending.
+- [ ] Exact-SHA CI; [ ] slow week/year deterministic replay and carbon/water/material ledger acceptance; [ ] sourced ecology/industry and human autonomy milestones. Next: verify CI and run slow tests, then advance a sourced physics/industry slice.
+
+
+## 2026-11-02 continuation: live People roster independent of stored population
+
+- Verified the canonical dylmarriner/Maer-ken-island remote and PR #68; previous exact-head [CI #41333346433](https://github.com/dylmarriner/Maer-ken-island/actions/runs/41333346433) **passed**.
+- Found the live People page eagerly fetched /api/humans (stored Phase-0b population) before choosing /api/world/humans (running island). A stale or inaccessible stored endpoint could blank the **live** roster even though the running island was healthy. Now selects the source first and fetches only the relevant roster; a failed live request is not silently replaced by unrelated stored records.
+- Regression tests failed before the change (missing roster-source helper), then **32/32** Node dashboard tests passed including three new source-isolation cases. JS syntax, Cargo formatting and Git diff checks passed on OpenCommander amd. No simulation, ledger, snapshot, seed, source pack or replay digest changed.
+- [ ] Exact-new-SHA CI green. [ ] Slow week/year replay hashes and water/carbon/material ledger acceptance. [ ] Sourced ecology/industry, autonomy and open owner decisions.
+- Next: confirm CI and run the capacity-safe slow simulation acceptance; then advance a sourced physics/industry milestone.

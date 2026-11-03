@@ -16,12 +16,22 @@ const CSS: &str = "text/css; charset=utf-8";
 
 /// The files under `/static/`. Keeping them in one table means a new asset is
 /// one line here rather than a new route.
-pub const ASSETS: [(&str, &str, &str); 6] = [
+pub const ASSETS: [(&str, &str, &str); 8] = [
     ("style.css", include_str!("../../static/style.css"), CSS),
     ("app.js", include_str!("../../static/app.js"), JS),
     ("overview.js", include_str!("../../static/overview.js"), JS),
     ("people.js", include_str!("../../static/people.js"), JS),
+    (
+        "people-selection.mjs",
+        include_str!("../../static/people-selection.mjs"),
+        JS,
+    ),
     ("island.js", include_str!("../../static/island.js"), JS),
+    (
+        "cell-details.mjs",
+        include_str!("../../static/cell-details.mjs"),
+        JS,
+    ),
     ("creator.js", include_str!("../../static/creator.js"), JS),
 ];
 
@@ -141,8 +151,27 @@ mod tests {
             ("/people", "text/html", "id=\"roster\""),
             ("/creator", "text/html", "id=\"creator\""),
             ("/static/app.js", "text/javascript", "export"),
+            (
+                "/static/island.js",
+                "text/javascript",
+                "cellEnvironmentDetails",
+            ),
+            (
+                "/static/cell-details.mjs",
+                "text/javascript",
+                "cellEnvironmentDetails",
+            ),
             ("/static/overview.js", "text/javascript", "/api/activity"),
-            ("/static/people.js", "text/javascript", "/api/humans"),
+            (
+                "/static/people.js",
+                "text/javascript",
+                "/static/people-selection.mjs",
+            ),
+            (
+                "/static/people-selection.mjs",
+                "text/javascript",
+                "loadPeopleRoster",
+            ),
             (
                 "/static/creator.js",
                 "text/javascript",
@@ -172,9 +201,30 @@ mod tests {
     }
 
     #[test]
+    fn every_dashboard_module_import_is_served_by_the_binary() {
+        // A browser cannot load a dashboard if an imported module is absent
+        // from the binary's embedded asset table. This previously broke People.
+        for (source, script, _) in ASSETS
+            .iter()
+            .filter(|(name, _, _)| name.ends_with(".js") || name.ends_with(".mjs"))
+        {
+            for import in script.split("from \"/static/").skip(1) {
+                let dependency = import.split('"').next().unwrap_or("");
+                assert!(
+                    ASSETS.iter().any(|(name, _, _)| *name == dependency),
+                    "{source} imports an unserved /static/{dependency}"
+                );
+            }
+        }
+    }
+
+    #[test]
     fn scripts_never_insert_markup() {
         // Names and attributes are user-supplied; text must go in as text.
-        for (name, script, _) in ASSETS.iter().filter(|(name, _, _)| name.ends_with(".js")) {
+        for (name, script, _) in ASSETS
+            .iter()
+            .filter(|(name, _, _)| name.ends_with(".js") || name.ends_with(".mjs"))
+        {
             for banned in [
                 "innerHTML",
                 "outerHTML",

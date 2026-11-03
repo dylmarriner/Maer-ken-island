@@ -14,6 +14,7 @@ import {
   message,
   reportOffline,
 } from "/static/app.js";
+import { createLivePersonInspector, createLatestRequest, createLiveRosterPoller, reconcileLiveRoster, loadPeopleRoster, preparePeopleRoster, personRecordPath, personRecordExport, validateConversationFeed, createConversationClockGuard } from "/static/people-selection.mjs";
 
 const rosterEl = document.getElementById("roster");
 const rosterCountEl = document.getElementById("roster-count");
@@ -32,6 +33,7 @@ const leadEl = document.getElementById("people-lead");
 
 let everyone = [];
 let selected = null;
+
 
 function displayName(human) {
   return human.name || human.agent_id;
@@ -149,13 +151,13 @@ function readingGroup(section) {
 }
 
 function recordDetails(person) {
-  const text = JSON.stringify(person.human, null, 2);
+  const { filename, json: text } = personRecordExport(person);
   const details = el("details", null, { class: "record" });
   details.append(
     el("summary", `Everything stored about ${displayName(person.summary)}`),
     el(
       "p",
-      "The complete record, exactly as it is written to disk. Most of it is derived; nothing here is typed by hand.",
+      "The inspected record at the time it was loaded. Live records may change as the island runs.",
       { class: "hint" },
     ),
   );
@@ -173,10 +175,16 @@ function recordDetails(person) {
       copy.textContent = "Copy as JSON";
     }, 2500);
   });
-  const download = el("a", "Download", {
-    class: "button secondary",
-    href: `/api/humans/${encodeURIComponent(person.summary.agent_id)}`,
-    download: `${person.summary.agent_id}.json`,
+  const download = el("button", "Download", { type: "button", class: "button secondary" });
+  download.addEventListener("click", () => {
+    // A normal anchor GET omits our bearer token, and a second fetch may read
+    // a different simulation tick. Download the inspected snapshot instead.
+    const objectUrl = URL.createObjectURL(new Blob([text], { type: "application/json;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = filename;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
   });
   tools.append(copy, download);
   details.append(tools, el("pre", text));
@@ -217,6 +225,25 @@ function loadingPerson() {
   detailEl.replaceChildren(wrap);
 }
 
+const personInspection = createLivePersonInspector(
+  (live, agentId, signal) => getJson(personRecordPath(live, agentId), { signal }),
+  (person) => {
+    clearOffline();
+    drawPerson(person);
+  },
+  (error) => {
+    detailEl.replaceChildren(emptyState("That record could not be read", explain(error)));
+    const retry = el("button", "Try again", { type: "button", class: "secondary" });
+    retry.addEventListener("click", () => select(selected));
+    detailEl.append(retry);
+  },
+  (error) => {
+    // Do not replace the last good inspected snapshot on a transient poll
+    // failure. The next successful refresh will clear the offline warning.
+    if (error.status !== 404) reportOffline(error);
+  },
+);
+
 async function select(agentId) {
   selected = agentId;
   markSelected(agentId);
@@ -224,19 +251,7 @@ async function select(agentId) {
   url.searchParams.set("human", agentId);
   history.replaceState(null, "", url);
   loadingPerson();
-  try {
-    const path = onTheIsland ? "/api/world/humans/" : "/api/humans/";
-    const person = await getJson(path + encodeURIComponent(agentId));
-    if (selected !== agentId) return; // a faster click won
-    drawPerson(person);
-  } catch (error) {
-    detailEl.replaceChildren(
-      emptyState("That record could not be read", error.message),
-    );
-    const retry = el("button", "Try again", { type: "button", class: "secondary" });
-    retry.addEventListener("click", () => select(agentId));
-    detailEl.append(retry);
-  }
+  await personInspection.select(agentId, onTheIsland);
 }
 
 function describeStatus(status) {
@@ -259,13 +274,13 @@ function describeWorld(world) {
 
 async function load() {
   try {
-    const [status, stored, world] = await Promise.all([
-      getJson("/api/status"),
-      getJson("/api/humans"),
-      getJson("/api/world"),
-    ]);
+    const { status, roster, onTheIsland: live } = await loadPeopleRoster(getJson);
+    // Validate the complete source before changing visible mode or people.
+    // A malformed response must leave the previous valid roster intact.
+    const nextPeople = preparePeopleRoster(roster, live, selected);
+    if (live) liveRosterPoller.seed(roster);
     clearOffline();
-    onTheIsland = world && world.running === true;
+    onTheIsland = live;
     if (onTheIsland) {
       // The standing copy says nothing has stepped these people, which is
       // true of a stored population and false of a living one.
@@ -273,23 +288,17 @@ async function load() {
         "Pick someone to see how they are: who they are, what their body is " +
         "doing, how they feel and how they think. These people are living on " +
         "the island — the readings move as they breathe, sleep and eat.";
-      const roster = await getJson("/api/world/humans");
       // The world's people in the shape this roster already draws.
-      everyone = roster.people.map((person) => ({
-        agent_id: person.agent_id,
-        name: person.agent_id,
-        human_id: person.agent_id,
-        biological_sex: "",
-        status: person.alive ? "Alive" : "Dead",
-        age_years: person.age_years,
-      }));
+      everyone = nextPeople;
       statusEl.textContent = describeWorld(roster);
     } else {
-      everyone = stored;
+      everyone = nextPeople;
       statusEl.textContent = describeStatus(status);
     }
     fillChrome(status);
     if (everyone.length === 0) {
+      personInspection.invalidate();
+      selected = null;
       rosterEl.replaceChildren();
       detailEl.replaceChildren(
         emptyState(
@@ -313,6 +322,30 @@ async function load() {
   }
 }
 
+// The selected record already refreshes, but the roster must also reflect
+// arrivals and deaths. Keep the current selection and inspector intact when
+// it still exists; only select a different person when the old one disappears.
+const liveRosterPoller = createLiveRosterPoller(
+  (signal) => getJson("/api/world/humans", { signal }),
+  (roster) => {
+    const next = reconcileLiveRoster(roster, selected);
+    everyone = next.people;
+    statusEl.textContent = describeWorld(roster);
+    clearOffline();
+    if (everyone.length === 0) {
+      personInspection.invalidate();
+      selected = null;
+      rosterEl.replaceChildren();
+      rosterCountEl.textContent = "Nobody lives on the island right now.";
+      detailEl.replaceChildren(emptyState("Nobody lives here yet", "The running island has nobody to inspect."));
+      return;
+    }
+    drawRoster();
+    if (next.selectionChanged) void select(next.selected);
+  },
+  (error) => { if (error.status !== 404) reportOffline(error); },
+);
+
 searchEl.addEventListener("input", drawRoster);
 sortEl.addEventListener("change", drawRoster);
 rosterEl.addEventListener("keydown", onRosterKey);
@@ -326,6 +359,28 @@ addEventListener("popstate", () => {
 // token into when the first request comes back 401.
 mountServerChrome();
 load();
+
+// Refresh the roster too: the initial list must not stay frozen while the
+// simulated population changes. Hidden tabs and stored populations do not poll.
+setInterval(() => {
+  if (onTheIsland && !document.hidden) void liveRosterPoller.refresh();
+}, 5000);
+
+// A request started while visible can finish after the tab is hidden. Stop
+// that request so its stale roster cannot replace the last inspected state.
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) liveRosterPoller.suspend();
+});
+addEventListener("pagehide", () => liveRosterPoller.suspend());
+
+// Live human records change on every simulation tick. Refresh the selected
+// person's snapshot without resetting the scroll, URL or loading skeleton.
+// Hidden tabs and stored (non-running) populations do not poll.
+setInterval(() => {
+  if (onTheIsland && selected && !document.hidden) {
+    void personInspection.refresh();
+  }
+}, 5000);
 
 // ---------------------------------------------------------------------------
 // What the islanders have said to each other.
@@ -384,34 +439,56 @@ function conversationCard(conversation) {
   return card;
 }
 
+const conversationRequest = createLatestRequest();
+const conversationClock = createConversationClockGuard();
+
 async function loadConversations() {
-  try {
-    const data = await getJson("/api/conversations");
-    // Shown rather than paraphrased, like the island page's notes: a reader
-    // needs to know these lines are composed from real state and that no
-    // language model wrote them.
-    talkNoteEl.textContent = data.note;
-    if (!data.conversations.length) {
-      talkEl.replaceChildren(
-        emptyState(
-          "Nobody has spoken yet",
-          "Conversations happen when people are near each other or are kin. None has been generated on this island so far.",
-        ),
-      );
-    } else {
-      talkEl.replaceChildren(...data.conversations.map(conversationCard));
-    }
-    talkPanelEl.hidden = false;
-  } catch (error) {
-    // A missing island is not an error worth shouting about here: the page
-    // already says there is no world. Any other failure hides the panel
-    // rather than showing an empty one that looks like silence.
-    if (error.status !== 404) reportOffline(error);
-    talkPanelEl.hidden = true;
-  }
+  if (document.hidden) return;
+  // A slow earlier poll must not replace newer dialogue or hide the panel
+  // after a later poll succeeded. Both successes and failures are ordered.
+  await conversationRequest.load(
+    (signal) => getJson("/api/conversations", { signal }),
+    (data) => {
+      // Reject malformed snapshots before changing the note or dialogue cards.
+      validateConversationFeed(data);
+      // A later HTTP response can still carry an older simulation projection.
+      // Ignore it without hiding the last good dialogue or rewinding the clock.
+      if (!conversationClock.accept(data)) return;
+      // Shown rather than paraphrased, like the island page's notes: a reader
+      // needs to know these lines are composed from real state and that no
+      // language model wrote them.
+      talkNoteEl.textContent = data.note;
+      if (!data.conversations.length) {
+        talkEl.replaceChildren(
+          emptyState(
+            "Nobody has spoken yet",
+            "Conversations happen when people are near each other or are kin. None has been generated on this island so far.",
+          ),
+        );
+      } else {
+        talkEl.replaceChildren(...data.conversations.map(conversationCard));
+      }
+      talkPanelEl.hidden = false;
+    },
+    (error) => {
+      // A missing island is not an error worth shouting about here: the page
+      // already says there is no world. Any other failure hides the panel
+      // rather than showing an empty one that looks like silence.
+      if (error.status === 404) conversationClock.reset();
+      else reportOffline(error);
+      talkPanelEl.hidden = true;
+    },
+  );
 }
 
 loadConversations();
 // People keep talking while the page is open, so this refreshes. Five
 // seconds matches the island page's own cadence.
-setInterval(loadConversations, 5000);
+setInterval(() => {
+  if (!document.hidden) void loadConversations();
+}, 5000);
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) conversationRequest.invalidate();
+  else void loadConversations();
+});
+addEventListener("pagehide", () => conversationRequest.invalidate());
