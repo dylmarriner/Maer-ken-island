@@ -74,10 +74,15 @@ pub fn read(reply: &serde_json::Value) -> Result<Person, String> {
     if sections.is_empty() {
         return Err("this backend served a person with no sections".to_string());
     }
+    // A malformed live location is a wire-contract error, not offline state.
     let whereabouts = reply
         .get("where")
         .filter(|w| !w.is_null())
-        .and_then(|w| serde_json::from_value(w.clone()).ok());
+        .map(|w| {
+            serde_json::from_value(w.clone())
+                .map_err(|e| format!("the person's whereabouts could not be read: {e}"))
+        })
+        .transpose()?;
     Ok(Person {
         sections,
         whereabouts,
@@ -152,6 +157,20 @@ mod tests {
         let mut stored = reply();
         stored["where"] = serde_json::Value::Null;
         assert_eq!(read(&stored).unwrap().whereabouts, None);
+    }
+
+    #[test]
+    fn malformed_live_whereabouts_are_rejected_not_shown_as_offline() {
+        let mut corrupt = reply();
+        corrupt["where"] = serde_json::json!({"asleep": "not a boolean"});
+        assert!(read(&corrupt).unwrap_err().contains("whereabouts"));
+    }
+
+    #[test]
+    fn invalid_live_carbon_is_a_wire_error() {
+        let mut corrupt = reply();
+        corrupt["where"] = serde_json::json!({"asleep": false, "body_carbon_kg": "unknown"});
+        assert!(read(&corrupt).unwrap_err().contains("whereabouts"));
     }
 
     #[test]
