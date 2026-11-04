@@ -31,3 +31,10 @@ Source and regression are committed to PR #76. Exact-head GitHub Actions must pa
 - Keep PR #76 stacked on #75 → #74 → #73; do not merge out of order.
 
 No simulation state, snapshot format, replay-log serialization, real-world constants, owner governance, production infrastructure or SCOS state changed.
+
+
+## CI correction — 5 November 2026
+
+- Exact-head run [#41841623263](https://github.com/dylmarriner/Maer-ken-island/actions/runs/41841623263) exposed one rustfmt-only difference in the new explicit-budget assertion; no Clippy or test failure was reported because the check job stopped at formatting.
+- Applied the formatter's exact multiline layout in commit [`c4ce89e`](https://github.com/dylmarriner/Maer-ken-island/commit/c4ce89e84ae05acd36e6dc1f9102d2afd14c0857).
+- A new exact-head run is required. Desktop/backend checks from the prior head are not evidence for this corrected head.
