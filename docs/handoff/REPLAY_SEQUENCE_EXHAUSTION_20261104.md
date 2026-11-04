@@ -24,3 +24,10 @@ Date: 2026-11-04
 2. Run `cargo test -p mk_engine --test island_replay --locked --offline`.
 3. Run `cargo clippy -p mk_engine --all-targets --locked --offline -- -D warnings`.
 4. Verify exact-head GitHub Actions and the required ignored week/year reference-pack tests.
+
+
+## CI correction (2026-11-04)
+- Exact-head CI run [#41779168066](https://github.com/dylmarriner/Maer-ken-island/actions/runs/41779168066) failed in the first `cargo fmt --all -- --check` step only; Clippy and fast tests were skipped as a consequence.
+- The formatter diff was limited to the new `SequenceExhausted` struct-variant layout, chained `record_with_sequence` calls, and line-wrapping the updated test assertions.
+- Applied those rustfmt-prescribed layouts. This is a formatting correction, not a change to runtime behaviour.
+- New exact-head CI must still prove formatting, Clippy, fast tests, desktop/backend checks. Slow week/year reference-pack tests remain required and were skipped by this PR workflow.
