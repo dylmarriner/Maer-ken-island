@@ -485,6 +485,26 @@ fn load_refuses_symlinked_replay_paths() {
     ));
 }
 
+/// A FIFO is not a replay file. Loading it must refuse the special file rather than
+/// treating a stream with no stable length as a bounded replay document.
+#[cfg(unix)]
+#[test]
+fn load_refuses_fifo_replay_sources() {
+    use std::ffi::CString;
+    use std::os::unix::ffi::OsStrExt;
+
+    let dir = tempfile::tempdir().unwrap();
+    let fifo = dir.path().join("replay.fifo");
+    let c_path = CString::new(fifo.as_os_str().as_bytes()).unwrap();
+    let created = unsafe { libc::mkfifo(c_path.as_ptr(), 0o600) };
+    assert_eq!(created, 0, "the FIFO fixture must be created");
+
+    assert!(matches!(
+        IslandReplayLog::load(&fifo),
+        Err(IslandReplayError::NotALog(_, reason)) if reason.contains("regular file")
+    ));
+}
+
 /// Replay logs contain personal details and must not be readable by other local users.
 #[cfg(unix)]
 #[test]
