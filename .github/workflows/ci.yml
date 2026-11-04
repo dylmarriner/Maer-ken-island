@@ -375,11 +375,29 @@ jobs:
             echo "No simulation sources, tests, reference packs or deviation register changed; slow reference gates are not required for this PR."
           fi
       - name: Week reference-pack acceptance
+        id: week
         if: steps.scope.outputs.required == 'true'
+        # Run both reference packs even when the first one fails. A stale digest
+        # must not hide whether the independent year-weather acceptance also regressed.
+        continue-on-error: true
         run: cargo test --locked --release -p mk_engine --test island_life_acceptance -- --ignored slow_a_week_on_the_island_matches_the_reference_packs
       - name: Year weather reference-pack acceptance
+        id: year
         if: steps.scope.outputs.required == 'true'
+        continue-on-error: true
         run: cargo test --locked --release -p mk_engine --test regional_physical_coupling -- --ignored slow_a_year_of_island_weather_matches_the_reference_packs
+      - name: Enforce reference-pack acceptance results
+        if: always() && steps.scope.outputs.required == 'true'
+        env:
+          WEEK_OUTCOME: ${{ steps.week.outcome }}
+          YEAR_OUTCOME: ${{ steps.year.outcome }}
+        run: |
+          printf 'Week reference-pack acceptance: %s\\n' "$WEEK_OUTCOME"
+          printf 'Year weather reference-pack acceptance: %s\\n' "$YEAR_OUTCOME"
+          if [ "$WEEK_OUTCOME" != "success" ] || [ "$YEAR_OUTCOME" != "success" ]; then
+            echo "Reference-pack acceptance failed; keep this PR unmerged until both tests pass and any digest drift is audited."
+            exit 1
+          fi
       - name: Report path-scoped skip
         if: steps.scope.outputs.required != 'true'
         run: echo "Skipped because this PR does not change simulation sources, tests, reference packs or the deviation register."
