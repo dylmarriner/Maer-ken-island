@@ -162,10 +162,7 @@ impl IslandReplayLog {
 
         let log: Self = serde_json::from_slice(&bytes)
             .map_err(|e| IslandReplayError::NotALog(path_name, e.to_string()))?;
-        if log.version != REPLAY_LOG_VERSION {
-            return Err(IslandReplayError::Version(log.version));
-        }
-        validate_scenario_digest(&log.scenario_digest)?;
+        validate_replay_log_header(&log)?;
         ordered_replay_entries(log.entries.iter())?;
         Ok(log)
     }
@@ -179,7 +176,7 @@ impl IslandReplayLog {
         ordered_replay_entries(self.entries.iter())?;
         let text = serialize_replay_log(self, path, MAX_REPLAY_LOG_BYTES)?;
         // Preserve the size error for oversized documents before inspecting their fields.
-        validate_scenario_digest(&self.scenario_digest)?;
+        validate_replay_log_header(self)?;
 
         let mut candidate = None;
         for sequence in 0..128 {
@@ -435,6 +432,14 @@ fn validate_scenario_digest(digest: &str) -> Result<(), IslandReplayError> {
     }
 }
 
+/// Validate the format version and scenario identity shared by file and in-memory boundaries.
+fn validate_replay_log_header(log: &IslandReplayLog) -> Result<(), IslandReplayError> {
+    if log.version != REPLAY_LOG_VERSION {
+        return Err(IslandReplayError::Version(log.version));
+    }
+    validate_scenario_digest(&log.scenario_digest)
+}
+
 /// Run a scenario forward to `until_tick`, applying the log as it goes.
 ///
 /// Commands are applied at the start of the tick they were recorded at, in
@@ -448,8 +453,12 @@ pub fn replay_island(
     until_tick: u64,
 ) -> Result<IslandLife, IslandReplayError> {
     // Direct callers can construct an in-memory log without passing through load().
-    // Enforce the same canonical digest contract before bootstrapping or comparing scenarios.
-    validate_scenario_digest(&log.scenario_digest)?;
+    // Validate the same header and complete sequence contract before allocating an island.
+    validate_replay_log_header(log)?;
+    let entries = ordered_replay_entries(log.entries.iter())?
+        .into_iter()
+        .filter(|entry| entry.tick <= until_tick)
+        .collect::<Vec<_>>();
     let mut life = IslandLife::bootstrap(scenario, canon).map_err(IslandReplayError::Island)?;
 
     let here = life.scenario_digest_hex();
@@ -459,9 +468,6 @@ pub fn replay_island(
             scenario: here,
         });
     }
-
-    let entries =
-        ordered_replay_entries(log.entries.iter().filter(|entry| entry.tick <= until_tick))?;
 
     let step = life.scenario.cadences.human_seconds;
     for entry in entries {
