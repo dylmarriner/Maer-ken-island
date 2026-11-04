@@ -49,5 +49,4 @@ No simulation, physics, replay, snapshot, real-world reference pack, owner-gover
 
 ## Current exact-head CI
 
-- PR #77 head: `e288db49b50d2f49ced7c9b7adcf279e8f9bb785`.
-- Workflow run [#41877017851](https://github.com/dylmarriner/Maer-ken-island/actions/runs/41877017851) was queued when inspected; all fast/desktop/backend jobs were queued and the nightly slow job was skipped as expected for a PR run. No new-head pass is claimed.
+The handoff was updated after the preceding CI run, creating a new docs-only branch head. That push triggers a fresh PR workflow. The next execution must inspect the workflow attached to the resulting latest head; no pass is claimed for this docs-only head.
