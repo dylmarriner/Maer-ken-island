@@ -507,12 +507,16 @@ dashboard; the desktop panels).
 | 7 | The sync script is done (2026-10-14, `scripts/sync_maerken_upstream.py`, `UPSTREAM.md` § Sync procedure). The creator moved into `apps/island` (`island::population`) and `apps/island_humans` is retired. Pruning is the owner's call (the inventory recommends not to) | Engineering |
 | 8 | Final acceptance: every design criterion run and recorded | All of the above |
 
-**Replay-session reliability (2026-11-05):** the upstream-world `ReplaySession` now latches the
+**Replay-session reliability (2026-11-05):** the upstream-world `ReplaySession` latches the
 first failed step/hash/state comparison and refuses further replay or verification. The
-`stop_on_error=false` compatibility flag cannot skip a failed deterministic step. An over-budget
-request remains a preflight rejection and can be retried with a smaller target. A target earlier than the current tick is likewise rejected before mutation; the session remains usable for a later forward replay. Regression tests
-cover both behaviours; hosted exact-head CI is pending. No island simulation constants, append-only
-island replay-log entries, snapshots or digest inputs changed.
+`stop_on_error=false` compatibility flag cannot skip a failed deterministic step. Over-budget and
+backward-target requests are rejected before mutation; the session remains usable after either
+preflight rejection. The backward-target change merged in PR #80 after exact-head fmt, Clippy, fast
+tests, desktop/backend checks and both week/year reference-pack acceptance passed. A follow-up
+(PR #81) makes the session's snapshot, current state, target, options and history fields private and
+exposes immutable accessors, so callers cannot bypass the replay session's single-writer invariant.
+Its exact-head CI is pending. No island simulation constants, append-only island replay-log entries,
+snapshots or digest inputs changed.
 
 A GPU frame-rate figure for `island-ui` is measured (2026-10-15, RX 470, 1600×1000, release,
 without vsync): 255.6 frames/s on the island view and 508.9 on the estate, against 0.6 and 10.8
