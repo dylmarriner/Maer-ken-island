@@ -177,15 +177,7 @@ impl IslandReplayLog {
     pub fn save(&self, path: &Path) -> Result<(), IslandReplayError> {
         // Never persist a log that this same build would reject when loading or replaying.
         ordered_replay_entries(self.entries.iter())?;
-        let text = serde_json::to_vec_pretty(self)
-            .map_err(|e| IslandReplayError::NotALog(path.display().to_string(), e.to_string()))?;
-        if text.len() as u64 > MAX_REPLAY_LOG_BYTES {
-            return Err(IslandReplayError::TooLarge {
-                path: path.display().to_string(),
-                bytes: text.len() as u64,
-                max_bytes: MAX_REPLAY_LOG_BYTES,
-            });
-        }
+        let text = serialize_replay_log(self, path, MAX_REPLAY_LOG_BYTES)?;
         // Preserve the size error for oversized documents before inspecting their fields.
         validate_scenario_digest(&self.scenario_digest)?;
 
@@ -241,6 +233,52 @@ impl IslandReplayLog {
         }
         Ok(())
     }
+}
+
+/// Count serialized bytes without first allocating the entire JSON document.
+#[derive(Default)]
+struct CountingWriter {
+    bytes: u64,
+}
+
+impl Write for CountingWriter {
+    fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
+        self.bytes = self.bytes.checked_add(buffer.len() as u64).ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidData, "replay log size overflow")
+        })?;
+        Ok(buffer.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+/// Preserve the exact TooLarge byte count while keeping the first serialization pass
+/// allocation-free. The JSON is materialized only after it is known to fit the bound.
+fn serialize_replay_log(
+    log: &IslandReplayLog,
+    path: &Path,
+    max_bytes: u64,
+) -> Result<Vec<u8>, IslandReplayError> {
+    let path_name = path.display().to_string();
+    let mut counter = CountingWriter::default();
+    serde_json::to_writer_pretty(&mut counter, log)
+        .map_err(|error| IslandReplayError::NotALog(path_name.clone(), error.to_string()))?;
+
+    if counter.bytes > max_bytes {
+        return Err(IslandReplayError::TooLarge {
+            path: path_name,
+            bytes: counter.bytes,
+            max_bytes,
+        });
+    }
+
+    let text = serde_json::to_vec_pretty(log).map_err(|error| {
+        IslandReplayError::NotALog(path.display().to_string(), error.to_string())
+    })?;
+    debug_assert_eq!(text.len() as u64, counter.bytes);
+    Ok(text)
 }
 
 #[cfg(unix)]
@@ -495,5 +533,30 @@ impl IslandLife {
             .iter()
             .map(|b| format!("{b:02x}"))
             .collect()
+    }
+}
+
+#[cfg(test)]
+mod replay_serialization_tests {
+    use super::*;
+    use std::path::Path;
+
+    #[test]
+    fn serialized_size_is_counted_exactly_before_output_allocation() {
+        let log = IslandReplayLog::new("0".repeat(64));
+        let expected = serde_json::to_vec_pretty(&log).unwrap();
+        let exact_size = expected.len() as u64;
+
+        let error =
+            serialize_replay_log(&log, Path::new("replay-test.json"), exact_size - 1).unwrap_err();
+        assert!(matches!(
+            error,
+            IslandReplayError::TooLarge { bytes, max_bytes, .. }
+                if bytes == exact_size && max_bytes == exact_size - 1
+        ));
+
+        let accepted =
+            serialize_replay_log(&log, Path::new("replay-test.json"), exact_size).unwrap();
+        assert_eq!(accepted, expected, "the exact size limit is inclusive");
     }
 }
