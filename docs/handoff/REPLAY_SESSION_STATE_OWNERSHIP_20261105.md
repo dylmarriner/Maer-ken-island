@@ -39,3 +39,8 @@ digests, physical constants or LLM behaviour.
 1. Verify the exact PR head and all required CI jobs.
 2. Merge only after green exact-head checks and review.
 3. Continue the remaining Phase 5 application and realism requirements in `WORK_REMAINING.md`.
+
+
+## First exact-head CI correction
+
+Workflow [#41928451248](https://github.com/dylmarriner/Maer-ken-island/actions/runs/41928451248) failed only at `cargo fmt --all -- --check`. Rustfmt requested a multiline layout for the first accessor assertion. No Clippy or test compilation was reached in that job. The exact formatter change is committed as `15367d4001c687a133371cf774bd1dc9e30ebbf2`; a fresh exact-head workflow is required. No test pass is claimed from the failed run.
