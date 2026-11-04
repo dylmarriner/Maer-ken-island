@@ -36,3 +36,11 @@ The existing `replay_to` guard rejects a requested horizon beyond the configured
 - Corrected the test to use `Arc::new(CanonLocked::default())`, matching the existing upstream-world construction pattern in `crates/mk_engine/tests/island_allocation_bounds.rs`. No canonical physical constants or simulation behaviour were changed.
 - Fix commit: `9c6f2321af8cc7577a2fdb7b5c4d13e909444b56`.
 - A fresh exact-head workflow is required. Do not merge until fast tests and the full required workflow pass.
+
+
+## Rejected-request state integrity (2026-11-05)
+
+- Review of the budget guard found that `replay_to` assigned `target_tick` before checking the budget. The world tick and history remained unchanged on rejection, but the session's target metadata was still mutated.
+- Moved the target assignment after the budget guard and extended the regression to assert the prior `target_tick` is preserved along with world tick and empty history.
+- Commit: `aeba89d0cf6c5cb7bb087a8599ab99bdf8eb0d24`.
+- This changes no accepted replay result; it makes a rejected over-budget call state-preserving. Fresh exact-head CI remains mandatory.
