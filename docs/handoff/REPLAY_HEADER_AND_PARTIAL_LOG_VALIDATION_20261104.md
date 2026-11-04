@@ -45,3 +45,25 @@ No simulation state, scenario digest algorithm, snapshot format, owner governanc
 ## CI correction (2026-11-04)
 
 The first run on the new head, #41816490579, failed at `cargo fmt --all -- --check` on one multiline assertion in the new unsupported-version save test. The formatter's exact diff was applied in commit `28488c39e7a8f57d9f0452fd0b87a6ca3cc6792f`. The follow-up exact-head run #41816993183 is pending. No Rust test pass is claimed for the new code until that run completes.
+
+## Whole-project remaining checklist (source: `WORK_REMAINING.md` and `docs/ISLAND_SYSTEM_STATUS.md`)
+
+- [ ] Timber: finish the remaining routes/sawing and tool/recipe work; keep sourced action durations and material ledgers.
+- [ ] Living world: finish remaining gem/tin placer models, tools/recipes, species-to-resource wiring and the D31 soil-nutrient limitation on NPP.
+- [ ] Human/runtime: complete action timing for craft/explore/social actions, job attendance/trades/maintenance, free will to quit/leave/settle, and upstream-first human mind changes. Do not put staff or villagers in the founders' house; estate staff have separate cottages.
+- [ ] Industry: remaining oil-field water-cut/spill/workover/harm models, refinery reformer, staffing and maintenance, petroleum payroll/payslips, household bills and home/business market decisions.
+- [ ] Food/timber chain: wire forestry, sawmill, farms, livestock, food processing and fishery into the map and `IslandLife`; fishery must consume the island's actual fish populations; finish sourced roof-truss/second-stage food/supermarket details.
+- [ ] Complete genetics/reproduction and remaining human agency/psyche/qualia requirements without invented biological or real-world constants.
+- [ ] Every real-world number must come from a cited reference pack; every material movement must close the audited carbon/water ledgers; every known departure must be in `docs/island/DEVIATIONS.md`.
+- [ ] Run `island_life_acceptance -- --ignored`, both week and year reference-pack slow tests, and fixed-seed replay-hash equality. Re-pin `WEEK_DIGEST` only after the audit passes.
+- [ ] Complete Phase 5 acceptance. PR #75 stays stacked on #74 → #73 until parent acceptance; PR #68 and the paused merge-completion job remain separate.
+
+## Architecture and ownership constraints
+
+Preserve deterministic Rust single-writer state, fixed-tick ordering, append-only replay logs/snapshots, canonical replay hashes, fail-fast production invariants, offline operation and budget limits. LLM integration remains optional. Do not alter simulation state or owner governance as part of replay hardening. `WORK_REMAINING.md` explicitly requires upstream-first changes to `dylmarriner/Maer-Ken`; that is a separate repository and must not be confused with this target `Maer-ken-island` repository.
+
+## Latest verification and next task
+
+- Exact-head run #41816490579 failed only `cargo fmt --all -- --check` on one new assertion; commit `28488c39e7a8f57d9f0452fd0b87a6ca3cc6792f` applied the formatter output.
+- Current follow-up run #41817102111: Format and Clippy passed; fast tests were in progress at last poll. Desktop build and tests passed, island render smoke was in progress, installed backend passed; dashboard, computer service, dependency audit and repository scripts passed. Nightly week/year slow tests were skipped.
+- **Next:** finish exact-head fast/desktop checks, then obtain week/year reference-pack and fixed-seed replay evidence before choosing the next `WORK_REMAINING.md` engineering slice.
