@@ -47,6 +47,8 @@ No simulation, physics, replay, snapshot, real-world reference pack, owner-gover
 3. Run the full slow tier before final simulation acceptance and preserve deterministic replay-hash equality.
 
 
-## Current exact-head CI
+## Current CI evidence
 
-The handoff was updated after the preceding CI run, creating a new docs-only branch head. That push triggers a fresh PR workflow. The next execution must inspect the workflow attached to the resulting latest head; no pass is claimed for this docs-only head.
+- PR-opening workflow [#41877017851](https://github.com/dylmarriner/Maer-ken-island/actions/runs/41877017851) was created for code-bearing head `e288db49b50d2f49ced7c9b7adcf279e8f9bb785`; its jobs were queued at last inspection.
+- The branch has since advanced with handoff-only documentation commits. The compare from `e288db49b50d2f49ced7c9b7adcf279e8f9bb785` to `c2c0b256bee14c883c0eb763755e153c206eb461` showed only this handoff file changed. The code, digest pin, active digest documents and consistency test are unchanged from the code-bearing head.
+- No CI pass is claimed. The queued workflow must finish before this PR can be accepted.
