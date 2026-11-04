@@ -240,9 +240,12 @@ fn a_log_from_another_island_is_refused() {
 #[test]
 fn record_keeps_sequences_contiguous_when_ticks_are_interleaved() {
     let mut log = IslandReplayLog::new("scenario".to_string());
-    log.record(1, somebody("Rua", 1)).expect("replay sequence remains available");
-    log.record(2, somebody("Toru", 1)).expect("replay sequence remains available");
-    log.record(1, somebody("Hana", 1)).expect("replay sequence remains available");
+    log.record(1, somebody("Rua", 1))
+        .expect("replay sequence remains available");
+    log.record(2, somebody("Toru", 1))
+        .expect("replay sequence remains available");
+    log.record(1, somebody("Hana", 1))
+        .expect("replay sequence remains available");
 
     let tick_one_sequences: Vec<u64> = log
         .entries
@@ -260,11 +263,14 @@ fn record_keeps_sequences_contiguous_when_ticks_are_interleaved() {
 #[test]
 fn record_uses_max_sequence_when_existing_entries_are_shuffled() {
     let mut log = IslandReplayLog::new("scenario".to_string());
-    log.record(1, somebody("Rua", 1)).expect("replay sequence remains available");
-    log.record(1, somebody("Hana", 1)).expect("replay sequence remains available");
+    log.record(1, somebody("Rua", 1))
+        .expect("replay sequence remains available");
+    log.record(1, somebody("Hana", 1))
+        .expect("replay sequence remains available");
     log.entries.reverse();
 
-    log.record(1, somebody("Toru", 1)).expect("replay sequence remains available");
+    log.record(1, somebody("Toru", 1))
+        .expect("replay sequence remains available");
 
     let mut sequences: Vec<u64> = log
         .entries
