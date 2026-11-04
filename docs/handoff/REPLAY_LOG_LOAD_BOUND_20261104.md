@@ -39,6 +39,8 @@ The size cap is an explicit compatibility bound. If a documented reference pack 
 
 ## Follow-up: replay source path and writer bounds — 4 November 2026
 
+Code commit: c3e02ff8b68b29fbb8de9dd4359bbd89569e6814
+
 - IslandReplayLog::load now rejects symlinks and non-regular files before parsing. On Unix it also opens with O_NOFOLLOW | O_NONBLOCK, then validates the opened file descriptor, closing the metadata/open symlink race and avoiding a FIFO hang if a path is swapped.
 - The existing 128 MiB compatibility cap is retained. The opened file is checked again and read with a one-byte-over-limit bound; save refuses serialized logs above the same limit with IslandReplayError::TooLarge, so the writer cannot create a file its reader rejects.
 - Added regressions for symlink rejection and oversized serialized saves. The existing sparse-file test continues to cover oversized reads.
