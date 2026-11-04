@@ -510,7 +510,7 @@ dashboard; the desktop panels).
 **Replay-session reliability (2026-11-05):** the upstream-world `ReplaySession` now latches the
 first failed step/hash/state comparison and refuses further replay or verification. The
 `stop_on_error=false` compatibility flag cannot skip a failed deterministic step. An over-budget
-request remains a preflight rejection and can be retried with a smaller target. Regression tests
+request remains a preflight rejection and can be retried with a smaller target. A target earlier than the current tick is likewise rejected before mutation; the session remains usable for a later forward replay. Regression tests
 cover both behaviours; hosted exact-head CI is pending. No island simulation constants, append-only
 island replay-log entries, snapshots or digest inputs changed.
 
