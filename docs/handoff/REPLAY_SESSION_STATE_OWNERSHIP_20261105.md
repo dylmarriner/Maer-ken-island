@@ -44,3 +44,11 @@ digests, physical constants or LLM behaviour.
 ## First exact-head CI correction
 
 Workflow [#41928451248](https://github.com/dylmarriner/Maer-ken-island/actions/runs/41928451248) failed only at `cargo fmt --all -- --check`. Rustfmt requested a multiline layout for the first accessor assertion. No Clippy or test compilation was reached in that job. The exact formatter change is committed as `15367d4001c687a133371cf774bd1dc9e30ebbf2`; a fresh exact-head workflow is required. No test pass is claimed from the failed run.
+
+
+## Corrected exact-head CI
+
+- Formatting correction commit: `15367d4001c687a133371cf774bd1dc9e30ebbf2`.
+- Handoff update commit: `22cd6a34b6eac8b0d001518979635a1b666069cf`.
+- Fresh exact-head workflow [#41928602373](https://github.com/dylmarriner/Maer-ken-island/actions/runs/41928602373) is pending.
+- The prior run #41928451248 failed only at rustfmt; no Clippy or Rust tests ran in that job. The corrected run must establish all required checks before merge.
