@@ -348,18 +348,15 @@ mod tests {
     use super::{ReplayError, ReplayOptions, ReplaySession, DEFAULT_MAX_REPLAY_TICKS};
     use crate::world_integration::WorldState;
     use mk_core::canon::CanonLocked;
-    use std::path::PathBuf;
     use std::sync::Arc;
-
-    fn canon() -> Arc<CanonLocked> {
-        let path =
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/island/canon.json");
-        Arc::new(CanonLocked::load(&path).expect("the canonical fixture is valid"))
-    }
 
     #[test]
     fn default_replay_budget_rejects_an_overlong_horizon_before_stepping() {
-        let state = WorldState::new(canon(), [0x5a; 32]);
+        // ReplaySession wraps the upstream planetary WorldState, whose canon
+        // is intentionally distinct from the island-world canon fixture.
+        // Keep this test on the same valid canon used by other upstream-world
+        // construction tests instead of passing fixtures/island/canon.json.
+        let state = WorldState::new(Arc::new(CanonLocked::default()), [0x5a; 32]);
         let mut session =
             ReplaySession::from_world_state(state, ReplayOptions::default()).expect("session");
         let start_tick = session.current_state.tick;
