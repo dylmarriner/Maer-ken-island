@@ -34,3 +34,11 @@ Base: `ae6757754e7e969406dd782a7a076c6cfab267c2`
 1. Verify the exact PR head and the new regression test.
 2. Keep the PR draft until all required exact-head jobs pass.
 3. Continue the remaining Phase 5 application and realism requirements in `WORK_REMAINING.md`.
+
+
+## First CI correction
+
+The first exact-head run `#41921107685` stopped at `cargo fmt --all -- --check` and reported only
+two formatting differences in the new match arm and regression assertion. Both have been corrected
+to rustfmt's exact output in the follow-up commit. No compiler/test failure was reached in that run;
+a fresh exact-head workflow is required.

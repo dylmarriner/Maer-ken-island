@@ -327,7 +327,7 @@ impl fmt::Display for ReplayError {
             ReplayError::MaxTicksExceeded => write!(f, "Max ticks exceeded"),
             ReplayError::TargetBeforeCurrentTick => {
                 write!(f, "Target tick precedes current replay state")
-            },
+            }
         }
     }
 }
@@ -433,7 +433,9 @@ mod tests {
         assert_eq!(session.current_state.tick, advanced_tick);
         assert_eq!(session.target_tick, accepted_target);
         assert_eq!(session.history.len(), history_len);
-        session.verify().expect("rejected rewind leaves replay valid");
+        session
+            .verify()
+            .expect("rejected rewind leaves replay valid");
 
         // A backward request is a preflight rejection, not an integrity failure.
         session
