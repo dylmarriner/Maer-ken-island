@@ -380,7 +380,7 @@ impl std::fmt::Display for IslandReplayError {
             ),
             Self::ReplayBudgetExceeded { tick, max_ticks } => write!(
                 f,
-                "replay command at tick {tick} exceeds the per-call limit of {max_ticks} ticks; replay from a snapshot or explicitly raise the budget"
+                "replay tick {tick} exceeds the per-call limit of {max_ticks} ticks; replay from a snapshot or explicitly raise the budget"
             ),
             Self::Version(v) => write!(
                 f,
@@ -498,16 +498,19 @@ pub fn replay_island_with_budget(
     // Direct callers can construct an in-memory log without passing through load().
     // Validate the same header and complete sequence contract before allocating an island.
     validate_replay_log_header(log)?;
-    let entries = ordered_replay_entries(log.entries.iter())?
-        .into_iter()
-        .filter(|entry| entry.tick <= until_tick)
-        .collect::<Vec<_>>();
-    if let Some(entry) = entries.iter().find(|entry| entry.tick > max_replay_ticks) {
+    let ordered = ordered_replay_entries(log.entries.iter())?;
+    // Bound the requested horizon as well as commands. Otherwise an empty log
+    // (or a log whose commands are all earlier) could still advance indefinitely.
+    if until_tick > max_replay_ticks {
         return Err(IslandReplayError::ReplayBudgetExceeded {
-            tick: entry.tick,
+            tick: until_tick,
             max_ticks: max_replay_ticks,
         });
     }
+    let entries = ordered
+        .into_iter()
+        .filter(|entry| entry.tick <= until_tick)
+        .collect::<Vec<_>>();
     let mut life = IslandLife::bootstrap(scenario, canon).map_err(IslandReplayError::Island)?;
 
     let here = life.scenario_digest_hex();
