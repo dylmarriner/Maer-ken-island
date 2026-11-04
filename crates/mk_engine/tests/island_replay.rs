@@ -447,7 +447,11 @@ fn load_refuses_duplicate_command_sequences_before_replay() {
 
     assert!(matches!(
         IslandReplayLog::load(&path),
-        Err(IslandReplayError::InvalidSequence { tick: 0, expected: 1, actual: 0 })
+        Err(IslandReplayError::InvalidSequence {
+            tick: 0,
+            expected: 1,
+            actual: 0
+        })
     ));
 }
 
@@ -460,7 +464,11 @@ fn save_refuses_sequence_gaps_without_creating_a_file() {
     let path = dir.path().join("sequence-gap.log.json");
     assert!(matches!(
         log.save(&path),
-        Err(IslandReplayError::InvalidSequence { tick: 0, expected: 1, actual: 2 })
+        Err(IslandReplayError::InvalidSequence {
+            tick: 0,
+            expected: 1,
+            actual: 2
+        })
     ));
     assert!(!path.exists(), "invalid replay logs must not be persisted");
 }
@@ -476,13 +484,46 @@ fn save_and_load_accept_shuffled_entries_with_contiguous_sequences() {
     let loaded = IslandReplayLog::load(&path).unwrap();
 
     assert_eq!(
-        loaded.entries.iter().map(|entry| entry.sequence).collect::<Vec<_>>(),
+        loaded
+            .entries
+            .iter()
+            .map(|entry| entry.sequence)
+            .collect::<Vec<_>>(),
         vec![1, 0],
         "validation must not rewrite the stored entry order"
     );
     let replayed = replay_island(canon(), scenario(), &loaded, 0).unwrap();
     let original = replay_island(canon(), scenario(), &log, 0).unwrap();
     assert_eq!(hex(replayed.state_digest()), hex(original.state_digest()));
+}
+
+#[test]
+fn load_refuses_noncanonical_scenario_digest() {
+    let mut log = two_command_log();
+    log.scenario_digest = "not-a-digest".to_string();
+
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("invalid-scenario-digest.log.json");
+    std::fs::write(&path, serde_json::to_vec(&log).unwrap()).unwrap();
+
+    assert!(matches!(
+        IslandReplayLog::load(&path),
+        Err(IslandReplayError::InvalidScenarioDigest)
+    ));
+}
+
+#[test]
+fn save_refuses_noncanonical_scenario_digest_without_creating_a_file() {
+    let mut log = two_command_log();
+    log.scenario_digest = "not-a-digest".to_string();
+
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("invalid-scenario-digest.log.json");
+    assert!(matches!(
+        log.save(&path),
+        Err(IslandReplayError::InvalidScenarioDigest)
+    ));
+    assert!(!path.exists(), "invalid replay logs must not be persisted");
 }
 
 fn two_command_log() -> IslandReplayLog {
@@ -560,7 +601,7 @@ fn load_refuses_fifo_replay_sources() {
 fn saved_replay_files_are_owner_only() {
     use std::os::unix::fs::PermissionsExt;
 
-    let log = IslandReplayLog::new("scenario".to_string());
+    let log = IslandReplayLog::new(island().scenario_digest_hex());
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("private-run.log.json");
     log.save(&path).unwrap();

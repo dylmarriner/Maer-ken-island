@@ -165,6 +165,7 @@ impl IslandReplayLog {
         if log.version != REPLAY_LOG_VERSION {
             return Err(IslandReplayError::Version(log.version));
         }
+        validate_scenario_digest(&log.scenario_digest)?;
         ordered_replay_entries(log.entries.iter())?;
         Ok(log)
     }
@@ -185,6 +186,8 @@ impl IslandReplayLog {
                 max_bytes: MAX_REPLAY_LOG_BYTES,
             });
         }
+        // Preserve the size error for oversized documents before inspecting their fields.
+        validate_scenario_digest(&self.scenario_digest)?;
 
         let mut candidate = None;
         for sequence in 0..128 {
@@ -261,6 +264,8 @@ fn sync_parent_directory(_path: &Path) -> io::Result<()> {
 pub enum IslandReplayError {
     Io(String, std::io::Error),
     NotALog(String, String),
+    /// The scenario fingerprint must be a canonical 32-byte lowercase hexadecimal digest.
+    InvalidScenarioDigest,
     /// A replay file exceeded the bounded input size accepted by this build.
     TooLarge {
         path: String,
@@ -301,6 +306,7 @@ impl std::fmt::Display for IslandReplayError {
         match self {
             Self::Io(path, e) => write!(f, "{path}: {e}"),
             Self::NotALog(path, why) => write!(f, "{path} is not a replay log: {why}"),
+            Self::InvalidScenarioDigest => write!(f, "the scenario digest must be 64 lowercase hexadecimal characters"),
             Self::TooLarge {
                 path,
                 bytes,
@@ -376,6 +382,18 @@ fn ordered_replay_entries<'a>(
     Ok(ordered)
 }
 
+fn validate_scenario_digest(digest: &str) -> Result<(), IslandReplayError> {
+    if digest.len() == 64
+        && digest
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        Ok(())
+    } else {
+        Err(IslandReplayError::InvalidScenarioDigest)
+    }
+}
+
 /// Run a scenario forward to `until_tick`, applying the log as it goes.
 ///
 /// Commands are applied at the start of the tick they were recorded at, in
@@ -398,7 +416,8 @@ pub fn replay_island(
         });
     }
 
-    let entries = ordered_replay_entries(log.entries.iter().filter(|entry| entry.tick <= until_tick))?;
+    let entries =
+        ordered_replay_entries(log.entries.iter().filter(|entry| entry.tick <= until_tick))?;
 
     let step = life.scenario.cadences.human_seconds;
     for entry in entries {
