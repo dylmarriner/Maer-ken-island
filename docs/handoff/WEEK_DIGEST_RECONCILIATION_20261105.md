@@ -47,8 +47,9 @@ No simulation, physics, replay, snapshot, real-world reference pack, owner-gover
 3. Run the full slow tier before final simulation acceptance and preserve deterministic replay-hash equality.
 
 
-## Current CI evidence
+## Current exact-head CI
 
-- PR-opening workflow [#41877017851](https://github.com/dylmarriner/Maer-ken-island/actions/runs/41877017851) was created for code-bearing head `e288db49b50d2f49ced7c9b7adcf279e8f9bb785`; its jobs were queued at last inspection.
-- The branch has since advanced with handoff-only documentation commits. The compare from `e288db49b50d2f49ced7c9b7adcf279e8f9bb785` to `c2c0b256bee14c883c0eb763755e153c206eb461` showed only this handoff file changed. The code, digest pin, active digest documents and consistency test are unchanged from the code-bearing head.
-- No CI pass is claimed. The queued workflow must finish before this PR can be accepted.
+- The PR now includes the `reference-acceptance` workflow gate, copied as a workflow-only change from the reviewed PR #76 patch. It runs both the week and year reference-pack tests independently for changes under `crates/*/(src|tests)`, reference fixtures, `UPSTREAM.md` or the deviation register.
+- The digest source and the new documentation-consistency test are within that path scope, so both reference tests are required for this PR.
+- Code-bearing head `a9cbb604b1b58e0b49de4093a24b3a8a677a5b19` has workflow run [#41877917983](https://github.com/dylmarriner/Maer-ken-island/actions/runs/41877917983); it was queued at last inspection. The earlier run #41877017851 predates the gate and does not satisfy this acceptance requirement.
+- This handoff update is documentation-only. It does not alter simulation code or the acceptance test. No new-head pass is claimed; the next execution must inspect the workflow attached to the latest PR head.
