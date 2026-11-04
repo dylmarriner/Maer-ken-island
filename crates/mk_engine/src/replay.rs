@@ -446,7 +446,10 @@ mod tests {
         let session =
             ReplaySession::from_world_state(state, ReplayOptions::default()).expect("session");
 
-        assert_eq!(session.initial_snapshot().tick, session.current_state().tick);
+        assert_eq!(
+            session.initial_snapshot().tick,
+            session.current_state().tick
+        );
         assert_eq!(session.target_tick(), session.current_state().tick);
         assert_eq!(session.options().max_ticks, DEFAULT_MAX_REPLAY_TICKS);
         assert!(session.history().is_empty());
