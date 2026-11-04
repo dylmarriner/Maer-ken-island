@@ -341,3 +341,45 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Slow tests
         run: cargo test --workspace --release -- --ignored slow_
+
+  # Behaviour-changing simulation PRs must prove the week and year reference packs.
+  # The nightly job remains the full slow tier; this path-scoped gate prevents a
+  # fast-only green check from being mistaken for replay/physics acceptance.
+  reference-acceptance:
+    name: week/year reference-pack acceptance
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      CARGO_BUILD_JOBS: "2"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install pinned toolchain
+        run: rustup show
+      - uses: Swatinem/rust-cache@v2
+      - name: Detect simulation or reference-data changes
+        id: scope
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -eu
+          changed_files="$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")"
+          if printf '%s\n' "$changed_files" | grep -Eq '^(crates/[^/]+/(src|tests)/|fixtures/(reference|island)/|UPSTREAM\.md$|docs/island/DEVIATIONS\.md$)'; then
+            echo "required=true" >> "$GITHUB_OUTPUT"
+            echo "Simulation sources, tests, reference packs or deviation register changed; running week and year acceptance."
+          else
+            echo "required=false" >> "$GITHUB_OUTPUT"
+            echo "No simulation sources, tests, reference packs or deviation register changed; slow reference gates are not required for this PR."
+          fi
+      - name: Week reference-pack acceptance
+        if: steps.scope.outputs.required == 'true'
+        run: cargo test --locked --release -p mk_engine --test island_life_acceptance -- --ignored slow_a_week_on_the_island_matches_the_reference_packs
+      - name: Year weather reference-pack acceptance
+        if: steps.scope.outputs.required == 'true'
+        run: cargo test --locked --release -p mk_engine --test regional_physical_coupling -- --ignored slow_a_year_of_island_weather_matches_the_reference_packs
+      - name: Report path-scoped skip
+        if: steps.scope.outputs.required != 'true'
+        run: echo "Skipped because this PR does not change simulation sources, tests, reference packs or the deviation register."
