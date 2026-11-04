@@ -25,8 +25,10 @@ this list holds the current state. The evidence for what is *done* is in
 - **The week digest is re-pinned only after the audit passes**: run
   `island_life_acceptance -- --ignored`, confirm the books close and the reference-pack checks
   pass, then update `WEEK_DIGEST` (procedure in `docs/handoff/WORKING_PRACTICES.md`).
-- Behaviour-changing work runs the two reference-pack slow tests (the week and the year) before
-  merging; the fast tier cannot see them.
+- Behaviour-changing PRs run the week and year reference-pack tests through the path-scoped
+  `reference-acceptance` CI job; the fast tier cannot see them. A path-scoped skip means no
+  simulation source/test, reference pack, island scenario, upstream manifest or deviation-register
+  file changed, not that the slow tests passed.
 - **Who lives where (owner, 2026-10-13).** The founders' house is the two founders' and their
   children's alone. Estate staff each have a separate 2-3 bedroom cottage on the estate; everyone
   else lives in the town. Nothing may put anybody else in the house, including test scaffolding:
