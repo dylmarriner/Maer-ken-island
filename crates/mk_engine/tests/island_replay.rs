@@ -15,7 +15,9 @@ use mk_core::human::BiologicalSex;
 use mk_engine::regional::commands::{ControlCommand, IslandCommand};
 use mk_engine::regional::create_human::{CreateLocation, IslandCreateHuman};
 use mk_engine::regional::life::IslandLife;
-use mk_engine::regional::replay::{replay_island, IslandReplayError, IslandReplayLog};
+use mk_engine::regional::replay::{
+    replay_island, IslandReplayError, IslandReplayLog, MAX_REPLAY_LOG_BYTES,
+};
 use mk_island::IslandScenario;
 
 const STEP: u64 = 60;
@@ -251,6 +253,23 @@ fn record_keeps_sequences_contiguous_when_ticks_are_interleaved() {
 
     assert_eq!(tick_one_sequences, vec![0, 1]);
     assert_eq!(log.entries[1].sequence, 0);
+}
+
+/// Refuse oversized replay files before allocating or parsing their contents.
+/// A sparse file exercises the size guard without consuming equivalent disk space.
+#[test]
+fn oversized_replay_logs_are_rejected_before_reading() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("oversized.log.json");
+    let file = std::fs::File::create(&path).unwrap();
+    file.set_len(MAX_REPLAY_LOG_BYTES + 1).unwrap();
+    drop(file);
+
+    assert!(matches!(
+        IslandReplayLog::load(&path),
+        Err(IslandReplayError::TooLarge { bytes, max_bytes, .. })
+            if bytes == MAX_REPLAY_LOG_BYTES + 1 && max_bytes == MAX_REPLAY_LOG_BYTES
+    ));
 }
 
 /// A log survives a trip through a file, order and all.

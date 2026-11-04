@@ -25,7 +25,12 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
+  # The backend fast suite links many integration-test binaries. Debug info in
+  # both clippy/dev and test profiles exhausted the hosted runner's disk before
+  # tests could finish. Keep incremental output disabled and omit debug symbols.
   CARGO_INCREMENTAL: "0"
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_PROFILE_TEST_DEBUG: "0"
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}

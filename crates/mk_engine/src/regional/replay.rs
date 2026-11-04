@@ -11,7 +11,7 @@
 //! reproduced would be a number about one afternoon on one machine.
 
 use std::fs::{self, OpenOptions};
-use std::io::{self, Write};
+use std::io::{self, Read, Write};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -25,6 +25,10 @@ use super::life::{IslandLife, IslandLifeError};
 /// The log's format. A log written by another version is refused rather
 /// than guessed at, for the same reason a snapshot is.
 pub const REPLAY_LOG_VERSION: u32 = 1;
+
+/// Maximum serialized replay-log size accepted from disk (128 MiB). This
+/// bounds memory use when loading corrupt or untrusted replay paths.
+pub const MAX_REPLAY_LOG_BYTES: u64 = 128 * 1024 * 1024;
 
 /// One command, and exactly when it was applied.
 ///
@@ -79,8 +83,35 @@ impl IslandReplayLog {
 
     /// Read a log from a file.
     pub fn load(path: &Path) -> Result<Self, IslandReplayError> {
-        let bytes = std::fs::read(path)
+        let file = fs::File::open(path)
             .map_err(|e| IslandReplayError::Io(path.display().to_string(), e))?;
+        let size = file
+            .metadata()
+            .map_err(|e| IslandReplayError::Io(path.display().to_string(), e))?
+            .len();
+        if size > MAX_REPLAY_LOG_BYTES {
+            return Err(IslandReplayError::TooLarge {
+                path: path.display().to_string(),
+                bytes: size,
+                max_bytes: MAX_REPLAY_LOG_BYTES,
+            });
+        }
+
+        // The metadata check gives a fast refusal for known-large files. The
+        // bounded read also protects against a file growing after that check.
+        let mut bytes = Vec::with_capacity(size as usize);
+        let mut bounded = file.take(MAX_REPLAY_LOG_BYTES + 1);
+        let read = bounded
+            .read_to_end(&mut bytes)
+            .map_err(|e| IslandReplayError::Io(path.display().to_string(), e))?;
+        if read as u64 > MAX_REPLAY_LOG_BYTES {
+            return Err(IslandReplayError::TooLarge {
+                path: path.display().to_string(),
+                bytes: read as u64,
+                max_bytes: MAX_REPLAY_LOG_BYTES,
+            });
+        }
+
         let log: Self = serde_json::from_slice(&bytes)
             .map_err(|e| IslandReplayError::NotALog(path.display().to_string(), e.to_string()))?;
         if log.version != REPLAY_LOG_VERSION {
@@ -172,6 +203,12 @@ fn sync_parent_directory(_path: &Path) -> io::Result<()> {
 pub enum IslandReplayError {
     Io(String, std::io::Error),
     NotALog(String, String),
+    /// A replay file exceeded the bounded input size accepted by this build.
+    TooLarge {
+        path: String,
+        bytes: u64,
+        max_bytes: u64,
+    },
     /// A log written by a format this build does not know.
     Version(u32),
     /// A tick's command sequence is duplicated or skips an expected entry.
@@ -202,6 +239,14 @@ impl std::fmt::Display for IslandReplayError {
         match self {
             Self::Io(path, e) => write!(f, "{path}: {e}"),
             Self::NotALog(path, why) => write!(f, "{path} is not a replay log: {why}"),
+            Self::TooLarge {
+                path,
+                bytes,
+                max_bytes,
+            } => write!(
+                f,
+                "{path} is {bytes} bytes; replay logs are limited to {max_bytes} bytes"
+            ),
             Self::Version(v) => write!(
                 f,
                 "that log is format {v}; this build reads {REPLAY_LOG_VERSION}"
