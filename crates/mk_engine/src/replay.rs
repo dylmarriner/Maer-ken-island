@@ -396,7 +396,9 @@ impl ReplayManager {
 
     /// List all session names
     pub fn list_sessions(&self) -> Vec<String> {
-        self.sessions.keys().cloned().collect()
+        let mut names = self.sessions.keys().cloned().collect::<Vec<_>>();
+        names.sort_unstable();
+        names
     }
 }
 
