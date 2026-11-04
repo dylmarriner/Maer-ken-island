@@ -142,6 +142,12 @@ impl ReplaySession {
         }
 
         let start_tick = self.current_state.tick;
+        // ReplaySession advances a live state; it cannot rewind to an earlier tick.
+        // Reject this before changing target metadata so callers can safely retry forward.
+        if target_tick < start_tick {
+            return Err(ReplayError::TargetBeforeCurrentTick);
+        }
+
         let ticks_to_replay = target_tick.saturating_sub(start_tick);
 
         if self.options.max_ticks > 0 && ticks_to_replay > self.options.max_ticks {
@@ -307,6 +313,7 @@ pub enum ReplayError {
     ValidationError(String),
     IntegrityError(String),
     MaxTicksExceeded,
+    TargetBeforeCurrentTick,
 }
 
 impl fmt::Display for ReplayError {
@@ -318,6 +325,9 @@ impl fmt::Display for ReplayError {
             ReplayError::ValidationError(msg) => write!(f, "Validation error: {}", msg),
             ReplayError::IntegrityError(msg) => write!(f, "Integrity error: {}", msg),
             ReplayError::MaxTicksExceeded => write!(f, "Max ticks exceeded"),
+            ReplayError::TargetBeforeCurrentTick => {
+                write!(f, "Target tick precedes current replay state")
+            }
         }
     }
 }
@@ -400,6 +410,38 @@ mod tests {
         session.replay_to(start_tick + 1).expect("smaller retry");
         assert_eq!(session.current_state.tick, start_tick + 1);
         assert_eq!(session.history.len(), 1);
+    }
+
+    #[test]
+    fn backward_target_is_rejected_without_mutating_or_poisoning_session() {
+        let state = WorldState::new(Arc::new(CanonLocked::default()), [0x5a; 32]);
+        let mut session =
+            ReplaySession::from_world_state(state, ReplayOptions::default()).expect("session");
+        let initial_tick = session.current_state.tick;
+
+        session
+            .replay_to(initial_tick + 1)
+            .expect("initial forward replay");
+        let advanced_tick = session.current_state.tick;
+        let accepted_target = session.target_tick;
+        let history_len = session.history.len();
+
+        assert!(matches!(
+            session.replay_to(initial_tick),
+            Err(ReplayError::TargetBeforeCurrentTick)
+        ));
+        assert_eq!(session.current_state.tick, advanced_tick);
+        assert_eq!(session.target_tick, accepted_target);
+        assert_eq!(session.history.len(), history_len);
+        session
+            .verify()
+            .expect("rejected rewind leaves replay valid");
+
+        // A backward request is a preflight rejection, not an integrity failure.
+        session
+            .replay_to(advanced_tick + 1)
+            .expect("forward replay remains available");
+        assert_eq!(session.current_state.tick, advanced_tick + 1);
     }
 
     #[test]
