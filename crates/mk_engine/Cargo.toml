@@ -29,6 +29,7 @@ rusqlite.workspace = true
 aes-gcm.workspace = true
 aead.workspace = true
 thiserror.workspace = true
+libc.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 ureq.workspace = true

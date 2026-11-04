@@ -84,37 +84,71 @@ impl IslandReplayLog {
 
     /// Read a log from a file.
     pub fn load(path: &Path) -> Result<Self, IslandReplayError> {
-        let file = fs::File::open(path)
-            .map_err(|e| IslandReplayError::Io(path.display().to_string(), e))?;
-        let size = file
+        let path_name = path.display().to_string();
+        let path_metadata = fs::symlink_metadata(path)
+            .map_err(|error| IslandReplayError::Io(path_name.clone(), error))?;
+        if !path_metadata.file_type().is_file() {
+            return Err(IslandReplayError::NotALog(
+                path_name.clone(),
+                "replay source must be a regular file, not a symlink or special file".to_string(),
+            ));
+        }
+        if path_metadata.len() > MAX_REPLAY_LOG_BYTES {
+            return Err(IslandReplayError::TooLarge {
+                path: path_name.clone(),
+                bytes: path_metadata.len(),
+                max_bytes: MAX_REPLAY_LOG_BYTES,
+            });
+        }
+
+        let mut options = OpenOptions::new();
+        options.read(true);
+        // O_NOFOLLOW closes the metadata/open symlink race on Unix. O_NONBLOCK
+        // prevents a raced FIFO from hanging the process before file-type validation.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
+        }
+        let file = options
+            .open(path)
+            .map_err(|error| IslandReplayError::Io(path_name.clone(), error))?;
+        let opened_metadata = file
             .metadata()
-            .map_err(|e| IslandReplayError::Io(path.display().to_string(), e))?
-            .len();
+            .map_err(|error| IslandReplayError::Io(path_name.clone(), error))?;
+        if !opened_metadata.is_file() {
+            return Err(IslandReplayError::NotALog(
+                path_name.clone(),
+                "opened replay source is not a regular file".to_string(),
+            ));
+        }
+
+        let size = opened_metadata.len();
         if size > MAX_REPLAY_LOG_BYTES {
             return Err(IslandReplayError::TooLarge {
-                path: path.display().to_string(),
+                path: path_name.clone(),
                 bytes: size,
                 max_bytes: MAX_REPLAY_LOG_BYTES,
             });
         }
 
-        // The metadata check gives a fast refusal for known-large files. The
-        // bounded read also protects against a file growing after that check.
+        // Read at most one byte beyond the limit as well: the file may grow
+        // after metadata was inspected, and that must not bypass the bound.
         let mut bytes = Vec::with_capacity(size as usize);
-        let mut bounded = file.take(MAX_REPLAY_LOG_BYTES + 1);
-        let read = bounded
+        let read = file
+            .take(MAX_REPLAY_LOG_BYTES + 1)
             .read_to_end(&mut bytes)
-            .map_err(|e| IslandReplayError::Io(path.display().to_string(), e))?;
+            .map_err(|error| IslandReplayError::Io(path_name.clone(), error))?;
         if read as u64 > MAX_REPLAY_LOG_BYTES {
             return Err(IslandReplayError::TooLarge {
-                path: path.display().to_string(),
+                path: path_name,
                 bytes: read as u64,
                 max_bytes: MAX_REPLAY_LOG_BYTES,
             });
         }
 
         let log: Self = serde_json::from_slice(&bytes)
-            .map_err(|e| IslandReplayError::NotALog(path.display().to_string(), e.to_string()))?;
+            .map_err(|e| IslandReplayError::NotALog(path_name, e.to_string()))?;
         if log.version != REPLAY_LOG_VERSION {
             return Err(IslandReplayError::Version(log.version));
         }
@@ -128,6 +162,13 @@ impl IslandReplayLog {
     pub fn save(&self, path: &Path) -> Result<(), IslandReplayError> {
         let text = serde_json::to_vec_pretty(self)
             .map_err(|e| IslandReplayError::NotALog(path.display().to_string(), e.to_string()))?;
+        if text.len() as u64 > MAX_REPLAY_LOG_BYTES {
+            return Err(IslandReplayError::TooLarge {
+                path: path.display().to_string(),
+                bytes: text.len() as u64,
+                max_bytes: MAX_REPLAY_LOG_BYTES,
+            });
+        }
 
         let mut candidate = None;
         for sequence in 0..128 {

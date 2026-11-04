@@ -36,3 +36,14 @@ The size cap is an explicit compatibility bound. If a documented reference pack 
 - [ ] Verify runtime replay digest equality and persistence behavior on the new head.
 - [ ] Continue the canonical roadmap: snapshot/replay acceptance, material-ledger closure, sourced ecology/industry, climate fidelity, town/workforce, and year acceptance.
 - [ ] Keep PR #68 separate and untouched; its merge conflicts remain a separate issue.
+
+## Follow-up: replay source path and writer bounds — 4 November 2026
+
+- IslandReplayLog::load now rejects symlinks and non-regular files before parsing. On Unix it also opens with O_NOFOLLOW | O_NONBLOCK, then validates the opened file descriptor, closing the metadata/open symlink race and avoiding a FIFO hang if a path is swapped.
+- The existing 128 MiB compatibility cap is retained. The opened file is checked again and read with a one-byte-over-limit bound; save refuses serialized logs above the same limit with IslandReplayError::TooLarge, so the writer cannot create a file its reader rejects.
+- Added regressions for symlink rejection and oversized serialized saves. The existing sparse-file test continues to cover oversized reads.
+- The fast Rust CI job now bounds compile/link concurrency with CARGO_BUILD_JOBS=2; root dev/test debug-info limits and disabled incremental compilation remain in place. The existing Python CI-profile test now guards the concurrency setting too.
+- Verified locally: cargo fmt --all -- --check, repository Python tests 11/11, and git diff --check passed.
+- Runtime island_replay tests are still pending on the updated code head; the prior hosted run #41769714575 passed on the previous head but does not verify these follow-up changes.
+
+No simulation tick, state digest, snapshot schema, material ledger, imported human runtime, LLM policy or owner governance changed.

@@ -35,6 +35,7 @@ rusqlite = { version = "0.31", features = ["bundled"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 hex = "0.4"
+libc = "0.2"
 png = "0.17"
 rayon = "1"
 

@@ -427,6 +427,40 @@ fn two_command_log() -> IslandReplayLog {
     life.replay_log().clone()
 }
 
+/// A writer must not create a replay file that its bounded reader would reject.
+#[test]
+fn save_refuses_serialized_replay_over_the_size_limit() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("oversized-save.log.json");
+    let log = IslandReplayLog::new("x".repeat(MAX_REPLAY_LOG_BYTES as usize + 1));
+
+    assert!(matches!(
+        log.save(&path),
+        Err(IslandReplayError::TooLarge { max_bytes, .. }) if max_bytes == MAX_REPLAY_LOG_BYTES
+    ));
+    assert!(
+        !path.exists(),
+        "an oversized replay must not leave a partial file"
+    );
+}
+
+/// A replay path must name the private file itself, not a symlink to another file.
+#[cfg(unix)]
+#[test]
+fn load_refuses_symlinked_replay_paths() {
+    let dir = tempfile::tempdir().unwrap();
+    let target = dir.path().join("actual-run.log.json");
+    let link = dir.path().join("linked-run.log.json");
+    let log = IslandReplayLog::new("scenario".to_string());
+    std::fs::write(&target, serde_json::to_vec(&log).unwrap()).unwrap();
+    std::os::unix::fs::symlink(&target, &link).unwrap();
+
+    assert!(matches!(
+        IslandReplayLog::load(&link),
+        Err(IslandReplayError::NotALog(_, reason)) if reason.contains("regular file")
+    ));
+}
+
 /// Replay logs contain personal details and must not be readable by other local users.
 #[cfg(unix)]
 #[test]

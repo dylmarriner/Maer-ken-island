@@ -44,6 +44,11 @@ jobs:
     # The complete backend fast suite exceeded 45 minutes on PR #67;
     # it was still passing tests when GitHub cancelled the job.
     timeout-minutes: 90
+    # The workspace test suite links many mk_engine integration binaries. The
+    # 2026-11-04 hosted run exhausted its runner disk (93 MiB remained) during
+    # parallel linking. Keep peak build concurrency and test debug artifacts bounded.
+    env:
+      CARGO_BUILD_JOBS: "2"
     steps:
       - uses: actions/checkout@v4
       # Installs the toolchain pinned in rust-toolchain.toml.
