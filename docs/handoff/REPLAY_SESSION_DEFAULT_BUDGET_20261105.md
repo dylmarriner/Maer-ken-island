@@ -27,3 +27,12 @@ The existing `replay_to` guard rejects a requested horizon beyond the configured
 - Corrected the test module spacing and fixture-path wrapping in source commit 28ef5226f66bb6a897b083aea1505f0d1f3704e6.
 - The current branch handoff was reconciled with the latest `main` handoff after PR #77 merged as `750840e3160893888bcf2efab25ac7cc34d8fdbe`. The replay-session change remains separate in PR #78.
 - A fresh exact-head workflow must pass before review/merge; no Rust test pass is claimed yet.
+
+
+## Exact-head fast-test failure and correction (2026-11-05)
+
+- Workflow [#41890354072](https://github.com/dylmarriner/Maer-ken-island/actions/runs/41890354072) passed formatting, Clippy, week/year acceptance, desktop/backend, dashboard, computer service, repository scripts and dependency audit, but fast Rust tests failed: 771 passed and the new replay-budget test panicked during setup.
+- Root cause: the new test constructed the upstream planetary `WorldState` using `fixtures/island/canon.json`. That fixture intentionally describes the island-world physics and disagrees with the upstream planetary validator (planet mass 5.367508e25 vs 1.07532e26). This is a test-fixture mismatch, not a replay-budget assertion failure.
+- Corrected the test to use `Arc::new(CanonLocked::default())`, matching the existing upstream-world construction pattern in `crates/mk_engine/tests/island_allocation_bounds.rs`. No canonical physical constants or simulation behaviour were changed.
+- Fix commit: `9c6f2321af8cc7577a2fdb7b5c4d13e909444b56`.
+- A fresh exact-head workflow is required. Do not merge until fast tests and the full required workflow pass.
