@@ -436,6 +436,96 @@ fn replay_refuses_gaps_in_command_sequences_at_same_tick() {
     }
 }
 
+#[test]
+fn load_refuses_duplicate_command_sequences_before_replay() {
+    let mut log = two_command_log();
+    log.entries[1].sequence = 0;
+
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("duplicate-sequence.log.json");
+    std::fs::write(&path, serde_json::to_vec(&log).unwrap()).unwrap();
+
+    assert!(matches!(
+        IslandReplayLog::load(&path),
+        Err(IslandReplayError::InvalidSequence {
+            tick: 0,
+            expected: 1,
+            actual: 0
+        })
+    ));
+}
+
+#[test]
+fn save_refuses_sequence_gaps_without_creating_a_file() {
+    let mut log = two_command_log();
+    log.entries[1].sequence = 2;
+
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("sequence-gap.log.json");
+    assert!(matches!(
+        log.save(&path),
+        Err(IslandReplayError::InvalidSequence {
+            tick: 0,
+            expected: 1,
+            actual: 2
+        })
+    ));
+    assert!(!path.exists(), "invalid replay logs must not be persisted");
+}
+
+#[test]
+fn save_and_load_accept_shuffled_entries_with_contiguous_sequences() {
+    let mut log = two_command_log();
+    log.entries.reverse();
+
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("shuffled-valid.log.json");
+    log.save(&path).unwrap();
+    let loaded = IslandReplayLog::load(&path).unwrap();
+
+    assert_eq!(
+        loaded
+            .entries
+            .iter()
+            .map(|entry| entry.sequence)
+            .collect::<Vec<_>>(),
+        vec![1, 0],
+        "validation must not rewrite the stored entry order"
+    );
+    let replayed = replay_island(canon(), scenario(), &loaded, 0).unwrap();
+    let original = replay_island(canon(), scenario(), &log, 0).unwrap();
+    assert_eq!(hex(replayed.state_digest()), hex(original.state_digest()));
+}
+
+#[test]
+fn load_refuses_noncanonical_scenario_digest() {
+    let mut log = two_command_log();
+    log.scenario_digest = "not-a-digest".to_string();
+
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("invalid-scenario-digest.log.json");
+    std::fs::write(&path, serde_json::to_vec(&log).unwrap()).unwrap();
+
+    assert!(matches!(
+        IslandReplayLog::load(&path),
+        Err(IslandReplayError::InvalidScenarioDigest)
+    ));
+}
+
+#[test]
+fn save_refuses_noncanonical_scenario_digest_without_creating_a_file() {
+    let mut log = two_command_log();
+    log.scenario_digest = "not-a-digest".to_string();
+
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("invalid-scenario-digest.log.json");
+    assert!(matches!(
+        log.save(&path),
+        Err(IslandReplayError::InvalidScenarioDigest)
+    ));
+    assert!(!path.exists(), "invalid replay logs must not be persisted");
+}
+
 fn two_command_log() -> IslandReplayLog {
     let mut life = island();
     let space = life
@@ -485,13 +575,33 @@ fn load_refuses_symlinked_replay_paths() {
     ));
 }
 
+/// A FIFO is not a replay file. Loading it must refuse the special file rather than
+/// treating a stream with no stable length as a bounded replay document.
+#[cfg(unix)]
+#[test]
+fn load_refuses_fifo_replay_sources() {
+    use std::ffi::CString;
+    use std::os::unix::ffi::OsStrExt;
+
+    let dir = tempfile::tempdir().unwrap();
+    let fifo = dir.path().join("replay.fifo");
+    let c_path = CString::new(fifo.as_os_str().as_bytes()).unwrap();
+    let created = unsafe { libc::mkfifo(c_path.as_ptr(), 0o600) };
+    assert_eq!(created, 0, "the FIFO fixture must be created");
+
+    assert!(matches!(
+        IslandReplayLog::load(&fifo),
+        Err(IslandReplayError::NotALog(_, reason)) if reason.contains("regular file")
+    ));
+}
+
 /// Replay logs contain personal details and must not be readable by other local users.
 #[cfg(unix)]
 #[test]
 fn saved_replay_files_are_owner_only() {
     use std::os::unix::fs::PermissionsExt;
 
-    let log = IslandReplayLog::new("scenario".to_string());
+    let log = IslandReplayLog::new(island().scenario_digest_hex());
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("private-run.log.json");
     log.save(&path).unwrap();

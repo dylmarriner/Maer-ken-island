@@ -165,6 +165,8 @@ impl IslandReplayLog {
         if log.version != REPLAY_LOG_VERSION {
             return Err(IslandReplayError::Version(log.version));
         }
+        validate_scenario_digest(&log.scenario_digest)?;
+        ordered_replay_entries(log.entries.iter())?;
         Ok(log)
     }
 
@@ -173,15 +175,11 @@ impl IslandReplayLog {
     /// Exclusive file creation matters even with a single simulation writer: a
     /// stale temp file or concurrent save must never be truncated before rename.
     pub fn save(&self, path: &Path) -> Result<(), IslandReplayError> {
-        let text = serde_json::to_vec_pretty(self)
-            .map_err(|e| IslandReplayError::NotALog(path.display().to_string(), e.to_string()))?;
-        if text.len() as u64 > MAX_REPLAY_LOG_BYTES {
-            return Err(IslandReplayError::TooLarge {
-                path: path.display().to_string(),
-                bytes: text.len() as u64,
-                max_bytes: MAX_REPLAY_LOG_BYTES,
-            });
-        }
+        // Never persist a log that this same build would reject when loading or replaying.
+        ordered_replay_entries(self.entries.iter())?;
+        let text = serialize_replay_log(self, path, MAX_REPLAY_LOG_BYTES)?;
+        // Preserve the size error for oversized documents before inspecting their fields.
+        validate_scenario_digest(&self.scenario_digest)?;
 
         let mut candidate = None;
         for sequence in 0..128 {
@@ -237,6 +235,52 @@ impl IslandReplayLog {
     }
 }
 
+/// Count serialized bytes without first allocating the entire JSON document.
+#[derive(Default)]
+struct CountingWriter {
+    bytes: u64,
+}
+
+impl Write for CountingWriter {
+    fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
+        self.bytes = self.bytes.checked_add(buffer.len() as u64).ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidData, "replay log size overflow")
+        })?;
+        Ok(buffer.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+/// Preserve the exact TooLarge byte count while keeping the first serialization pass
+/// allocation-free. The JSON is materialized only after it is known to fit the bound.
+fn serialize_replay_log(
+    log: &IslandReplayLog,
+    path: &Path,
+    max_bytes: u64,
+) -> Result<Vec<u8>, IslandReplayError> {
+    let path_name = path.display().to_string();
+    let mut counter = CountingWriter::default();
+    serde_json::to_writer_pretty(&mut counter, log)
+        .map_err(|error| IslandReplayError::NotALog(path_name.clone(), error.to_string()))?;
+
+    if counter.bytes > max_bytes {
+        return Err(IslandReplayError::TooLarge {
+            path: path_name,
+            bytes: counter.bytes,
+            max_bytes,
+        });
+    }
+
+    let text = serde_json::to_vec_pretty(log).map_err(|error| {
+        IslandReplayError::NotALog(path.display().to_string(), error.to_string())
+    })?;
+    debug_assert_eq!(text.len() as u64, counter.bytes);
+    Ok(text)
+}
+
 #[cfg(unix)]
 fn sync_parent_directory(path: &Path) -> io::Result<()> {
     let parent = path
@@ -258,6 +302,8 @@ fn sync_parent_directory(_path: &Path) -> io::Result<()> {
 pub enum IslandReplayError {
     Io(String, std::io::Error),
     NotALog(String, String),
+    /// The scenario fingerprint must be a canonical 32-byte lowercase hexadecimal digest.
+    InvalidScenarioDigest,
     /// A replay file exceeded the bounded input size accepted by this build.
     TooLarge {
         path: String,
@@ -298,6 +344,10 @@ impl std::fmt::Display for IslandReplayError {
         match self {
             Self::Io(path, e) => write!(f, "{path}: {e}"),
             Self::NotALog(path, why) => write!(f, "{path} is not a replay log: {why}"),
+            Self::InvalidScenarioDigest => write!(
+                f,
+                "the scenario digest must be 64 lowercase hexadecimal characters"
+            ),
             Self::TooLarge {
                 path,
                 bytes,
@@ -342,6 +392,49 @@ impl std::fmt::Display for IslandReplayError {
 
 impl std::error::Error for IslandReplayError {}
 
+/// Sort commands into replay order and reject duplicate or missing same-tick sequence IDs.
+///
+/// The same structural rule applies at every file boundary: saving must not write an
+/// invalid log, loading must not return one, and replay must not guess at command order.
+fn ordered_replay_entries<'a>(
+    entries: impl IntoIterator<Item = &'a IslandReplayEntry>,
+) -> Result<Vec<&'a IslandReplayEntry>, IslandReplayError> {
+    let mut ordered: Vec<&IslandReplayEntry> = entries.into_iter().collect();
+    ordered.sort_by_key(|entry| (entry.tick, entry.sequence));
+
+    let mut current_tick: Option<u64> = None;
+    let mut expected_sequence = 0_u64;
+    for entry in &ordered {
+        if current_tick != Some(entry.tick) {
+            current_tick = Some(entry.tick);
+            expected_sequence = 0;
+        }
+        if entry.sequence != expected_sequence {
+            return Err(IslandReplayError::InvalidSequence {
+                tick: entry.tick,
+                expected: expected_sequence,
+                actual: entry.sequence,
+            });
+        }
+        expected_sequence = expected_sequence
+            .checked_add(1)
+            .ok_or(IslandReplayError::SequenceExhausted { tick: entry.tick })?;
+    }
+    Ok(ordered)
+}
+
+fn validate_scenario_digest(digest: &str) -> Result<(), IslandReplayError> {
+    if digest.len() == 64
+        && digest
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        Ok(())
+    } else {
+        Err(IslandReplayError::InvalidScenarioDigest)
+    }
+}
+
 /// Run a scenario forward to `until_tick`, applying the log as it goes.
 ///
 /// Commands are applied at the start of the tick they were recorded at, in
@@ -364,36 +457,8 @@ pub fn replay_island(
         });
     }
 
-    // In (tick, sequence) order, whatever order the file happens to be in:
-    // a log is a record, and a record that had been reordered should still
-    // reproduce the run rather than quietly produce a different one.
-    let mut entries: Vec<&IslandReplayEntry> = log
-        .entries
-        .iter()
-        .filter(|e| e.tick <= until_tick)
-        .collect();
-    entries.sort_by_key(|e| (e.tick, e.sequence));
-
-    // `record` assigns a zero-based, contiguous sequence to commands at a
-    // tick. A duplicate or missing sequence makes same-tick ordering
-    // ambiguous after a log is serialized and reordered, so refuse the log
-    // before applying any of its commands rather than guessing.
-    let mut current_tick = None;
-    let mut expected_sequence = 0_u64;
-    for entry in &entries {
-        if current_tick != Some(entry.tick) {
-            current_tick = Some(entry.tick);
-            expected_sequence = 0;
-        }
-        if entry.sequence != expected_sequence {
-            return Err(IslandReplayError::InvalidSequence {
-                tick: entry.tick,
-                expected: expected_sequence,
-                actual: entry.sequence,
-            });
-        }
-        expected_sequence += 1;
-    }
+    let entries =
+        ordered_replay_entries(log.entries.iter().filter(|entry| entry.tick <= until_tick))?;
 
     let step = life.scenario.cadences.human_seconds;
     for entry in entries {
@@ -468,5 +533,30 @@ impl IslandLife {
             .iter()
             .map(|b| format!("{b:02x}"))
             .collect()
+    }
+}
+
+#[cfg(test)]
+mod replay_serialization_tests {
+    use super::*;
+    use std::path::Path;
+
+    #[test]
+    fn serialized_size_is_counted_exactly_before_output_allocation() {
+        let log = IslandReplayLog::new("0".repeat(64));
+        let expected = serde_json::to_vec_pretty(&log).unwrap();
+        let exact_size = expected.len() as u64;
+
+        let error =
+            serialize_replay_log(&log, Path::new("replay-test.json"), exact_size - 1).unwrap_err();
+        assert!(matches!(
+            error,
+            IslandReplayError::TooLarge { bytes, max_bytes, .. }
+                if bytes == exact_size && max_bytes == exact_size - 1
+        ));
+
+        let accepted =
+            serialize_replay_log(&log, Path::new("replay-test.json"), exact_size).unwrap();
+        assert_eq!(accepted, expected, "the exact size limit is inclusive");
     }
 }
