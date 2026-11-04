@@ -16,8 +16,8 @@ use mk_engine::regional::commands::{ControlCommand, IslandCommand};
 use mk_engine::regional::create_human::{CreateLocation, IslandCreateHuman};
 use mk_engine::regional::life::IslandLife;
 use mk_engine::regional::replay::{
-    replay_island, IslandReplayEntry, IslandReplayError, IslandReplayLog, MAX_REPLAY_LOG_BYTES,
-    REPLAY_LOG_VERSION,
+    replay_island, replay_island_with_budget, IslandReplayEntry, IslandReplayError,
+    IslandReplayLog, MAX_REPLAY_LOG_BYTES, MAX_REPLAY_TICKS, REPLAY_LOG_VERSION,
 };
 use mk_island::IslandScenario;
 
@@ -269,6 +269,46 @@ fn partial_replay_refuses_invalid_sequences_after_the_requested_tick() {
             tick: 1,
             expected: 0,
             actual: 1
+        })
+    ));
+}
+
+#[test]
+fn replay_refuses_a_far_future_command_before_bootstrapping() {
+    let mut log = two_command_log();
+    let requested_tick = MAX_REPLAY_TICKS + 1;
+    for entry in &mut log.entries {
+        entry.tick = requested_tick;
+    }
+
+    assert!(matches!(
+        replay_island(canon(), scenario(), &log, requested_tick),
+        Err(IslandReplayError::ReplayBudgetExceeded { tick, max_ticks })
+            if tick == requested_tick && max_ticks == MAX_REPLAY_TICKS
+    ));
+}
+
+#[test]
+fn partial_replay_does_not_apply_the_budget_to_future_commands() {
+    let mut log = two_command_log();
+    for entry in &mut log.entries {
+        entry.tick = MAX_REPLAY_TICKS + 1;
+    }
+
+    let replayed = replay_island(canon(), scenario(), &log, 0)
+        .expect("a partial replay before future commands remains bounded");
+    assert_eq!(replayed.tick, 0);
+}
+
+#[test]
+fn replay_refuses_requested_horizon_beyond_explicit_budget() {
+    let log = two_command_log();
+
+    assert!(matches!(
+        replay_island_with_budget(canon(), scenario(), &log, 2, 1),
+        Err(IslandReplayError::ReplayBudgetExceeded {
+            tick: 2,
+            max_ticks: 1
         })
     ));
 }
