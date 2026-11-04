@@ -16,7 +16,7 @@ use mk_engine::regional::commands::{ControlCommand, IslandCommand};
 use mk_engine::regional::create_human::{CreateLocation, IslandCreateHuman};
 use mk_engine::regional::life::IslandLife;
 use mk_engine::regional::replay::{
-    replay_island, IslandReplayError, IslandReplayLog, MAX_REPLAY_LOG_BYTES,
+    replay_island, IslandReplayEntry, IslandReplayError, IslandReplayLog, MAX_REPLAY_LOG_BYTES,
 };
 use mk_island::IslandScenario;
 
@@ -240,9 +240,9 @@ fn a_log_from_another_island_is_refused() {
 #[test]
 fn record_keeps_sequences_contiguous_when_ticks_are_interleaved() {
     let mut log = IslandReplayLog::new("scenario".to_string());
-    log.record(1, somebody("Rua", 1));
-    log.record(2, somebody("Toru", 1));
-    log.record(1, somebody("Hana", 1));
+    log.record(1, somebody("Rua", 1)).expect("replay sequence remains available");
+    log.record(2, somebody("Toru", 1)).expect("replay sequence remains available");
+    log.record(1, somebody("Hana", 1)).expect("replay sequence remains available");
 
     let tick_one_sequences: Vec<u64> = log
         .entries
@@ -260,11 +260,11 @@ fn record_keeps_sequences_contiguous_when_ticks_are_interleaved() {
 #[test]
 fn record_uses_max_sequence_when_existing_entries_are_shuffled() {
     let mut log = IslandReplayLog::new("scenario".to_string());
-    log.record(1, somebody("Rua", 1));
-    log.record(1, somebody("Hana", 1));
+    log.record(1, somebody("Rua", 1)).expect("replay sequence remains available");
+    log.record(1, somebody("Hana", 1)).expect("replay sequence remains available");
     log.entries.reverse();
 
-    log.record(1, somebody("Toru", 1));
+    log.record(1, somebody("Toru", 1)).expect("replay sequence remains available");
 
     let mut sequences: Vec<u64> = log
         .entries
@@ -274,6 +274,24 @@ fn record_uses_max_sequence_when_existing_entries_are_shuffled() {
         .collect();
     sequences.sort_unstable();
     assert_eq!(sequences, vec![0, 1, 2]);
+}
+
+/// A loaded log with an exhausted same-tick sequence must not wrap or duplicate it.
+#[test]
+fn record_refuses_sequence_overflow_without_appending_a_duplicate() {
+    let mut log = IslandReplayLog::new("scenario".to_string());
+    log.entries.push(IslandReplayEntry {
+        tick: 1,
+        sequence: u64::MAX,
+        command: somebody("Rua", 1),
+    });
+
+    assert!(matches!(
+        log.record(1, somebody("Toru", 1)),
+        Err(IslandReplayError::SequenceExhausted { tick: 1 })
+    ));
+    assert_eq!(log.entries.len(), 1);
+    assert_eq!(log.entries[0].sequence, u64::MAX);
 }
 
 /// Refuse oversized replay files before allocating or parsing their contents.
