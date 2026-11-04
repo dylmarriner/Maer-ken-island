@@ -19,3 +19,11 @@ The existing `replay_to` guard rejects a requested horizon beyond the configured
 
 - Inspect the exact-head workflow result before review or merge.
 - Ensure no callers depend on the previous implicit-unlimited default; callers requiring a longer horizon must now set an explicit budget.
+
+
+## CI follow-up (2026-11-05)
+
+- Initial exact-head workflow [#41890163537](https://github.com/dylmarriner/Maer-ken-island/actions/runs/41890163537) failed only at `cargo fmt --all -- --check`; Clippy and fast tests were skipped by the workflow after formatting failed.
+- Corrected the test module spacing and fixture-path wrapping in source commit 28ef5226f66bb6a897b083aea1505f0d1f3704e6.
+- The current branch handoff was reconciled with the latest `main` handoff after PR #77 merged as `750840e3160893888bcf2efab25ac7cc34d8fdbe`. The replay-session change remains separate in PR #78.
+- A fresh exact-head workflow must pass before review/merge; no Rust test pass is claimed yet.
