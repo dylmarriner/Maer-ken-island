@@ -306,7 +306,10 @@ fn replay_refuses_requested_horizon_beyond_explicit_budget() {
 
     assert!(matches!(
         replay_island_with_budget(canon(), scenario(), &log, 2, 1),
-        Err(IslandReplayError::ReplayBudgetExceeded { tick: 2, max_ticks: 1 })
+        Err(IslandReplayError::ReplayBudgetExceeded {
+            tick: 2,
+            max_ticks: 1
+        })
     ));
 }
 
