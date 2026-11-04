@@ -29,16 +29,12 @@ digests, physical constants or LLM behaviour.
 
 ## Verification
 
-- Exact-head hosted CI required: fmt, Clippy, fast Rust tests, week/year reference acceptance,
-  desktop, installed backend, dashboard, computer service, repository scripts and dependency audit.
-- Local Cargo checks were not run because the custom OpenCommander device session is unavailable.
-- Exact-head workflow must prove no workspace consumer depended on the formerly public fields.
-
-## Next
-
-1. Verify the exact PR head and all required CI jobs.
-2. Merge only after green exact-head checks and review.
-3. Continue the remaining Phase 5 application and realism requirements in `WORK_REMAINING.md`.
+- Exact-head workflow [#41928721548](https://github.com/dylmarriner/Maer-ken-island/actions/runs/41928721548) completed successfully on `0004b1e2382be58c69edf41dda77f8703961d837`.
+- Passed: formatting, Clippy, fast Rust tests, both week/year reference-pack acceptance tests, desktop build/render tests, installed backend, dashboard, computer service, repository scripts and dependency audit.
+- The nightly slow-test job was skipped by design; the path-scoped week/year acceptance job ran and passed both tests.
+- Local Cargo checks were not run because the custom OpenCommander device session was unavailable.
+- PR #81 was marked ready after exact-head checks passed and merged by squash as `7af8bec18ddbada7ff6f537d73684d0b805dc329`.
+- No simulation constants, snapshot formats, append-only logs, canonical digest inputs or LLM behaviour changed.
 
 
 ## First exact-head CI correction
