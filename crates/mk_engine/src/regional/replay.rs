@@ -572,15 +572,17 @@ mod replay_serialization_tests {
         let exact_size = expected.len() as u64;
 
         let error =
-            serialize_replay_log(&log, Path::new("replay-test.json"), exact_size - 1).unwrap_err();
+            measure_replay_log(&log, Path::new("replay-test.json"), exact_size - 1).unwrap_err();
         assert!(matches!(
             error,
             IslandReplayError::TooLarge { bytes, max_bytes, .. }
                 if bytes == exact_size && max_bytes == exact_size - 1
         ));
 
+        let measured =
+            measure_replay_log(&log, Path::new("replay-test.json"), exact_size).unwrap();
         let accepted =
-            serialize_replay_log(&log, Path::new("replay-test.json"), exact_size).unwrap();
+            materialize_replay_log(&log, Path::new("replay-test.json"), measured).unwrap();
         assert_eq!(accepted, expected, "the exact size limit is inclusive");
     }
 }
