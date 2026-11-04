@@ -272,8 +272,9 @@ impl ReplaySession {
             .filter(|e| matches!(e.status, ReplayStatus::Success))
             .count();
 
-        let failed_steps = self.history.len() - successful_steps + usize::from(self.failure.is_some());
-        let total_steps = self.history.len() + usize::from(self.failure.is_some());
+        let failed_attempts = if self.failure.is_some() { 1 } else { 0 };
+        let failed_steps = self.history.len() - successful_steps + failed_attempts;
+        let total_steps = self.history.len() + failed_attempts;
 
         ReplayStatistics {
             total_steps,
