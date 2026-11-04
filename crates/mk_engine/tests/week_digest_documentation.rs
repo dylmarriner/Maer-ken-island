@@ -20,9 +20,15 @@ fn pinned_week_digest() -> &'static str {
 #[test]
 fn active_week_digest_documentation_matches_the_acceptance_pin() {
     let digest = pinned_week_digest();
-    assert_eq!(digest.len(), 64, "the week digest must be a full BLAKE3 hex value");
+    assert_eq!(
+        digest.len(),
+        64,
+        "the week digest must be a full BLAKE3 hex value"
+    );
     assert!(
-        digest.bytes().all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)),
+        digest
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)),
         "the week digest must be lowercase hexadecimal"
     );
 
