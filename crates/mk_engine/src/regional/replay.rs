@@ -131,8 +131,31 @@ impl IslandReplayLog {
             let _ = fs::remove_file(&temp);
             return Err(IslandReplayError::Io(path.display().to_string(), error));
         }
+
+        // The file's contents are synced before rename. On Unix, sync the
+        // containing directory as well so the new name survives a crash or
+        // power loss; atomic rename alone guarantees visibility, not durability.
+        if let Err(error) = sync_parent_directory(path) {
+            return Err(IslandReplayError::Io(path.display().to_string(), error));
+        }
         Ok(())
     }
+}
+
+#[cfg(unix)]
+fn sync_parent_directory(path: &Path) -> io::Result<()> {
+    let parent = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    fs::File::open(parent)?.sync_all()
+}
+
+#[cfg(not(unix))]
+fn sync_parent_directory(_path: &Path) -> io::Result<()> {
+    // Portable directory handles are not exposed by std on every platform.
+    // The staged file itself is still synced before the atomic rename.
+    Ok(())
 }
 
 /// Why a replay did not happen, or did not finish.

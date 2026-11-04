@@ -29,3 +29,9 @@ The round-trip regression seeds both the legacy temp path and the first new cand
 - Recheck PR #73 mergeability and base conflicts; do not rebase or merge the separate conflict-blocked PR #68.
 - Continue the broader roadmap in WORK_REMAINING.md: replay/hash acceptance, snapshots, material ledger closure, sourced ecology/industry, climate fidelity, town/workforce and year acceptance.
 - Do not mark the island complete until documented acceptance gates are evidenced.
+
+## Follow-up: replay directory-entry durability (2026-11-04)
+
+- After syncing the staged replay file and atomically renaming it into place, Unix builds now sync the containing directory so the rename metadata is durable across a crash or power loss. Relative filenames resolve their parent to `.`. Non-Unix builds retain the synced-file plus atomic-rename behavior because portable directory handles are not exposed by `std` on every target.
+- A parent-directory sync failure is returned as an I/O error after the rename; the file may be visible, but the save does not claim durability it could not confirm.
+- The existing `a_log_round_trips_through_a_file` integration test exercises this save path and checks replay state-digest equality. `cargo fmt --all -- --check` and `git diff --check` passed after the change. The targeted offline runtime suite is still running; no test pass is claimed until it returns.
