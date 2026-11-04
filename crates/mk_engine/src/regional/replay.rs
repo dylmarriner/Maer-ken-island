@@ -30,6 +30,11 @@ pub const REPLAY_LOG_VERSION: u32 = 1;
 /// bounds memory use when loading corrupt or untrusted replay paths.
 pub const MAX_REPLAY_LOG_BYTES: u64 = 128 * 1024 * 1024;
 
+/// Default per-call replay horizon, measured in human ticks from tick zero.
+/// The default scenario uses 60-second ticks, so this allows a year-long
+/// replay plus margin. Longer histories require an explicit execution budget.
+pub const MAX_REPLAY_TICKS: u64 = 600_000;
+
 /// One command, and exactly when it was applied.
 ///
 /// `sequence` orders commands that landed on the same tick. Without it a
@@ -322,6 +327,11 @@ pub enum IslandReplayError {
         bytes: u64,
         max_bytes: u64,
     },
+    /// A requested replay would advance beyond the per-call execution budget.
+    ReplayBudgetExceeded {
+        tick: u64,
+        max_ticks: u64,
+    },
     /// A log written by a format this build does not know.
     Version(u32),
     /// A tick's command sequence is duplicated or skips an expected entry.
@@ -367,6 +377,10 @@ impl std::fmt::Display for IslandReplayError {
             } => write!(
                 f,
                 "{path} is {bytes} bytes; replay logs are limited to {max_bytes} bytes"
+            ),
+            Self::ReplayBudgetExceeded { tick, max_ticks } => write!(
+                f,
+                "replay command at tick {tick} exceeds the per-call limit of {max_ticks} ticks; replay from a snapshot or explicitly raise the budget"
             ),
             Self::Version(v) => write!(
                 f,
@@ -467,6 +481,20 @@ pub fn replay_island(
     log: &IslandReplayLog,
     until_tick: u64,
 ) -> Result<IslandLife, IslandReplayError> {
+    replay_island_with_budget(canon, scenario, log, until_tick, MAX_REPLAY_TICKS)
+}
+
+/// Replay with an explicit absolute tick ceiling for intentional long histories.
+/// The default API is bounded so a tiny log with a far-future command cannot
+/// trigger an effectively unbounded simulation loop. Raising the ceiling is an
+/// explicit caller decision; structural validation still covers the complete log.
+pub fn replay_island_with_budget(
+    canon: Arc<CanonLocked>,
+    scenario: IslandScenario,
+    log: &IslandReplayLog,
+    until_tick: u64,
+    max_replay_ticks: u64,
+) -> Result<IslandLife, IslandReplayError> {
     // Direct callers can construct an in-memory log without passing through load().
     // Validate the same header and complete sequence contract before allocating an island.
     validate_replay_log_header(log)?;
@@ -474,6 +502,12 @@ pub fn replay_island(
         .into_iter()
         .filter(|entry| entry.tick <= until_tick)
         .collect::<Vec<_>>();
+    if let Some(entry) = entries.iter().find(|entry| entry.tick > max_replay_ticks) {
+        return Err(IslandReplayError::ReplayBudgetExceeded {
+            tick: entry.tick,
+            max_ticks: max_replay_ticks,
+        });
+    }
     let mut life = IslandLife::bootstrap(scenario, canon).map_err(IslandReplayError::Island)?;
 
     let here = life.scenario_digest_hex();
