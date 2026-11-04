@@ -273,7 +273,9 @@ pub enum IslandReplayError {
         actual: u64,
     },
     /// No further same-tick command can be recorded without duplicating a sequence.
-    SequenceExhausted { tick: u64 },
+    SequenceExhausted {
+        tick: u64,
+    },
     /// The log belongs to a different scenario. Replaying it here would
     /// reproduce nothing and look like it had.
     WrongScenario {
@@ -431,7 +433,8 @@ impl IslandLife {
                 let made = self
                     .create_human((**request).clone())
                     .map_err(CommandError::Create)?;
-                self.replay_log.record_with_sequence(self.tick, sequence, command);
+                self.replay_log
+                    .record_with_sequence(self.tick, sequence, command);
                 Ok(Applied::Created(made))
             }
             IslandCommand::Intervention(action) => {
@@ -439,14 +442,16 @@ impl IslandLife {
                 // the island refuses never happened and must not be in a
                 // log that claims to reproduce the run.
                 let outcome = self.intervene(action).map_err(CommandError::Intervention)?;
-                self.replay_log.record_with_sequence(self.tick, sequence, command);
+                self.replay_log
+                    .record_with_sequence(self.tick, sequence, command);
                 Ok(Applied::Intervened(outcome))
             }
             IslandCommand::Control(control) => {
                 // Nothing in the world moves. It is recorded because a
                 // replay should be able to say what the operator did.
                 let _: &ControlCommand = control;
-                self.replay_log.record_with_sequence(self.tick, sequence, command);
+                self.replay_log
+                    .record_with_sequence(self.tick, sequence, command);
                 Ok(Applied::Noted)
             }
         }
