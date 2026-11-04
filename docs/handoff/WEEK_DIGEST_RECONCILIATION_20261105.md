@@ -2,7 +2,7 @@
 
 Canonical repository: `dylmarriner/Maer-ken-island`
 Branch: `fix/week-digest-audit-20261105`
-Pull request: pending creation
+Pull request: [#77](https://github.com/dylmarriner/Maer-ken-island/pull/77)
 
 ## Finding
 
@@ -45,3 +45,9 @@ No simulation, physics, replay, snapshot, real-world reference pack, owner-gover
 1. Verify the new digest consistency test in the fast Rust suite.
 2. Verify both week and year reference-pack acceptance on this exact PR head.
 3. Run the full slow tier before final simulation acceptance and preserve deterministic replay-hash equality.
+
+
+## Current exact-head CI
+
+- PR #77 head: `e288db49b50d2f49ced7c9b7adcf279e8f9bb785`.
+- Workflow run [#41877017851](https://github.com/dylmarriner/Maer-ken-island/actions/runs/41877017851) was queued when inspected; all fast/desktop/backend jobs were queued and the nightly slow job was skipped as expected for a PR run. No new-head pass is claimed.
