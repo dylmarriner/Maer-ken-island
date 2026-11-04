@@ -436,6 +436,55 @@ fn replay_refuses_gaps_in_command_sequences_at_same_tick() {
     }
 }
 
+#[test]
+fn load_refuses_duplicate_command_sequences_before_replay() {
+    let mut log = two_command_log();
+    log.entries[1].sequence = 0;
+
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("duplicate-sequence.log.json");
+    std::fs::write(&path, serde_json::to_vec(&log).unwrap()).unwrap();
+
+    assert!(matches!(
+        IslandReplayLog::load(&path),
+        Err(IslandReplayError::InvalidSequence { tick: 0, expected: 1, actual: 0 })
+    ));
+}
+
+#[test]
+fn save_refuses_sequence_gaps_without_creating_a_file() {
+    let mut log = two_command_log();
+    log.entries[1].sequence = 2;
+
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("sequence-gap.log.json");
+    assert!(matches!(
+        log.save(&path),
+        Err(IslandReplayError::InvalidSequence { tick: 0, expected: 1, actual: 2 })
+    ));
+    assert!(!path.exists(), "invalid replay logs must not be persisted");
+}
+
+#[test]
+fn save_and_load_accept_shuffled_entries_with_contiguous_sequences() {
+    let mut log = two_command_log();
+    log.entries.reverse();
+
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("shuffled-valid.log.json");
+    log.save(&path).unwrap();
+    let loaded = IslandReplayLog::load(&path).unwrap();
+
+    assert_eq!(
+        loaded.entries.iter().map(|entry| entry.sequence).collect::<Vec<_>>(),
+        vec![1, 0],
+        "validation must not rewrite the stored entry order"
+    );
+    let replayed = replay_island(canon(), scenario(), &loaded, 0).unwrap();
+    let original = replay_island(canon(), scenario(), &log, 0).unwrap();
+    assert_eq!(hex(replayed.state_digest()), hex(original.state_digest()));
+}
+
 fn two_command_log() -> IslandReplayLog {
     let mut life = island();
     let space = life
