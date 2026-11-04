@@ -223,15 +223,26 @@ fn a_log_from_another_island_is_refused() {
     let mut live = island();
     live.advance(STEP).unwrap();
     let mut log = live.replay_log().clone();
-    log.scenario_digest = "not this island".to_string();
+    // A foreign scenario must still be rejected when its digest is canonical.
+    log.scenario_digest = "0".repeat(64);
 
     match replay_island(canon(), scenario(), &log, 2) {
         Err(IslandReplayError::WrongScenario { log, .. }) => {
-            assert_eq!(log, "not this island");
+            assert_eq!(log, "0".repeat(64));
         }
         Err(other) => panic!("the wrong refusal for a foreign log: {other}"),
         Ok(_) => panic!("a foreign log was accepted"),
     }
+}
+
+#[test]
+fn replay_refuses_noncanonical_scenario_digest_before_scenario_comparison() {
+    let log = IslandReplayLog::new("not-a-digest".to_string());
+
+    assert!(matches!(
+        replay_island(canon(), scenario(), &log, 0),
+        Err(IslandReplayError::InvalidScenarioDigest)
+    ));
 }
 
 /// Recording commands for an earlier tick must continue that tick's sequence
