@@ -29,3 +29,5 @@ Date: 2026-11-05
 - The year test was skipped by GitHub Actions' default fail-fast step condition. This run fixes that evidence gap: both tests now run independently, and a final gate fails if either test fails.
 - Do **not** re-pin the week digest from this result alone. Existing docs disagree about the canonical value, and the year-weather test still needs to execute before the digest audit can be completed.
 - Next: inspect the independent year-test result, reconcile the week digest against the audit/reference-pack evidence and documented behavior changes, then rerun both tests on the resulting exact head.
+
+- Independent execution and aggregate gating: [3abedc8](https://github.com/dylmarriner/Maer-ken-island/commit/3abedc8d3e41ac1b415d9749cb64d8c8816ace2f); testing-guide update: [eb41923](https://github.com/dylmarriner/Maer-ken-island/commit/eb4192335e9ce05fde136f13e9fed8afe000e892). The final workflow prints both outcomes on separate lines and fails if either is not successful.
