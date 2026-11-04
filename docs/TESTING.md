@@ -13,7 +13,7 @@ The toolchain is pinned in `rust-toolchain.toml` (Rust 1.97.0 with `rustfmt` and
 
 `--ignored deep_` is a substring filter, so a slow test's name must not contain `deep_`. libtest filters by test name, not by ignore reason, which is why the name prefix is required in addition to the `#[ignore]` reason. Tests are never deleted to make a tier faster; they move tier.
 
-The PR `reference-acceptance` job diffs the pull request base and head. It runs `slow_a_week_on_the_island_matches_the_reference_packs` and `slow_a_year_of_island_weather_matches_the_reference_packs` when crate source/tests, reference packs, island scenario fixtures, `UPSTREAM.md`, or the deviation register change. A path-scoped skip means those inputs did not change; it is not a test pass.
+The PR `reference-acceptance` job diffs the pull request base and head. It runs `slow_a_week_on_the_island_matches_the_reference_packs` and `slow_a_year_of_island_weather_matches_the_reference_packs` when crate source/tests, reference packs, island scenario fixtures, `UPSTREAM.md`, or the deviation register change. The week and year tests run independently: a week failure must not skip the year test. A final gate fails the job unless both outcomes are successful. A path-scoped skip means those inputs did not change; it is not a test pass.
 
 `island_ui` is excluded from the fast and slow commands because it pulls in Bevy, which needs
 system audio and graphics headers a plain container lacks; it has its own CI job. The nightly
