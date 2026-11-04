@@ -10,6 +10,9 @@ use std::collections::HashMap;
 use std::fmt;
 use tracing::warn;
 
+/// Default per-session replay budget: enough for a year at a 60-second cadence.
+pub const DEFAULT_MAX_REPLAY_TICKS: u64 = 600_000;
+
 /// Replay session for deterministic simulation replay
 #[derive(Debug, Clone)]
 pub struct ReplaySession {
@@ -47,7 +50,7 @@ pub struct ReplayOptions {
     /// Stop on first error
     pub stop_on_error: bool,
 
-    /// Maximum ticks to replay (0 = unlimited)
+    /// Maximum ticks to replay. Zero explicitly opts out of the execution bound.
     pub max_ticks: u64,
 
     /// Capture detailed metrics
@@ -59,7 +62,7 @@ impl Default for ReplayOptions {
         Self {
             verify_hashes: true,
             stop_on_error: true,
-            max_ticks: 0,
+            max_ticks: DEFAULT_MAX_REPLAY_TICKS,
             capture_metrics: true,
         }
     }
@@ -337,5 +340,50 @@ impl ReplayManager {
 impl Default for ReplayManager {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::{ReplayError, ReplayOptions, ReplaySession, DEFAULT_MAX_REPLAY_TICKS};
+    use crate::world_integration::WorldState;
+    use mk_core::canon::CanonLocked;
+    use std::path::PathBuf;
+    use std::sync::Arc;
+
+    fn canon() -> Arc<CanonLocked> {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../fixtures/island/canon.json");
+        Arc::new(CanonLocked::load(&path).expect("the canonical fixture is valid"))
+    }
+
+    #[test]
+    fn default_replay_budget_rejects_an_overlong_horizon_before_stepping() {
+        let state = WorldState::new(canon(), [0x5a; 32]);
+        let mut session =
+            ReplaySession::from_world_state(state, ReplayOptions::default()).expect("session");
+        let start_tick = session.current_state.tick;
+        let target_tick = start_tick + DEFAULT_MAX_REPLAY_TICKS + 1;
+
+        assert!(matches!(
+            session.replay_to(target_tick),
+            Err(ReplayError::MaxTicksExceeded)
+        ));
+        assert_eq!(session.current_state.tick, start_tick);
+        assert!(session.history.is_empty());
+    }
+
+    #[test]
+    fn unlimited_replay_is_an_explicit_override() {
+        assert_eq!(ReplayOptions::default().max_ticks, DEFAULT_MAX_REPLAY_TICKS);
+        assert_eq!(
+            ReplayOptions {
+                max_ticks: 0,
+                ..ReplayOptions::default()
+            }
+            .max_ticks,
+            0
+        );
     }
 }
