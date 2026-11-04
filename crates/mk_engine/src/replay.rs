@@ -343,7 +343,6 @@ impl Default for ReplayManager {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::{ReplayError, ReplayOptions, ReplaySession, DEFAULT_MAX_REPLAY_TICKS};
@@ -353,8 +352,8 @@ mod tests {
     use std::sync::Arc;
 
     fn canon() -> Arc<CanonLocked> {
-        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../fixtures/island/canon.json");
+        let path =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/island/canon.json");
         Arc::new(CanonLocked::load(&path).expect("the canonical fixture is valid"))
     }
 
