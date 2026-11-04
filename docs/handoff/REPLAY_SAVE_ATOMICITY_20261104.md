@@ -36,3 +36,18 @@ The round-trip regression seeds both the legacy temp path and the first new cand
 - A parent-directory sync failure is returned as an I/O error after the rename; the file may be visible, but the save does not claim durability it could not confirm.
 - The existing `a_log_round_trips_through_a_file` integration test exercises this save path and checks replay state-digest equality. On exact head `ab6054b`: `cargo fmt --all -- --check`, `git diff --check`, `CARGO_BUILD_JOBS=2 cargo check -p mk_engine --test island_replay --locked --offline` (40.64 s), and `CARGO_BUILD_JOBS=2 cargo clippy -p mk_engine --all-targets --locked --offline -- -D warnings` (50.75 s) passed.
 - The targeted offline runtime command `CARGO_BUILD_JOBS=2 cargo test -p mk_engine --test island_replay --locked --offline` timed out twice at the 300-second command limit while compiling `mk_engine`; no assertion failure was reported, but runtime tests are not verified. The hosted exact-head CI run is the remaining independent runtime/build check; week/year slow reference-pack acceptance is still required before merge.
+
+## Follow-up: owner-only replay file permissions (2026-11-04)
+
+- Commit `90e52bb` creates Unix replay staging files with mode `0600` before writing any serialized content. Atomic rename preserves the restrictive mode on the final replay log. Non-Unix builds retain the platform's inherited ACL behavior because portable ACL controls are not exposed by `std`.
+- The reason is data classification: replay logs include simulated people's names, birth timestamps and physical details. The regression `saved_replay_files_are_owner_only` verifies that group/world permission bits are absent and the owner can read the file.
+- `cargo fmt --all -- --check` and `git diff --check` passed before commit. The targeted local command `CARGO_BUILD_JOBS=2 CARGO_INCREMENTAL=0 cargo test -p mk_engine --test island_replay --locked --offline saved_replay_files_are_owner_only` reached its 300-second limit and was terminated with exit `-9` while compiling `mk_engine`; no test assertion ran, so the runtime regression is **not locally verified**.
+- The earlier exact-head CI run #41752413427 was still running on `a205e10` at the last inspection: installed-backend, dependency-audit and computer-service jobs passed; desktop tests and fast tests were still in progress; slow week/year tests were skipped. The new `90e52bb` push requires a fresh exact-head CI run.
+
+## Current remaining checklist
+
+- [ ] Verify exact-head CI for `90e52bb`, including the new Unix permission regression.
+- [ ] Run the week and year reference-pack slow tests before merge, as required by `WORK_REMAINING.md` for replay behavior changes.
+- [ ] Obtain a completed runtime result for the new test; the local timeout is not a pass.
+- [ ] Recheck PR #73 mergeability; leave separate conflict-blocked PR #68 untouched.
+- [ ] Continue the remaining `WORK_REMAINING.md` acceptance work: replay/hash, snapshots, material ledgers, sourced ecology/industry, climate, town/workforce and year acceptance.
