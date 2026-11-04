@@ -447,6 +447,9 @@ pub fn replay_island(
     log: &IslandReplayLog,
     until_tick: u64,
 ) -> Result<IslandLife, IslandReplayError> {
+    // Direct callers can construct an in-memory log without passing through load().
+    // Enforce the same canonical digest contract before bootstrapping or comparing scenarios.
+    validate_scenario_digest(&log.scenario_digest)?;
     let mut life = IslandLife::bootstrap(scenario, canon).map_err(IslandReplayError::Island)?;
 
     let here = life.scenario_digest_hex();
