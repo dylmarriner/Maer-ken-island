@@ -306,7 +306,10 @@ impl std::fmt::Display for IslandReplayError {
         match self {
             Self::Io(path, e) => write!(f, "{path}: {e}"),
             Self::NotALog(path, why) => write!(f, "{path} is not a replay log: {why}"),
-            Self::InvalidScenarioDigest => write!(f, "the scenario digest must be 64 lowercase hexadecimal characters"),
+            Self::InvalidScenarioDigest => write!(
+                f,
+                "the scenario digest must be 64 lowercase hexadecimal characters"
+            ),
             Self::TooLarge {
                 path,
                 bytes,

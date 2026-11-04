@@ -16,7 +16,8 @@ Parent inspected: `055c672b86de34b6a651161c3f4be925cf134064`
 ## Verification
 
 - Previous run #41791619666: desktop, installed backend, repository scripts, dependency audit, computer service and web dashboard passed; the fast Rust job failed at rustfmt. No compile/test result was produced by that job.
-- This new code has not yet been executed. The next exact-head CI run must pass formatting, Clippy, fast tests, desktop/backend checks and the mandatory week/year reference-pack tests before merge.
+- The first exact-head run after this patch found one additional rustfmt-only difference in the new error display arm; this follow-up formats that arm to the CI formatter's exact output. No compile or test result has yet been produced for the new code.
+- The next exact-head CI run must pass formatting, Clippy, fast tests, desktop/backend checks and the mandatory week/year reference-pack tests before merge.
 - The PR remains stacked on PR #73; do not retarget or merge this branch before its base is reconciled.
 
 ## Remaining checklist
