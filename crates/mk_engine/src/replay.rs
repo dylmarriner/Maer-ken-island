@@ -39,6 +39,10 @@ pub struct ReplaySession {
 
     /// Replay history for verification
     pub history: Vec<ReplayEntry>,
+
+    /// First failed step, latched so a partially advanced or divergent session cannot
+    /// later be reported as a successful replay.
+    failure: Option<ReplayError>,
 }
 
 /// Replay options
@@ -47,7 +51,8 @@ pub struct ReplayOptions {
     /// Verify hash at each step
     pub verify_hashes: bool,
 
-    /// Stop on first error
+    /// Compatibility policy flag. Step failures always stop and poison the session:
+    /// skipping one would make deterministic state and replay history unverifiable.
     pub stop_on_error: bool,
 
     /// Maximum ticks to replay. Zero explicitly opts out of the execution bound.
@@ -101,6 +106,7 @@ impl ReplaySession {
             target_tick: snapshot.tick,
             options,
             history: Vec::new(),
+            failure: None,
         })
     }
 
@@ -125,11 +131,16 @@ impl ReplaySession {
             target_tick,
             options,
             history: Vec::new(),
+            failure: None,
         })
     }
 
     /// Replay to a specific tick
     pub fn replay_to(&mut self, target_tick: Tick) -> Result<(), ReplayError> {
+        if let Some(error) = &self.failure {
+            return Err(error.clone());
+        }
+
         let start_tick = self.current_state.tick;
         let ticks_to_replay = target_tick.saturating_sub(start_tick);
 
@@ -141,12 +152,19 @@ impl ReplaySession {
         self.target_tick = target_tick;
 
         while self.current_state.tick < target_tick {
-            if let Err(e) = self.step_replay() {
-                if self.options.stop_on_error {
-                    return Err(e);
+            if let Err(error) = self.step_replay() {
+                // A failed step may already have advanced one state, failed the shadow
+                // step, or exposed a hash/state mismatch. There is no safe tick to skip:
+                // continuing can turn a corrupt replay into an apparent success.
+                self.failure = Some(error.clone());
+                if !self.options.stop_on_error {
+                    warn!(
+                        tick = self.current_state.tick,
+                        error = %error,
+                        "Replay step failed; session is poisoned and cannot safely continue"
+                    );
                 }
-                // Log error and continue if not stopping on error
-                warn!(tick = self.current_state.tick, error = %e, "Replay error, continuing");
+                return Err(error);
             }
         }
 
@@ -209,6 +227,10 @@ impl ReplaySession {
 
     /// Verify replay integrity
     pub fn verify(&self) -> Result<(), ReplayError> {
+        if let Some(error) = &self.failure {
+            return Err(error.clone());
+        }
+
         // Verify final state
         self.current_state
             .validate()
@@ -250,10 +272,11 @@ impl ReplaySession {
             .filter(|e| matches!(e.status, ReplayStatus::Success))
             .count();
 
-        let failed_steps = self.history.len() - successful_steps;
+        let failed_steps = self.history.len() - successful_steps + usize::from(self.failure.is_some());
+        let total_steps = self.history.len() + usize::from(self.failure.is_some());
 
         ReplayStatistics {
-            total_steps: self.history.len(),
+            total_steps,
             successful_steps,
             failed_steps,
             start_tick: self.initial_snapshot.tick,
@@ -371,6 +394,52 @@ mod tests {
         assert_eq!(session.current_state.tick, start_tick);
         assert_eq!(session.target_tick, initial_target);
         assert!(session.history.is_empty());
+
+        // A rejected budget request is preflight-only, not a poisoned session.
+        session.replay_to(start_tick + 1).expect("smaller retry");
+        assert_eq!(session.current_state.tick, start_tick + 1);
+        assert_eq!(session.history.len(), 1);
+    }
+
+    #[test]
+    fn integrity_failure_poison_session_even_when_stop_on_error_is_disabled() {
+        let state = WorldState::new(Arc::new(CanonLocked::default()), [0x5a; 32]);
+        let mut session = ReplaySession::from_world_state(
+            state,
+            ReplayOptions {
+                stop_on_error: false,
+                ..ReplayOptions::default()
+            },
+        )
+        .expect("session");
+        let start_tick = session.current_state.tick;
+
+        // Deliberately corrupt only the independent verification copy. Both worlds
+        // still step, but their hash chains cannot agree.
+        session.shadow_state.hash_chain.current[0] ^= 0x01;
+        let target_tick = start_tick + 2;
+
+        assert!(matches!(
+            session.replay_to(target_tick),
+            Err(ReplayError::HashMismatch)
+        ));
+        assert_eq!(session.current_state.tick, start_tick + 1);
+        assert!(session.history.is_empty());
+
+        let statistics = session.get_statistics();
+        assert_eq!(statistics.total_steps, 1);
+        assert_eq!(statistics.successful_steps, 0);
+        assert_eq!(statistics.failed_steps, 1);
+
+        // The first integrity failure is sticky: a second call cannot advance the
+        // partially advanced session or turn the failed replay into Ok(()).
+        let failed_tick = session.current_state.tick;
+        assert!(matches!(
+            session.replay_to(target_tick),
+            Err(ReplayError::HashMismatch)
+        ));
+        assert_eq!(session.current_state.tick, failed_tick);
+        assert!(matches!(session.verify(), Err(ReplayError::HashMismatch)));
     }
 
     #[test]
