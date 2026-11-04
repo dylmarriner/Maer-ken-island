@@ -392,8 +392,8 @@ jobs:
           WEEK_OUTCOME: ${{ steps.week.outcome }}
           YEAR_OUTCOME: ${{ steps.year.outcome }}
         run: |
-          printf 'Week reference-pack acceptance: %s\\n' "$WEEK_OUTCOME"
-          printf 'Year weather reference-pack acceptance: %s\\n' "$YEAR_OUTCOME"
+          printf 'Week reference-pack acceptance: %s\n' "$WEEK_OUTCOME"
+          printf 'Year weather reference-pack acceptance: %s\n' "$YEAR_OUTCOME"
           if [ "$WEEK_OUTCOME" != "success" ] || [ "$YEAR_OUTCOME" != "success" ]; then
             echo "Reference-pack acceptance failed; keep this PR unmerged until both tests pass and any digest drift is audited."
             exit 1
