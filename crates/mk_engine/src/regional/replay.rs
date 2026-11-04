@@ -100,7 +100,16 @@ impl IslandReplayLog {
         let mut candidate = None;
         for sequence in 0..128 {
             let temp = path.with_extension(format!("tmp-{}-{sequence}", std::process::id()));
-            match OpenOptions::new().write(true).create_new(true).open(&temp) {
+            let mut options = OpenOptions::new();
+            options.write(true).create_new(true);
+            // Replay logs contain names, birth timestamps and physical details.
+            // Do not expose those records to other local users by default.
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::OpenOptionsExt;
+                options.mode(0o600);
+            }
+            match options.open(&temp) {
                 Ok(file) => {
                     candidate = Some((temp, file));
                     break;

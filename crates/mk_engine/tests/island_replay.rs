@@ -386,3 +386,23 @@ fn two_command_log() -> IslandReplayLog {
     life.apply_command(somebody("Toru", space)).unwrap();
     life.replay_log().clone()
 }
+
+/// Replay logs contain personal details and must not be readable by other local users.
+#[cfg(unix)]
+#[test]
+fn saved_replay_files_are_owner_only() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let log = IslandReplayLog::new("scenario".to_string());
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("private-run.log.json");
+    log.save(&path).unwrap();
+
+    let mode = std::fs::metadata(&path).unwrap().permissions().mode();
+    assert_eq!(
+        mode & 0o077,
+        0,
+        "replay files must not grant group/world access"
+    );
+    assert_ne!(mode & 0o400, 0, "the owner must be able to read the replay");
+}
