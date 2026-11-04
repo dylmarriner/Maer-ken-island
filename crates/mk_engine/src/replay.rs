@@ -130,14 +130,15 @@ impl ReplaySession {
 
     /// Replay to a specific tick
     pub fn replay_to(&mut self, target_tick: Tick) -> Result<(), ReplayError> {
-        self.target_tick = target_tick;
-
         let start_tick = self.current_state.tick;
         let ticks_to_replay = target_tick.saturating_sub(start_tick);
 
         if self.options.max_ticks > 0 && ticks_to_replay > self.options.max_ticks {
             return Err(ReplayError::MaxTicksExceeded);
         }
+
+        // A rejected request must not mutate even the session's target metadata.
+        self.target_tick = target_tick;
 
         while self.current_state.tick < target_tick {
             if let Err(e) = self.step_replay() {
@@ -360,6 +361,7 @@ mod tests {
         let mut session =
             ReplaySession::from_world_state(state, ReplayOptions::default()).expect("session");
         let start_tick = session.current_state.tick;
+        let initial_target = session.target_tick;
         let target_tick = start_tick + DEFAULT_MAX_REPLAY_TICKS + 1;
 
         assert!(matches!(
@@ -367,6 +369,7 @@ mod tests {
             Err(ReplayError::MaxTicksExceeded)
         ));
         assert_eq!(session.current_state.tick, start_tick);
+        assert_eq!(session.target_tick, initial_target);
         assert!(session.history.is_empty());
     }
 
