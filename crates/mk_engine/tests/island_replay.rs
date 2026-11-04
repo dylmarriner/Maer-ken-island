@@ -17,6 +17,7 @@ use mk_engine::regional::create_human::{CreateLocation, IslandCreateHuman};
 use mk_engine::regional::life::IslandLife;
 use mk_engine::regional::replay::{
     replay_island, IslandReplayEntry, IslandReplayError, IslandReplayLog, MAX_REPLAY_LOG_BYTES,
+    REPLAY_LOG_VERSION,
 };
 use mk_island::IslandScenario;
 
@@ -223,15 +224,53 @@ fn a_log_from_another_island_is_refused() {
     let mut live = island();
     live.advance(STEP).unwrap();
     let mut log = live.replay_log().clone();
-    log.scenario_digest = "not this island".to_string();
+    // A foreign scenario must still be rejected when its digest is canonical.
+    log.scenario_digest = "0".repeat(64);
 
     match replay_island(canon(), scenario(), &log, 2) {
         Err(IslandReplayError::WrongScenario { log, .. }) => {
-            assert_eq!(log, "not this island");
+            assert_eq!(log, "0".repeat(64));
         }
         Err(other) => panic!("the wrong refusal for a foreign log: {other}"),
         Ok(_) => panic!("a foreign log was accepted"),
     }
+}
+
+#[test]
+fn replay_refuses_noncanonical_scenario_digest_before_scenario_comparison() {
+    let log = IslandReplayLog::new("not-a-digest".to_string());
+
+    assert!(matches!(
+        replay_island(canon(), scenario(), &log, 0),
+        Err(IslandReplayError::InvalidScenarioDigest)
+    ));
+}
+
+#[test]
+fn replay_refuses_unsupported_in_memory_log_versions() {
+    let mut log = two_command_log();
+    let unsupported = REPLAY_LOG_VERSION + 1;
+    log.version = unsupported;
+
+    assert!(matches!(
+        replay_island(canon(), scenario(), &log, 0),
+        Err(IslandReplayError::Version(version)) if version == unsupported
+    ));
+}
+
+#[test]
+fn partial_replay_refuses_invalid_sequences_after_the_requested_tick() {
+    let mut log = two_command_log();
+    log.entries[1].tick = 1;
+
+    assert!(matches!(
+        replay_island(canon(), scenario(), &log, 0),
+        Err(IslandReplayError::InvalidSequence {
+            tick: 1,
+            expected: 0,
+            actual: 1
+        })
+    ));
 }
 
 /// Recording commands for an earlier tick must continue that tick's sequence
@@ -524,6 +563,74 @@ fn save_refuses_noncanonical_scenario_digest_without_creating_a_file() {
         Err(IslandReplayError::InvalidScenarioDigest)
     ));
     assert!(!path.exists(), "invalid replay logs must not be persisted");
+}
+
+#[test]
+fn load_refuses_unsupported_log_versions() {
+    let mut log = two_command_log();
+    log.version = REPLAY_LOG_VERSION + 1;
+
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("unsupported-version.log.json");
+    std::fs::write(&path, serde_json::to_vec(&log).unwrap()).unwrap();
+
+    assert!(matches!(
+        IslandReplayLog::load(&path),
+        Err(IslandReplayError::Version(version)) if version == REPLAY_LOG_VERSION + 1
+    ));
+}
+
+#[test]
+fn save_refuses_unsupported_log_versions_without_creating_a_file() {
+    let mut log = two_command_log();
+    log.version = REPLAY_LOG_VERSION + 1;
+
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("unsupported-version.log.json");
+    assert!(matches!(
+        log.save(&path),
+        Err(IslandReplayError::Version(version)) if version == REPLAY_LOG_VERSION + 1
+    ));
+    assert!(
+        !path.exists(),
+        "unsupported replay logs must not be persisted"
+    );
+}
+
+#[test]
+fn save_validates_header_before_command_sequence() {
+    let mut log = two_command_log();
+    log.version = REPLAY_LOG_VERSION + 1;
+    log.entries[1].sequence = 2;
+
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("invalid-header-and-sequence.log.json");
+    assert!(matches!(
+        log.save(&path),
+        Err(IslandReplayError::Version(version)) if version == REPLAY_LOG_VERSION + 1
+    ));
+    assert!(
+        !path.exists(),
+        "a replay with an unsupported header must not be persisted"
+    );
+}
+
+#[test]
+fn save_validates_scenario_digest_before_command_sequence() {
+    let mut log = two_command_log();
+    log.scenario_digest = "not-a-digest".to_string();
+    log.entries[1].sequence = 2;
+
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("invalid-digest-and-sequence.log.json");
+    assert!(matches!(
+        log.save(&path),
+        Err(IslandReplayError::InvalidScenarioDigest)
+    ));
+    assert!(
+        !path.exists(),
+        "a replay with a malformed scenario digest must not be persisted"
+    );
 }
 
 fn two_command_log() -> IslandReplayLog {

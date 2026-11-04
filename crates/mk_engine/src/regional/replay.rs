@@ -162,10 +162,7 @@ impl IslandReplayLog {
 
         let log: Self = serde_json::from_slice(&bytes)
             .map_err(|e| IslandReplayError::NotALog(path_name, e.to_string()))?;
-        if log.version != REPLAY_LOG_VERSION {
-            return Err(IslandReplayError::Version(log.version));
-        }
-        validate_scenario_digest(&log.scenario_digest)?;
+        validate_replay_log_header(&log)?;
         ordered_replay_entries(log.entries.iter())?;
         Ok(log)
     }
@@ -175,11 +172,12 @@ impl IslandReplayLog {
     /// Exclusive file creation matters even with a single simulation writer: a
     /// stale temp file or concurrent save must never be truncated before rename.
     pub fn save(&self, path: &Path) -> Result<(), IslandReplayError> {
-        // Never persist a log that this same build would reject when loading or replaying.
+        // Measure first so oversized input keeps its stable error without allocating the JSON.
+        // For in-bound logs, validate the header before command ordering, matching load/replay.
+        let serialized_bytes = measure_replay_log(self, path, MAX_REPLAY_LOG_BYTES)?;
+        validate_replay_log_header(self)?;
         ordered_replay_entries(self.entries.iter())?;
-        let text = serialize_replay_log(self, path, MAX_REPLAY_LOG_BYTES)?;
-        // Preserve the size error for oversized documents before inspecting their fields.
-        validate_scenario_digest(&self.scenario_digest)?;
+        let text = materialize_replay_log(self, path, serialized_bytes)?;
 
         let mut candidate = None;
         for sequence in 0..128 {
@@ -256,11 +254,11 @@ impl Write for CountingWriter {
 
 /// Preserve the exact TooLarge byte count while keeping the first serialization pass
 /// allocation-free. The JSON is materialized only after it is known to fit the bound.
-fn serialize_replay_log(
+fn measure_replay_log(
     log: &IslandReplayLog,
     path: &Path,
     max_bytes: u64,
-) -> Result<Vec<u8>, IslandReplayError> {
+) -> Result<u64, IslandReplayError> {
     let path_name = path.display().to_string();
     let mut counter = CountingWriter::default();
     serde_json::to_writer_pretty(&mut counter, log)
@@ -274,10 +272,24 @@ fn serialize_replay_log(
         });
     }
 
+    Ok(counter.bytes)
+}
+
+/// Materialize only after the bounded counting pass and semantic validation.
+fn materialize_replay_log(
+    log: &IslandReplayLog,
+    path: &Path,
+    measured_bytes: u64,
+) -> Result<Vec<u8>, IslandReplayError> {
     let text = serde_json::to_vec_pretty(log).map_err(|error| {
         IslandReplayError::NotALog(path.display().to_string(), error.to_string())
     })?;
-    debug_assert_eq!(text.len() as u64, counter.bytes);
+    if text.len() as u64 != measured_bytes {
+        return Err(IslandReplayError::NotALog(
+            path.display().to_string(),
+            "replay log changed size between validation and serialization".to_string(),
+        ));
+    }
     Ok(text)
 }
 
@@ -435,6 +447,14 @@ fn validate_scenario_digest(digest: &str) -> Result<(), IslandReplayError> {
     }
 }
 
+/// Validate the format version and scenario identity shared by file and in-memory boundaries.
+fn validate_replay_log_header(log: &IslandReplayLog) -> Result<(), IslandReplayError> {
+    if log.version != REPLAY_LOG_VERSION {
+        return Err(IslandReplayError::Version(log.version));
+    }
+    validate_scenario_digest(&log.scenario_digest)
+}
+
 /// Run a scenario forward to `until_tick`, applying the log as it goes.
 ///
 /// Commands are applied at the start of the tick they were recorded at, in
@@ -447,6 +467,13 @@ pub fn replay_island(
     log: &IslandReplayLog,
     until_tick: u64,
 ) -> Result<IslandLife, IslandReplayError> {
+    // Direct callers can construct an in-memory log without passing through load().
+    // Validate the same header and complete sequence contract before allocating an island.
+    validate_replay_log_header(log)?;
+    let entries = ordered_replay_entries(log.entries.iter())?
+        .into_iter()
+        .filter(|entry| entry.tick <= until_tick)
+        .collect::<Vec<_>>();
     let mut life = IslandLife::bootstrap(scenario, canon).map_err(IslandReplayError::Island)?;
 
     let here = life.scenario_digest_hex();
@@ -456,9 +483,6 @@ pub fn replay_island(
             scenario: here,
         });
     }
-
-    let entries =
-        ordered_replay_entries(log.entries.iter().filter(|entry| entry.tick <= until_tick))?;
 
     let step = life.scenario.cadences.human_seconds;
     for entry in entries {
@@ -548,15 +572,16 @@ mod replay_serialization_tests {
         let exact_size = expected.len() as u64;
 
         let error =
-            serialize_replay_log(&log, Path::new("replay-test.json"), exact_size - 1).unwrap_err();
+            measure_replay_log(&log, Path::new("replay-test.json"), exact_size - 1).unwrap_err();
         assert!(matches!(
             error,
             IslandReplayError::TooLarge { bytes, max_bytes, .. }
                 if bytes == exact_size && max_bytes == exact_size - 1
         ));
 
+        let measured = measure_replay_log(&log, Path::new("replay-test.json"), exact_size).unwrap();
         let accepted =
-            serialize_replay_log(&log, Path::new("replay-test.json"), exact_size).unwrap();
+            materialize_replay_log(&log, Path::new("replay-test.json"), measured).unwrap();
         assert_eq!(accepted, expected, "the exact size limit is inclusive");
     }
 }
