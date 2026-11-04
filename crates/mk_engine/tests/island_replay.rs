@@ -255,6 +255,27 @@ fn record_keeps_sequences_contiguous_when_ticks_are_interleaved() {
     assert_eq!(log.entries[1].sequence, 0);
 }
 
+/// A loaded or transported log may have entries in a different vector order.
+/// Continue after the highest sequence for the tick, not the last matching vector element.
+#[test]
+fn record_uses_max_sequence_when_existing_entries_are_shuffled() {
+    let mut log = IslandReplayLog::new("scenario".to_string());
+    log.record(1, somebody("Rua", 1));
+    log.record(1, somebody("Hana", 1));
+    log.entries.reverse();
+
+    log.record(1, somebody("Toru", 1));
+
+    let mut sequences: Vec<u64> = log
+        .entries
+        .iter()
+        .filter(|entry| entry.tick == 1)
+        .map(|entry| entry.sequence)
+        .collect();
+    sequences.sort_unstable();
+    assert_eq!(sequences, vec![0, 1, 2]);
+}
+
 /// Refuse oversized replay files before allocating or parsing their contents.
 /// A sparse file exercises the size guard without consuming equivalent disk space.
 #[test]

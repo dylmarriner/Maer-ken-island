@@ -71,9 +71,10 @@ impl IslandReplayLog {
         let sequence = self
             .entries
             .iter()
-            .rev()
-            .find(|entry| entry.tick == tick)
-            .map_or(0, |entry| entry.sequence + 1);
+            .filter(|entry| entry.tick == tick)
+            .map(|entry| entry.sequence)
+            .max()
+            .map_or(0, |sequence| sequence.saturating_add(1));
         self.entries.push(IslandReplayEntry {
             tick,
             sequence,
