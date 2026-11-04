@@ -293,15 +293,6 @@ fn materialize_replay_log(
     Ok(text)
 }
 
-fn serialize_replay_log(
-    log: &IslandReplayLog,
-    path: &Path,
-    max_bytes: u64,
-) -> Result<Vec<u8>, IslandReplayError> {
-    let measured_bytes = measure_replay_log(log, path, max_bytes)?;
-    materialize_replay_log(log, path, measured_bytes)
-}
-
 #[cfg(unix)]
 fn sync_parent_directory(path: &Path) -> io::Result<()> {
     let parent = path
