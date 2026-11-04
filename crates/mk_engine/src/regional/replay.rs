@@ -165,6 +165,7 @@ impl IslandReplayLog {
         if log.version != REPLAY_LOG_VERSION {
             return Err(IslandReplayError::Version(log.version));
         }
+        ordered_replay_entries(log.entries.iter())?;
         Ok(log)
     }
 
@@ -173,6 +174,8 @@ impl IslandReplayLog {
     /// Exclusive file creation matters even with a single simulation writer: a
     /// stale temp file or concurrent save must never be truncated before rename.
     pub fn save(&self, path: &Path) -> Result<(), IslandReplayError> {
+        // Never persist a log that this same build would reject when loading or replaying.
+        ordered_replay_entries(self.entries.iter())?;
         let text = serde_json::to_vec_pretty(self)
             .map_err(|e| IslandReplayError::NotALog(path.display().to_string(), e.to_string()))?;
         if text.len() as u64 > MAX_REPLAY_LOG_BYTES {
@@ -342,6 +345,37 @@ impl std::fmt::Display for IslandReplayError {
 
 impl std::error::Error for IslandReplayError {}
 
+/// Sort commands into replay order and reject duplicate or missing same-tick sequence IDs.
+///
+/// The same structural rule applies at every file boundary: saving must not write an
+/// invalid log, loading must not return one, and replay must not guess at command order.
+fn ordered_replay_entries<'a>(
+    entries: impl IntoIterator<Item = &'a IslandReplayEntry>,
+) -> Result<Vec<&'a IslandReplayEntry>, IslandReplayError> {
+    let mut ordered: Vec<&IslandReplayEntry> = entries.into_iter().collect();
+    ordered.sort_by_key(|entry| (entry.tick, entry.sequence));
+
+    let mut current_tick: Option<u64> = None;
+    let mut expected_sequence = 0_u64;
+    for entry in &ordered {
+        if current_tick != Some(entry.tick) {
+            current_tick = Some(entry.tick);
+            expected_sequence = 0;
+        }
+        if entry.sequence != expected_sequence {
+            return Err(IslandReplayError::InvalidSequence {
+                tick: entry.tick,
+                expected: expected_sequence,
+                actual: entry.sequence,
+            });
+        }
+        expected_sequence = expected_sequence
+            .checked_add(1)
+            .ok_or(IslandReplayError::SequenceExhausted { tick: entry.tick })?;
+    }
+    Ok(ordered)
+}
+
 /// Run a scenario forward to `until_tick`, applying the log as it goes.
 ///
 /// Commands are applied at the start of the tick they were recorded at, in
@@ -364,36 +398,7 @@ pub fn replay_island(
         });
     }
 
-    // In (tick, sequence) order, whatever order the file happens to be in:
-    // a log is a record, and a record that had been reordered should still
-    // reproduce the run rather than quietly produce a different one.
-    let mut entries: Vec<&IslandReplayEntry> = log
-        .entries
-        .iter()
-        .filter(|e| e.tick <= until_tick)
-        .collect();
-    entries.sort_by_key(|e| (e.tick, e.sequence));
-
-    // `record` assigns a zero-based, contiguous sequence to commands at a
-    // tick. A duplicate or missing sequence makes same-tick ordering
-    // ambiguous after a log is serialized and reordered, so refuse the log
-    // before applying any of its commands rather than guessing.
-    let mut current_tick = None;
-    let mut expected_sequence = 0_u64;
-    for entry in &entries {
-        if current_tick != Some(entry.tick) {
-            current_tick = Some(entry.tick);
-            expected_sequence = 0;
-        }
-        if entry.sequence != expected_sequence {
-            return Err(IslandReplayError::InvalidSequence {
-                tick: entry.tick,
-                expected: expected_sequence,
-                actual: entry.sequence,
-            });
-        }
-        expected_sequence += 1;
-    }
+    let entries = ordered_replay_entries(log.entries.iter().filter(|entry| entry.tick <= until_tick))?;
 
     let step = life.scenario.cadences.human_seconds;
     for entry in entries {
