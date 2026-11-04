@@ -591,7 +591,10 @@ fn save_refuses_unsupported_log_versions_without_creating_a_file() {
         log.save(&path),
         Err(IslandReplayError::Version(version)) if version == REPLAY_LOG_VERSION + 1
     ));
-    assert!(!path.exists(), "unsupported replay logs must not be persisted");
+    assert!(
+        !path.exists(),
+        "unsupported replay logs must not be persisted"
+    );
 }
 
 fn two_command_log() -> IslandReplayLog {
