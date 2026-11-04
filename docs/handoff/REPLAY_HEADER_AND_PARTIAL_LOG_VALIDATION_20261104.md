@@ -40,3 +40,8 @@ The existing save size-preflight ordering is preserved: oversized serializations
 4. Keep PR #75 stacked until PRs #73 and #74 are accepted; do not retarget or merge early.
 
 No simulation state, scenario digest algorithm, snapshot format, owner governance, live infrastructure or SCOS state was changed.
+
+
+## CI correction (2026-11-04)
+
+The first run on the new head, #41816490579, failed at `cargo fmt --all -- --check` on one multiline assertion in the new unsupported-version save test. The formatter's exact diff was applied in commit `28488c39e7a8f57d9f0452fd0b87a6ca3cc6792f`. The follow-up exact-head run #41816993183 is pending. No Rust test pass is claimed for the new code until that run completes.
