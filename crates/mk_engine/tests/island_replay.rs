@@ -17,6 +17,7 @@ use mk_engine::regional::create_human::{CreateLocation, IslandCreateHuman};
 use mk_engine::regional::life::IslandLife;
 use mk_engine::regional::replay::{
     replay_island, IslandReplayEntry, IslandReplayError, IslandReplayLog, MAX_REPLAY_LOG_BYTES,
+    REPLAY_LOG_VERSION,
 };
 use mk_island::IslandScenario;
 
@@ -242,6 +243,33 @@ fn replay_refuses_noncanonical_scenario_digest_before_scenario_comparison() {
     assert!(matches!(
         replay_island(canon(), scenario(), &log, 0),
         Err(IslandReplayError::InvalidScenarioDigest)
+    ));
+}
+
+#[test]
+fn replay_refuses_unsupported_in_memory_log_versions() {
+    let mut log = two_command_log();
+    let unsupported = REPLAY_LOG_VERSION + 1;
+    log.version = unsupported;
+
+    assert!(matches!(
+        replay_island(canon(), scenario(), &log, 0),
+        Err(IslandReplayError::Version(version)) if version == unsupported
+    ));
+}
+
+#[test]
+fn partial_replay_refuses_invalid_sequences_after_the_requested_tick() {
+    let mut log = two_command_log();
+    log.entries[1].tick = 1;
+
+    assert!(matches!(
+        replay_island(canon(), scenario(), &log, 0),
+        Err(IslandReplayError::InvalidSequence {
+            tick: 1,
+            expected: 0,
+            actual: 1
+        })
     ));
 }
 
@@ -535,6 +563,35 @@ fn save_refuses_noncanonical_scenario_digest_without_creating_a_file() {
         Err(IslandReplayError::InvalidScenarioDigest)
     ));
     assert!(!path.exists(), "invalid replay logs must not be persisted");
+}
+
+#[test]
+fn load_refuses_unsupported_log_versions() {
+    let mut log = two_command_log();
+    log.version = REPLAY_LOG_VERSION + 1;
+
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("unsupported-version.log.json");
+    std::fs::write(&path, serde_json::to_vec(&log).unwrap()).unwrap();
+
+    assert!(matches!(
+        IslandReplayLog::load(&path),
+        Err(IslandReplayError::Version(version)) if version == REPLAY_LOG_VERSION + 1
+    ));
+}
+
+#[test]
+fn save_refuses_unsupported_log_versions_without_creating_a_file() {
+    let mut log = two_command_log();
+    log.version = REPLAY_LOG_VERSION + 1;
+
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("unsupported-version.log.json");
+    assert!(matches!(
+        log.save(&path),
+        Err(IslandReplayError::Version(version)) if version == REPLAY_LOG_VERSION + 1
+    ));
+    assert!(!path.exists(), "unsupported replay logs must not be persisted");
 }
 
 fn two_command_log() -> IslandReplayLog {
