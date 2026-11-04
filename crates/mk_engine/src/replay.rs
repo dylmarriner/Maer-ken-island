@@ -17,10 +17,10 @@ pub const DEFAULT_MAX_REPLAY_TICKS: u64 = 600_000;
 #[derive(Debug, Clone)]
 pub struct ReplaySession {
     /// Initial snapshot
-    pub initial_snapshot: WorldSnapshot,
+    initial_snapshot: WorldSnapshot,
 
     /// Current replay state
-    pub current_state: WorldState,
+    current_state: WorldState,
 
     /// Independent copy of the initial state, stepped in lockstep with
     /// `current_state`. Two independently-stepped copies of the same
@@ -32,13 +32,13 @@ pub struct ReplaySession {
     shadow_state: WorldState,
 
     /// Target tick to replay to
-    pub target_tick: Tick,
+    target_tick: Tick,
 
     /// Replay options
-    pub options: ReplayOptions,
+    options: ReplayOptions,
 
     /// Replay history for verification
-    pub history: Vec<ReplayEntry>,
+    history: Vec<ReplayEntry>,
 
     /// First failed step, latched so a partially advanced or divergent session cannot
     /// later be reported as a successful replay.
@@ -133,6 +133,34 @@ impl ReplaySession {
             history: Vec::new(),
             failure: None,
         })
+    }
+
+    /// Borrow the immutable snapshot from which this replay session started.
+    pub fn initial_snapshot(&self) -> &WorldSnapshot {
+        &self.initial_snapshot
+    }
+
+    /// Borrow the current replay state without allowing callers to mutate it.
+    ///
+    /// The session is the sole writer of both the primary and shadow states;
+    /// callers that need to advance it must use `replay_to`.
+    pub fn current_state(&self) -> &WorldState {
+        &self.current_state
+    }
+
+    /// Return the last accepted replay target.
+    pub fn target_tick(&self) -> Tick {
+        self.target_tick
+    }
+
+    /// Borrow the immutable replay options selected when the session was created.
+    pub fn options(&self) -> &ReplayOptions {
+        &self.options
+    }
+
+    /// Borrow successful replay history without exposing a mutable collection.
+    pub fn history(&self) -> &[ReplayEntry] {
+        &self.history
     }
 
     /// Replay to a specific tick
@@ -410,6 +438,18 @@ mod tests {
         session.replay_to(start_tick + 1).expect("smaller retry");
         assert_eq!(session.current_state.tick, start_tick + 1);
         assert_eq!(session.history.len(), 1);
+    }
+
+    #[test]
+    fn public_session_accessors_expose_only_read_only_state_views() {
+        let state = WorldState::new(Arc::new(CanonLocked::default()), [0x5a; 32]);
+        let session =
+            ReplaySession::from_world_state(state, ReplayOptions::default()).expect("session");
+
+        assert_eq!(session.initial_snapshot().tick, session.current_state().tick);
+        assert_eq!(session.target_tick(), session.current_state().tick);
+        assert_eq!(session.options().max_ticks, DEFAULT_MAX_REPLAY_TICKS);
+        assert!(session.history().is_empty());
     }
 
     #[test]
