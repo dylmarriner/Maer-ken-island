@@ -31,3 +31,14 @@ Date: 2026-11-05
 - Next: inspect the independent year-test result, reconcile the week digest against the audit/reference-pack evidence and documented behavior changes, then rerun both tests on the resulting exact head.
 
 - Independent execution and aggregate gating: [3abedc8](https://github.com/dylmarriner/Maer-ken-island/commit/3abedc8d3e41ac1b415d9749cb64d8c8816ace2f); testing-guide update: [eb41923](https://github.com/dylmarriner/Maer-ken-island/commit/eb4192335e9ce05fde136f13e9fed8afe000e892). The final workflow prints both outcomes on separate lines and fails if either is not successful.
+
+
+## Digest audit and reconciliation (2026-11-05)
+
+Exact-head run [#41861164760](https://github.com/dylmarriner/Maer-ken-island/actions/runs/41861164760) completed. Formatting, Clippy, fast Rust tests, desktop application, installed backend, dashboard, computer service, repository scripts and dependency audit passed. The week/year reference gate failed only because the week test's pinned digest was stale; the independent year-weather test passed in 39.85 seconds.
+
+The week test completed its audit before the digest comparison: 27,597 audits (167 hourly water audits), zero food and water shortfalls, 112 economy events, 200,000 patch trees, founder body carbon matching expected values (13.0/13.0 kg and 10.4/10.4 kg), forest carbon uptake within its 400–900 g C/m²/year reference band (471), and founder drinking rates within the configured intake bands. The only failed assertion was the final state digest: actual `bc8706aca29525e6bd75d27d94678a56cbd97a717aa4553ac8a15a2a64c7a076`, expected `c32897c47a10fcb5fed2671df781949b3d924cdd9ed1a62103127cf552647054`.
+
+The source-history audit found inconsistent documentation: commit [`45ff141`](https://github.com/dylmarriner/Maer-ken-island/commit/45ff1414eb291ce9599d1677cb7398b8b41c7550) set the test pin to `c32897c4…27054`; commit [`1336218`](https://github.com/dylmarriner/Maer-ken-island/commit/1336218f2e5ea04899042ba8a5de114d32ae1865) changed only the checklist to `577e4215…540a`; the testing guide and state handoff still listed `f6699166…9c81`. Since then, simulation sources affecting life, industry, town, fitness, genome and replay behavior changed substantially. The current week run's non-digest audit passed and the independent year test passed, so the current deterministic output is now the pin in the test and all current canonical digest summaries. Historical session records remain historical and are not rewritten.
+
+This reconciliation changes only the acceptance pin and its current documentation, not simulation state, reference data, snapshots, replay code, real-world constants or production infrastructure. A fresh exact-head CI run is still required to verify the updated pin and both reference tests.
