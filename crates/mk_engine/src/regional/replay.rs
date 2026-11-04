@@ -172,11 +172,12 @@ impl IslandReplayLog {
     /// Exclusive file creation matters even with a single simulation writer: a
     /// stale temp file or concurrent save must never be truncated before rename.
     pub fn save(&self, path: &Path) -> Result<(), IslandReplayError> {
-        // Never persist a log that this same build would reject when loading or replaying.
-        ordered_replay_entries(self.entries.iter())?;
-        let text = serialize_replay_log(self, path, MAX_REPLAY_LOG_BYTES)?;
-        // Preserve the size error for oversized documents before inspecting their fields.
+        // Measure first so oversized input keeps its stable error without allocating the JSON.
+        // For in-bound logs, validate the header before command ordering, matching load/replay.
+        let serialized_bytes = measure_replay_log(self, path, MAX_REPLAY_LOG_BYTES)?;
         validate_replay_log_header(self)?;
+        ordered_replay_entries(self.entries.iter())?;
+        let text = materialize_replay_log(self, path, serialized_bytes)?;
 
         let mut candidate = None;
         for sequence in 0..128 {
@@ -253,11 +254,11 @@ impl Write for CountingWriter {
 
 /// Preserve the exact TooLarge byte count while keeping the first serialization pass
 /// allocation-free. The JSON is materialized only after it is known to fit the bound.
-fn serialize_replay_log(
+fn measure_replay_log(
     log: &IslandReplayLog,
     path: &Path,
     max_bytes: u64,
-) -> Result<Vec<u8>, IslandReplayError> {
+) -> Result<u64, IslandReplayError> {
     let path_name = path.display().to_string();
     let mut counter = CountingWriter::default();
     serde_json::to_writer_pretty(&mut counter, log)
@@ -271,11 +272,34 @@ fn serialize_replay_log(
         });
     }
 
+    Ok(counter.bytes)
+}
+
+/// Materialize only after the bounded counting pass and semantic validation.
+fn materialize_replay_log(
+    log: &IslandReplayLog,
+    path: &Path,
+    measured_bytes: u64,
+) -> Result<Vec<u8>, IslandReplayError> {
     let text = serde_json::to_vec_pretty(log).map_err(|error| {
         IslandReplayError::NotALog(path.display().to_string(), error.to_string())
     })?;
-    debug_assert_eq!(text.len() as u64, counter.bytes);
+    if text.len() as u64 != measured_bytes {
+        return Err(IslandReplayError::NotALog(
+            path.display().to_string(),
+            "replay log changed size between validation and serialization".to_string(),
+        ));
+    }
     Ok(text)
+}
+
+fn serialize_replay_log(
+    log: &IslandReplayLog,
+    path: &Path,
+    max_bytes: u64,
+) -> Result<Vec<u8>, IslandReplayError> {
+    let measured_bytes = measure_replay_log(log, path, max_bytes)?;
+    materialize_replay_log(log, path, measured_bytes)
 }
 
 #[cfg(unix)]
