@@ -129,3 +129,8 @@ cargo run -p island -- serve --scenario fixtures/island/default_scenario.json   
   computer service, web, dependency audit) before merging to `main`.
 - After every feature or fix, update `docs/ISLAND_SYSTEM_STATUS.md`, the deviation register, the
   plan's status notes, and `WORK_REMAINING.md`.
+
+
+## Latest engineering handoff
+
+- 2026-11-05: [Replay session default execution budget](docs/handoff/REPLAY_SESSION_DEFAULT_BUDGET_20261105.md) records the bounded default and the exact-head verification gate.
