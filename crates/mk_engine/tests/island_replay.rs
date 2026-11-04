@@ -597,6 +597,42 @@ fn save_refuses_unsupported_log_versions_without_creating_a_file() {
     );
 }
 
+#[test]
+fn save_validates_header_before_command_sequence() {
+    let mut log = two_command_log();
+    log.version = REPLAY_LOG_VERSION + 1;
+    log.entries[1].sequence = 2;
+
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("invalid-header-and-sequence.log.json");
+    assert!(matches!(
+        log.save(&path),
+        Err(IslandReplayError::Version(version)) if version == REPLAY_LOG_VERSION + 1
+    ));
+    assert!(
+        !path.exists(),
+        "a replay with an unsupported header must not be persisted"
+    );
+}
+
+#[test]
+fn save_validates_scenario_digest_before_command_sequence() {
+    let mut log = two_command_log();
+    log.scenario_digest = "not-a-digest".to_string();
+    log.entries[1].sequence = 2;
+
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("invalid-digest-and-sequence.log.json");
+    assert!(matches!(
+        log.save(&path),
+        Err(IslandReplayError::InvalidScenarioDigest)
+    ));
+    assert!(
+        !path.exists(),
+        "a replay with a malformed scenario digest must not be persisted"
+    );
+}
+
 fn two_command_log() -> IslandReplayLog {
     let mut life = island();
     let space = life
