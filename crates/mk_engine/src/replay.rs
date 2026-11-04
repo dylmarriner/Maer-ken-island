@@ -410,7 +410,7 @@ impl Default for ReplayManager {
 
 #[cfg(test)]
 mod tests {
-    use super::{ReplayError, ReplayOptions, ReplaySession, DEFAULT_MAX_REPLAY_TICKS};
+    use super::{ReplayError, ReplayManager, ReplayOptions, ReplaySession, DEFAULT_MAX_REPLAY_TICKS};
     use crate::world_integration::WorldState;
     use mk_core::canon::CanonLocked;
     use std::sync::Arc;
@@ -528,6 +528,23 @@ mod tests {
         ));
         assert_eq!(session.current_state.tick, failed_tick);
         assert!(matches!(session.verify(), Err(ReplayError::HashMismatch)));
+    }
+
+    #[test]
+    fn replay_manager_lists_session_names_in_deterministic_order() {
+        let mut manager = ReplayManager::new();
+
+        for name in ["zeta", "alpha", "middle"] {
+            let state = WorldState::new(Arc::new(CanonLocked::default()), [0x5a; 32]);
+            let session = ReplaySession::from_world_state(state, ReplayOptions::default())
+                .expect("session");
+            manager.add_session(name.to_owned(), session);
+        }
+
+        assert_eq!(
+            manager.list_sessions(),
+            vec!["alpha".to_owned(), "middle".to_owned(), "zeta".to_owned()]
+        );
     }
 
     #[test]
