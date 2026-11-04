@@ -410,7 +410,9 @@ impl Default for ReplayManager {
 
 #[cfg(test)]
 mod tests {
-    use super::{ReplayError, ReplayManager, ReplayOptions, ReplaySession, DEFAULT_MAX_REPLAY_TICKS};
+    use super::{
+        ReplayError, ReplayManager, ReplayOptions, ReplaySession, DEFAULT_MAX_REPLAY_TICKS,
+    };
     use crate::world_integration::WorldState;
     use mk_core::canon::CanonLocked;
     use std::sync::Arc;
@@ -536,8 +538,8 @@ mod tests {
 
         for name in ["zeta", "alpha", "middle"] {
             let state = WorldState::new(Arc::new(CanonLocked::default()), [0x5a; 32]);
-            let session = ReplaySession::from_world_state(state, ReplayOptions::default())
-                .expect("session");
+            let session =
+                ReplaySession::from_world_state(state, ReplayOptions::default()).expect("session");
             manager.add_session(name.to_owned(), session);
         }
 
