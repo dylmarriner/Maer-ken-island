@@ -18,7 +18,7 @@ const DAY: u64 = 86_400;
 
 /// The canonical state digest after one simulated week from the default
 /// scenario (`fixtures/island/default_scenario.json`), identical across
-/// processes. Changing any Phase 1-3 behaviour changes it: update it
+/// processes. Any change to state represented in IslandLife's digest changes it: update it
 /// deliberately, in the commit that changes the behaviour.
 ///
 /// Last changed by giving a spoken sentence a capital letter: most of
@@ -192,7 +192,18 @@ const DAY: u64 = 86_400;
 /// closed (the chain's hourly audits added), no food or water shortfalls,
 /// body carbon 12.9 of 13.0 and 10.4 of 10.4 kg, eating 48 and 44 minutes a
 /// day, asleep at home 40 of 56 and 40 of 55 hours.
-const WEEK_DIGEST: &str = "c32897c47a10fcb5fed2671df781949b3d924cdd9ed1a62103127cf552647054";
+/// Re-pinned on 2026-11-05 after the town/economy state was integrated into
+/// IslandLife (PR #66) and the 2026-10-29 fitness, genome and free-will
+/// integration changed the founders' complete state. Exact-head release
+/// acceptance run #41861164760 produced this digest after every assertion
+/// before the final digest comparison passed: 27,597 ledger audits (167
+/// hourly water audits), zero food or water shortfalls, 112 economy events,
+/// 200,000 estate-patch trees, Gem-D body carbon 13.0/13.0 kg, Gem-K 10.4/10.4
+/// kg, and temperate-forest NPP 471 g C/m2/yr against the pack's 400-900.
+/// The independent year-weather reference-pack test passed in the same run.
+/// The only failing assertion was the previous digest pin; no simulation
+/// state or physics code was changed by this re-pin.
+const WEEK_DIGEST: &str = "bc8706aca29525e6bd75d27d94678a56cbd97a717aa4553ac8a15a2a64c7a076";
 
 fn repo(path: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
