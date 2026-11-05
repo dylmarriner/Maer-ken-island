@@ -6,6 +6,13 @@ how to build and check it, and where everything else is written down.
 
 **What is left to do, and what each item needs, is in [`WORK_REMAINING.md`](WORK_REMAINING.md).**
 
+## Latest engineering handoff — 6 November 2026
+
+- [Fishery MSY under low-biomass depensation](docs/handoff/FISHERY_DEPENSATION_MSY_20261106.md) — PR #100. Corrects the analytic maximum sustainable surplus for every allowed depensation threshold; regression samples 1,001 biomass fractions at four thresholds. The default threshold remains unchanged.
+- PR #97's subnormal-safe surplus correction was merged into main at `1d70e9e2941675aef4d10fb8f94816cfe4610c70` after all required exact-head jobs passed.
+- PR #100's exact-head CI is running. Custom OpenCommander returned HTTP 429, so no local Cargo test is claimed.
+- Fishery remains standalone until sourced species-specific stock and effort data are available; no carrying capacities or CPUE values were invented.
+
 ## What this is
 
 Maer-Ken Island simulates a New-Zealand-sized island on Marr'Kena, an Earth-like planet with a
