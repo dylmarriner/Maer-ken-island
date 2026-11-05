@@ -375,7 +375,9 @@ fn species_weights(species: &[IslandSpecies]) -> ([f64; 10], [f64; 10]) {
 
 /// A marine aquatic species must be projected from upstream density, not
 /// either of the island's carbon pools.
-fn validate_marine_species_metadata(species: &[IslandSpecies]) -> Result<(), MarineProjectionError> {
+fn validate_marine_species_metadata(
+    species: &[IslandSpecies],
+) -> Result<(), MarineProjectionError> {
     for (index, s) in species.iter().enumerate() {
         if s.category == SpeciesCategory::Aquatic
             && matches!(
@@ -1207,7 +1209,6 @@ mod tests {
         assert!(!habitat_of(open, BiomeType::CoastalWaters, NOTHING));
     }
 }
-
 
 #[cfg(test)]
 mod marine_index_tests {
