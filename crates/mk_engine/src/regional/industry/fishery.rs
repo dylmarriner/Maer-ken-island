@@ -381,7 +381,10 @@ mod tests {
         invalid_model = m.clone();
         invalid_model.depensation_below = 1.01;
         assert!(!invalid_model.is_valid());
-        assert_eq!(stock.fish(&invalid_model, 10.0, YEAR_S), 0.0);
+        assert_eq!(
+            stock.fish(&invalid_model, 10.0, YEAR_S),
+            Err(FisheryError::InvalidModel)
+        );
         assert_eq!(stock, before);
 
         let mut invalid_stock = before.clone();
