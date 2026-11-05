@@ -9,6 +9,7 @@ how to build and check it, and where everything else is written down.
 ## Latest engineering handoff — 6 November 2026
 
 - [Fishery MSY biomass target](docs/handoff/FISHERY_MSY_BIOMASS_TARGET_20261106.md) — PR #101. Adds a read-only `msy_biomass_t` diagnostic derived from the same piecewise peak as MSY, with boundary, invalid-state and extreme-capacity regressions.
+- Follow-up commit `e356c66b` corrects the extreme-capacity target expectation in that regression; the prior workflow head predates this correction, so only the new exact-head run can verify it.
 - PR #100 (piecewise MSY) was merged into main at `55851f7a10d6ab3653b5ef013e6eba8de8e13c52`. Exact-head workflow [#42117060148](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42117060148) passed every required job, including fast Rust tests, desktop build/tests/rendering, installed backend, week/year reference-pack acceptance, dashboard, computer service, scripts and dependency audit. The nightly slow tier was skipped by design.
 - PR #97's subnormal-safe surplus correction remains in main at `1d70e9e2941675aef4d10fb8f94816cfe4610c70`.
 - PR #101 exact-head CI is required before merge. Custom OpenCommander returned HTTP 429, so no local Cargo test is claimed.
