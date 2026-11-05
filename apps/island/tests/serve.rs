@@ -1206,6 +1206,12 @@ async fn a_cell_of_the_island_can_be_asked_about_by_row_and_column() {
     // The estate is on land and buildable; that is where the founders live.
     assert_eq!(cell["land"], true, "{cell}");
     assert_eq!(cell["buildable"], true, "{cell}");
+    assert!(
+        cell.get("marine_aquatic_species").is_none()
+            && cell.get("marine_aquatic_individuals").is_none()
+            && cell.get("marine_aquatic_biomass_t").is_none(),
+        "land cells must not be given marine populations: {cell}"
+    );
 
     // And it says what grows there and in what climate, for the
     // inspector: the estate is wooded temperate land at about 41 degrees
@@ -1241,6 +1247,38 @@ async fn a_cell_of_the_island_can_be_asked_about_by_row_and_column() {
         body_of(&response).contains("medium grid"),
         "says why: {}",
         body_of(&response)
+    );
+}
+
+#[tokio::test]
+async fn a_sea_cell_reports_the_upstream_marine_biomass_projection() {
+    let port = a_shared_dashboard();
+
+    // The small fixture's south-west corner is in the required ocean buffer.
+    let (status, response) = get(port, "/api/cell/0/0").await;
+    assert_eq!(status, 200, "{response}");
+    let body: serde_json::Value = serde_json::from_str(body_of(&response)).unwrap();
+    let cell = &body["cell"];
+    assert_eq!(cell["land"], false, "{cell}");
+
+    let species = cell["marine_aquatic_species"]
+        .as_u64()
+        .expect("marine species count");
+    let individuals = cell["marine_aquatic_individuals"]
+        .as_f64()
+        .expect("upstream-derived marine individuals");
+    let biomass_t = cell["marine_aquatic_biomass_t"]
+        .as_f64()
+        .expect("upstream-derived marine biomass in tonnes");
+
+    assert!(species > 0, "the ocean cell has aquatic species: {cell}");
+    assert!(
+        individuals.is_finite() && individuals > 0.0,
+        "the projection is finite and positive: {cell}"
+    );
+    assert!(
+        biomass_t.is_finite() && biomass_t > 0.0,
+        "the projected live biomass is finite and positive: {cell}"
     );
 }
 
