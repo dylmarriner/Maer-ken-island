@@ -386,10 +386,7 @@ impl ReplayManager {
     /// already trimmed, and free of control characters; internal spaces remain valid.
     /// A duplicate is rejected before the existing session or its replay state can be replaced.
     pub fn add_session(&mut self, name: String, session: ReplaySession) -> Result<(), ReplayError> {
-        if name.trim().is_empty()
-            || name.trim() != name
-            || name.chars().any(char::is_control)
-        {
+        if name.trim().is_empty() || name.trim() != name || name.chars().any(char::is_control) {
             return Err(ReplayError::InvalidSessionName);
         }
 
