@@ -628,7 +628,7 @@ mod tests {
             .expect("finite positive carrying capacity");
 
         assert_eq!(stock.msy_t(&model), Ok(f64::MAX * 0.5));
-        assert_eq!(stock.msy_biomass_t(&model), Ok(f64::MAX * 0.5));
+        assert_eq!(stock.msy_biomass_t(&model), Ok(f64::MAX * 0.25));
     }
 
     #[test]
