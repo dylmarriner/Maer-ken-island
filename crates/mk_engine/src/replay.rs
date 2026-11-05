@@ -578,7 +578,7 @@ mod tests {
             .expect("session");
 
         assert!(matches!(
-            manager.add_session(" \\t\\n".to_owned(), session),
+            manager.add_session(" \t\n".to_owned(), session),
             Err(ReplayError::InvalidSessionName)
         ));
         assert!(manager.list_sessions().is_empty());
