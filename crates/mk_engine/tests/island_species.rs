@@ -438,7 +438,7 @@ fn marine_projection_rejects_carbon_abundance_for_marine_species_without_mutatin
     let b = base();
     let species_index = b
         .biota
-        .species()()
+        .species()
         .iter()
         .position(|species| {
             species.category == SpeciesCategory::Aquatic && is_marine(&species.affinity)
