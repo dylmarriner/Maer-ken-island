@@ -70,6 +70,42 @@ pub struct Cut {
     pub weight_fraction: f64,
 }
 
+/// Rounded assay yields are accepted within 0.01 percentage points of 100%.
+const ASSAY_YIELD_SUM_TOLERANCE_FRACTION: f64 = 0.0001;
+
+/// Reject invalid assay weights before they can be normalised into plausible-looking
+/// product fractions. The source reports percentages rounded to three decimals.
+fn validate_assay_yields(cuts: &[Cut]) -> Result<(), MissingReference> {
+    if cuts.is_empty() {
+        return Err(MissingReference(
+            "troll_atmospheric_cut_yields: assay contains no cuts".into(),
+        ));
+    }
+
+    let mut total = 0.0;
+    for cut in cuts {
+        if !cut.weight_fraction.is_finite()
+            || cut.weight_fraction < 0.0
+            || cut.weight_fraction > 1.0
+        {
+            return Err(MissingReference(format!(
+                "troll_atmospheric_cut_yields/{}: yield must be finite and between 0 and 100 wt%",
+                cut.label
+            )));
+        }
+        total += cut.weight_fraction;
+    }
+
+    if !total.is_finite() || (total - 1.0).abs() > ASSAY_YIELD_SUM_TOLERANCE_FRACTION {
+        return Err(MissingReference(format!(
+            "troll_atmospheric_cut_yields: weight yields sum to {:.6}%, expected 100% ± 0.01 percentage points",
+            total * 100.0
+        )));
+    }
+
+    Ok(())
+}
+
 /// The end temperature of an assay cut from its label: `IBP-C4` is the
 /// light gases; `a-b C` ends at `b`; `C5-65 C` at 65; `370 C-FBP` boils to
 /// the end.
@@ -155,6 +191,7 @@ impl RefineryModel {
                 })
             })
             .collect::<Result<Vec<_>, MissingReference>>()?;
+        validate_assay_yields(&cuts)?;
         let ipcc = table("ipcc_ncv_and_carbon_content")?;
         let cell = |row: &str, column: &str| {
             ipcc.get(row, column)
@@ -323,6 +360,27 @@ mod tests {
                 cut_end_c(label).is_err(),
                 "accepted invalid cut label {label:?}"
             );
+        }
+    }
+    #[test]
+    fn assay_yields_must_be_finite_nonnegative_and_close_to_one_hundred_percent() {
+        let cut = |label: &str, weight_fraction: f64| Cut {
+            label: label.into(),
+            end_c: Some(100.0),
+            weight_fraction,
+        };
+
+        assert!(validate_assay_yields(&[cut("a", 0.4), cut("b", 0.60001)]).is_ok());
+
+        let invalid = [
+            Vec::new(),
+            vec![cut("negative", -0.01), cut("positive", 1.01)],
+            vec![cut("not-finite", f64::NAN)],
+            vec![cut("underweight", 0.99)],
+            vec![cut("overweight", 1.01)],
+        ];
+        for cuts in invalid {
+            assert!(validate_assay_yields(&cuts).is_err(), "accepted {cuts:?}");
         }
     }
 }
