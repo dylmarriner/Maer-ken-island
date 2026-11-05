@@ -343,6 +343,7 @@ pub enum ReplayError {
     MaxTicksExceeded,
     TargetBeforeCurrentTick,
     DuplicateSessionName(String),
+    InvalidSessionName,
 }
 
 impl fmt::Display for ReplayError {
@@ -360,6 +361,7 @@ impl fmt::Display for ReplayError {
             ReplayError::DuplicateSessionName(name) => {
                 write!(f, "Replay session already exists: {}", name)
             }
+            ReplayError::InvalidSessionName => write!(f, "Replay session name must not be empty"),
         }
     }
 }
@@ -383,6 +385,10 @@ impl ReplayManager {
     /// Session names are stable identifiers within a manager. A duplicate is rejected
     /// before the existing session or its replay state can be replaced.
     pub fn add_session(&mut self, name: String, session: ReplaySession) -> Result<(), ReplayError> {
+        if name.trim().is_empty() {
+            return Err(ReplayError::InvalidSessionName);
+        }
+
         if self.sessions.contains_key(&name) {
             return Err(ReplayError::DuplicateSessionName(name));
         }
@@ -562,6 +568,20 @@ mod tests {
             manager.list_sessions(),
             vec!["alpha".to_owned(), "middle".to_owned(), "zeta".to_owned()]
         );
+    }
+
+    #[test]
+    fn replay_manager_rejects_blank_session_names_without_mutating_manager() {
+        let mut manager = ReplayManager::new();
+        let state = WorldState::new(Arc::new(CanonLocked::default()), [0x5a; 32]);
+        let session = ReplaySession::from_world_state(state, ReplayOptions::default())
+            .expect("session");
+
+        assert!(matches!(
+            manager.add_session(" \\t\\n".to_owned(), session),
+            Err(ReplayError::InvalidSessionName)
+        ));
+        assert!(manager.list_sessions().is_empty());
     }
 
     #[test]
