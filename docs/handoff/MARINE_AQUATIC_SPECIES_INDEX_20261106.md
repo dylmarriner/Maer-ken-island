@@ -48,3 +48,8 @@ Base: `main` at `7bc452d1b6bced84cdc6c8f1515b726a495456b4`.
 - Projection rejects both an out-of-range index and an in-range index that now points to a different species after the publicly exposed species vector is reordered.
 - Added a regression that swaps two marine species after index construction and requires a typed stale-index error instead of silently projecting the wrong species.
 - This remains a derived read-only guard; it does not change species order, snapshots, event logs, ledger entries, RNG streams or replay hashes.
+
+
+## Follow-up: controlled catalogue replacement (2026-11-06)
+
+Codex review found that a public `Vec<IslandSpecies>` could gain a newly eligible OpenOcean/ReefSea aquatic species without updating the cached index. The catalogue is now private, `species()` exposes an immutable slice, and `replace_species_catalogue` validates marine abundance then rebuilds the marine index plus producer/grazer weights atomically. Regression coverage includes newly eligible species, category/affinity changes, rejected marine carbon abundance and unchanged state after rejection. See [MARINE_AQUATIC_CATALOGUE_MUTATION_20261106.md](MARINE_AQUATIC_CATALOGUE_MUTATION_20261106.md).
