@@ -30,3 +30,8 @@ Source and regression tests are committed. Workflow [#42045662490](https://githu
 3. Only then connect the fishery to IslandLife, human-chosen fishing effort and ledger-balanced catches.
 
 No live island state, production infrastructure, external service, snapshot format or deterministic replay input changed.
+
+
+## Follow-up: browser map inspector (2026-11-06)
+
+The API fields and desktop inspector were present, but `apps/island/static/island.js:onMapClick` still rendered only coordinates and land/sea details. The browser click handler now renders marine species count, upstream-derived individuals and live biomass tonnes when all three API values are finite, with an explicit label that this is an uncalibrated upstream estimate and not harvestable stock or catch. `style.css` gives the estimate a separate, tabular-numeric line. `apps/island/tests/serve.rs` verifies the served browser handler contains the three fields and the safety label.
