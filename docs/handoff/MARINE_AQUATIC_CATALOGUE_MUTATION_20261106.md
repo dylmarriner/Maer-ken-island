@@ -30,6 +30,8 @@ Codex identified that `IslandBiota::species` was a public `Vec`. The cached mari
 - `7c027f2ab6f98d17443df48d94945575773dd41a` — private catalogue, controlled replacement, index/weight rebuild.
 - `6eb3d582c42c8c71d4f6e257e79d0aea6cc70c77` — borrow-safe validation and defensive comments.
 - `8663ce13daa6377aa2cc1f6e8f9ba452e801c2fc` — membership and replacement regressions.
+- `5c090dd6928371811d02bc1e33180660354ba785` — grazer-weight rebuild regression.
+- `fb32fe414a0f7eef656459ed152d91869f813973` — checked test-fixture arithmetic.
 - Documentation commits update `WORK_REMAINING.md`, `docs/ISLAND_SYSTEM_STATUS.md`, `docs/island/DEVIATIONS.md` and the Phase 3 program plan.
 
 ## Verification
