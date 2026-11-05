@@ -104,3 +104,8 @@ Population:
 - [ ] Run the benchmark command defined in Phase 5 and commit the baseline report under `benchmarks/`.
 - [ ] Update `UPSTREAM.md` with every imported path and island divergence introduced by the phases.
 - [ ] Tick the program complete only after all nine gates are green.
+
+
+### Phase 3 species-cache status (2026-11-06)
+
+The derived `IslandBiota` species catalogue is now read-only to external callers. Catalogue replacement is explicit and rebuilds the marine aquatic membership index plus producer/grazer carbon weights before returning. The regression suite covers newly eligible marine species, category/affinity changes, invalid marine abundance rejection and unchanged catalogue state after a rejected replacement. No persistent simulation state or replay input is added.
