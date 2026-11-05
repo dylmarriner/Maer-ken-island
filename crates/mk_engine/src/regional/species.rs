@@ -38,6 +38,7 @@
 //! seed and the fields whenever they are asked for, so snapshots and the
 //! week digest do not move, and an older snapshot needs no migration.
 
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use mk_core::biomes::BiomeType;
@@ -236,6 +237,11 @@ pub enum MarineProjectionError {
         index: usize,
         species_id: u64,
     },
+    DuplicateSpeciesId {
+        first_index: usize,
+        duplicate_index: usize,
+        species_id: u64,
+    },
     InvalidDensity {
         species_id: u64,
     },
@@ -278,6 +284,14 @@ impl std::fmt::Display for MarineProjectionError {
             Self::InvalidMarineAbundance { index, species_id } => write!(
                 f,
                 "marine aquatic species {species_id} at index {index} must use upstream-density abundance"
+            ),
+            Self::DuplicateSpeciesId {
+                first_index,
+                duplicate_index,
+                species_id,
+            } => write!(
+                f,
+                "species catalogue repeats id {species_id} at indices {first_index} and {duplicate_index}"
             ),
             Self::InvalidDensity { species_id } => write!(
                 f,
@@ -373,12 +387,18 @@ fn species_weights(species: &[IslandSpecies]) -> ([f64; 10], [f64; 10]) {
     (producer_weight, grazer_weight)
 }
 
-/// A marine aquatic species must be projected from upstream density, not
-/// either of the island's carbon pools.
-fn validate_marine_species_metadata(
-    species: &[IslandSpecies],
-) -> Result<(), MarineProjectionError> {
+/// Validate catalogue-wide identity and the marine projection's abundance source.
+fn validate_species_catalogue(species: &[IslandSpecies]) -> Result<(), MarineProjectionError> {
+    let mut first_index_by_id = BTreeMap::new();
     for (index, s) in species.iter().enumerate() {
+        if let Some(first_index) = first_index_by_id.get(&s.species_id).copied() {
+            return Err(MarineProjectionError::DuplicateSpeciesId {
+                first_index,
+                duplicate_index: index,
+                species_id: s.species_id,
+            });
+        }
+        first_index_by_id.insert(s.species_id, index);
         if s.category == SpeciesCategory::Aquatic
             && matches!(
                 &s.affinity,
@@ -411,13 +431,13 @@ impl IslandBiota {
     }
 
     /// Replace the derived catalogue while rebuilding every cache that depends
-    /// on species membership or abundance. Marine aquatic entries using a
-    /// carbon-pool abundance are rejected before any state is changed.
+    /// on species membership or abundance. Duplicate identities and marine
+    /// aquatic entries using a carbon-pool abundance are rejected before state changes.
     pub fn replace_species_catalogue(
         &mut self,
         species: Vec<IslandSpecies>,
     ) -> Result<(), MarineProjectionError> {
-        validate_marine_species_metadata(&species)?;
+        validate_species_catalogue(&species)?;
         let marine_aquatic_species = marine_aquatic_species_indices(&species);
         let (producer_weight, grazer_weight) = species_weights(&species);
 
@@ -455,6 +475,9 @@ impl IslandBiota {
                 upstream_population: s.population_size,
             })
             .collect();
+        validate_species_catalogue(&species).unwrap_or_else(|error| {
+            panic!("invalid upstream species catalogue: {error}");
+        });
         let marine_aquatic_species = marine_aquatic_species_indices(&species);
 
         let (rows, cols) = (domain.rows(MEDIUM), domain.cols(MEDIUM));
