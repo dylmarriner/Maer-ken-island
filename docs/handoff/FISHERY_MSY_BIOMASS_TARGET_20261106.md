@@ -27,6 +27,7 @@ After the piecewise MSY correction, the fishery model could report the maximum s
 ## Commits
 
 - Implementation and regression: `4ba8c01fc3d95aafffb7231e34b2fd690a4c0d4e`.
+- Follow-up extreme-capacity assertion correction: `e356c66bbb392069c249308ebc48904fba879b5b`; the target is one quarter of `f64::MAX` when K is one half of `f64::MAX` and the default peak fraction is one half.
 - Remaining-work ledger: `b830f170886ad7407df2d07ee319d1f8b8433518`.
 - Root handoff: `bac57bdc74cbd63d05551af5faf831795642619f`.
 
