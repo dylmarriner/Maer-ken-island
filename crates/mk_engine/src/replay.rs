@@ -553,7 +553,9 @@ mod tests {
             let state = WorldState::new(Arc::new(CanonLocked::default()), [0x5a; 32]);
             let session =
                 ReplaySession::from_world_state(state, ReplayOptions::default()).expect("session");
-            manager.add_session(name.to_owned(), session).expect("unique session name");
+            manager
+                .add_session(name.to_owned(), session)
+                .expect("unique session name");
         }
 
         assert_eq!(
@@ -566,8 +568,8 @@ mod tests {
     fn replay_manager_rejects_duplicate_names_without_replacing_existing_session() {
         let mut manager = ReplayManager::new();
         let state = WorldState::new(Arc::new(CanonLocked::default()), [0x5a; 32]);
-        let mut existing =
-            ReplaySession::from_world_state(state, ReplayOptions::default()).expect("existing session");
+        let mut existing = ReplaySession::from_world_state(state, ReplayOptions::default())
+            .expect("existing session");
         let initial_tick = existing.current_state().tick;
         existing
             .replay_to(initial_tick + 1)
@@ -577,17 +579,17 @@ mod tests {
             .expect("first session name is unique");
 
         let replacement_state = WorldState::new(Arc::new(CanonLocked::default()), [0x6b; 32]);
-        let replacement = ReplaySession::from_world_state(
-            replacement_state,
-            ReplayOptions::default(),
-        )
-        .expect("replacement session");
+        let replacement =
+            ReplaySession::from_world_state(replacement_state, ReplayOptions::default())
+                .expect("replacement session");
 
         assert!(matches!(
             manager.add_session("primary".to_owned(), replacement),
             Err(ReplayError::DuplicateSessionName(ref name)) if name == "primary"
         ));
-        let retained = manager.get_session("primary").expect("original session remains");
+        let retained = manager
+            .get_session("primary")
+            .expect("original session remains");
         assert_eq!(retained.current_state().tick, initial_tick + 1);
         assert_eq!(manager.list_sessions(), vec!["primary".to_owned()]);
     }
