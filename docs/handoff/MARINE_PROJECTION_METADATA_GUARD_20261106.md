@@ -67,3 +67,16 @@ The new `MarineAquaticSpeciesIndex.affinity` field also required updating the ex
 Commit: `ddf35001a10cc6d79e3dab1ab03743c7f48c8343`.
 
 A fresh exact-head CI run is required after this fixture update. The previous workflow was started before this commit and cannot verify it.
+
+
+## Follow-up: preserve aquatic abundance semantics
+
+A further mutable-catalogue gap remained after category/affinity fencing: an indexed aquatic species could retain its ID, category and marine affinity while its public `abundance` field changed from `UpstreamDensity` to a carbon-pool variant. The marine projection would then report biomass from upstream density while the general animal projection treated the same species as carbon.
+
+The checked projection now rejects any indexed marine species whose abundance is not `Abundance::UpstreamDensity`, using the existing typed `StaleSpeciesMetadata` error.
+
+Regression coverage mutates a surveyed marine species to both `ProducerCarbon` and `GrazerCarbon` and verifies that neither can enter the fishery projection.
+
+This remains a read-only derived-data guard. It does not alter snapshots, logs, RNG, replay digests, ecological parameters, material ledgers or live simulation state.
+
+A fresh exact-head workflow is required; no Rust test or Clippy pass is claimed until CI reports it.
