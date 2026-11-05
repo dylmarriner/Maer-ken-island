@@ -67,3 +67,9 @@ Verification:
 - The earlier CI run on the previous PR head does not certify these commits; a fresh exact-head run must pass formatting, Clippy, fast tests, desktop/backend, dashboard, computer service, dependency audit and both week/year reference-pack acceptance tests.
 - Local Cargo checks were not run because the custom OpenCommander session terminated; no local pass is claimed.
 - No simulation state, tick logic, replay hash, snapshot format, append-only log or LLM behavior changed.
+
+## Exact-head formatting correction
+
+- Workflow [#41957894866](https://github.com/dylmarriner/Maer-ken-island/actions/runs/41957894866) reached the formatter and failed only because rustfmt wanted the new test's `let session` assignment wrapped differently. Clippy and fast tests were skipped after the formatting failure; this is not a test failure.
+- Commit `0d5ef91eaa8a523e78bb651c0c6977df361c3480` applies the exact line layout printed by the CI formatter.
+- A fresh exact-head workflow is required for the formatter correction and this handoff update. No earlier CI result certifies the new head.
