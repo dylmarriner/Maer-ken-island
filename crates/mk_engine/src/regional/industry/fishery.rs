@@ -309,7 +309,8 @@ mod tests {
     #[test]
     fn surplus_peaks_at_half_k_and_falls_away_when_depleted() {
         let m = FisheryModel::load_default().expect("the pack loads");
-        let mut stock = FishStock::unexploited(Resilience::Medium, 1_000.0).expect("positive carrying capacity");
+        let mut stock = FishStock::unexploited(Resilience::Medium, 1_000.0)
+            .expect("positive carrying capacity");
         assert_eq!(stock.surplus_t_per_year(&m), 0.0);
         stock.biomass_t = 500.0;
         assert!((stock.surplus_t_per_year(&m) - stock.msy_t(&m)).abs() < 1e-9);
@@ -321,7 +322,8 @@ mod tests {
     #[test]
     fn a_fishery_cannot_take_more_than_the_stock_grows() {
         let m = FisheryModel::load_default().expect("the pack loads");
-        let mut stock = FishStock::unexploited(Resilience::Medium, 1_000.0).expect("positive carrying capacity");
+        let mut stock = FishStock::unexploited(Resilience::Medium, 1_000.0)
+            .expect("positive carrying capacity");
         stock.biomass_t = 500.0;
         let day = 86_400.0;
         for _ in 0..3_653 {
@@ -337,7 +339,8 @@ mod tests {
     #[test]
     fn invalid_fishing_inputs_return_typed_errors_without_mutating_the_stock() {
         let m = FisheryModel::load_default().expect("the pack loads");
-        let mut stock = FishStock::unexploited(Resilience::Medium, 1_000.0).expect("positive carrying capacity");
+        let mut stock = FishStock::unexploited(Resilience::Medium, 1_000.0)
+            .expect("positive carrying capacity");
         stock.biomass_t = 500.0;
         stock.landed_t = 25.0;
         let before = stock.clone();
@@ -351,10 +354,7 @@ mod tests {
         }
 
         for dt in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY, -1.0] {
-            assert_eq!(
-                stock.fish(&m, 1.0, dt),
-                Err(FisheryError::InvalidTimeStep)
-            );
+            assert_eq!(stock.fish(&m, 1.0, dt), Err(FisheryError::InvalidTimeStep));
             assert_eq!(stock, before, "invalid time step mutated the stock");
         }
     }
@@ -362,14 +362,18 @@ mod tests {
     #[test]
     fn invalid_model_and_stock_state_are_rejected_without_mutation() {
         let m = FisheryModel::load_default().expect("the pack loads");
-        let mut stock = FishStock::unexploited(Resilience::Medium, 1_000.0).expect("positive carrying capacity");
+        let mut stock = FishStock::unexploited(Resilience::Medium, 1_000.0)
+            .expect("positive carrying capacity");
         stock.biomass_t = 500.0;
         let before = stock.clone();
 
         let mut invalid_model = m.clone();
         invalid_model.r_per_year[Resilience::Medium as usize] = f64::NAN;
         assert!(!invalid_model.is_valid());
-        assert_eq!(stock.fish(&invalid_model, 10.0, YEAR_S), Err(FisheryError::InvalidModel));
+        assert_eq!(
+            stock.fish(&invalid_model, 10.0, YEAR_S),
+            Err(FisheryError::InvalidModel)
+        );
         assert_eq!(stock, before);
 
         invalid_model = m.clone();
@@ -381,7 +385,10 @@ mod tests {
         let mut invalid_stock = before.clone();
         invalid_stock.biomass_t = invalid_stock.k_t + 1.0;
         let invalid_before = invalid_stock.clone();
-        assert_eq!(invalid_stock.fish(&m, 10.0, YEAR_S), Err(FisheryError::InvalidStockState));
+        assert_eq!(
+            invalid_stock.fish(&m, 10.0, YEAR_S),
+            Err(FisheryError::InvalidStockState)
+        );
         assert_eq!(invalid_stock, invalid_before);
     }
 
@@ -390,18 +397,23 @@ mod tests {
         let m = FisheryModel::load_default().expect("the pack loads");
         let mut explosive = m.clone();
         explosive.r_per_year[Resilience::Medium as usize] = f64::MAX;
-        let mut stock = FishStock::unexploited(Resilience::Medium, 1.0e308).expect("positive carrying capacity");
+        let mut stock = FishStock::unexploited(Resilience::Medium, 1.0e308)
+            .expect("positive carrying capacity");
         stock.biomass_t = 5.0e307;
         let before = stock.clone();
 
-        assert_eq!(stock.fish(&explosive, 1.0, YEAR_S), Err(FisheryError::NonFiniteGrowth));
+        assert_eq!(
+            stock.fish(&explosive, 1.0, YEAR_S),
+            Err(FisheryError::NonFiniteGrowth)
+        );
         assert_eq!(stock, before);
     }
 
     #[test]
     fn landed_total_overflow_returns_an_error_without_mutating_the_stock() {
         let m = FisheryModel::load_default().expect("the pack loads");
-        let mut stock = FishStock::unexploited(Resilience::Medium, 1.0e308).expect("positive carrying capacity");
+        let mut stock = FishStock::unexploited(Resilience::Medium, 1.0e308)
+            .expect("positive carrying capacity");
         stock.biomass_t = 5.0e307;
         stock.landed_t = f64::MAX * 0.99;
         let before = stock.clone();
@@ -416,10 +428,13 @@ mod tests {
     #[test]
     fn coarse_fishing_interval_cannot_harvest_more_than_remaining_capacity() {
         let m = FisheryModel::load_default().expect("the pack loads");
-        let mut stock = FishStock::unexploited(Resilience::Medium, 1_000.0).expect("positive carrying capacity");
+        let mut stock = FishStock::unexploited(Resilience::Medium, 1_000.0)
+            .expect("positive carrying capacity");
         stock.biomass_t = 500.0;
 
-        let landed = stock.fish(&m, 10_000.0, 100.0 * YEAR_S).expect("valid coarse fishing step");
+        let landed = stock
+            .fish(&m, 10_000.0, 100.0 * YEAR_S)
+            .expect("valid coarse fishing step");
 
         assert_eq!(landed, 500.0);
         assert_eq!(stock.biomass_t, 500.0);
