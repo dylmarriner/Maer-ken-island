@@ -282,7 +282,10 @@ fn negative_offtake_caps_are_rejected_without_mutating_field_or_ledger() {
     }
 
     assert_eq!(field, before, "invalid caps must not mutate the field");
-    assert!(ledger.entries().is_empty(), "invalid caps must not book carbon");
+    assert!(
+        ledger.entries().is_empty(),
+        "invalid caps must not book carbon"
+    );
 }
 
 #[test]
