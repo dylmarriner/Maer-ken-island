@@ -8,7 +8,9 @@ use mk_core::canon::CanonLocked;
 use mk_engine::biosphere::{SpeciesCategory, TerrainAffinity};
 use mk_engine::regional::ecology::RegionalEcologyState;
 use mk_engine::regional::physical::RegionalPhysicalState;
-use mk_engine::regional::species::{Abundance, IslandBiota, NodeStock, AFFINITIES};
+use mk_engine::regional::species::{
+    Abundance, IslandBiota, MarineProjectionError, NodeStock, AFFINITIES,
+};
 use mk_island::{DomainLevel, IslandDomain, IslandProfile};
 
 const M: DomainLevel = DomainLevel::Medium;
@@ -373,4 +375,51 @@ fn the_survey_is_the_same_every_time_for_the_same_seed() {
         .biota
         .species_in(forest)
         .any(|s| s.affinity == TerrainAffinity::OpenOcean));
+}
+
+#[test]
+fn marine_projection_rejects_category_changes_after_the_survey() {
+    let b = base();
+    let mut biota = b.biota.clone();
+    let species_index = biota
+        .species
+        .iter()
+        .position(|species| species.category == SpeciesCategory::Aquatic && is_marine(&species.affinity))
+        .expect("the island has a marine aquatic species");
+    let affinity = biota.species[species_index].affinity.clone();
+    let cell = biota.habitat_cells(&affinity).next().expect("marine habitat");
+
+    // Keep identity and affinity stable while changing category. The cached
+    // index must not continue treating a now-terrestrial species as fish.
+    biota.species[species_index].category = SpeciesCategory::Tree;
+
+    assert!(matches!(
+        biota.try_marine_aquatic_nodes(cell),
+        Err(MarineProjectionError::StaleSpeciesMetadata { index, .. }) if index == species_index
+    ));
+}
+
+#[test]
+fn marine_projection_rejects_affinity_changes_after_the_survey() {
+    let b = base();
+    let mut biota = b.biota.clone();
+    let species_index = biota
+        .species
+        .iter()
+        .position(|species| species.category == SpeciesCategory::Aquatic && is_marine(&species.affinity))
+        .expect("the island has a marine aquatic species");
+    let original_affinity = biota.species[species_index].affinity.clone();
+    let cell = biota
+        .habitat_cells(&original_affinity)
+        .next()
+        .expect("marine habitat");
+
+    // The cell mask was surveyed for the original affinity. A later mutation
+    // must not silently turn the indexed species into a river species.
+    biota.species[species_index].affinity = TerrainAffinity::River;
+
+    assert!(matches!(
+        biota.try_marine_aquatic_nodes(cell),
+        Err(MarineProjectionError::StaleSpeciesMetadata { index, .. }) if index == species_index
+    ));
 }
