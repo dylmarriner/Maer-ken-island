@@ -100,7 +100,7 @@ fn the_island_has_its_trees_its_open_ground_plants_and_its_sea_life() {
     let carbon = b.biota.carbon_by_species(&b.ecology);
     let living = |category: SpeciesCategory| {
         b.biota
-            .species
+            .species()
             .iter()
             .zip(&carbon)
             .filter(|(s, c)| s.category == category && c.is_some_and(|c| c > 0.0))
@@ -146,7 +146,7 @@ fn the_plants_carbon_is_the_producer_field_before_and_after_a_step() {
         .sum();
     let summed: f64 = b
         .biota
-        .species
+        .species()
         .iter()
         .zip(&all)
         .filter(|(s, _)| s.abundance == Abundance::ProducerCarbon)
@@ -245,7 +245,7 @@ fn the_animal_nodes_add_up_to_each_species_on_the_island() {
     // The sea's fish are nodes in the sea.
     let fish = b
         .biota
-        .species
+        .species()
         .iter()
         .position(|s| s.category == SpeciesCategory::Aquatic && is_marine(&s.affinity));
     if let Some(fish) = fish {
@@ -438,7 +438,7 @@ fn marine_projection_rejects_carbon_abundance_for_marine_species_without_mutatin
     let b = base();
     let species_index = b
         .biota
-        .species()
+        .species()()
         .iter()
         .position(|species| {
             species.category == SpeciesCategory::Aquatic && is_marine(&species.affinity)
