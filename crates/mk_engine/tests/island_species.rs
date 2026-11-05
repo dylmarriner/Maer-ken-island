@@ -258,6 +258,67 @@ fn the_animal_nodes_add_up_to_each_species_on_the_island() {
 }
 
 #[test]
+fn marine_aquatic_nodes_project_population_to_biomass_without_a_second_stock() {
+    let b = base();
+    let cells = b.ecology.herbivore_kgc_m2.data().len();
+    let mut individuals = vec![0.0; b.biota.species.len()];
+    let mut biomass_t = vec![0.0; b.biota.species.len()];
+    let mut node_count = 0usize;
+
+    for cell in 0..cells {
+        let animals = b.biota.animal_nodes(cell, &b.ecology);
+        for node in b.biota.marine_aquatic_nodes(cell) {
+            node_count += 1;
+            let species = &b.biota.species[node.species];
+            assert_eq!(species.category, SpeciesCategory::Aquatic);
+            assert!(is_marine(&species.affinity), "{}", species.name);
+            assert!(b.biota.is_habitat(cell, &species.affinity));
+
+            let animal = animals
+                .iter()
+                .find(|candidate| candidate.species == node.species)
+                .expect("marine aquatic node is also an animal node");
+            match animal.stock {
+                NodeStock::Head(count) => assert!(close(node.individuals, count)),
+                NodeStock::CarbonKgc(_) => panic!("upstream aquatic density is counted in heads"),
+            }
+
+            assert!(node.individuals.is_finite() && node.individuals >= 0.0);
+            assert!(node.biomass_t.is_finite() && node.biomass_t >= 0.0);
+            assert!(close(
+                node.biomass_t,
+                node.individuals * species.body_mass_kg / 1_000.0
+            ));
+            individuals[node.species] += node.individuals;
+            biomass_t[node.species] += node.biomass_t;
+        }
+    }
+
+    assert!(node_count > 0, "the island has marine aquatic species");
+    for (index, species) in b.biota.species.iter().enumerate() {
+        if species.category == SpeciesCategory::Aquatic && is_marine(&species.affinity) {
+            let expected_individuals = b.biota.population(index).unwrap_or(0.0);
+            let expected_biomass_t = expected_individuals * species.body_mass_kg / 1_000.0;
+            assert!(
+                close(individuals[index], expected_individuals),
+                "{}: {} individuals against {expected_individuals}",
+                species.name,
+                individuals[index]
+            );
+            assert!(
+                close(biomass_t[index], expected_biomass_t),
+                "{}: {} t against {expected_biomass_t} t",
+                species.name,
+                biomass_t[index]
+            );
+        } else {
+            assert_eq!(individuals[index], 0.0, "{}", species.name);
+            assert_eq!(biomass_t[index], 0.0, "{}", species.name);
+        }
+    }
+}
+
+#[test]
 fn the_plant_nodes_add_up_to_each_plant_species_on_the_island() {
     let b = base();
     let cells = b.ecology.biomass_kgc_m2.data().len();

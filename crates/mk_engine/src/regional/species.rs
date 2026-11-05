@@ -196,6 +196,22 @@ pub struct AnimalNode {
     pub stock: NodeStock,
 }
 
+/// A marine aquatic species' population and live biomass on one medium cell.
+///
+/// This is a read-only projection of upstream density, not a second stock.
+/// Biomass is in tonnes for the fishery model's unit convention; no carrying
+/// capacity, resilience class or harvest rate is inferred here.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MarineAquaticNode {
+    pub cell: usize,
+    /// Index into [`IslandBiota::species`].
+    pub species: usize,
+    /// Individuals represented by this cell's share of upstream density.
+    pub individuals: f64,
+    /// Live biomass represented by those individuals (tonnes).
+    pub biomass_t: f64,
+}
+
 /// Upstream's species on the island's ground.
 #[derive(Debug, Clone)]
 pub struct IslandBiota {
@@ -455,6 +471,43 @@ impl IslandBiota {
                     species: index,
                     stock,
                 })
+            })
+            .collect()
+    }
+
+    /// Marine aquatic species on medium cell `cell`, with abundance converted
+    /// to live biomass in tonnes. This is a projection of the same upstream
+    /// density used by `animal_nodes`; it does not store or mutate a second
+    /// population and deliberately does not invent fishery resilience,
+    /// unexploited carrying capacity or catch-per-unit-effort.
+    ///
+    /// Only OpenOcean and ReefSea species are included. River-affinity aquatic
+    /// species remain available through `animal_nodes`, but are not treated
+    /// as part of the inshore marine fishery.
+    pub fn marine_aquatic_nodes(&self, cell: usize) -> Vec<MarineAquaticNode> {
+        let mask = self.habitat.get(cell).copied().unwrap_or(0);
+        if mask == 0 {
+            return Vec::new();
+        }
+        self.species
+            .iter()
+            .enumerate()
+            .filter(|(_, s)| {
+                s.category == SpeciesCategory::Aquatic
+                    && matches!(
+                        &s.affinity,
+                        TerrainAffinity::OpenOcean | TerrainAffinity::ReefSea
+                    )
+                    && mask & bit(&s.affinity) != 0
+            })
+            .map(|(species, s)| {
+                let individuals = s.upstream_density_per_m2 * self.cell_area_m2;
+                MarineAquaticNode {
+                    cell,
+                    species,
+                    individuals,
+                    biomass_t: individuals * s.body_mass_kg / 1_000.0,
+                }
             })
             .collect()
     }
