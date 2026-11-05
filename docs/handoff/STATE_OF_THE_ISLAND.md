@@ -101,7 +101,7 @@ Every number the model uses that describes the real world lives in a cited pack,
 
 | Pin | Where | Current value |
 |---|---|---|
-| The founders' week | `crates/mk_engine/tests/island_life_acceptance.rs` `WEEK_DIGEST` | `bc8706aca29525e6bd75d27d94678a56cbd97a717aa4553ac8a15a2a64c7a076` (audited after town/economy and fitness/genome/free-will integration; run #41861164760) |
+| The founders' week | `crates/mk_engine/tests/island_life_acceptance.rs` `WEEK_DIGEST` | `29ed53bd7769eb3025e70135bab8b7ea07718e26e7fca4cbf77ab379d62b7784` (audited after town/economy and fitness/genome/free-will integration; run #41861164760) |
 | The planetary topology | `crates/mk_engine/tests/topology_hash_baseline.rs` | `e4ece246…73e2` (moved only by starter-shed data: the R1b jerrycans) |
 
 `WORKING_PRACTICES.md` says how and when to re-pin.

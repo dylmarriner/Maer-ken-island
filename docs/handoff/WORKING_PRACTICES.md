@@ -46,6 +46,13 @@ with `WEEK_DIGEST`. Any change to physics, life or serialized state moves the di
 3. Only if every deferred assertion passed and the movement is explained by your change, copy the
    new digest into `WEEK_DIGEST`.
 
+   On the petroleum offtake-cap correction, exact-head run [#41990556526](https://github.com/dylmarriner/Maer-ken-island/actions/runs/41990556526)
+   produced `29ed53bd7769eb3025e70135bab8b7ea07718e26e7fca4cbf77ab379d62b7784`. Every week assertion before the final digest comparison passed,
+   and the independent year-weather reference-pack test passed. The movement from
+   `bc8706aca29525e6bd75d27d94678a56cbd97a717aa4553ac8a15a2a64c7a076` is explained by the corrected finite-cap calculation in
+   `regional/industry/petroleum.rs`: it changes the exact floating-point production state.
+   This is an intentional behavior change, not a reference-pack or snapshot-format edit.
+
 `topology_hash_baseline.rs` pins the planetary engine. Island work should never move it.
 
 ## CI (`.github/workflows/ci.yml`)

@@ -203,7 +203,7 @@ const DAY: u64 = 86_400;
 /// The independent year-weather reference-pack test passed in the same run.
 /// The only failing assertion was the previous digest pin; no simulation
 /// state or physics code was changed by this re-pin.
-const WEEK_DIGEST: &str = "bc8706aca29525e6bd75d27d94678a56cbd97a717aa4553ac8a15a2a64c7a076";
+const WEEK_DIGEST: &str = "29ed53bd7769eb3025e70135bab8b7ea07718e26e7fca4cbf77ab379d62b7784";
 
 fn repo(path: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))

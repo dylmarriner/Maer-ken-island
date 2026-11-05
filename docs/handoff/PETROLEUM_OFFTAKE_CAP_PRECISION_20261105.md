@@ -34,8 +34,11 @@ instead of being rejected as invalid input.
 
 Valid finite intervals retain the same exponential decline model. Gas remains
 produced in the same share as oil when oil remains; a field with no remaining
-oil remains unchoked. No reference data, production constants, carbon flows,
-replay hashes, snapshot formats or persistence formats were changed.
+oil remains unchoked. No reference data, decline parameters, carbon/energy
+constants, snapshot schema or persistence format changed. The one-week state
+digest did move because the corrected finite-cap calculation changes the exact
+floating-point production state. This is an intentional behavior change, not a
+reference-pack edit or planetary-topology change.
 
 ## Verification
 
@@ -84,3 +87,19 @@ regressions now explicitly select an oil-bearing field rather than assuming the
 first surveyed field has oil. This keeps the cap-boundary assertion tied to a
 non-zero oil reserve and avoids making the test depend on deposit ordering.
 Commit: `402085e412f1f88095ea71baaa9620b8a7b3cb7d`.
+
+
+## Audited week-digest movement
+
+Exact-head run [#41990556526](https://github.com/dylmarriner/Maer-ken-island/actions/runs/41990556526)
+observed `29ed53bd7769eb3025e70135bab8b7ea07718e26e7fca4cbf77ab379d62b7784` instead of the prior pin `bc8706aca29525e6bd75d27d94678a56cbd97a717aa4553ac8a15a2a64c7a076`.
+
+The week test passed its ledger, water, founder, ecology, tree, eating and drinking
+assertions before failing only at the stale digest equality. The independent
+year-weather reference-pack test passed. The printed week evidence was 27,597
+closed audits (167 hourly water audits), zero food/water shortfalls, 112 economy
+events, 200,000 patch trees, body carbon 13.0/13.0 kg and 10.4/10.4 kg, and
+temperate-forest NPP 471 g C/m²/yr against the 400–900 reference range.
+
+The pin is updated to the exact observed digest in this follow-up. A fresh
+exact-head workflow must pass the week and year acceptance gates before merge.
