@@ -40,3 +40,12 @@ was changed. The existing cited Troll assay and IPCC reference values remain unt
 2. Merge only after exact-head checks and review are green.
 3. Continue the remaining refinery reformer, oil-field water-cut/spill and energy-ledger
    requirements in `WORK_REMAINING.md`.
+
+
+## First exact-head CI correction
+
+- Workflow [#41970492431](https://github.com/dylmarriner/Maer-ken-island/actions/runs/41970492431) failed at `cargo fmt --all -- --check` only.
+- Rustfmt requested multiline wrapping for two assertions and the invalid-label assertion.
+- Commit `286ff3fe4765d64fd39f9c0178b19504d24fdc44` applies those exact formatter changes.
+- Clippy and fast tests were skipped after formatting failed; no code assertion failure was observed.
+- A fresh exact-head workflow is required. The failed run does not certify the corrected head.
