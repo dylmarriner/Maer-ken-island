@@ -53,3 +53,8 @@ Fresh workflow [#42015041970](https://github.com/dylmarriner/Maer-ken-island/act
 ## Clippy/compiler correction
 
 Exact-head workflow [#42015513952](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42015513952) passed formatting and reached Clippy, where the second invalid-model regression still compared the new `Result<f64, FisheryError>` API to `0.0`. This is a test compile error, not a production-code diagnostic. The assertion now expects `Err(FisheryError::InvalidModel)` in commit `9fa08df45a47ca3cffb1364875c5ca13cb1e5a78`. A fresh exact-head run is required.
+
+
+## Latest corrected exact-head CI
+
+Workflow [#42016144545](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42016144545) is the latest exact-head run after the missed invalid-depensation assertion was corrected. At handoff update, dashboard, computer service, dependency audit and repository scripts have passed; formatting/Clippy/fast tests, desktop, installed backend and week/year reference acceptance remain in progress. Do not merge until every required job on this head passes.
