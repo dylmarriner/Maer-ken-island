@@ -126,7 +126,7 @@ Done 2026-10-14 (`regional/species.rs`, D55): upstream's founding species placed
 habitats, plants and grazers as shares of the island's carbon fields, other guilds at upstream's
 density times the island's habitat area. The catalogue is now private; callers read through
 `species()` and replace it through `replace_species_catalogue`, which rebuilds the marine index and
-producer/grazer weights atomically so newly eligible aquatic species cannot be silently omitted.
+producer/grazer weights atomically so newly eligible aquatic species cannot be silently omitted. Survey and replacement also fail fast on duplicate `species_id` values; a rejected replacement preserves both the original catalogue and cached marine projection.
 **Left:** Earth-calibrated densities and a carbon pool for each consumer guild (realism R8, R10);
 serving the species to the map and the cell inspector; animal and fish resource nodes (done 2026-10-23, §2b).
 
