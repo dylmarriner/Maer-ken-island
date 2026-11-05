@@ -58,3 +58,27 @@ Exact-head workflow [#42015513952](https://github.com/dylmarriner/Maer-ken-islan
 ## Latest corrected exact-head CI
 
 Workflow [#42016144545](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42016144545) is the latest exact-head run after the missed invalid-depensation assertion was corrected. At handoff update, dashboard, computer service, dependency audit and repository scripts have passed; formatting/Clippy/fast tests, desktop, installed backend and week/year reference acceptance remain in progress. Do not merge until every required job on this head passes.
+
+
+## Public diagnostic API hardening (2026-11-06)
+
+The typed-error contract now covers the public diagnostic methods as well as
+`fish()`:
+
+- `surplus_t_per_year()` and `msy_t()` return `Result<f64, FisheryError>`.
+- Invalid models, carrying capacity and stock state no longer masquerade as a
+  legitimate zero surplus/MSY.
+- Non-finite diagnostic arithmetic returns `NonFiniteGrowth`.
+- MSY computes `r * (k / 4)`, avoiding an overflowing intermediate when the
+  mathematically correct result remains representable.
+- `fish()` reuses the same stock-state validation and propagates diagnostic
+  errors before mutating biomass or landed totals.
+
+Regressions cover invalid model/state errors and the representable large-MSY
+case. Repository search found these diagnostics only in this module's tests,
+so no runtime caller or serialized field is changed.
+
+Exact-head CI is required for the updated PR head. No local Cargo result is
+claimed in this run; custom OpenCommander device discovery is returning HTTP
+429. Do not merge until formatting, Clippy, fast tests, desktop/backend and
+week/year acceptance all pass on the new head.
