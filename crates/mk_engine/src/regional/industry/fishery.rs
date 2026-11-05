@@ -301,13 +301,21 @@ impl FishStock {
         } else {
             (surplus * dt_s) / YEAR_S
         };
-        if !raw_growth.is_finite() || raw_growth < 0.0 {
+        if raw_growth.is_nan() || raw_growth < 0.0 {
             return Err(FisheryError::NonFiniteGrowth);
         }
         // A single aggregate step cannot add more biomass than the stock's
         // remaining headroom to carrying capacity. The instantaneous Schaefer
         // rate is an Euler estimate; cap it so a coarse dt cannot create fish.
-        let grown = raw_growth.min(self.k_t - self.biomass_t);
+        // Positive infinity means the unconstrained interval growth exceeds f64::MAX.
+        // The stock's remaining headroom is finite, so the physically valid result
+        // is still representable: cap at carrying capacity instead of rejecting the step.
+        let headroom = self.k_t - self.biomass_t;
+        let grown = if raw_growth.is_infinite() {
+            headroom
+        } else {
+            raw_growth.min(headroom)
+        };
         let post_growth = self.biomass_t + grown;
         if !post_growth.is_finite() {
             return Err(FisheryError::NonFiniteGrowth);
@@ -612,7 +620,7 @@ mod tests {
     }
 
     #[test]
-    fn overflowing_growth_is_rejected_without_mutating_the_stock() {
+    fn unrepresentable_annual_surplus_is_rejected_without_mutating_the_stock() {
         let m = FisheryModel::load_default().expect("the pack loads");
         let mut explosive = m.clone();
         explosive.r_per_year[Resilience::Medium as usize] = f64::MAX;
@@ -626,6 +634,41 @@ mod tests {
             Err(FisheryError::NonFiniteGrowth)
         );
         assert_eq!(stock, before);
+    }
+
+    #[test]
+    fn interval_growth_above_f64_range_caps_at_finite_stock_headroom() {
+        let m = FisheryModel::load_default().expect("the pack loads");
+        let initial = f64::MAX / 2.0;
+        let headroom = f64::MAX - initial;
+        let mut harvested = FishStock {
+            resilience: Resilience::High,
+            k_t: f64::MAX,
+            biomass_t: initial,
+            landed_t: 0.0,
+        };
+
+        let landed = harvested
+            .fish(&m, f64::MAX, f64::MAX)
+            .expect("overflowing unconstrained growth is capped at finite headroom");
+
+        assert_eq!(landed, headroom);
+        assert_eq!(harvested.biomass_t, initial);
+        assert_eq!(harvested.landed_t, headroom);
+
+        let mut unharvested = FishStock {
+            resilience: Resilience::High,
+            k_t: f64::MAX,
+            biomass_t: initial,
+            landed_t: 0.0,
+        };
+        assert_eq!(
+            unharvested.fish(&m, 0.0, f64::MAX),
+            Ok(0.0),
+            "growth above the float range still fills the finite stock capacity"
+        );
+        assert_eq!(unharvested.biomass_t, f64::MAX);
+        assert_eq!(unharvested.landed_t, 0.0);
     }
 
     #[test]
