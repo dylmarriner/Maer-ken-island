@@ -216,16 +216,26 @@ pub struct MarineAquaticNode {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MarineProjectionError {
     InvalidCellArea,
-    InvalidSpeciesIndex { index: usize },
+    InvalidSpeciesIndex {
+        index: usize,
+    },
     StaleSpeciesIndex {
         index: usize,
         expected_species_id: u64,
         actual_species_id: u64,
     },
-    InvalidDensity { species_id: u64 },
-    InvalidBodyMass { species_id: u64 },
-    NonFiniteIndividuals { species_id: u64 },
-    NonFiniteBiomass { species_id: u64 },
+    InvalidDensity {
+        species_id: u64,
+    },
+    InvalidBodyMass {
+        species_id: u64,
+    },
+    NonFiniteIndividuals {
+        species_id: u64,
+    },
+    NonFiniteBiomass {
+        species_id: u64,
+    },
 }
 
 impl std::fmt::Display for MarineProjectionError {
@@ -303,9 +313,7 @@ struct MarineAquaticSpeciesIndex {
 /// Species eligible for the read-only marine biomass projection. Keeping this
 /// stable, identity-checked index avoids scanning all founding species for every
 /// single-cell dashboard request.
-fn marine_aquatic_species_indices(
-    species: &[IslandSpecies],
-) -> Vec<MarineAquaticSpeciesIndex> {
+fn marine_aquatic_species_indices(species: &[IslandSpecies]) -> Vec<MarineAquaticSpeciesIndex> {
     species
         .iter()
         .enumerate()
