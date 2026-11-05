@@ -752,7 +752,14 @@ mod tests {
     fn marine_projection_rejects_invalid_density_and_body_mass() {
         let mut invalid_density = species(11, SpeciesCategory::Aquatic, TerrainAffinity::OpenOcean);
         invalid_density.upstream_density_per_m2 = f64::INFINITY;
-        let biota = marine_biota(vec![invalid_density], vec![MarineAquaticSpeciesIndex { index: 0, species_id: 11 }], 1.0);
+        let biota = marine_biota(
+            vec![invalid_density],
+            vec![MarineAquaticSpeciesIndex {
+                index: 0,
+                species_id: 11,
+            }],
+            1.0,
+        );
         assert_eq!(
             biota.try_marine_aquatic_nodes(0),
             Err(MarineProjectionError::InvalidDensity { species_id: 11 })
@@ -760,7 +767,14 @@ mod tests {
 
         let mut invalid_mass = species(12, SpeciesCategory::Aquatic, TerrainAffinity::OpenOcean);
         invalid_mass.body_mass_kg = f64::NAN;
-        let biota = marine_biota(vec![invalid_mass], vec![MarineAquaticSpeciesIndex { index: 0, species_id: 12 }], 1.0);
+        let biota = marine_biota(
+            vec![invalid_mass],
+            vec![MarineAquaticSpeciesIndex {
+                index: 0,
+                species_id: 12,
+            }],
+            1.0,
+        );
         assert_eq!(
             biota.try_marine_aquatic_nodes(0),
             Err(MarineProjectionError::InvalidBodyMass { species_id: 12 })
@@ -772,7 +786,14 @@ mod tests {
         let mut invalid_population =
             species(21, SpeciesCategory::Aquatic, TerrainAffinity::OpenOcean);
         invalid_population.upstream_density_per_m2 = f64::MAX;
-        let biota = marine_biota(vec![invalid_population], vec![MarineAquaticSpeciesIndex { index: 0, species_id: 21 }], 2.0);
+        let biota = marine_biota(
+            vec![invalid_population],
+            vec![MarineAquaticSpeciesIndex {
+                index: 0,
+                species_id: 21,
+            }],
+            2.0,
+        );
         assert_eq!(
             biota.try_marine_aquatic_nodes(0),
             Err(MarineProjectionError::NonFiniteIndividuals { species_id: 21 })
@@ -781,7 +802,14 @@ mod tests {
         let mut invalid_biomass = species(22, SpeciesCategory::Aquatic, TerrainAffinity::OpenOcean);
         invalid_biomass.upstream_density_per_m2 = 1.0e200;
         invalid_biomass.body_mass_kg = 1.0e200;
-        let biota = marine_biota(vec![invalid_biomass], vec![MarineAquaticSpeciesIndex { index: 0, species_id: 22 }], 1.0);
+        let biota = marine_biota(
+            vec![invalid_biomass],
+            vec![MarineAquaticSpeciesIndex {
+                index: 0,
+                species_id: 22,
+            }],
+            1.0,
+        );
         assert_eq!(
             biota.try_marine_aquatic_nodes(0),
             Err(MarineProjectionError::NonFiniteBiomass { species_id: 22 })
@@ -819,7 +847,10 @@ mod tests {
         let valid = species(31, SpeciesCategory::Aquatic, TerrainAffinity::OpenOcean);
         let biota = marine_biota(
             vec![valid.clone()],
-            vec![MarineAquaticSpeciesIndex { index: 0, species_id: 31 }],
+            vec![MarineAquaticSpeciesIndex {
+                index: 0,
+                species_id: 31,
+            }],
             0.0,
         );
         assert_eq!(
@@ -829,7 +860,10 @@ mod tests {
 
         let biota = marine_biota(
             vec![valid],
-            vec![MarineAquaticSpeciesIndex { index: 1, species_id: 31 }],
+            vec![MarineAquaticSpeciesIndex {
+                index: 1,
+                species_id: 31,
+            }],
             1.0,
         );
         assert_eq!(
