@@ -155,8 +155,8 @@ animal and fish resource nodes (done 2026-10-23, §2b).
     come, and the densities stay upstream's (D55).
   - Marine biomass bridge (2026-11-06): `IslandBiota::marine_aquatic_nodes` projects the same
     upstream head counts into tonnes per medium cell, with a conservation test against
-    `animal_nodes` and whole-island species populations. The map/desktop cell inspector now
-    reports the habitat's species count, individual count and live biomass, explicitly labelled
+    `animal_nodes` and whole-island species populations. The browser map and desktop cell inspectors now
+    report the habitat's species count, individual count and live biomass, explicitly labelled
     as an uncalibrated upstream-derived estimate; land and river cells are not assigned marine
     stock. It is a read-only view, not a second population. Fishery harvest remains open: no
     species-specific resilience class, unexploited carrying capacity or catch-per-unit-effort
