@@ -46,3 +46,13 @@ No local Cargo result is claimed because custom OpenCommander is unavailable.
 4. Keep the catalytic reformer blocked until mass, volume, carbon and by-product data can be closed from cited sources.
 
 No live island state, production infrastructure, network service or owner data was changed.
+
+
+## First exact-head CI correction
+
+Workflow [#41983560549](https://github.com/dylmarriner/Maer-ken-island/actions/runs/41983560549)
+reported one rustfmt-only line-wrap difference in the new `drill_for` guard. The
+source was changed to the exact formatter layout in the follow-up style commit.
+The failed run's Clippy and fast tests were skipped; its other independent jobs
+were still running at the time of correction. A fresh exact-head workflow is
+required; no full verification pass is claimed from the first run.
