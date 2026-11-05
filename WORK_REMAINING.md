@@ -1,6 +1,6 @@
 # Work remaining
 
-Written 2026-10-13 against `main` at the merge of PR #6 (`05fd6e5`). This is the single list of
+Updated 2026-11-06 against `main` at `d6f6ce7a1c5f01bf5a14d158fad32dbbcdaffb0a` (after the fishery arithmetic and snapshot-validation work in PRs #89–#91). This is the single list of
 what is not done, and for each item, **what it takes to do it**: the sources or data it needs,
 the decisions only the owner can make, the files it touches, the tests that prove it and when it
 counts as finished. Read [`HANDOFF.md`](HANDOFF.md) first for what exists.
