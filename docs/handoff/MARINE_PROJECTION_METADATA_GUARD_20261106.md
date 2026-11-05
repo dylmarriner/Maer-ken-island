@@ -45,3 +45,17 @@ No reference pack, real-world parameter, deviation register, snapshot, append-on
 4. Continue fishery integration into IslandLife only with sourced resilience, carrying-capacity and CPUE parameters.
 
 No production deployment, external service, LLM, budget spend or simulation-state mutation was performed.
+
+## Exact-head formatting follow-up
+
+The first workflow after the metadata-guard commits checked out the PR merge commit and reported two rustfmt differences:
+
+- the earlier large-population test assignment in `regional/species.rs`;
+- the new category-regression test's single-line habitat iterator.
+
+Both were corrected in follow-up commits:
+
+- `7485eb9877a1cb3c072878cb26ecefcbab3078fc` — source test formatting.
+- `1657d7217770266feffa7f1ed75af5f5ced60864` — integration test formatting.
+
+The previous run's formatting failure is now addressed in source, but a fresh exact-head workflow is still required. Clippy, fast tests, backend/desktop builds and week/year acceptance remain unverified until that run completes.
