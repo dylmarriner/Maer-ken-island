@@ -51,3 +51,10 @@ No fishery constants, reference data, event logs, replay hashes, snapshot field 
 - This branch now carries the corrected parent fishery source plus the snapshot-deserialization validation, so the next exact-head run covers both changes together.
 - Parent exact-head workflow [#42021998151](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42021998151) is running; formatting has passed and Clippy, fast tests, desktop/backend and week/year acceptance were still in progress at inspection.
 - PR #90 remains stacked on PR #89. Do not merge until the parent passes and is merged; then retarget/rebase and rerun this branch.
+
+
+## Binary non-finite regression (2026-11-06)
+
+- Added a bincode fixture containing positive-infinite carrying capacity and asserted that custom deserialization rejects it. JSON cannot represent NaN/infinity, so the earlier JSON cases alone did not prove the binary snapshot boundary.
+- Test commit: `ee24cd0b069525da79f4c65ae17ef94f42d54f97`.
+- The new exact-head run must include this commit; the previous #90 run predates it.
