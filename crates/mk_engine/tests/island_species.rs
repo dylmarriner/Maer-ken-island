@@ -430,3 +430,36 @@ fn marine_projection_rejects_affinity_changes_after_the_survey() {
         Err(MarineProjectionError::StaleSpeciesMetadata { index, .. }) if index == species_index
     ));
 }
+
+
+#[test]
+fn marine_projection_rejects_abundance_changes_after_the_survey() {
+    let b = base();
+    let species_index = b
+        .biota
+        .species
+        .iter()
+        .position(|species| {
+            species.category == SpeciesCategory::Aquatic && is_marine(&species.affinity)
+        })
+        .expect("the island has a marine aquatic species");
+    let affinity = b.biota.species[species_index].affinity.clone();
+    let cell = b
+        .biota
+        .habitat_cells(&affinity)
+        .next()
+        .expect("marine habitat");
+
+    // Aquatic species are projected from upstream density, never from either
+    // of the island's carbon pools. Public mutation must not change that contract.
+    for invalid_abundance in [Abundance::ProducerCarbon, Abundance::GrazerCarbon] {
+        let mut biota = b.biota.clone();
+        biota.species[species_index].abundance = invalid_abundance;
+
+        assert!(matches!(
+            biota.try_marine_aquatic_nodes(cell),
+            Err(MarineProjectionError::StaleSpeciesMetadata { index, .. })
+                if index == species_index
+        ));
+    }
+}
