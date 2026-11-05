@@ -394,7 +394,7 @@ impl ReplayManager {
         self.sessions.remove(name)
     }
 
-    /// List all session names
+    /// Return session names in lexicographic order, independent of `HashMap` iteration order.
     pub fn list_sessions(&self) -> Vec<String> {
         let mut names = self.sessions.keys().cloned().collect::<Vec<_>>();
         names.sort_unstable();
@@ -532,6 +532,7 @@ mod tests {
         assert!(matches!(session.verify(), Err(ReplayError::HashMismatch)));
     }
 
+    /// Ensures session listing is stable when sessions are inserted out of sort order.
     #[test]
     fn replay_manager_lists_session_names_in_deterministic_order() {
         let mut manager = ReplayManager::new();
