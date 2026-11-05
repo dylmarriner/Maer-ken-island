@@ -33,14 +33,15 @@ session listings needlessly non-deterministic.
 ## Verification
 
 - First exact-head workflow [#41936832743](https://github.com/dylmarriner/Maer-ken-island/actions/runs/41936832743) caught two rustfmt layout differences in the new test import and constructor expression. The formatter output was applied in commit `5e9419b3c720ca2ada29c72754d237d30acc3e5d`; the first run's check job stopped before Clippy/tests, so no Rust test pass is claimed from it.
-- A fresh exact-head workflow is required for `5e9419b3c720ca2ada29c72754d237d30acc3e5d`, including fmt, Clippy, fast Rust tests, week/year reference-pack acceptance, desktop/backend, dashboard, computer service, scripts and dependency audit.
-- Local Cargo checks were not run because the custom OpenCommander service is returning HTTP 429; no local pass is claimed.
+- Corrected exact-head workflow [#41937030480](https://github.com/dylmarriner/Maer-ken-island/actions/runs/41937030480) completed successfully on `cdd64a405e1d6e9b446dd6ed8d9cbc22fd70dfa9`.
+- Passed: formatting, Clippy, fast Rust tests, both week/year reference-pack acceptance tests, desktop/render, installed backend, dashboard, computer service, repository scripts and dependency audit.
+- The nightly slow-test job was skipped by design; the path-scoped week/year acceptance job ran and passed both tests.
+- Local Cargo checks were not run because the custom OpenCommander session is terminating; no local pass is claimed.
 - No simulation constants, canonical digests, snapshots, append-only logs, LLM behavior or live
   systems changed.
 
 ## Next
 
-1. Verify exact-head CI and ensure the regression runs in the fast Rust test job.
-2. Keep the PR draft until the exact-head workflow is green.
-3. Continue the remaining sourced realism, industry and Phase 5 acceptance requirements in
+1. Merge only after review and confirmation that the current PR head remains unchanged.
+2. Continue the remaining sourced realism, industry and Phase 5 acceptance requirements in
    `WORK_REMAINING.md`.
