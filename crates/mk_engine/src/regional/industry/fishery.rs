@@ -37,7 +37,9 @@ impl std::fmt::Display for FisheryError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let message = match self {
             Self::InvalidModel => "fishery model contains invalid parameters",
-            Self::InvalidCarryingCapacity => "fish stock carrying capacity must be finite and positive",
+            Self::InvalidCarryingCapacity => {
+                "fish stock carrying capacity must be finite and positive"
+            }
             Self::InvalidCatchRequest => "fish catch request must be finite and non-negative",
             Self::InvalidTimeStep => "fishery time step must be finite and non-negative",
             Self::InvalidStockState => "fish stock state is outside its valid domain",
