@@ -25,7 +25,7 @@ When `p` underflows to zero, the mathematically equivalent limiting expression i
 
 ## Regression
 
-The new unit test uses finite extreme values where `B / k` rounds to zero but `r * B² / (k * d)` is approximately `4e-200` tonnes/year. It asserts the result remains finite, positive and within a tight relative tolerance.
+The new unit test uses finite extreme values where `B / k` rounds to zero but `r * B² / (k * d)` is approximately `4e-200` tonnes/year. It asserts the result remains finite, positive and within a tight relative tolerance, then exercises `FishStock::fish` for one year and verifies a positive `1e-200` tonne catch is recorded from that surplus.
 
 ## Verification
 
