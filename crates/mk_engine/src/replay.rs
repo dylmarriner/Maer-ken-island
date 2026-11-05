@@ -588,7 +588,7 @@ mod tests {
     /// Rejects padded and control-character identifiers without inserting partial state.
     #[test]
     fn replay_manager_rejects_noncanonical_session_names_without_mutating_manager() {
-        for invalid_name in [" primary", "primary ", "primary\\nname", "primary\\0"] {
+        for invalid_name in [" primary", "primary ", "primary\nname", "primary\0"] {
             let mut manager = ReplayManager::new();
             let state = WorldState::new(Arc::new(CanonLocked::default()), [0x5a; 32]);
             let session =
