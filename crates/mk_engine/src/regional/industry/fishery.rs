@@ -90,7 +90,9 @@ impl FisheryModel {
     }
 
     fn is_valid(&self) -> bool {
-        self.r_per_year.iter().all(|rate| rate.is_finite() && *rate >= 0.0)
+        self.r_per_year
+            .iter()
+            .all(|rate| rate.is_finite() && *rate >= 0.0)
             && self.depensation_below.is_finite()
             && (0.0..=1.0).contains(&self.depensation_below)
     }
@@ -250,7 +252,10 @@ mod tests {
             (1.0, -1.0),
         ] {
             assert_eq!(stock.fish(&m, wanted, dt), 0.0);
-            assert_eq!(stock, before, "invalid input ({wanted}, {dt}) mutated the stock");
+            assert_eq!(
+                stock, before,
+                "invalid input ({wanted}, {dt}) mutated the stock"
+            );
         }
     }
 
