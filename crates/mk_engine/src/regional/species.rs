@@ -895,6 +895,8 @@ mod tests {
         let nodes = biota.try_marine_aquatic_nodes(0).unwrap();
         assert!(nodes[0].biomass_t.is_finite());
         assert!(nodes[0].biomass_t > 0.0);
+        let expected_tonnes = (1.0e308 / 1_000.0) * f64::from_bits(1);
+        assert!((nodes[0].biomass_t / expected_tonnes - 1.0).abs() < 1.0e-12);
     }
 
     #[test]

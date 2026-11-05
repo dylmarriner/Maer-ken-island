@@ -21,6 +21,7 @@ A deliberately extreme but finite input uses (10^{308}) individuals and 10 kg pe
 
 - `3af9f0e234bcd4139eb6bcdcc4d7aa35b0b43ce0` — initial overflow-safe scaling and regression.
 - `1496f4447211075c2d2f243d455b1da7dde3acc4` — choose the larger factor to avoid both overflow and premature underflow; add the subnormal regression.
+- `PENDING` — assert the exact finite tonne result for the smallest positive subnormal body mass.
 
 ## Verification
 
