@@ -54,3 +54,16 @@ session listings needlessly non-deterministic.
 1. Keep this PR draft until the exact current head has green required CI, including week/year reference-pack acceptance.
 2. Re-check the PR head SHA and unresolved review threads immediately before merge; any new commit requires a new exact-head check.
 3. Merge only after those conditions pass, then continue sourced realism, industry and Phase 5 acceptance work in `WORK_REMAINING.md`.
+
+## Follow-up: reject blank replay-session identifiers
+
+`ReplayManager::add_session` now rejects empty or whitespace-only names before duplicate lookup or insertion. Blank identifiers are not useful stable keys and otherwise create a session that cannot be meaningfully addressed by callers. The new `ReplayError::InvalidSessionName` is explicit, and the regression proves the manager remains empty after rejection.
+
+Commits:
+- `cf9f0a40e038ef1c4652574546ecda27c25f4847` — reject blank manager session names.
+- `42dc4eac573bf8fe4cec212b325a9137384f0bb8` — make the regression input actual Rust whitespace escapes.
+
+Verification:
+- The earlier CI run on the previous PR head does not certify these commits; a fresh exact-head run must pass formatting, Clippy, fast tests, desktop/backend, dashboard, computer service, dependency audit and both week/year reference-pack acceptance tests.
+- Local Cargo checks were not run because the custom OpenCommander session terminated; no local pass is claimed.
+- No simulation state, tick logic, replay hash, snapshot format, append-only log or LLM behavior changed.
