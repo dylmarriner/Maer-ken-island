@@ -73,3 +73,27 @@ Verification:
 - Workflow [#41957894866](https://github.com/dylmarriner/Maer-ken-island/actions/runs/41957894866) reached the formatter and failed only because rustfmt wanted the new test's `let session` assignment wrapped differently. Clippy and fast tests were skipped after the formatting failure; this is not a test failure.
 - Commit `0d5ef91eaa8a523e78bb651c0c6977df361c3480` applies the exact line layout printed by the CI formatter.
 - A fresh exact-head workflow is required for the formatter correction and this handoff update. No earlier CI result certifies the new head.
+
+
+## Follow-up: canonical replay-session identifiers
+
+The manager already rejected blank names and duplicate names. It still accepted identifiers with
+leading/trailing whitespace or embedded control characters, allowing visually ambiguous keys and
+awkward log/UI output.
+
+- Require names to be non-empty, already trimmed, and free of control characters.
+- Preserve ordinary internal spaces for readable names.
+- Add regressions proving invalid names leave the manager unchanged and valid internal spaces
+  remain supported.
+- This validation is local to the in-memory manager; it does not alter persisted replay formats,
+  command logs, canonical state hashes or simulation behavior.
+
+Commit:
+- `c5227e6f773ed5d7d35e9681ca54fb6360f68de0` — enforce canonical session-name validation and add regressions.
+
+Verification:
+- The prior successful exact-head run does not certify this new commit. A fresh exact-head CI run
+  must pass formatting, Clippy, fast tests, desktop/backend, dashboard, computer service,
+  repository scripts, dependency audit and both week/year reference-pack acceptance tests.
+- Local Cargo checks were not run because custom OpenCommander is currently returning HTTP 429.
+- Keep PR #82 draft until the new exact-head run passes and the current review feedback is resolved.
