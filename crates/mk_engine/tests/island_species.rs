@@ -431,7 +431,6 @@ fn marine_projection_rejects_affinity_changes_after_the_survey() {
     ));
 }
 
-
 #[test]
 fn marine_projection_rejects_abundance_changes_after_the_survey() {
     let b = base();
