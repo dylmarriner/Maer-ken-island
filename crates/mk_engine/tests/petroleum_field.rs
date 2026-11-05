@@ -265,3 +265,71 @@ fn a_field_drills_the_wells_its_rate_needs_and_counts_their_blowouts() {
     idle.produce_up_to(0.0, year_m3, m, &mut Ledger::new());
     assert_eq!((idle.wells, idle.blowouts), (0, 0));
 }
+
+#[test]
+fn negative_offtake_caps_are_rejected_without_mutating_field_or_ledger() {
+    let m = &base().model;
+    let mut field = fields().into_iter().next().unwrap();
+    let before = field.clone();
+    let mut ledger = Ledger::new();
+
+    for cap in [-1.0, f64::NEG_INFINITY] {
+        assert_eq!(
+            field.produce_up_to(1.0, cap, m, &mut ledger),
+            Default::default(),
+            "negative offtake cap {cap} must fail closed"
+        );
+    }
+
+    assert_eq!(field, before, "invalid caps must not mutate the field");
+    assert!(
+        ledger.entries().is_empty(),
+        "invalid caps must not book carbon"
+    );
+}
+
+#[test]
+fn finite_offtake_cap_is_never_exceeded_by_floating_point_rounding() {
+    let m = &base().model;
+    let mut field = fields()
+        .into_iter()
+        .find(|field| field.remaining_oil_m3() > 0.0)
+        .expect("the island should contain an oil-bearing field");
+    let remaining = field.remaining_oil_m3();
+    let share = 1.0 - (-m.decline_per_year).exp();
+    let potential = remaining * share;
+    assert!(potential.is_finite() && potential > 0.0);
+
+    // Select a deterministic cap for which the former scaled-share calculation
+    // rounded one ULP above the requested maximum.
+    let cap = (1..=4096)
+        .map(|step| potential * (step as f64 / 4097.0))
+        .find(|cap| remaining * (share * (*cap / potential)) > *cap)
+        .expect("the checked-in field should expose a floating-point cap boundary");
+
+    let production = field.produce_up_to(1.0, cap, m, &mut Ledger::new());
+    assert_eq!(production.oil_m3, cap);
+    assert!(production.oil_m3 <= cap);
+}
+
+#[test]
+fn positive_infinite_offtake_cap_matches_unbounded_production() {
+    let m = &base().model;
+    let mut unbounded = fields()
+        .into_iter()
+        .find(|field| field.remaining_oil_m3() > 0.0)
+        .expect("the island should contain an oil-bearing field");
+    let mut explicit = fields()
+        .into_iter()
+        .find(|field| field.remaining_oil_m3() > 0.0)
+        .expect("the island should contain an oil-bearing field");
+    let mut unbounded_ledger = Ledger::new();
+    let mut explicit_ledger = Ledger::new();
+
+    let expected = unbounded.produce(1.0, m, &mut unbounded_ledger);
+    let actual = explicit.produce_up_to(1.0, f64::INFINITY, m, &mut explicit_ledger);
+
+    assert_eq!(actual, expected);
+    assert_eq!(explicit, unbounded);
+    assert_eq!(explicit_ledger.entries(), unbounded_ledger.entries());
+}

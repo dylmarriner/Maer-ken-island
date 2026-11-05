@@ -59,3 +59,27 @@ No simulation, physics, replay, snapshot, real-world reference pack, owner-gover
 Run [#41878005820](https://github.com/dylmarriner/Maer-ken-island/actions/runs/41878005820) failed the initial `cargo fmt --all -- --check` step because the new `week_digest_documentation.rs` assertion expressions were not rustfmt-formatted. The failure occurred before Clippy, compilation or runtime tests; it provides no new digest/reference-pack result.
 
 The test source was reformatted to match the exact rustfmt diff from the workflow log. This is a formatting-only correction; the digest value and simulation behavior are unchanged. A fresh exact-head run must pass formatting, fast tests, the documentation-consistency test and both week/year reference acceptance tests before this PR can be considered verified.
+
+
+## Petroleum offtake-cap follow-up (2026-11-05)
+
+PR #87's exact-head run [#41990556526](https://github.com/dylmarriner/Maer-ken-island/actions/runs/41990556526)
+observed week digest `29ed53bd7769eb3025e70135bab8b7ea07718e26e7fca4cbf77ab379d62b7784`, while the previous canonical pin was
+`bc8706aca29525e6bd75d27d94678a56cbd97a717aa4553ac8a15a2a64c7a076`.
+
+The week test completed all assertions before the final digest comparison:
+27,597 closed ledger audits (167 hourly water audits), zero food or water
+shortfalls, 112 economy events, 200,000 patch trees, founder body-carbon
+checks, eating/drinking checks and temperate-forest NPP in the reference band.
+The independent year-weather reference-pack test passed. The only week failure
+was equality with the old digest.
+
+The movement is explained by PR #87's finite-offtake correction: when the cap
+binds, oil production is now exactly the requested cap and the gas-production
+share is derived from that exact capped amount. This intentionally changes the
+floating-point production state and therefore the week hash. It does not change
+the planetary topology pin, source reference packs or snapshot schema.
+
+The canonical week pin and all active documentation are updated to the observed
+digest. The corrected exact-head week/year acceptance must pass before PR #87
+can be merged.
