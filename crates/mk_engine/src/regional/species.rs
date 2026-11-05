@@ -215,6 +215,9 @@ pub struct MarineAquaticNode {
 /** A marine population-to-biomass projection must remain finite and physically valid. */
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MarineProjectionError {
+    InvalidCellIndex {
+        cell: usize,
+    },
     InvalidCellArea,
     InvalidSpeciesIndex {
         index: usize,
@@ -241,6 +244,9 @@ pub enum MarineProjectionError {
 impl std::fmt::Display for MarineProjectionError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::InvalidCellIndex { cell } => {
+                write!(f, "marine projection cell {cell} is outside the habitat grid")
+            }
             Self::InvalidCellArea => {
                 f.write_str("marine projection cell area must be finite and positive")
             }
@@ -590,7 +596,10 @@ impl IslandBiota {
         &self,
         cell: usize,
     ) -> Result<Vec<MarineAquaticNode>, MarineProjectionError> {
-        let mask = self.habitat.get(cell).copied().unwrap_or(0);
+        let mask = *self
+            .habitat
+            .get(cell)
+            .ok_or(MarineProjectionError::InvalidCellIndex { cell })?;
         if mask == 0 {
             return Ok(Vec::new());
         }
@@ -652,6 +661,11 @@ impl IslandBiota {
     /// fast if the upstream-derived projection is invalid; callers that need
     /// a recoverable error should use try_marine_aquatic_nodes.
     pub fn marine_aquatic_nodes(&self, cell: usize) -> Vec<MarineAquaticNode> {
+        // Preserve the legacy convenience API's out-of-range empty result.
+        // Callers that need a typed bounds error use try_marine_aquatic_nodes.
+        if cell >= self.habitat.len() {
+            return Vec::new();
+        }
         self.try_marine_aquatic_nodes(cell)
             .unwrap_or_else(|error| panic!("invalid marine aquatic projection: {error}"))
     }
@@ -754,6 +768,19 @@ mod tests {
             producer_weight: [0.0; 10],
             grazer_weight: [0.0; 10],
         }
+    }
+
+    #[test]
+    fn checked_marine_projection_rejects_out_of_range_cells() {
+        let biota = marine_biota(Vec::new(), Vec::new(), 1.0);
+
+        assert_eq!(
+            biota.try_marine_aquatic_nodes(1),
+            Err(MarineProjectionError::InvalidCellIndex { cell: 1 })
+        );
+        // Existing callers of the infallible compatibility method retain the
+        // previous empty result for an out-of-range cell.
+        assert!(biota.marine_aquatic_nodes(1).is_empty());
     }
 
     #[test]
