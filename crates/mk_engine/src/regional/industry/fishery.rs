@@ -651,9 +651,14 @@ mod tests {
             stock.biomass_t = k_t * peak_biomass_fraction;
 
             let msy = stock.msy_t(&model).expect("valid model has finite MSY");
+            let before_target_read = stock.clone();
             let target_biomass = stock
                 .msy_biomass_t(&model)
                 .expect("valid model has a finite peak biomass target");
+            assert_eq!(
+                stock, before_target_read,
+                "the MSY biomass diagnostic must not mutate stock state"
+            );
             let surplus = stock
                 .surplus_t_per_year(&model)
                 .expect("the analytic peak has finite surplus");
