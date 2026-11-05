@@ -545,7 +545,7 @@ mod tests {
     }
 
     #[test]
-    fn depensation_preserves_representable_surplus_when_biomass_capacity_ratio_underflows() {
+    fn depensation_preserves_representable_surplus_and_catch_when_biomass_ratio_underflows() {
         let mut model = FisheryModel::load_default().expect("the pack loads");
         model.r_per_year[Resilience::Medium as usize] = 1.0e308;
         model.depensation_below = 0.25;
