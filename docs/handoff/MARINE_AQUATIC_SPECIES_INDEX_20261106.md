@@ -31,3 +31,12 @@ Base: `main` at `7bc452d1b6bced84cdc6c8f1515b726a495456b4`.
 
 1. Verify the exact PR head on all required CI jobs.
 2. Merge only after review and all required checks pass.
+
+
+## Follow-up: fail-fast projection validation (2026-11-06)
+
+- Added a checked marine projection that validates cell area, cached species indices, non-negative finite upstream density, positive finite body mass, and finite individual/biomass products before returning nodes.
+- Kept the existing projection method as a compatibility wrapper that fails fast on invalid derived state; callers needing a recoverable response can use the checked method.
+- Added regressions for invalid density, invalid body mass, population overflow, biomass overflow, invalid cell area and stale derived indices.
+- The projection remains read-only and derived. No snapshot, event log, ledger, RNG stream, replay input/hash, or simulation state changes.
+- Exact-head CI is required; no local Cargo result is claimed because custom OpenCommander access is currently returning HTTP 429.
