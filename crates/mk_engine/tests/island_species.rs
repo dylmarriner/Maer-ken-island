@@ -501,6 +501,43 @@ fn marine_projection_indexes_species_that_become_eligible_after_catalogue_replac
 }
 
 #[test]
+fn replacing_species_catalogue_rejects_duplicate_ids_without_mutating_caches() {
+    let b = base();
+    let mut biota = b.biota.clone();
+    let original_ids: Vec<_> = biota.species().iter().map(|species| species.species_id).collect();
+    let marine_cell = biota
+        .habitat_cells(&TerrainAffinity::OpenOcean)
+        .next()
+        .expect("the island has open-ocean habitat");
+    let before_nodes = biota
+        .try_marine_aquatic_nodes(marine_cell)
+        .expect("the original marine projection is valid");
+
+    let mut replacement = biota.species().to_vec();
+    let duplicate_id = replacement[0].species_id;
+    replacement[1].species_id = duplicate_id;
+
+    assert_eq!(
+        biota.replace_species_catalogue(replacement),
+        Err(MarineProjectionError::DuplicateSpeciesId {
+            first_index: 0,
+            duplicate_index: 1,
+            species_id: duplicate_id,
+        })
+    );
+    assert_eq!(
+        biota.species().iter().map(|species| species.species_id).collect::<Vec<_>>(),
+        original_ids,
+        "a rejected duplicate-ID replacement must leave the original catalogue intact"
+    );
+    assert_eq!(
+        biota.try_marine_aquatic_nodes(marine_cell).unwrap(),
+        before_nodes,
+        "a rejected duplicate-ID replacement must leave the cached marine projection intact"
+    );
+}
+
+#[test]
 fn replacing_species_catalogue_rebuilds_grazer_weights() {
     let b = base();
     let mut biota = b.biota.clone();
