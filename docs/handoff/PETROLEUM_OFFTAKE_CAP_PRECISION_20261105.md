@@ -75,3 +75,12 @@ the new negative-cap regression. The exact formatter layout was applied in the
 follow-up commit. Clippy and fast tests were skipped by the formatting failure;
 the independent reference-pack, desktop and installed-backend jobs were still
 running at the time of this correction. A fresh exact-head run is required.
+
+
+## Test-fixture selection correction
+
+The island can contain gas-only petroleum fields. The finite-cap and unbounded-cap
+regressions now explicitly select an oil-bearing field rather than assuming the
+first surveyed field has oil. This keeps the cap-boundary assertion tied to a
+non-zero oil reserve and avoids making the test depend on deposit ordering.
+Commit: `402085e412f1f88095ea71baaa9620b8a7b3cb7d`.
