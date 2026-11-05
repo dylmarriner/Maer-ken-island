@@ -133,4 +133,5 @@ cargo run -p island -- serve --scenario fixtures/island/default_scenario.json   
 
 ## Latest engineering handoff
 
+- 2026-11-06: [Marine projection metadata guard](docs/handoff/MARINE_PROJECTION_METADATA_GUARD_20261106.md) records stale category/affinity detection and exact-head verification requirements.
 - 2026-11-05: [Replay session default execution budget](docs/handoff/REPLAY_SESSION_DEFAULT_BUDGET_20261105.md) records the bounded default and exact-head verification gate.
