@@ -30,7 +30,9 @@ snapshot schema or valid-input result is intentionally changed.
 ## Verification
 
 - Unit regressions are included in `crates/mk_engine/src/regional/industry/fishery.rs`.
-- Exact-head GitHub Actions must pass formatting, Clippy and the required fast suite.
+- First exact-head workflow `#41997469485` ran the formatter and identified two formatting-only differences. No Clippy or fast-test pass is claimed from that run.
+- Applied the exact rustfmt output in commit `27d865a97bd51a3ecf9d473a366df3a104697036`.
+- A fresh exact-head workflow is required for the corrected branch head.
 - Local Cargo checks were not run because the custom OpenCommander device session
   terminates before command execution.
 
