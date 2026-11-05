@@ -342,7 +342,9 @@ impl PetroleumField {
         model: &PetroleumModel,
         ledger: &mut Ledger,
     ) -> Production {
-        if dt_years.is_nan() || dt_years <= 0.0 {
+        // Infinite elapsed time would otherwise drain the entire remaining field in one step.
+        // NaN offtake is invalid too; it must not be interpreted as a zero production cap.
+        if !dt_years.is_finite() || dt_years <= 0.0 || max_oil_m3.is_nan() {
             return Production::default();
         }
         let mut share = 1.0 - (-model.decline_per_year * dt_years).exp();
@@ -396,6 +398,12 @@ impl PetroleumField {
     /// sum passes a whole number, so the count is deterministic and its
     /// long-run rate is the record's.
     pub fn drill_for(&mut self, bbl_per_day: f64, dt_years: f64, model: &PetroleumModel) {
+        // A zero-duration call may legitimately drill wells, but non-finite or negative
+        // rates/intervals must never poison the cumulative blowout expectation.
+        if !bbl_per_day.is_finite() || bbl_per_day < 0.0 || !dt_years.is_finite() || dt_years < 0.0
+        {
+            return;
+        }
         if model.well_bbl_per_day > 0.0 && bbl_per_day > 0.0 {
             let needed = (bbl_per_day / model.well_bbl_per_day).ceil() as u32;
             if needed > self.wells {

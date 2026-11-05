@@ -186,10 +186,44 @@ fn no_time_no_production() {
     let m = &base().model;
     let mut f = fields().into_iter().next().unwrap();
     let mut ledger = Ledger::new();
-    for dt in [0.0, -1.0, f64::NAN] {
+    for dt in [0.0, -1.0, f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
         assert_eq!(f.produce(dt, m, &mut ledger).oil_m3, 0.0);
     }
+    assert_eq!(
+        f.produce_up_to(1.0, f64::NAN, m, &mut ledger),
+        Default::default(),
+        "a NaN offtake cap must not be treated as a valid production request"
+    );
+    assert_eq!(f.produced_oil_m3, 0.0);
+    assert_eq!(f.produced_gas_gj, 0.0);
+    assert_eq!(f.produced_water_m3, 0.0);
     assert!(ledger.entries().is_empty());
+}
+
+#[test]
+fn drilling_rejects_nonfinite_or_negative_inputs_without_changing_well_state() {
+    let m = &base().model;
+    let mut field = fields().into_iter().next().unwrap();
+    // A valid zero-duration call may add wells without accruing a well-year hazard.
+    field.drill_for(29.0, 0.0, m);
+    assert_eq!(field.wells, 1);
+    let before = (field.wells, field.blowout_expectation, field.blowouts);
+
+    for (rate, dt) in [
+        (f64::INFINITY, 1.0),
+        (f64::NAN, 1.0),
+        (500.0, f64::INFINITY),
+        (500.0, f64::NEG_INFINITY),
+        (500.0, -1.0),
+        (-1.0, 1.0),
+    ] {
+        field.drill_for(rate, dt, m);
+        assert_eq!(
+            (field.wells, field.blowout_expectation, field.blowouts),
+            before,
+            "invalid drilling input ({rate}, {dt}) changed the field"
+        );
+    }
 }
 
 #[test]
