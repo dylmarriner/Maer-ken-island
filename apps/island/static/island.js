@@ -954,7 +954,7 @@ async function onMapClick(event) {
   try {
     const data = await getJson(`/api/cell/${row}/${col}`);
     const c = data.cell;
-    out.replaceChildren(
+    const details = [
       el("p", `Row ${c.row}, column ${c.col} — ${c.latitude.toFixed(4)}°, ${c.longitude.toFixed(4)}°`, { class: "cell-where" }),
       el(
         "p",
@@ -963,7 +963,25 @@ async function onMapClick(event) {
           : `Sea, ${(-c.elevation_m).toFixed(0)} m deep. Nobody can be created here and nothing can be built.`,
         { class: "cell-what" },
       ),
-    );
+    ];
+    const marineProjectionAvailable =
+      Number.isSafeInteger(c.marine_aquatic_species) &&
+      Number.isFinite(c.marine_aquatic_individuals) &&
+      Number.isFinite(c.marine_aquatic_biomass_t);
+    if (marineProjectionAvailable) {
+      details.push(
+        el(
+          "p",
+          `${c.marine_aquatic_species.toLocaleString()} marine aquatic species; ` +
+            `${c.marine_aquatic_individuals.toLocaleString(undefined, { maximumSignificantDigits: 4 })} ` +
+            `upstream-derived individuals; ` +
+            `${c.marine_aquatic_biomass_t.toLocaleString(undefined, { maximumSignificantDigits: 4 })} t live biomass. ` +
+            "Uncalibrated upstream estimate; not harvestable stock or catch.",
+          { class: "cell-marine" },
+        ),
+      );
+    }
+    out.replaceChildren(...details);
     // The point of clicking. Before this the intervention form offered
     // exactly one place -- the estate -- so the whole rest of the island
     // was unreachable from the page. A clicked cell becomes a place, and
