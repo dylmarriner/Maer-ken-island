@@ -30,6 +30,7 @@ session listings needlessly non-deterministic.
 
 - `edffa9a3300e3843ceca28bb1d8e5ba322b9720a` — deterministic session-name ordering.
 - `873d93f2ead41e77f13858f775b40862e6ddc8c5` — reject duplicate session names without replacing replay progress.
+- `c70de1d648fa8424f596cd52cb4d803bde7a2fa3` — apply the exact rustfmt output required by the first exact-head run.
 - `59981d8741211181c77d1ff543f9fc573116fa73` — regression test.
 - `5e9419b3c720ca2ada29c72754d237d30acc3e5d` — apply exact rustfmt output from the first CI run.
 - `639b87a2e4175cad1a96a818a4cd9f71d8ccb915` — update work ledger with PR #81 evidence.
@@ -42,7 +43,9 @@ session listings needlessly non-deterministic.
 - Passed: formatting, Clippy, fast Rust tests, both week/year reference-pack acceptance tests, desktop/render, installed backend, dashboard, computer service, repository scripts and dependency audit.
 - The nightly slow-test job was skipped by design; the required path-scoped week/year acceptance job ran and passed both tests.
 - The review follow-up documents the stable-order API contract and the regression test, and corrects the merge gate requested in review.
-- The duplicate-name source/test commit `873d93f2ead41e77f13858f775b40862e6ddc8c5` requires a fresh exact-head workflow. Earlier runs do **not** certify this SHA. Do not merge until all required jobs, including week/year acceptance, pass on the final current PR head.
+- Exact-head workflow [#41953353236](https://github.com/dylmarriner/Maer-ken-island/actions/runs/41953353236) failed at `cargo fmt --all -- --check`; the log identified formatting-only differences in the new regression. The exact formatter output was applied in `c70de1d648fa8424f596cd52cb4d803bde7a2fa3`.
+- The first run's computer service, dependency audit, repository scripts and web dashboard passed; desktop, installed backend and week/year acceptance were still running when the formatting failure was recorded. None of those results certifies the corrected head.
+- A fresh exact-head workflow is required for `c70de1d648fa8424f596cd52cb4d803bde7a2fa3` and the subsequent handoff commit. Earlier green runs do **not** certify it. Do not merge until all required jobs, including week/year acceptance, pass on the final current PR head.
 - Local Cargo checks were not run because the custom OpenCommander session is terminating; no local pass is claimed.
 - No simulation constants, canonical digests, snapshots, append-only logs, LLM behavior or live systems changed.
 
