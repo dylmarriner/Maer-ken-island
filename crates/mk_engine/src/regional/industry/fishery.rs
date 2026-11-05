@@ -2,10 +2,10 @@
 //!
 //! The stock grows by the Schaefer surplus-production model as Froese et
 //! al. (2017) write it: next year's biomass is this year's plus
-//! `r (1 - B/k) B` less the catch, and below a quarter of `k` the surplus
-//! falls off linearly (`× 4 B/k`), as recruitment fails. `r` is the middle
+//! `r (1 - B/k) B` less the catch. Below the configured depensation threshold
+//! `d k`, surplus is scaled by `B/(d k)` as recruitment fails. `r` is the middle
 //! of the paper's prior range for the species' FishBase resilience class;
-//! the most a stock can give year on year is `MSY = r k / 4`, at `B = k/2`.
+//! the maximum is the analytic piecewise MSY; with the default depensation threshold (0.25), it is `r k / 4` at `B = k/2`.
 //!
 //! The fishery never takes more than the stock grows: its catch is capped
 //! at the surplus of the moment, so harvest never exceeds regrowth.
@@ -195,6 +195,19 @@ impl<'de> Deserialize<'de> for FishStock {
     }
 }
 
+fn msy_peak_fractions(depensation_below: f64) -> (f64, f64) {
+    if depensation_below <= 0.5 {
+        (0.5, 0.25)
+    } else if depensation_below <= 2.0 / 3.0 {
+        (
+            depensation_below,
+            depensation_below * (1.0 - depensation_below),
+        )
+    } else {
+        (2.0 / 3.0, 4.0 / (27.0 * depensation_below))
+    }
+}
+
 impl FishStock {
     /// An unfished stock, at `k`. Invalid capacities are rejected at construction.
     pub fn unexploited(resilience: Resilience, k_t: f64) -> Result<Self, FisheryError> {
@@ -277,19 +290,30 @@ impl FishStock {
         }
         self.validate_state()?;
 
-        let d = model.depensation_below;
-        let peak_fraction = if d <= 0.5 {
-            0.25
-        } else if d <= 2.0 / 3.0 {
-            d * (1.0 - d)
-        } else {
-            4.0 / (27.0 * d)
-        };
-        let msy = model.r(self.resilience) * (self.k_t * peak_fraction);
+        let (_, peak_surplus_fraction) = msy_peak_fractions(model.depensation_below);
+        let msy = model.r(self.resilience) * (self.k_t * peak_surplus_fraction);
         if !msy.is_finite() || msy < 0.0 {
             return Err(FisheryError::NonFiniteGrowth);
         }
         Ok(msy)
+    }
+
+    /// Biomass at which the stock produces its maximum sustainable surplus (tonnes).
+    ///
+    /// This is a diagnostic target for a future harvest decision layer. It does not
+    /// change the stock or imply that a real-world species has been calibrated.
+    pub fn msy_biomass_t(&self, model: &FisheryModel) -> Result<f64, FisheryError> {
+        if !model.is_valid() {
+            return Err(FisheryError::InvalidModel);
+        }
+        self.validate_state()?;
+
+        let (peak_biomass_fraction, _) = msy_peak_fractions(model.depensation_below);
+        let biomass = self.k_t * peak_biomass_fraction;
+        if !biomass.is_finite() || biomass < 0.0 {
+            return Err(FisheryError::NonFiniteGrowth);
+        }
+        Ok(biomass)
     }
 
     /// Step `dt_s`, fishing for `wanted_t` over the step.
@@ -512,6 +536,10 @@ mod tests {
             Err(FisheryError::InvalidModel)
         );
         assert_eq!(stock.msy_t(&invalid_model), Err(FisheryError::InvalidModel));
+        assert_eq!(
+            stock.msy_biomass_t(&invalid_model),
+            Err(FisheryError::InvalidModel)
+        );
 
         let mut invalid_capacity = stock.clone();
         invalid_capacity.k_t = f64::INFINITY;
@@ -523,6 +551,10 @@ mod tests {
             invalid_capacity.msy_t(&m),
             Err(FisheryError::InvalidCarryingCapacity)
         );
+        assert_eq!(
+            invalid_capacity.msy_biomass_t(&m),
+            Err(FisheryError::InvalidCarryingCapacity)
+        );
 
         let mut invalid_biomass = stock;
         invalid_biomass.biomass_t = f64::NAN;
@@ -532,6 +564,10 @@ mod tests {
         );
         assert_eq!(
             invalid_biomass.msy_t(&m),
+            Err(FisheryError::InvalidStockState)
+        );
+        assert_eq!(
+            invalid_biomass.msy_biomass_t(&m),
             Err(FisheryError::InvalidStockState)
         );
     }
@@ -592,6 +628,7 @@ mod tests {
             .expect("finite positive carrying capacity");
 
         assert_eq!(stock.msy_t(&model), Ok(f64::MAX * 0.5));
+        assert_eq!(stock.msy_biomass_t(&model), Ok(f64::MAX * 0.25));
     }
 
     #[test]
@@ -602,7 +639,9 @@ mod tests {
 
         for (threshold, peak_biomass_fraction, expected_peak_fraction) in [
             (0.25, 0.5, 0.25),
+            (0.5, 0.5, 0.25),
             (0.6, 0.6, 0.24),
+            (2.0 / 3.0, 2.0 / 3.0, 2.0 / 9.0),
             (0.75, 2.0 / 3.0, 4.0 / (27.0 * 0.75)),
             (1.0, 2.0 / 3.0, 4.0 / 27.0),
         ] {
@@ -612,12 +651,25 @@ mod tests {
             stock.biomass_t = k_t * peak_biomass_fraction;
 
             let msy = stock.msy_t(&model).expect("valid model has finite MSY");
+            let before_target_read = stock.clone();
+            let target_biomass = stock
+                .msy_biomass_t(&model)
+                .expect("valid model has a finite peak biomass target");
+            assert_eq!(
+                stock, before_target_read,
+                "the MSY biomass diagnostic must not mutate stock state"
+            );
             let surplus = stock
                 .surplus_t_per_year(&model)
                 .expect("the analytic peak has finite surplus");
+            let expected_target_biomass = k_t * peak_biomass_fraction;
             let expected = k_t * expected_peak_fraction;
             let tolerance = expected.max(1.0) * 1e-12;
 
+            assert!(
+                (target_biomass - expected_target_biomass).abs() <= tolerance,
+                "threshold {threshold}: target biomass {target_biomass} vs {expected_target_biomass}"
+            );
             assert!(
                 (msy - expected).abs() <= tolerance,
                 "threshold {threshold}: {msy} vs {expected}"
