@@ -124,9 +124,14 @@ the log's last water is booked to the air at that moment rather than when the wo
 
 Done 2026-10-14 (`regional/species.rs`, D55): upstream's founding species placed on the island's
 habitats, plants and grazers as shares of the island's carbon fields, other guilds at upstream's
-density times the island's habitat area. **Left:** Earth-calibrated densities and a carbon pool
-for each consumer guild (realism R8, R10); serving the species to the map and the cell inspector;
-animal and fish resource nodes (done 2026-10-23, §2b).
+density times the island's habitat area. The catalogue is private; callers read through
+`species()` and replace through `replace_species_catalogue`, which rebuilds marine membership
+and producer/grazer weights atomically. Survey and replacement reject duplicate species IDs.
+The checked marine projection rejects invalid cell indices/area, stale identity or metadata,
+invalid abundance, non-finite density/body mass and non-finite population/biomass conversions.
+**Left:** Earth-calibrated densities and a carbon pool for each consumer guild (realism R8, R10);
+serving the species to the map and the cell inspector; animal and fish resource nodes (done
+2026-10-23, §2b).
 
 ### 2b. Phase 3 Task 2: every resource and material
 
