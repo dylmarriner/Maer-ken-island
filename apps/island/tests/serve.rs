@@ -1283,6 +1283,45 @@ async fn a_sea_cell_reports_the_upstream_marine_biomass_projection() {
 }
 
 #[tokio::test]
+async fn marine_cell_inspection_does_not_change_the_island_digest() {
+    let (world, port, server) = a_running_dashboard().await;
+    world.set_paused(true);
+    // Let any step already in flight finish before taking the baseline.
+    tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+
+    let (status, response) = get(port, "/api/world").await;
+    assert_eq!(status, 200, "{response}");
+    let before: serde_json::Value = serde_json::from_str(body_of(&response)).unwrap();
+    let before_digest = before["digest"]["value"]
+        .as_str()
+        .expect("a canonical digest")
+        .to_string();
+    let before_tick = before["digest"]["at_tick"]
+        .as_u64()
+        .expect("the digest tick");
+
+    let (status, response) = get(port, "/api/cell/0/0").await;
+    assert_eq!(status, 200, "{response}");
+
+    let (status, response) = get(port, "/api/world").await;
+    assert_eq!(status, 200, "{response}");
+    let after: serde_json::Value = serde_json::from_str(body_of(&response)).unwrap();
+    assert_eq!(
+        after["digest"]["value"].as_str(),
+        Some(before_digest.as_str()),
+        "reading the derived marine projection must not mutate canonical state"
+    );
+    assert_eq!(
+        after["digest"]["at_tick"].as_u64(),
+        Some(before_tick),
+        "a read-only cell query must not advance the simulation"
+    );
+
+    server.abort();
+    world.stop();
+}
+
+#[tokio::test]
 async fn the_islands_individual_trees_can_be_asked_for_by_the_box() {
     let port = a_shared_dashboard();
 
