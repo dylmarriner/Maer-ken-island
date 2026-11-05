@@ -387,6 +387,19 @@ mod tests {
                 "invalid stock snapshot must fail to deserialize"
             );
         }
+
+        // Binary snapshots can encode non-finite floats even though JSON cannot.
+        let invalid = FishStock {
+            resilience: Resilience::Medium,
+            k_t: f64::INFINITY,
+            biomass_t: 0.0,
+            landed_t: 0.0,
+        };
+        let binary = bincode::serialize(&invalid).expect("invalid fixture serializes");
+        assert!(
+            bincode::deserialize::<FishStock>(&binary).is_err(),
+            "non-finite binary stock snapshot must fail to deserialize"
+        );
     }
 
     #[test]
