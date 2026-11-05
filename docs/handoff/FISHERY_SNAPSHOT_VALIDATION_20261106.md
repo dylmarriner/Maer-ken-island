@@ -58,3 +58,10 @@ No fishery constants, reference data, event logs, replay hashes, snapshot field 
 - Added a bincode fixture containing positive-infinite carrying capacity and asserted that custom deserialization rejects it. JSON cannot represent NaN/infinity, so the earlier JSON cases alone did not prove the binary snapshot boundary.
 - Test commit: `ee24cd0b069525da79f4c65ae17ef94f42d54f97`.
 - The new exact-head run must include this commit; the previous #90 run predates it.
+
+
+## Exact-head rustfmt correction (2026-11-06)
+
+- Workflow [#42022708165](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42022708165) checked out the correct PR #90 merge ref and found one formatter-only line-wrap mismatch in the JSON round-trip assertion. Clippy and fast tests were skipped by the format gate.
+- Applied the exact one-line rustfmt output in commit `09846ca352e24b65751d7b89814c1752cab3e7eb`.
+- The failed run is not a pass. A fresh exact-head workflow is required for this corrected head, including the binary non-finite regression.
