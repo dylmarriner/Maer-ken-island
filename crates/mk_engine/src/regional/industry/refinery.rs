@@ -304,16 +304,25 @@ mod tests {
 
     #[test]
     fn cut_labels_give_their_end_temperatures() {
-        assert_eq!(cut_end_c("IBP-C4 (C1-C4 gases incl. LPG range)").unwrap(), None);
+        assert_eq!(
+            cut_end_c("IBP-C4 (C1-C4 gases incl. LPG range)").unwrap(),
+            None
+        );
         assert_eq!(cut_end_c("C5-65 C (light naphtha)").unwrap(), Some(65.0));
         assert_eq!(cut_end_c("150-200 C").unwrap(), Some(200.0));
-        assert_eq!(cut_end_c("370 C-FBP (residue)").unwrap(), Some(f64::INFINITY));
+        assert_eq!(
+            cut_end_c("370 C-FBP (residue)").unwrap(),
+            Some(f64::INFINITY)
+        );
     }
 
     #[test]
     fn unknown_or_malformed_cut_labels_are_rejected() {
         for label in ["IBP-C5", "mystery cut", "100-50 C", "not-a-number C-FBP"] {
-            assert!(cut_end_c(label).is_err(), "accepted invalid cut label {label:?}");
+            assert!(
+                cut_end_c(label).is_err(),
+                "accepted invalid cut label {label:?}"
+            );
         }
     }
 }
