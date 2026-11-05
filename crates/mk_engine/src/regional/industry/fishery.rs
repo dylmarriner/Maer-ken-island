@@ -161,13 +161,38 @@ impl FisheryModel {
 }
 
 /// One stock and what has been landed from it.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct FishStock {
     pub resilience: Resilience,
     /// Unexploited biomass (t).
     pub k_t: f64,
     pub biomass_t: f64,
     pub landed_t: f64,
+}
+
+#[derive(Deserialize)]
+struct FishStockSnapshot {
+    resilience: Resilience,
+    k_t: f64,
+    biomass_t: f64,
+    landed_t: f64,
+}
+
+impl<'de> Deserialize<'de> for FishStock {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let snapshot = FishStockSnapshot::deserialize(deserializer)?;
+        let stock = Self {
+            resilience: snapshot.resilience,
+            k_t: snapshot.k_t,
+            biomass_t: snapshot.biomass_t,
+            landed_t: snapshot.landed_t,
+        };
+        stock.validate_state().map_err(serde::de::Error::custom)?;
+        Ok(stock)
+    }
 }
 
 impl FishStock {
@@ -303,6 +328,86 @@ impl FishStock {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fish_stock_snapshots_round_trip_without_changing_json_or_binary_layout() {
+        let mut stock = FishStock::unexploited(Resilience::Medium, 1_000.0)
+            .expect("positive carrying capacity");
+        stock.biomass_t = 420.0;
+        stock.landed_t = 17.0;
+
+        let json = serde_json::to_value(&stock).expect("stock serializes");
+        assert_eq!(
+            json,
+            serde_json::json!({
+                "resilience": "Medium",
+                "k_t": 1_000.0,
+                "biomass_t": 420.0,
+                "landed_t": 17.0
+            })
+        );
+        let restored: FishStock = serde_json::from_value(json).expect("valid JSON stock restores");
+        assert_eq!(restored, stock);
+
+        let binary = bincode::serialize(&stock).expect("stock serializes to bincode");
+        let restored: FishStock =
+            bincode::deserialize(&binary).expect("valid binary stock restores");
+        assert_eq!(restored, stock);
+    }
+
+    #[test]
+    fn fish_stock_deserialization_rejects_invalid_physical_state() {
+        for value in [
+            serde_json::json!({
+                "resilience": "Medium",
+                "k_t": 0.0,
+                "biomass_t": 0.0,
+                "landed_t": 0.0
+            }),
+            serde_json::json!({
+                "resilience": "Medium",
+                "k_t": -1.0,
+                "biomass_t": 0.0,
+                "landed_t": 0.0
+            }),
+            serde_json::json!({
+                "resilience": "Medium",
+                "k_t": 100.0,
+                "biomass_t": 101.0,
+                "landed_t": 0.0
+            }),
+            serde_json::json!({
+                "resilience": "Medium",
+                "k_t": 100.0,
+                "biomass_t": -1.0,
+                "landed_t": 0.0
+            }),
+            serde_json::json!({
+                "resilience": "Medium",
+                "k_t": 100.0,
+                "biomass_t": 50.0,
+                "landed_t": -1.0
+            }),
+        ] {
+            assert!(
+                serde_json::from_value::<FishStock>(value).is_err(),
+                "invalid stock snapshot must fail to deserialize"
+            );
+        }
+
+        // Binary snapshots can encode non-finite floats even though JSON cannot.
+        let invalid = FishStock {
+            resilience: Resilience::Medium,
+            k_t: f64::INFINITY,
+            biomass_t: 0.0,
+            landed_t: 0.0,
+        };
+        let binary = bincode::serialize(&invalid).expect("invalid fixture serializes");
+        assert!(
+            bincode::deserialize::<FishStock>(&binary).is_err(),
+            "non-finite binary stock snapshot must fail to deserialize"
+        );
+    }
 
     #[test]
     fn invalid_carrying_capacity_is_rejected_at_stock_construction() {
