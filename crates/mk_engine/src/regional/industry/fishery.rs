@@ -21,6 +21,20 @@ use crate::validation::{ReferenceDomain, ReferenceLibrary};
 
 const YEAR_S: f64 = 365.25 * 86_400.0;
 
+/// Midpoint of a published growth-rate prior after validating both source bounds.
+/// Subtracting first avoids overflowing an otherwise representable midpoint.
+fn checked_rate_midpoint(min: f64, max: f64) -> Option<f64> {
+    if !min.is_finite() || !max.is_finite() || min < 0.0 || max < min {
+        return None;
+    }
+    let midpoint = min + (max - min) * 0.5;
+    if midpoint.is_finite() {
+        Some(midpoint)
+    } else {
+        None
+    }
+}
+
 /// FishBase's resilience classes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Resilience {
@@ -70,7 +84,14 @@ impl FisheryModel {
                     .get(class.label(), col)
                     .ok_or_else(|| MissingReference(format!("{R}/{}", class.label())))
             };
-            *slot = 0.5 * (get("r_min")? + get("r_max")?);
+            let r_min = get("r_min")?;
+            let r_max = get("r_max")?;
+            *slot = checked_rate_midpoint(r_min, r_max).ok_or_else(|| {
+                MissingReference(format!(
+                    "{R}/{} has invalid growth-rate bounds",
+                    class.label()
+                ))
+            })?;
         }
         const D: &str = "schaefer_depensation_threshold_of_k";
         let depensation_below = library
@@ -195,6 +216,28 @@ impl FishStock {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn growth_rate_prior_bounds_must_be_finite_nonnegative_and_ordered() {
+        for (min, max) in [
+            (-0.01, 1.0),
+            (0.5, 0.4),
+            (f64::NAN, 1.0),
+            (0.0, f64::INFINITY),
+            (f64::NEG_INFINITY, 0.5),
+        ] {
+            assert_eq!(checked_rate_midpoint(min, max), None);
+        }
+    }
+
+    #[test]
+    fn growth_rate_prior_midpoint_avoids_intermediate_overflow() {
+        let midpoint = checked_rate_midpoint(f64::MAX * 0.5, f64::MAX).unwrap();
+        assert!(midpoint.is_finite());
+        assert!(midpoint >= f64::MAX * 0.5);
+        assert!(midpoint <= f64::MAX);
+        assert!((checked_rate_midpoint(0.6, 1.5).unwrap() - 1.05).abs() < 1e-12);
+    }
 
     #[test]
     fn the_growth_rates_are_the_middle_of_froese_s_priors() {
