@@ -227,6 +227,11 @@ pub enum MarineProjectionError {
         expected_species_id: u64,
         actual_species_id: u64,
     },
+    /// The cached marine index no longer matches this species' surveyed category or affinity.
+    StaleSpeciesMetadata {
+        index: usize,
+        species_id: u64,
+    },
     InvalidDensity {
         species_id: u64,
     },
@@ -261,6 +266,10 @@ impl std::fmt::Display for MarineProjectionError {
             } => write!(
                 f,
                 "marine projection index {index} expected species {expected_species_id} but found {actual_species_id}"
+            ),
+            Self::StaleSpeciesMetadata { index, species_id } => write!(
+                f,
+                "marine projection index {index} for species {species_id} no longer matches its surveyed aquatic metadata"
             ),
             Self::InvalidDensity { species_id } => write!(
                 f,
@@ -310,10 +319,11 @@ fn abundance_of(category: &SpeciesCategory) -> Abundance {
 /// IslandBiota exposes its species catalogue for read access, so this guard
 /// prevents a later reorder through a mutable owner from silently aliasing a
 /// different species at the same vector index.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct MarineAquaticSpeciesIndex {
     index: usize,
     species_id: u64,
+    affinity: TerrainAffinity,
 }
 
 /// Species eligible for the read-only marine biomass projection. Keeping this
@@ -333,6 +343,7 @@ fn marine_aquatic_species_indices(species: &[IslandSpecies]) -> Vec<MarineAquati
         .map(|(index, s)| MarineAquaticSpeciesIndex {
             index,
             species_id: s.species_id,
+            affinity: s.affinity.clone(),
         })
         .collect()
 }
@@ -619,6 +630,15 @@ impl IslandBiota {
                     index: species,
                     expected_species_id: indexed.species_id,
                     actual_species_id: s.species_id,
+                });
+            }
+            // The species vector is public. Reordering is caught by species_id;
+            // changing category or affinity must also invalidate the derived
+            // habitat index rather than silently omitting or misclassifying stock.
+            if s.category != SpeciesCategory::Aquatic || s.affinity != indexed.affinity {
+                return Err(MarineProjectionError::StaleSpeciesMetadata {
+                    index: species,
+                    species_id: s.species_id,
                 });
             }
             if mask & bit(&s.affinity) == 0 {
