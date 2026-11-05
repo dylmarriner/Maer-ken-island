@@ -235,11 +235,15 @@ impl FishStock {
         self.validate_state()?;
 
         let p = self.biomass_t / self.k_t;
-        let surplus = model.r(self.resilience) * (1.0 - p) * self.biomass_t;
+        let rate = model.r(self.resilience);
+        // Apply the low-biomass depensation factor before multiplying by the
+        // growth rate. The old order could overflow at rate * biomass even
+        // when the final depensated surplus was representable.
         let surplus = if p < model.depensation_below {
-            surplus * p / model.depensation_below
+            let biomass_factor = (1.0 - p) * (p / model.depensation_below);
+            rate * (self.biomass_t * biomass_factor)
         } else {
-            surplus
+            rate * (1.0 - p) * self.biomass_t
         };
         if !surplus.is_finite() || surplus < 0.0 {
             return Err(FisheryError::NonFiniteGrowth);
@@ -498,6 +502,27 @@ mod tests {
             invalid_biomass.msy_t(&m),
             Err(FisheryError::InvalidStockState)
         );
+    }
+
+    #[test]
+    fn depensation_is_applied_before_large_growth_products_can_overflow() {
+        let mut model = FisheryModel::load_default().expect("the pack loads");
+        model.r_per_year[Resilience::Medium as usize] = 1.0e154;
+        model.depensation_below = 0.25;
+
+        let mut stock = FishStock::unexploited(Resilience::Medium, 1.0e157)
+            .expect("finite positive carrying capacity");
+        stock.biomass_t = 1.0e155;
+
+        // The unscaled intermediate r * (1 - B/k) * B exceeds f64::MAX,
+        // but the low-biomass depensation factor makes the final surplus
+        // approximately 3.96e307, which is representable.
+        let surplus = stock
+            .surplus_t_per_year(&model)
+            .expect("finite depensated surplus");
+
+        assert!(surplus.is_finite());
+        assert!((surplus / 3.96e307 - 1.0).abs() < 1e-12);
     }
 
     #[test]
