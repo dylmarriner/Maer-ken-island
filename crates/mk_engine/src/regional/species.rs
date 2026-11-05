@@ -217,6 +217,11 @@ pub struct MarineAquaticNode {
 pub enum MarineProjectionError {
     InvalidCellArea,
     InvalidSpeciesIndex { index: usize },
+    StaleSpeciesIndex {
+        index: usize,
+        expected_species_id: u64,
+        actual_species_id: u64,
+    },
     InvalidDensity { species_id: u64 },
     InvalidBodyMass { species_id: u64 },
     NonFiniteIndividuals { species_id: u64 },
@@ -232,6 +237,14 @@ impl std::fmt::Display for MarineProjectionError {
             Self::InvalidSpeciesIndex { index } => write!(
                 f,
                 "marine projection index {index} is outside the species catalogue"
+            ),
+            Self::StaleSpeciesIndex {
+                index,
+                expected_species_id,
+                actual_species_id,
+            } => write!(
+                f,
+                "marine projection index {index} expected species {expected_species_id} but found {actual_species_id}"
             ),
             Self::InvalidDensity { species_id } => write!(
                 f,
@@ -258,7 +271,7 @@ pub struct IslandBiota {
     pub species: Vec<IslandSpecies>,
     /// Stable indices of OpenOcean/ReefSea aquatic species, built once at survey
     /// so a cell lookup does not rescan every founding species.
-    marine_aquatic_species: Vec<usize>,
+    marine_aquatic_species: Vec<MarineAquaticSpeciesIndex>,
     /// Per medium cell, a bit per [`AFFINITIES`] entry it is habitat for.
     habitat: Vec<u16>,
     cell_area_m2: f64,
@@ -277,10 +290,22 @@ fn abundance_of(category: &SpeciesCategory) -> Abundance {
     }
 }
 
-/// Species indices eligible for the read-only marine biomass projection.
-/// Keeping this stable, species-order index avoids scanning all founding
-/// species for every single-cell dashboard request.
-fn marine_aquatic_species_indices(species: &[IslandSpecies]) -> Vec<usize> {
+/// A cached species index carries its identity as well as its position.
+/// IslandBiota exposes its species catalogue for read access, so this guard
+/// prevents a later reorder through a mutable owner from silently aliasing a
+/// different species at the same vector index.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct MarineAquaticSpeciesIndex {
+    index: usize,
+    species_id: u64,
+}
+
+/// Species eligible for the read-only marine biomass projection. Keeping this
+/// stable, identity-checked index avoids scanning all founding species for every
+/// single-cell dashboard request.
+fn marine_aquatic_species_indices(
+    species: &[IslandSpecies],
+) -> Vec<MarineAquaticSpeciesIndex> {
     species
         .iter()
         .enumerate()
@@ -291,7 +316,10 @@ fn marine_aquatic_species_indices(species: &[IslandSpecies]) -> Vec<usize> {
                     TerrainAffinity::OpenOcean | TerrainAffinity::ReefSea
                 )
         })
-        .map(|(index, _)| index)
+        .map(|(index, s)| MarineAquaticSpeciesIndex {
+            index,
+            species_id: s.species_id,
+        })
         .collect()
 }
 
@@ -563,11 +591,19 @@ impl IslandBiota {
         }
 
         let mut nodes = Vec::with_capacity(self.marine_aquatic_species.len());
-        for &species in &self.marine_aquatic_species {
+        for indexed in &self.marine_aquatic_species {
+            let species = indexed.index;
             let s = self
                 .species
                 .get(species)
                 .ok_or(MarineProjectionError::InvalidSpeciesIndex { index: species })?;
+            if s.species_id != indexed.species_id {
+                return Err(MarineProjectionError::StaleSpeciesIndex {
+                    index: species,
+                    expected_species_id: indexed.species_id,
+                    actual_species_id: s.species_id,
+                });
+            }
             if mask & bit(&s.affinity) == 0 {
                 continue;
             }
@@ -699,7 +735,7 @@ mod tests {
     }
     fn marine_biota(
         species: Vec<IslandSpecies>,
-        marine_aquatic_species: Vec<usize>,
+        marine_aquatic_species: Vec<MarineAquaticSpeciesIndex>,
         cell_area_m2: f64,
     ) -> IslandBiota {
         IslandBiota {
@@ -716,7 +752,7 @@ mod tests {
     fn marine_projection_rejects_invalid_density_and_body_mass() {
         let mut invalid_density = species(11, SpeciesCategory::Aquatic, TerrainAffinity::OpenOcean);
         invalid_density.upstream_density_per_m2 = f64::INFINITY;
-        let biota = marine_biota(vec![invalid_density], vec![0], 1.0);
+        let biota = marine_biota(vec![invalid_density], vec![MarineAquaticSpeciesIndex { index: 0, species_id: 11 }], 1.0);
         assert_eq!(
             biota.try_marine_aquatic_nodes(0),
             Err(MarineProjectionError::InvalidDensity { species_id: 11 })
@@ -724,7 +760,7 @@ mod tests {
 
         let mut invalid_mass = species(12, SpeciesCategory::Aquatic, TerrainAffinity::OpenOcean);
         invalid_mass.body_mass_kg = f64::NAN;
-        let biota = marine_biota(vec![invalid_mass], vec![0], 1.0);
+        let biota = marine_biota(vec![invalid_mass], vec![MarineAquaticSpeciesIndex { index: 0, species_id: 12 }], 1.0);
         assert_eq!(
             biota.try_marine_aquatic_nodes(0),
             Err(MarineProjectionError::InvalidBodyMass { species_id: 12 })
@@ -736,7 +772,7 @@ mod tests {
         let mut invalid_population =
             species(21, SpeciesCategory::Aquatic, TerrainAffinity::OpenOcean);
         invalid_population.upstream_density_per_m2 = f64::MAX;
-        let biota = marine_biota(vec![invalid_population], vec![0], 2.0);
+        let biota = marine_biota(vec![invalid_population], vec![MarineAquaticSpeciesIndex { index: 0, species_id: 21 }], 2.0);
         assert_eq!(
             biota.try_marine_aquatic_nodes(0),
             Err(MarineProjectionError::NonFiniteIndividuals { species_id: 21 })
@@ -745,7 +781,7 @@ mod tests {
         let mut invalid_biomass = species(22, SpeciesCategory::Aquatic, TerrainAffinity::OpenOcean);
         invalid_biomass.upstream_density_per_m2 = 1.0e200;
         invalid_biomass.body_mass_kg = 1.0e200;
-        let biota = marine_biota(vec![invalid_biomass], vec![0], 1.0);
+        let biota = marine_biota(vec![invalid_biomass], vec![MarineAquaticSpeciesIndex { index: 0, species_id: 22 }], 1.0);
         assert_eq!(
             biota.try_marine_aquatic_nodes(0),
             Err(MarineProjectionError::NonFiniteBiomass { species_id: 22 })
@@ -753,15 +789,49 @@ mod tests {
     }
 
     #[test]
+    fn marine_projection_rejects_cached_indices_that_alias_after_species_reordering() {
+        let first = species(41, SpeciesCategory::Aquatic, TerrainAffinity::OpenOcean);
+        let second = species(42, SpeciesCategory::Aquatic, TerrainAffinity::OpenOcean);
+        let mut biota = marine_biota(
+            vec![first, second],
+            vec![MarineAquaticSpeciesIndex {
+                index: 0,
+                species_id: 41,
+            }],
+            1.0,
+        );
+
+        // The catalogue is publicly mutable; a cached index must not silently
+        // become a projection of a different species after a reorder.
+        biota.species.swap(0, 1);
+        assert_eq!(
+            biota.try_marine_aquatic_nodes(0),
+            Err(MarineProjectionError::StaleSpeciesIndex {
+                index: 0,
+                expected_species_id: 41,
+                actual_species_id: 42,
+            })
+        );
+    }
+
+    #[test]
     fn marine_projection_rejects_invalid_cell_area_and_stale_species_indices() {
         let valid = species(31, SpeciesCategory::Aquatic, TerrainAffinity::OpenOcean);
-        let biota = marine_biota(vec![valid.clone()], vec![0], 0.0);
+        let biota = marine_biota(
+            vec![valid.clone()],
+            vec![MarineAquaticSpeciesIndex { index: 0, species_id: 31 }],
+            0.0,
+        );
         assert_eq!(
             biota.try_marine_aquatic_nodes(0),
             Err(MarineProjectionError::InvalidCellArea)
         );
 
-        let biota = marine_biota(vec![valid], vec![1], 1.0);
+        let biota = marine_biota(
+            vec![valid],
+            vec![MarineAquaticSpeciesIndex { index: 1, species_id: 31 }],
+            1.0,
+        );
         assert_eq!(
             biota.try_marine_aquatic_nodes(0),
             Err(MarineProjectionError::InvalidSpeciesIndex { index: 1 })
@@ -778,7 +848,19 @@ mod tests {
             species(5, SpeciesCategory::Aquatic, TerrainAffinity::Hill),
         ];
 
-        assert_eq!(marine_aquatic_species_indices(&species), vec![0, 2]);
+        assert_eq!(
+            marine_aquatic_species_indices(&species),
+            vec![
+                MarineAquaticSpeciesIndex {
+                    index: 0,
+                    species_id: 1,
+                },
+                MarineAquaticSpeciesIndex {
+                    index: 2,
+                    species_id: 3,
+                },
+            ]
+        );
     }
 
     #[test]
