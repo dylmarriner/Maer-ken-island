@@ -108,4 +108,4 @@ Population:
 
 ### Phase 3 species-cache status (2026-11-06)
 
-The derived `IslandBiota` species catalogue is now read-only to external callers. Catalogue replacement is explicit and rebuilds the marine aquatic membership index plus producer/grazer carbon weights before returning. The regression suite covers newly eligible marine species, category/affinity changes, invalid marine abundance rejection and unchanged catalogue state after a rejected replacement. No persistent simulation state or replay input is added.
+The derived `IslandBiota` species catalogue is now read-only to external callers. Catalogue replacement is explicit and rebuilds the marine aquatic membership index plus producer/grazer carbon weights before returning. The regression suite covers newly eligible marine species, category/affinity changes, invalid marine abundance rejection, duplicate species-ID rejection and unchanged catalogue/cache state after rejected replacement. Survey and controlled replacement both fail fast on duplicate identities. No persistent simulation state or replay input is added.
