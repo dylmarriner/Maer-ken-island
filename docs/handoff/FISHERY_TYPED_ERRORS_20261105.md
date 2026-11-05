@@ -43,3 +43,8 @@ No live island state, production service, owner data or external system was chan
 ## Exact-head formatting correction
 
 The first exact-head workflow [#42014892960](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42014892960) reached the Rust formatting check and failed only on rustfmt line wrapping in the new tests. Clippy and fast tests were skipped by that formatting failure. The exact formatter layout was applied in commit `592c00a8b0638ce93d92e29b702d9195eef940cf`. A fresh exact-head run is required; the failed run does not verify the code.
+
+
+## Second exact-head formatting correction
+
+Fresh workflow [#42015041970](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42015041970) checked the merged PR ref and found one remaining rustfmt wrap in the `InvalidCarryingCapacity` Display arm. The other new source/test formatting differences from the first run were clean. The exact wrap was applied in commit `1317a154eb86915836bf9c2a825be41cbf8d265f`; the run is superseded and a fresh exact-head CI is mandatory.
