@@ -133,4 +133,5 @@ cargo run -p island -- serve --scenario fixtures/island/default_scenario.json   
 
 ## Latest engineering handoff
 
+- 2026-11-06: [Fishery subnormal biomass-ratio hardening](docs/handoff/FISHERY_SUBNORMAL_BIOMASS_RATIO_20261106.md) records the low-biomass underflow correction and exact-head verification gate.
 - 2026-11-05: [Replay session default execution budget](docs/handoff/REPLAY_SESSION_DEFAULT_BUDGET_20261105.md) records the bounded default and exact-head verification gate.

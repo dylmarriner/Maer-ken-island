@@ -240,8 +240,19 @@ impl FishStock {
         // growth rate. The old order could overflow at rate * biomass even
         // when the final depensated surplus was representable.
         let surplus = if p < model.depensation_below {
-            let biomass_factor = (1.0 - p) * (p / model.depensation_below);
-            rate * (self.biomass_t * biomass_factor)
+            if p == 0.0 && self.biomass_t > 0.0 && rate > 0.0 {
+                // B / K can underflow to zero even when r * B² / (K * d)
+                // is representable. In that rare case evaluate the equivalent
+                // positive product in log space rather than silently reporting
+                // zero surplus for a non-empty stock.
+                let log_surplus = rate.log2() + 2.0 * self.biomass_t.log2()
+                    - self.k_t.log2()
+                    - model.depensation_below.log2();
+                log_surplus.exp2()
+            } else {
+                let biomass_factor = (1.0 - p) * (p / model.depensation_below);
+                rate * (self.biomass_t * biomass_factor)
+            }
         } else {
             rate * (1.0 - p) * self.biomass_t
         };
@@ -531,6 +542,33 @@ mod tests {
 
         assert!(surplus.is_finite());
         assert!((surplus / 3.96e307 - 1.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn depensation_preserves_representable_surplus_and_catch_when_biomass_ratio_underflows() {
+        let mut model = FisheryModel::load_default().expect("the pack loads");
+        model.r_per_year[Resilience::Medium as usize] = 1.0e308;
+        model.depensation_below = 0.25;
+
+        let mut stock = FishStock::unexploited(Resilience::Medium, 1.0e308)
+            .expect("positive carrying capacity");
+        stock.biomass_t = 1.0e-100;
+
+        // B / K underflows to zero, but the mathematically equivalent
+        // r * B² / (K * d) remains a finite, positive value.
+        assert_eq!(stock.biomass_t / stock.k_t, 0.0);
+        let surplus = stock
+            .surplus_t_per_year(&model)
+            .expect("representable low-biomass surplus");
+
+        assert!(surplus.is_finite() && surplus > 0.0);
+        assert!((surplus / 4.0e-200 - 1.0).abs() < 1.0e-12);
+
+        let landed = stock
+            .fish(&model, 1.0e-200, YEAR_S)
+            .expect("the fishery can land a positive request from representable growth");
+        assert_eq!(landed, 1.0e-200);
+        assert_eq!(stock.landed_t, 1.0e-200);
     }
 
     #[test]
