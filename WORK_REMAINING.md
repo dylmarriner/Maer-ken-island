@@ -47,7 +47,7 @@ this list holds the current state. The evidence for what is *done* is in
 | Industry | Phase 4b Task 5: refinery, gas plant, fuel depot (D16) | Topping refinery done 2026-10-14; diesel depot 2026-10-22 (D58); gas plant 2026-10-23; reformer open | Reformate yield |
 | Industry | Phase 4b Task 6: jobs, trades, maintenance (D39) | Open | Upstream human-runtime change first |
 | Industry | Phase 4b Task 7: money, enterprises, payroll | Money, payroll and metered bills done 2026-10-18 (`regional/economy/`, D61, D62; `tests/island_economy.rs`). In `IslandLife` 2026-10-22 (`economy/island.rs`: deposits, Gem Petroleum selling the depot's diesel, monthly loans, closes, dividends, money audit); the petroleum business's staff and payslips, household bills, buying and selling homes open | Task 6 staff; upstream buying |
-| Industry | Phase 4b Task 7b: food and timber chains (forestry, sawmill, house framing, farm, livestock, food processing and fishery models 2026-10-23) | Models done; not yet on the map or wired into island life | Task 8 workforce: who works a farm, mill or salt works, chosen by the people themselves (R14), never assigned |
+| Industry | Phase 4b Task 7b: food and timber chains (forestry, sawmill, house framing, farm, livestock, food processing and fishery models 2026-10-23) | Models done; fishery low-biomass depensation now preserves representable surplus when `B/k` underflows; still not yet on the map or wired into island life | Task 8 workforce: who works a farm, mill or salt works, chosen by the people themselves (R14), never assigned |
 | Industry | Phase 4b Task 8: town and workforce | Founding households, the smallest practice and a staffed school done 2026-10-23 (`regional/town.rs`, D67); other enterprises' minimum staff, the town in `IslandLife`, homes and growth open | A sourced minimum staff for the oil, gas, power, bank and store businesses |
 | Industry | Phase 4b Task 9: dashboard pages, year acceptance | Industry (with payroll), Power, Timber and Food panels done 2026-10-23; Town dashboard added 2026-11-02 (living residents, location, practice and school staffing and accrued hours from live projection); year acceptance remains | Tasks 4-8 |
 | Climate | D3 rest: sea/land breezes, katabatic winds | Open | A diurnal wind solver |
@@ -411,8 +411,10 @@ trade, a 2-3 bedroom cottage's floor area (Task 6 and 7b); the Pukekohe growing 
   - `fishery.rs`: a stock in Schaefer surplus production with depensation below a quarter of
     unexploited biomass, `r` the middle of Froese et al. (2017) Table 2's prior for its FishBase
     resilience class; the catch is capped at the surplus, so the fishery never takes more than
-    grows. Not yet fed by the island's fish: their densities are upstream's (D55) and no species
-    carries a resilience class.
+    grows. The depensation calculation now preserves a finite positive surplus when `B / k`
+    underflows to zero but the equivalent `r B² / (k d)` remains representable. Not yet fed by
+    the island's fish: their densities are upstream's (D55) and no species carries a resilience
+    class.
   - The reference house's floor is a concrete slab on grade (thinkstep 2022 Table 2-2), so it has
     no floor timber. Its roof is "timber roof trusses (70x45mm SG8 H1.2 treated purlins)" over
     263 m², but the report gives the roof only as kg CO2e per m² (Table 6-7), not a timber volume.
