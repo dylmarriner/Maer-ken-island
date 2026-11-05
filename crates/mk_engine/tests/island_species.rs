@@ -504,7 +504,11 @@ fn marine_projection_indexes_species_that_become_eligible_after_catalogue_replac
 fn replacing_species_catalogue_rejects_duplicate_ids_without_mutating_caches() {
     let b = base();
     let mut biota = b.biota.clone();
-    let original_ids: Vec<_> = biota.species().iter().map(|species| species.species_id).collect();
+    let original_ids: Vec<_> = biota
+        .species()
+        .iter()
+        .map(|species| species.species_id)
+        .collect();
     let marine_cell = biota
         .habitat_cells(&TerrainAffinity::OpenOcean)
         .next()
@@ -526,7 +530,11 @@ fn replacing_species_catalogue_rejects_duplicate_ids_without_mutating_caches() {
         })
     );
     assert_eq!(
-        biota.species().iter().map(|species| species.species_id).collect::<Vec<_>>(),
+        biota
+            .species()
+            .iter()
+            .map(|species| species.species_id)
+            .collect::<Vec<_>>(),
         original_ids,
         "a rejected duplicate-ID replacement must leave the original catalogue intact"
     );
