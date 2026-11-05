@@ -342,6 +342,7 @@ pub enum ReplayError {
     IntegrityError(String),
     MaxTicksExceeded,
     TargetBeforeCurrentTick,
+    DuplicateSessionName(String),
 }
 
 impl fmt::Display for ReplayError {
@@ -355,6 +356,9 @@ impl fmt::Display for ReplayError {
             ReplayError::MaxTicksExceeded => write!(f, "Max ticks exceeded"),
             ReplayError::TargetBeforeCurrentTick => {
                 write!(f, "Target tick precedes current replay state")
+            }
+            ReplayError::DuplicateSessionName(name) => {
+                write!(f, "Replay session already exists: {}", name)
             }
         }
     }
@@ -374,9 +378,17 @@ impl ReplayManager {
         }
     }
 
-    /// Add a replay session
-    pub fn add_session(&mut self, name: String, session: ReplaySession) {
+    /// Add a replay session without replacing an existing session of the same name.
+    ///
+    /// Session names are stable identifiers within a manager. A duplicate is rejected
+    /// before the existing session or its replay state can be replaced.
+    pub fn add_session(&mut self, name: String, session: ReplaySession) -> Result<(), ReplayError> {
+        if self.sessions.contains_key(&name) {
+            return Err(ReplayError::DuplicateSessionName(name));
+        }
+
         self.sessions.insert(name, session);
+        Ok(())
     }
 
     /// Get a replay session
@@ -541,13 +553,43 @@ mod tests {
             let state = WorldState::new(Arc::new(CanonLocked::default()), [0x5a; 32]);
             let session =
                 ReplaySession::from_world_state(state, ReplayOptions::default()).expect("session");
-            manager.add_session(name.to_owned(), session);
+            manager.add_session(name.to_owned(), session).expect("unique session name");
         }
 
         assert_eq!(
             manager.list_sessions(),
             vec!["alpha".to_owned(), "middle".to_owned(), "zeta".to_owned()]
         );
+    }
+
+    #[test]
+    fn replay_manager_rejects_duplicate_names_without_replacing_existing_session() {
+        let mut manager = ReplayManager::new();
+        let state = WorldState::new(Arc::new(CanonLocked::default()), [0x5a; 32]);
+        let mut existing =
+            ReplaySession::from_world_state(state, ReplayOptions::default()).expect("existing session");
+        let initial_tick = existing.current_state().tick;
+        existing
+            .replay_to(initial_tick + 1)
+            .expect("advance existing session before insertion");
+        manager
+            .add_session("primary".to_owned(), existing)
+            .expect("first session name is unique");
+
+        let replacement_state = WorldState::new(Arc::new(CanonLocked::default()), [0x6b; 32]);
+        let replacement = ReplaySession::from_world_state(
+            replacement_state,
+            ReplayOptions::default(),
+        )
+        .expect("replacement session");
+
+        assert!(matches!(
+            manager.add_session("primary".to_owned(), replacement),
+            Err(ReplayError::DuplicateSessionName(ref name)) if name == "primary"
+        ));
+        let retained = manager.get_session("primary").expect("original session remains");
+        assert_eq!(retained.current_state().tick, initial_tick + 1);
+        assert_eq!(manager.list_sessions(), vec!["primary".to_owned()]);
     }
 
     #[test]
