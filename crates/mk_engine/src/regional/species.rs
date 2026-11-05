@@ -216,6 +216,9 @@ pub struct MarineAquaticNode {
 #[derive(Debug, Clone)]
 pub struct IslandBiota {
     pub species: Vec<IslandSpecies>,
+    /// Stable indices of OpenOcean/ReefSea aquatic species, built once at survey
+    /// so a cell lookup does not rescan every founding species.
+    marine_aquatic_species: Vec<usize>,
     /// Per medium cell, a bit per [`AFFINITIES`] entry it is habitat for.
     habitat: Vec<u16>,
     cell_area_m2: f64,
@@ -232,6 +235,24 @@ fn abundance_of(category: &SpeciesCategory) -> Abundance {
         SpeciesCategory::Herbivore => Abundance::GrazerCarbon,
         _ => Abundance::UpstreamDensity,
     }
+}
+
+/// Species indices eligible for the read-only marine biomass projection.
+/// Keeping this stable, species-order index avoids scanning all founding
+/// species for every single-cell dashboard request.
+fn marine_aquatic_species_indices(species: &[IslandSpecies]) -> Vec<usize> {
+    species
+        .iter()
+        .enumerate()
+        .filter(|(_, s)| {
+            s.category == SpeciesCategory::Aquatic
+                && matches!(
+                    &s.affinity,
+                    TerrainAffinity::OpenOcean | TerrainAffinity::ReefSea
+                )
+        })
+        .map(|(index, _)| index)
+        .collect()
 }
 
 /// The 64-bit seed upstream's biosphere takes, from the scenario's 32
@@ -271,6 +292,7 @@ impl IslandBiota {
                 upstream_population: s.population_size,
             })
             .collect();
+        let marine_aquatic_species = marine_aquatic_species_indices(&species);
 
         let (rows, cols) = (domain.rows(MEDIUM), domain.cols(MEDIUM));
         let is_sea = |r: usize, c: usize| *elevation_m.get(r, c) <= 0.0;
@@ -315,6 +337,7 @@ impl IslandBiota {
 
         Self {
             species,
+            marine_aquatic_species,
             habitat,
             cell_area_m2: domain.cell_area_m2(MEDIUM),
             producer_weight,
@@ -489,25 +512,20 @@ impl IslandBiota {
         if mask == 0 {
             return Vec::new();
         }
-        self.species
+        self.marine_aquatic_species
             .iter()
-            .enumerate()
-            .filter(|(_, s)| {
-                s.category == SpeciesCategory::Aquatic
-                    && matches!(
-                        &s.affinity,
-                        TerrainAffinity::OpenOcean | TerrainAffinity::ReefSea
-                    )
-                    && mask & bit(&s.affinity) != 0
-            })
-            .map(|(species, s)| {
+            .filter_map(|&species| {
+                let s = self.species.get(species)?;
+                if mask & bit(&s.affinity) == 0 {
+                    return None;
+                }
                 let individuals = s.upstream_density_per_m2 * self.cell_area_m2;
-                MarineAquaticNode {
+                Some(MarineAquaticNode {
                     cell,
                     species,
                     individuals,
                     biomass_t: individuals * s.body_mass_kg / 1_000.0,
-                }
+                })
             })
             .collect()
     }
@@ -580,6 +598,36 @@ mod tests {
         has_a_river: true,
         in_the_sea: true,
     };
+
+    fn species(
+        species_id: u64,
+        category: SpeciesCategory,
+        affinity: TerrainAffinity,
+    ) -> IslandSpecies {
+        IslandSpecies {
+            species_id,
+            name: format!("species-{species_id}"),
+            category,
+            affinity,
+            body_mass_kg: 1.0,
+            upstream_population: 1,
+            upstream_density_per_m2: 1.0,
+            abundance: Abundance::UpstreamDensity,
+        }
+    }
+
+    #[test]
+    fn marine_aquatic_index_keeps_only_open_ocean_and_reef_aquatic_species_in_order() {
+        let species = vec![
+            species(1, SpeciesCategory::Aquatic, TerrainAffinity::OpenOcean),
+            species(2, SpeciesCategory::Aquatic, TerrainAffinity::River),
+            species(3, SpeciesCategory::Aquatic, TerrainAffinity::ReefSea),
+            species(4, SpeciesCategory::Herbivore, TerrainAffinity::OpenOcean),
+            species(5, SpeciesCategory::Aquatic, TerrainAffinity::Hill),
+        ];
+
+        assert_eq!(marine_aquatic_species_indices(&species), vec![0, 2]);
+    }
 
     #[test]
     fn every_affinity_has_a_bit_of_its_own() {
