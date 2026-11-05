@@ -48,3 +48,8 @@ The first exact-head workflow [#42014892960](https://github.com/dylmarriner/Maer
 ## Second exact-head formatting correction
 
 Fresh workflow [#42015041970](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42015041970) checked the merged PR ref and found one remaining rustfmt wrap in the `InvalidCarryingCapacity` Display arm. The other new source/test formatting differences from the first run were clean. The exact wrap was applied in commit `1317a154eb86915836bf9c2a825be41cbf8d265f`; the run is superseded and a fresh exact-head CI is mandatory.
+
+
+## Clippy/compiler correction
+
+Exact-head workflow [#42015513952](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42015513952) passed formatting and reached Clippy, where the second invalid-model regression still compared the new `Result<f64, FisheryError>` API to `0.0`. This is a test compile error, not a production-code diagnostic. The assertion now expects `Err(FisheryError::InvalidModel)` in commit `9fa08df45a47ca3cffb1364875c5ca13cb1e5a78`. A fresh exact-head run is required.
