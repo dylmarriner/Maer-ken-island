@@ -343,7 +343,7 @@ impl PetroleumField {
         ledger: &mut Ledger,
     ) -> Production {
         // Infinite elapsed time would otherwise drain the entire remaining field in one step.
-        // NaN offtake is invalid too; it must not be interpreted as a zero production cap.
+        // NaN and negative offtake caps are invalid rather than zero-production requests.
         if !dt_years.is_finite() || dt_years <= 0.0 || max_oil_m3.is_nan() || max_oil_m3 < 0.0 {
             return Production::default();
         }
