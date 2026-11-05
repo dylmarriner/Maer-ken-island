@@ -46,3 +46,9 @@ The new test checks thresholds 0.25, 0.6, 0.75 and 1.0. For each it:
 ## Invariants
 
 The default depensation threshold and default MSY are unchanged. No stock capacity, resilience class, CPUE, catch, reference value, species density, simulation state, RNG, snapshot, append-only log, material ledger, replay hash or digest was changed. The fishery remains standalone; IslandLife integration still requires sourced marine stock and effort data.
+
+## First exact-head CI result and correction
+
+- Workflow `42116084786` checked the new branch. Repository scripts and dependency audit passed; the first Rust lane stopped at `cargo fmt --all -- --check` before Clippy/tests.
+- The log identified only two assertion lines in the new regression test that needed rustfmt wrapping. Corrected in `e8616c69c8233a031909e4b21ee6adcc3d395ab8`.
+- The desktop, installed-backend and week/year reference acceptance jobs from that run were still in progress when inspected. A new exact-head run is required for the corrected commit.
