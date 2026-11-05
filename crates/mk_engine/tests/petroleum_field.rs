@@ -266,8 +266,6 @@ fn a_field_drills_the_wells_its_rate_needs_and_counts_their_blowouts() {
     assert_eq!((idle.wells, idle.blowouts), (0, 0));
 }
 
-
-
 #[test]
 fn negative_offtake_caps_are_rejected_without_mutating_field_or_ledger() {
     let m = &base().model;
