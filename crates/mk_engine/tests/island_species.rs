@@ -384,7 +384,9 @@ fn marine_projection_rejects_category_changes_after_the_survey() {
     let species_index = biota
         .species
         .iter()
-        .position(|species| species.category == SpeciesCategory::Aquatic && is_marine(&species.affinity))
+        .position(|species| {
+            species.category == SpeciesCategory::Aquatic && is_marine(&species.affinity)
+        })
         .expect("the island has a marine aquatic species");
     let affinity = biota.species[species_index].affinity.clone();
     let cell = biota.habitat_cells(&affinity).next().expect("marine habitat");
@@ -406,7 +408,9 @@ fn marine_projection_rejects_affinity_changes_after_the_survey() {
     let species_index = biota
         .species
         .iter()
-        .position(|species| species.category == SpeciesCategory::Aquatic && is_marine(&species.affinity))
+        .position(|species| {
+            species.category == SpeciesCategory::Aquatic && is_marine(&species.affinity)
+        })
         .expect("the island has a marine aquatic species");
     let original_affinity = biota.species[species_index].affinity.clone();
     let cell = biota
