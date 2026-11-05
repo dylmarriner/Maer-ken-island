@@ -42,3 +42,12 @@ No fishery constants, reference data, event logs, replay hashes, snapshot field 
 1. Finish and merge PR #89 only after all required checks pass.
 2. Rebase this branch onto the merged parent and run its own exact-head checks.
 3. Propagate typed fishery errors at the eventual runtime integration boundary; do not convert them back to zero catch.
+
+
+## Parent arithmetic correction synchronized (2026-11-06)
+
+- PR #89 exposed and fixed an avoidable intermediate overflow in annual growth scaling: `surplus * dt_s / YEAR_S` is now `surplus * (dt_s / YEAR_S)`.
+- Parent source/test commit: `18a36a1b40bbad5a9abc91e76dad4506023515b2`; parent handoff commit: `83e6145da6c9911365ef4c9d1ee85c69f309f755`.
+- This branch now carries the corrected parent fishery source plus the snapshot-deserialization validation, so the next exact-head run covers both changes together.
+- Parent exact-head workflow [#42021998151](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42021998151) is running; formatting has passed and Clippy, fast tests, desktop/backend and week/year acceptance were still in progress at inspection.
+- PR #90 remains stacked on PR #89. Do not merge until the parent passes and is merged; then retarget/rebase and rerun this branch.
