@@ -262,17 +262,30 @@ impl FishStock {
         Ok(surplus)
     }
 
-    /// The most the stock can give year on year (t), `r k / 4`.
+    /// The maximum annual surplus production (t/year) over every valid biomass.
     ///
-    /// Divide carrying capacity before multiplying so a representable result
-    /// does not overflow in the intermediate `r * k`.
+    /// With a depensation threshold at or below half of carrying capacity, the
+    /// usual Schaefer peak remains at B = K/2 and equals rK/4. Above half K,
+    /// that peak lies inside the depensated region: the maximum moves to B = dK
+    /// through d = 2/3, then to B = 2K/3 for larger thresholds.
+    ///
+    /// Scale K by the bounded peak fraction before multiplying by r so a
+    /// representable result does not overflow in an intermediate r * K product.
     pub fn msy_t(&self, model: &FisheryModel) -> Result<f64, FisheryError> {
         if !model.is_valid() {
             return Err(FisheryError::InvalidModel);
         }
         self.validate_state()?;
 
-        let msy = model.r(self.resilience) * (self.k_t / 4.0);
+        let d = model.depensation_below;
+        let peak_fraction = if d <= 0.5 {
+            0.25
+        } else if d <= 2.0 / 3.0 {
+            d * (1.0 - d)
+        } else {
+            4.0 / (27.0 * d)
+        };
+        let msy = model.r(self.resilience) * (self.k_t * peak_fraction);
         if !msy.is_finite() || msy < 0.0 {
             return Err(FisheryError::NonFiniteGrowth);
         }
@@ -579,6 +592,55 @@ mod tests {
             .expect("finite positive carrying capacity");
 
         assert_eq!(stock.msy_t(&model), Ok(f64::MAX * 0.5));
+    }
+
+    #[test]
+    fn msy_tracks_the_piecewise_peak_for_every_allowed_depensation_threshold() {
+        let mut model = FisheryModel::load_default().expect("the pack loads");
+        model.r_per_year[Resilience::Medium as usize] = 1.0;
+        let k_t = 1_200.0;
+
+        for (threshold, peak_biomass_fraction, expected_peak_fraction) in [
+            (0.25, 0.5, 0.25),
+            (0.6, 0.6, 0.24),
+            (0.75, 2.0 / 3.0, 4.0 / (27.0 * 0.75)),
+            (1.0, 2.0 / 3.0, 4.0 / 27.0),
+        ] {
+            model.depensation_below = threshold;
+            let mut stock = FishStock::unexploited(Resilience::Medium, k_t)
+                .expect("positive carrying capacity");
+            stock.biomass_t = k_t * peak_biomass_fraction;
+
+            let msy = stock.msy_t(&model).expect("valid model has finite MSY");
+            let surplus = stock
+                .surplus_t_per_year(&model)
+                .expect("the analytic peak has finite surplus");
+            let expected = k_t * expected_peak_fraction;
+            let tolerance = expected.max(1.0) * 1e-12;
+
+            assert!(
+                (msy - expected).abs() <= tolerance,
+                "threshold {threshold}: {msy} vs {expected}"
+            );
+            assert!(
+                (surplus - msy).abs() <= tolerance,
+                "threshold {threshold}: peak surplus {surplus} vs MSY {msy}"
+            );
+
+            // The reported MSY must bound the complete piecewise curve, not
+            // merely the stock state at the analytic peak.
+            for step in 0..=1_000 {
+                stock.biomass_t = k_t * (step as f64 / 1_000.0);
+                let candidate = stock
+                    .surplus_t_per_year(&model)
+                    .expect("sampled biomass has finite surplus");
+                assert!(
+                    candidate <= msy + tolerance,
+                    "threshold {threshold}, biomass fraction {}: {candidate} exceeds {msy}",
+                    step as f64 / 1_000.0
+                );
+            }
+        }
     }
 
     #[test]
