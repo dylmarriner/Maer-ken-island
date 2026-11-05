@@ -38,3 +38,8 @@ No reference values, physical constants, ledger flows, replay hashes, snapshot f
 3. Continue species-specific stock calibration and effort/catch-per-trip modelling only from the verified fisheries reference pack.
 
 No live island state, production service, owner data or external system was changed.
+
+
+## Exact-head formatting correction
+
+The first exact-head workflow [#42014892960](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42014892960) reached the Rust formatting check and failed only on rustfmt line wrapping in the new tests. Clippy and fast tests were skipped by that formatting failure. The exact formatter layout was applied in commit `592c00a8b0638ce93d92e29b702d9195eef940cf`. A fresh exact-head run is required; the failed run does not verify the code.
