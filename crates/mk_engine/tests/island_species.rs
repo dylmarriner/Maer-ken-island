@@ -389,7 +389,10 @@ fn marine_projection_rejects_category_changes_after_the_survey() {
         })
         .expect("the island has a marine aquatic species");
     let affinity = biota.species[species_index].affinity.clone();
-    let cell = biota.habitat_cells(&affinity).next().expect("marine habitat");
+    let cell = biota
+        .habitat_cells(&affinity)
+        .next()
+        .expect("marine habitat");
 
     // Keep identity and affinity stable while changing category. The cached
     // index must not continue treating a now-terrestrial species as fish.
