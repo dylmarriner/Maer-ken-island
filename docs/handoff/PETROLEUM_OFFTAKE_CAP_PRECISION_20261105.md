@@ -54,3 +54,14 @@ claimed because the custom OpenCommander connection is unavailable.
 
 No live island state, production infrastructure, network service or owner data
 was changed.
+
+
+## Exact-head cleanup
+
+- `e144f7e245ba09beff50319649017da1893b0898` clarifies that both NaN and
+  negative caps are invalid.
+- `f546139b3a0e9fa3bd8b51a9da4f420a404c1373` normalises the regression-test
+  spacing after the source/test additions.
+- Current branch head: `f546139b3a0e9fa3bd8b51a9da4f420a404c1373`.
+- These follow-ups do not alter the production algorithm or test assertions.
+  A fresh exact-head CI run remains mandatory.
