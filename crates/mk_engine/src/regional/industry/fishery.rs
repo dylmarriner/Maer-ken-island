@@ -2,8 +2,8 @@
 //!
 //! The stock grows by the Schaefer surplus-production model as Froese et
 //! al. (2017) write it: next year's biomass is this year's plus
-//! `r (1 - B/k) B` less the catch, and below a quarter of `k` the surplus
-//! falls off linearly (`× 4 B/k`), as recruitment fails. `r` is the middle
+//! `r (1 - B/k) B` less the catch. Below the configured depensation threshold
+//! `d k`, surplus is scaled by `B/(d k)` as recruitment fails. `r` is the middle
 //! of the paper's prior range for the species' FishBase resilience class;
 //! the maximum is the analytic piecewise MSY; with the default depensation threshold (0.25), it is `r k / 4` at `B = k/2`.
 //!
