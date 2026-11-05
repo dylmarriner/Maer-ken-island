@@ -3,7 +3,7 @@
 Date: 2026-11-06
 Repository: `dylmarriner/Maer-ken-island`
 Branch: `feat/marine-aquatic-biomass-view-20261106`
-Base: `main` at `94ee419d97e238007dfa912124de6a367e889540`.
+Base: `main` at `d6f6ce7a1c5f01bf5a14d158fad32dbbcdaffb0a` (after fishery PR #91 merged).
 
 ## Change
 
