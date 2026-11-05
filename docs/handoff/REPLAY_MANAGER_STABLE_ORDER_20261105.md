@@ -97,3 +97,12 @@ Verification:
   repository scripts, dependency audit and both week/year reference-pack acceptance tests.
 - Local Cargo checks were not run because custom OpenCommander is currently returning HTTP 429.
 - Keep PR #82 draft until the new exact-head run passes and the current review feedback is resolved.
+
+
+## Exact-head formatting correction for canonical identifiers
+
+- Workflow [#41964614330](https://github.com/dylmarriner/Maer-ken-island/actions/runs/41964614330) checked out the exact PR merge commit and stopped at `cargo fmt --all -- --check`.
+- The only reported difference was the condition in `ReplayManager::add_session`: rustfmt requires the three-part predicate on one line.
+- Commit `4bc42dc589370188330c8497a2517d681d882f42` applies the exact formatter output.
+- Clippy and fast tests were not run in that job because formatting failed first; no assertion failure is recorded.
+- A fresh exact-head workflow is required for this formatter correction. Do not use the previous successful run as evidence for this new head.
