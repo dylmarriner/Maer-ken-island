@@ -42,3 +42,30 @@ After exact-head CI passes, continue the sourced fishery-to-human food chain wor
 species-specific stock calibration and human fishing choices/return rates remain
 separate acceptance requirements. This validation guard does not claim those
 features are implemented.
+
+
+## Remaining checklist
+
+- [ ] Finish the exact-head fast Rust test suite and resolve any failures.
+- [ ] Keep the week/year reference-pack distinction explicit: the current fishery-only
+      workflow path-skipped those slow tests; it did not execute them.
+- [ ] Calibrate species-specific fish stocks from cited reference packs.
+- [ ] Implement human fishing choices, effort and return-rate accounting without
+      invented values or breaking deterministic replay.
+- [ ] Continue the remaining `WORK_REMAINING.md` requirements: petroleum water-cut
+      and spill behaviour, mass/carbon-balanced reformer, workforce/maintenance/town
+      integration, remaining resource/material chains, climate/energy fidelity and
+      Phase 5 application acceptance.
+
+## Blockers and next task
+
+Exact-head workflow [#41997671638](https://github.com/dylmarriner/Maer-ken-island/actions/runs/41997671638)
+has passed formatting, Clippy, desktop build/tests, installed-backend checks,
+dashboard, computer-service, repository scripts and dependency audit. Its fast
+Rust tests are still running. The week/year reference job path-skipped this
+fishery-only change. Custom OpenCommander `list_devices` returns
+`Session terminated`, so no local Cargo run was possible.
+
+Next: finish exact-head fast tests, merge only after the full required checks pass,
+then implement the next source-backed fishery-to-human slice. Preserve the
+single-writer/replay and append-only persistence invariants.
