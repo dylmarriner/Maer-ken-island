@@ -104,3 +104,12 @@ simulation behaviour. A fresh exact-head run is required.
 - Added a positive regression for a large but representable one-year growth step; the existing landed-total-overflow regression now reaches its intended error branch.
 - Source/test commit: `18a36a1b40bbad5a9abc91e76dad4506023515b2`.
 - The failed run is not a pass. A fresh exact-head workflow is required; the desktop acceptance job was also still running at inspection.
+
+
+## Growth-scaling robustness refinement (2026-11-06)
+
+- The first correction `surplus * (dt_s / YEAR_S)` fixed the large one-year intermediate overflow but could underflow the ratio for a subnormal time step even when the final growth remained representable.
+- Replaced it with magnitude-aware scaling: divide the factor that is at least one year before multiplying; when both factors are below one year, their product is bounded and is divided afterward.
+- Added a regression using the smallest positive subnormal `dt_s` with a large finite surplus. It requires a positive representable catch.
+- Refinement source/test commit: `f92c6103ee665026d6774003b4d704576a83ff36`.
+- The prior corrected run #42021998151 predates this refinement and is not sufficient to verify the new branch. A fresh exact-head run is required.
