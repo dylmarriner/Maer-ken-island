@@ -344,15 +344,24 @@ impl PetroleumField {
     ) -> Production {
         // Infinite elapsed time would otherwise drain the entire remaining field in one step.
         // NaN offtake is invalid too; it must not be interpreted as a zero production cap.
-        if !dt_years.is_finite() || dt_years <= 0.0 || max_oil_m3.is_nan() {
+        if !dt_years.is_finite() || dt_years <= 0.0 || max_oil_m3.is_nan() || max_oil_m3 < 0.0 {
             return Production::default();
         }
+        // A negative cap is invalid; positive infinity remains the unbounded
+        // cap used by `produce`. Normalise negative zero to ordinary zero.
+        let max_oil_m3 = max_oil_m3.max(0.0);
+        let remaining_oil_m3 = self.remaining_oil_m3();
         let mut share = 1.0 - (-model.decline_per_year * dt_years).exp();
-        let potential = self.remaining_oil_m3() * share;
-        if potential > max_oil_m3.max(0.0) && potential > 0.0 {
-            share *= max_oil_m3.max(0.0) / potential;
-        }
-        let oil_m3 = self.remaining_oil_m3() * share;
+        let potential = remaining_oil_m3 * share;
+        let oil_m3 = if potential > max_oil_m3 && potential > 0.0 {
+            // Return the cap itself rather than multiplying a scaled share back
+            // by the reserve: floating-point rounding can otherwise exceed it
+            // by one ULP.
+            share = max_oil_m3 / remaining_oil_m3;
+            max_oil_m3
+        } else {
+            potential
+        };
         let gas_gj = self.remaining_gas_gj() * share;
         let leaked_gj = gas_gj * model.methane_loss_fraction;
         let kept_gj = gas_gj - leaked_gj;
