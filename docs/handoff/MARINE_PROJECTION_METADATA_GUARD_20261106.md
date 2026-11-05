@@ -59,3 +59,11 @@ Both were corrected in follow-up commits:
 - `1657d7217770266feffa7f1ed75af5f5ced60864` — integration test formatting.
 
 The previous run's formatting failure is now addressed in source, but a fresh exact-head workflow is still required. Clippy, fast tests, backend/desktop builds and week/year acceptance remain unverified until that run completes.
+
+## Fixture update after adding the affinity snapshot
+
+The new `MarineAquaticSpeciesIndex.affinity` field also required updating the existing private unit-test fixtures in `species.rs`. All 11 explicit index literals now provide the surveyed affinity; the index-order test records OpenOcean for species 1 and ReefSea for species 3.
+
+Commit: `ddf35001a10cc6d79e3dab1ab03743c7f48c8343`.
+
+A fresh exact-head CI run is required after this fixture update. The previous workflow was started before this commit and cannot verify it.
