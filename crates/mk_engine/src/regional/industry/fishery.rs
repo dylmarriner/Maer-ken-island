@@ -618,8 +618,14 @@ mod tests {
             let expected = k_t * expected_peak_fraction;
             let tolerance = expected.max(1.0) * 1e-12;
 
-            assert!((msy - expected).abs() <= tolerance, "threshold {threshold}: {msy} vs {expected}");
-            assert!((surplus - msy).abs() <= tolerance, "threshold {threshold}: peak surplus {surplus} vs MSY {msy}");
+            assert!(
+                (msy - expected).abs() <= tolerance,
+                "threshold {threshold}: {msy} vs {expected}"
+            );
+            assert!(
+                (surplus - msy).abs() <= tolerance,
+                "threshold {threshold}: peak surplus {surplus} vs MSY {msy}"
+            );
 
             // The reported MSY must bound the complete piecewise curve, not
             // merely the stock state at the analytic peak.
