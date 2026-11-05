@@ -820,6 +820,7 @@ mod tests {
             vec![MarineAquaticSpeciesIndex {
                 index: 0,
                 species_id: 11,
+                affinity: TerrainAffinity::OpenOcean,
             }],
             1.0,
         );
@@ -835,6 +836,7 @@ mod tests {
             vec![MarineAquaticSpeciesIndex {
                 index: 0,
                 species_id: 12,
+                affinity: TerrainAffinity::OpenOcean,
             }],
             1.0,
         );
@@ -854,6 +856,7 @@ mod tests {
             vec![MarineAquaticSpeciesIndex {
                 index: 0,
                 species_id: 21,
+                affinity: TerrainAffinity::OpenOcean,
             }],
             2.0,
         );
@@ -870,6 +873,7 @@ mod tests {
             vec![MarineAquaticSpeciesIndex {
                 index: 0,
                 species_id: 22,
+                affinity: TerrainAffinity::OpenOcean,
             }],
             1.0,
         );
@@ -890,6 +894,7 @@ mod tests {
             vec![MarineAquaticSpeciesIndex {
                 index: 0,
                 species_id: 23,
+                affinity: TerrainAffinity::OpenOcean,
             }],
             1.0,
         );
@@ -910,6 +915,7 @@ mod tests {
             vec![MarineAquaticSpeciesIndex {
                 index: 0,
                 species_id: 24,
+                affinity: TerrainAffinity::OpenOcean,
             }],
             1.0,
         );
@@ -929,6 +935,7 @@ mod tests {
             vec![MarineAquaticSpeciesIndex {
                 index: 0,
                 species_id: 41,
+                affinity: TerrainAffinity::OpenOcean,
             }],
             1.0,
         );
@@ -954,6 +961,7 @@ mod tests {
             vec![MarineAquaticSpeciesIndex {
                 index: 0,
                 species_id: 31,
+                affinity: TerrainAffinity::OpenOcean,
             }],
             0.0,
         );
@@ -967,6 +975,7 @@ mod tests {
             vec![MarineAquaticSpeciesIndex {
                 index: 1,
                 species_id: 31,
+                affinity: TerrainAffinity::OpenOcean,
             }],
             1.0,
         );
@@ -992,10 +1001,12 @@ mod tests {
                 MarineAquaticSpeciesIndex {
                     index: 0,
                     species_id: 1,
+                    affinity: TerrainAffinity::OpenOcean,
                 },
                 MarineAquaticSpeciesIndex {
                     index: 2,
                     species_id: 3,
+                    affinity: TerrainAffinity::ReefSea,
                 },
             ]
         );
