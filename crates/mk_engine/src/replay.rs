@@ -382,10 +382,14 @@ impl ReplayManager {
 
     /// Add a replay session without replacing an existing session of the same name.
     ///
-    /// Session names are stable identifiers within a manager. A duplicate is rejected
-    /// before the existing session or its replay state can be replaced.
+    /// Session names are stable identifiers within a manager. They must be non-empty,
+    /// already trimmed, and free of control characters; internal spaces remain valid.
+    /// A duplicate is rejected before the existing session or its replay state can be replaced.
     pub fn add_session(&mut self, name: String, session: ReplaySession) -> Result<(), ReplayError> {
-        if name.trim().is_empty() {
+        if name.trim().is_empty()
+            || name.trim() != name
+            || name.chars().any(char::is_control)
+        {
             return Err(ReplayError::InvalidSessionName);
         }
 
@@ -582,6 +586,40 @@ mod tests {
             Err(ReplayError::InvalidSessionName)
         ));
         assert!(manager.list_sessions().is_empty());
+    }
+
+    /// Rejects padded and control-character identifiers without inserting partial state.
+    #[test]
+    fn replay_manager_rejects_noncanonical_session_names_without_mutating_manager() {
+        for invalid_name in [" primary", "primary ", "primary\\nname", "primary\\0"] {
+            let mut manager = ReplayManager::new();
+            let state = WorldState::new(Arc::new(CanonLocked::default()), [0x5a; 32]);
+            let session =
+                ReplaySession::from_world_state(state, ReplayOptions::default()).expect("session");
+
+            assert!(
+                matches!(
+                    manager.add_session(invalid_name.to_owned(), session),
+                    Err(ReplayError::InvalidSessionName)
+                ),
+                "accepted invalid session name {invalid_name:?}"
+            );
+            assert!(manager.list_sessions().is_empty());
+        }
+    }
+
+    /// Keeps ordinary human-readable names with internal spaces valid.
+    #[test]
+    fn replay_manager_allows_internal_spaces_in_session_names() {
+        let mut manager = ReplayManager::new();
+        let state = WorldState::new(Arc::new(CanonLocked::default()), [0x5a; 32]);
+        let session =
+            ReplaySession::from_world_state(state, ReplayOptions::default()).expect("session");
+
+        manager
+            .add_session("north ridge".to_owned(), session)
+            .expect("internal spaces are valid");
+        assert_eq!(manager.list_sessions(), vec!["north ridge".to_owned()]);
     }
 
     #[test]
