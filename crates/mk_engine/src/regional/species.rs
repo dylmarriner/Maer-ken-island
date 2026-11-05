@@ -226,12 +226,26 @@ pub enum MarineProjectionError {
 impl std::fmt::Display for MarineProjectionError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::InvalidCellArea => f.write_str("marine projection cell area must be finite and positive"),
-            Self::InvalidSpeciesIndex { index } => write!(f, "marine projection index {index} is outside the species catalogue"),
-            Self::InvalidDensity { species_id } => write!(f, "marine species {species_id} has invalid upstream density"),
-            Self::InvalidBodyMass { species_id } => write!(f, "marine species {species_id} has invalid body mass"),
-            Self::NonFiniteIndividuals { species_id } => write!(f, "marine species {species_id} population overflowed"),
-            Self::NonFiniteBiomass { species_id } => write!(f, "marine species {species_id} biomass overflowed"),
+            Self::InvalidCellArea => {
+                f.write_str("marine projection cell area must be finite and positive")
+            }
+            Self::InvalidSpeciesIndex { index } => write!(
+                f,
+                "marine projection index {index} is outside the species catalogue"
+            ),
+            Self::InvalidDensity { species_id } => write!(
+                f,
+                "marine species {species_id} has invalid upstream density"
+            ),
+            Self::InvalidBodyMass { species_id } => {
+                write!(f, "marine species {species_id} has invalid body mass")
+            }
+            Self::NonFiniteIndividuals { species_id } => {
+                write!(f, "marine species {species_id} population overflowed")
+            }
+            Self::NonFiniteBiomass { species_id } => {
+                write!(f, "marine species {species_id} biomass overflowed")
+            }
         }
     }
 }
@@ -719,7 +733,8 @@ mod tests {
 
     #[test]
     fn marine_projection_rejects_population_and_biomass_overflow() {
-        let mut invalid_population = species(21, SpeciesCategory::Aquatic, TerrainAffinity::OpenOcean);
+        let mut invalid_population =
+            species(21, SpeciesCategory::Aquatic, TerrainAffinity::OpenOcean);
         invalid_population.upstream_density_per_m2 = f64::MAX;
         let biota = marine_biota(vec![invalid_population], vec![0], 2.0);
         assert_eq!(
