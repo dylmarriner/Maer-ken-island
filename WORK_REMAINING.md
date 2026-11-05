@@ -515,8 +515,7 @@ preflight rejection. The backward-target change merged in PR #80 after exact-hea
 tests, desktop/backend checks and both week/year reference-pack acceptance passed. A follow-up
 (PR #81) makes the session's snapshot, current state, target, options and history fields private and
 exposes immutable accessors, so callers cannot bypass the replay session's single-writer invariant.
-Its exact-head CI is pending. No island simulation constants, append-only island replay-log entries,
-snapshots or digest inputs changed.
+Its exact-head workflow [#41928721548](https://github.com/dylmarriner/Maer-ken-island/actions/runs/41928721548) passed formatting, Clippy, fast Rust tests, both week/year reference-pack acceptance tests, desktop/render, installed backend, dashboard, computer service, repository scripts and dependency audit. PR #81 merged as `7af8bec18ddbada7ff6f537d73684d0b805dc329`. The nightly slow-test job was skipped by design; the required path-scoped week/year tests ran and passed. No island simulation constants, append-only island replay-log entries, snapshots or digest inputs changed.
 
 A GPU frame-rate figure for `island-ui` is measured (2026-10-15, RX 470, 1600×1000, release,
 without vsync): 255.6 frames/s on the island view and 508.9 on the estate, against 0.6 and 10.8

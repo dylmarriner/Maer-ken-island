@@ -342,6 +342,8 @@ pub enum ReplayError {
     IntegrityError(String),
     MaxTicksExceeded,
     TargetBeforeCurrentTick,
+    DuplicateSessionName(String),
+    InvalidSessionName,
 }
 
 impl fmt::Display for ReplayError {
@@ -356,6 +358,10 @@ impl fmt::Display for ReplayError {
             ReplayError::TargetBeforeCurrentTick => {
                 write!(f, "Target tick precedes current replay state")
             }
+            ReplayError::DuplicateSessionName(name) => {
+                write!(f, "Replay session already exists: {}", name)
+            }
+            ReplayError::InvalidSessionName => write!(f, "Replay session name must not be empty"),
         }
     }
 }
@@ -374,9 +380,22 @@ impl ReplayManager {
         }
     }
 
-    /// Add a replay session
-    pub fn add_session(&mut self, name: String, session: ReplaySession) {
+    /// Add a replay session without replacing an existing session of the same name.
+    ///
+    /// Session names are stable identifiers within a manager. They must be non-empty,
+    /// already trimmed, and free of control characters; internal spaces remain valid.
+    /// A duplicate is rejected before the existing session or its replay state can be replaced.
+    pub fn add_session(&mut self, name: String, session: ReplaySession) -> Result<(), ReplayError> {
+        if name.trim().is_empty() || name.trim() != name || name.chars().any(char::is_control) {
+            return Err(ReplayError::InvalidSessionName);
+        }
+
+        if self.sessions.contains_key(&name) {
+            return Err(ReplayError::DuplicateSessionName(name));
+        }
+
         self.sessions.insert(name, session);
+        Ok(())
     }
 
     /// Get a replay session
@@ -394,9 +413,11 @@ impl ReplayManager {
         self.sessions.remove(name)
     }
 
-    /// List all session names
+    /// Return session names in lexicographic order, independent of `HashMap` iteration order.
     pub fn list_sessions(&self) -> Vec<String> {
-        self.sessions.keys().cloned().collect()
+        let mut names = self.sessions.keys().cloned().collect::<Vec<_>>();
+        names.sort_unstable();
+        names
     }
 }
 
@@ -408,7 +429,9 @@ impl Default for ReplayManager {
 
 #[cfg(test)]
 mod tests {
-    use super::{ReplayError, ReplayOptions, ReplaySession, DEFAULT_MAX_REPLAY_TICKS};
+    use super::{
+        ReplayError, ReplayManager, ReplayOptions, ReplaySession, DEFAULT_MAX_REPLAY_TICKS,
+    };
     use crate::world_integration::WorldState;
     use mk_core::canon::CanonLocked;
     use std::sync::Arc;
@@ -526,6 +549,104 @@ mod tests {
         ));
         assert_eq!(session.current_state.tick, failed_tick);
         assert!(matches!(session.verify(), Err(ReplayError::HashMismatch)));
+    }
+
+    /// Ensures session listing is stable when sessions are inserted out of sort order.
+    #[test]
+    fn replay_manager_lists_session_names_in_deterministic_order() {
+        let mut manager = ReplayManager::new();
+
+        for name in ["zeta", "alpha", "middle"] {
+            let state = WorldState::new(Arc::new(CanonLocked::default()), [0x5a; 32]);
+            let session =
+                ReplaySession::from_world_state(state, ReplayOptions::default()).expect("session");
+            manager
+                .add_session(name.to_owned(), session)
+                .expect("unique session name");
+        }
+
+        assert_eq!(
+            manager.list_sessions(),
+            vec!["alpha".to_owned(), "middle".to_owned(), "zeta".to_owned()]
+        );
+    }
+
+    #[test]
+    fn replay_manager_rejects_blank_session_names_without_mutating_manager() {
+        let mut manager = ReplayManager::new();
+        let state = WorldState::new(Arc::new(CanonLocked::default()), [0x5a; 32]);
+        let session =
+            ReplaySession::from_world_state(state, ReplayOptions::default()).expect("session");
+
+        assert!(matches!(
+            manager.add_session(" \t\n".to_owned(), session),
+            Err(ReplayError::InvalidSessionName)
+        ));
+        assert!(manager.list_sessions().is_empty());
+    }
+
+    /// Rejects padded and control-character identifiers without inserting partial state.
+    #[test]
+    fn replay_manager_rejects_noncanonical_session_names_without_mutating_manager() {
+        for invalid_name in [" primary", "primary ", "primary\nname", "primary\0"] {
+            let mut manager = ReplayManager::new();
+            let state = WorldState::new(Arc::new(CanonLocked::default()), [0x5a; 32]);
+            let session =
+                ReplaySession::from_world_state(state, ReplayOptions::default()).expect("session");
+
+            assert!(
+                matches!(
+                    manager.add_session(invalid_name.to_owned(), session),
+                    Err(ReplayError::InvalidSessionName)
+                ),
+                "accepted invalid session name {invalid_name:?}"
+            );
+            assert!(manager.list_sessions().is_empty());
+        }
+    }
+
+    /// Keeps ordinary human-readable names with internal spaces valid.
+    #[test]
+    fn replay_manager_allows_internal_spaces_in_session_names() {
+        let mut manager = ReplayManager::new();
+        let state = WorldState::new(Arc::new(CanonLocked::default()), [0x5a; 32]);
+        let session =
+            ReplaySession::from_world_state(state, ReplayOptions::default()).expect("session");
+
+        manager
+            .add_session("north ridge".to_owned(), session)
+            .expect("internal spaces are valid");
+        assert_eq!(manager.list_sessions(), vec!["north ridge".to_owned()]);
+    }
+
+    #[test]
+    fn replay_manager_rejects_duplicate_names_without_replacing_existing_session() {
+        let mut manager = ReplayManager::new();
+        let state = WorldState::new(Arc::new(CanonLocked::default()), [0x5a; 32]);
+        let mut existing = ReplaySession::from_world_state(state, ReplayOptions::default())
+            .expect("existing session");
+        let initial_tick = existing.current_state().tick;
+        existing
+            .replay_to(initial_tick + 1)
+            .expect("advance existing session before insertion");
+        manager
+            .add_session("primary".to_owned(), existing)
+            .expect("first session name is unique");
+
+        let replacement_state = WorldState::new(Arc::new(CanonLocked::default()), [0x6b; 32]);
+        let replacement =
+            ReplaySession::from_world_state(replacement_state, ReplayOptions::default())
+                .expect("replacement session");
+
+        assert!(matches!(
+            manager.add_session("primary".to_owned(), replacement),
+            Err(ReplayError::DuplicateSessionName(ref name)) if name == "primary"
+        ));
+        let retained = manager
+            .get_session("primary")
+            .expect("original session remains");
+        assert_eq!(retained.current_state().tick, initial_tick + 1);
+        assert_eq!(manager.list_sessions(), vec!["primary".to_owned()]);
     }
 
     #[test]
