@@ -400,7 +400,8 @@ impl PetroleumField {
     pub fn drill_for(&mut self, bbl_per_day: f64, dt_years: f64, model: &PetroleumModel) {
         // A zero-duration call may legitimately drill wells, but non-finite or negative
         // rates/intervals must never poison the cumulative blowout expectation.
-        if !bbl_per_day.is_finite() || bbl_per_day < 0.0 || !dt_years.is_finite() || dt_years < 0.0 {
+        if !bbl_per_day.is_finite() || bbl_per_day < 0.0 || !dt_years.is_finite() || dt_years < 0.0
+        {
             return;
         }
         if model.well_bbl_per_day > 0.0 && bbl_per_day > 0.0 {
