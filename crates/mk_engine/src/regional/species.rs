@@ -379,7 +379,7 @@ fn validate_marine_species_metadata(species: &[IslandSpecies]) -> Result<(), Mar
     for (index, s) in species.iter().enumerate() {
         if s.category == SpeciesCategory::Aquatic
             && matches!(
-                s.affinity,
+                &s.affinity,
                 TerrainAffinity::OpenOcean | TerrainAffinity::ReefSea
             )
             && s.abundance != Abundance::UpstreamDensity
@@ -691,9 +691,9 @@ impl IslandBiota {
                     actual_species_id: s.species_id,
                 });
             }
-            // The species vector is public. Reordering is caught by species_id;
-            // changing category, affinity or abundance must also invalidate the
-            // derived index rather than misclassifying a non-density species as fish.
+            // External callers can only replace the catalogue through
+            // replace_species_catalogue, which rebuilds the index and weights.
+            // Keep these identity/metadata checks as defence against internal drift.
             if s.category != SpeciesCategory::Aquatic
                 || s.affinity != indexed.affinity
                 || s.abundance != Abundance::UpstreamDensity
