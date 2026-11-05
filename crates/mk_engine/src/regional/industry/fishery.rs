@@ -338,8 +338,7 @@ mod tests {
                 "landed_t": 17.0
             })
         );
-        let restored: FishStock =
-            serde_json::from_value(json).expect("valid JSON stock restores");
+        let restored: FishStock = serde_json::from_value(json).expect("valid JSON stock restores");
         assert_eq!(restored, stock);
 
         let binary = bincode::serialize(&stock).expect("stock serializes to bincode");
