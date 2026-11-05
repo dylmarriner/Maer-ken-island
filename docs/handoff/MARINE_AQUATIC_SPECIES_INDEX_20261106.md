@@ -40,3 +40,11 @@ Base: `main` at `7bc452d1b6bced84cdc6c8f1515b726a495456b4`.
 - Added regressions for invalid density, invalid body mass, population overflow, biomass overflow, invalid cell area and stale derived indices.
 - The projection remains read-only and derived. No snapshot, event log, ledger, RNG stream, replay input/hash, or simulation state changes.
 - Exact-head CI is required; no local Cargo result is claimed because custom OpenCommander access is currently returning HTTP 429.
+
+
+## Follow-up: cached-index identity guard (2026-11-06)
+
+- The cached marine index now stores each species vector position together with its stable species ID.
+- Projection rejects both an out-of-range index and an in-range index that now points to a different species after the publicly exposed species vector is reordered.
+- Added a regression that swaps two marine species after index construction and requires a typed stale-index error instead of silently projecting the wrong species.
+- This remains a derived read-only guard; it does not change species order, snapshots, event logs, ledger entries, RNG streams or replay hashes.
