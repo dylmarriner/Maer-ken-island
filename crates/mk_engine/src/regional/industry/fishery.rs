@@ -191,10 +191,14 @@ impl FishStock {
             return 0.0;
         }
 
-        let grown = self.surplus_t_per_year(model).max(0.0) * dt_s / YEAR_S;
-        if !grown.is_finite() || grown < 0.0 {
+        let raw_growth = self.surplus_t_per_year(model).max(0.0) * dt_s / YEAR_S;
+        if !raw_growth.is_finite() || raw_growth < 0.0 {
             return 0.0;
         }
+        // A single aggregate step cannot add more biomass than the stock's
+        // remaining headroom to carrying capacity. The instantaneous Schaefer
+        // rate is an Euler estimate; cap it so a coarse dt cannot create fish.
+        let grown = raw_growth.min(self.k_t - self.biomass_t);
         let post_growth = self.biomass_t + grown;
         if !post_growth.is_finite() {
             return 0.0;
@@ -339,5 +343,19 @@ mod tests {
 
         assert_eq!(stock.fish(&explosive, 1.0, YEAR_S), 0.0);
         assert_eq!(stock, before);
+    }
+
+    #[test]
+    fn coarse_fishing_interval_cannot_harvest_more_than_remaining_capacity() {
+        let m = FisheryModel::load_default().expect("the pack loads");
+        let mut stock = FishStock::unexploited(Resilience::Medium, 1_000.0);
+        stock.biomass_t = 500.0;
+
+        let landed = stock.fish(&m, 10_000.0, 100.0 * YEAR_S);
+
+        assert_eq!(landed, 500.0);
+        assert_eq!(stock.biomass_t, 500.0);
+        assert_eq!(stock.landed_t, 500.0);
+        assert!(stock.biomass_t <= stock.k_t);
     }
 }
