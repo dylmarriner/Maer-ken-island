@@ -641,10 +641,15 @@ impl IslandBiota {
                     species_id: s.species_id,
                 });
             }
-            // Convert kilograms to tonnes before multiplying. The final
-            // biomass can be finite even when individuals * body_mass_kg
-            // would overflow as an intermediate f64 value.
-            let biomass_t = individuals * (s.body_mass_kg / 1_000.0);
+            // Divide the larger factor before multiplying. This avoids an
+            // overflowing kilogram product without underflowing a tiny body
+            // mass before a large population can scale it back into range.
+            let (scaled_individuals, scaled_mass_kg) = if individuals >= s.body_mass_kg {
+                (individuals / 1_000.0, s.body_mass_kg)
+            } else {
+                (individuals, s.body_mass_kg / 1_000.0)
+            };
+            let biomass_t = scaled_individuals * scaled_mass_kg;
             if !biomass_t.is_finite() || biomass_t < 0.0 {
                 return Err(MarineProjectionError::NonFiniteBiomass {
                     species_id: s.species_id,
@@ -855,7 +860,7 @@ mod tests {
     }
 
     #[test]
-    fn marine_projection_scales_mass_before_multiplication_to_avoid_false_overflow() {
+    fn marine_projection_scales_the_larger_factor_before_multiplication() {
         let mut large_population = species(23, SpeciesCategory::Aquatic, TerrainAffinity::OpenOcean);
         large_population.upstream_density_per_m2 = 1.0e308;
         large_population.body_mass_kg = 10.0;
@@ -873,6 +878,23 @@ mod tests {
         assert_eq!(nodes[0].individuals, 1.0e308);
         assert!(nodes[0].biomass_t.is_finite());
         assert!((nodes[0].biomass_t / 1.0e306 - 1.0).abs() < 1.0e-12);
+
+        // Dividing the tiny mass first would underflow it to zero. Scaling
+        // the larger population factor preserves the finite tonne result.
+        let mut tiny_mass = species(24, SpeciesCategory::Aquatic, TerrainAffinity::OpenOcean);
+        tiny_mass.upstream_density_per_m2 = 1.0e308;
+        tiny_mass.body_mass_kg = f64::from_bits(1);
+        let biota = marine_biota(
+            vec![tiny_mass],
+            vec![MarineAquaticSpeciesIndex {
+                index: 0,
+                species_id: 24,
+            }],
+            1.0,
+        );
+        let nodes = biota.try_marine_aquatic_nodes(0).unwrap();
+        assert!(nodes[0].biomass_t.is_finite());
+        assert!(nodes[0].biomass_t > 0.0);
     }
 
     #[test]
