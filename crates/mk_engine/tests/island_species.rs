@@ -499,3 +499,49 @@ fn marine_projection_indexes_species_that_become_eligible_after_catalogue_replac
         "newly eligible species {species_id} must be indexed after replacement"
     );
 }
+
+#[test]
+fn replacing_species_catalogue_rebuilds_grazer_weights() {
+    let b = base();
+    let mut biota = b.biota.clone();
+    let mut species = biota.species().to_vec();
+    let grazer_index = species
+        .iter()
+        .position(|species| species.abundance == Abundance::GrazerCarbon)
+        .expect("the island has grazer species");
+    let affinity = species[grazer_index].affinity.clone();
+    let cell = biota
+        .habitat_cells(&affinity)
+        .next()
+        .expect("the grazer affinity has habitat");
+    species[grazer_index].upstream_population = species[grazer_index]
+        .upstream_population
+        .saturating_add(1_000);
+
+    let expected_denominator: f64 = species
+        .iter()
+        .filter(|candidate| {
+            candidate.abundance == Abundance::GrazerCarbon
+                && biota.is_habitat(cell, &candidate.affinity)
+        })
+        .map(|candidate| candidate.upstream_population as f64)
+        .sum();
+    let expected = b.ecology.herbivore_kgc_m2.data()[cell]
+        * b.domain.cell_area_m2(M)
+        * species[grazer_index].upstream_population as f64
+        / expected_denominator;
+
+    biota
+        .replace_species_catalogue(species)
+        .expect("the replacement catalogue is valid");
+
+    let node = biota
+        .animal_nodes(cell, &b.ecology)
+        .into_iter()
+        .find(|node| node.species == grazer_index)
+        .expect("the updated grazer remains a node");
+    match node.stock {
+        NodeStock::CarbonKgc(actual) => assert!(close(actual, expected)),
+        NodeStock::Head(_) => panic!("grazer carbon must remain a carbon node"),
+    }
+}
