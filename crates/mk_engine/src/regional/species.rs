@@ -1207,3 +1207,43 @@ mod tests {
         assert!(!habitat_of(open, BiomeType::CoastalWaters, NOTHING));
     }
 }
+
+
+#[cfg(test)]
+mod marine_index_tests {
+    use super::*;
+
+    #[test]
+    fn checked_projection_rejects_internal_stale_metadata() {
+        let species = IslandSpecies {
+            species_id: 1,
+            name: "test marine species".to_owned(),
+            category: SpeciesCategory::Aquatic,
+            affinity: TerrainAffinity::OpenOcean,
+            body_mass_kg: 1.0,
+            upstream_population: 1,
+            upstream_density_per_m2: 1.0,
+            abundance: Abundance::UpstreamDensity,
+        };
+        let mut biota = IslandBiota {
+            species: vec![species.clone()],
+            marine_aquatic_species: marine_aquatic_species_indices(&[species]),
+            habitat: vec![bit(&TerrainAffinity::OpenOcean)],
+            cell_area_m2: 1.0,
+            producer_weight: [0.0; 10],
+            grazer_weight: [0.0; 10],
+        };
+
+        // This is only possible inside the module; public callers cannot
+        // bypass replace_species_catalogue and leave the cached index stale.
+        biota.species[0].category = SpeciesCategory::Tree;
+
+        assert!(matches!(
+            biota.try_marine_aquatic_nodes(0),
+            Err(MarineProjectionError::StaleSpeciesMetadata {
+                index: 0,
+                species_id: 1,
+            })
+        ));
+    }
+}
