@@ -286,9 +286,17 @@ impl FishStock {
         }
         self.validate_state()?;
 
-        // Divide the time interval first so a representable annual growth
-        // amount does not overflow in the intermediate multiplication by seconds.
-        let raw_growth = self.surplus_t_per_year(model)? * (dt_s / YEAR_S);
+        let surplus = self.surplus_t_per_year(model)?;
+        // Divide whichever factor is at least one year before multiplying.
+        // This avoids overflow for a large annual surplus and underflow when a
+        // tiny time step is paired with a large, otherwise representable rate.
+        let raw_growth = if surplus >= YEAR_S {
+            (surplus / YEAR_S) * dt_s
+        } else if dt_s >= YEAR_S {
+            surplus * (dt_s / YEAR_S)
+        } else {
+            (surplus * dt_s) / YEAR_S
+        };
         if !raw_growth.is_finite() || raw_growth < 0.0 {
             return Err(FisheryError::NonFiniteGrowth);
         }
@@ -609,6 +617,21 @@ mod tests {
         assert!((landed / 1.0e307 - 1.0).abs() < 1e-12);
         assert!((stock.biomass_t / 1.0e307 - 5.25).abs() < 1e-12);
         assert!((stock.landed_t / 1.0e307 - 1.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn tiny_time_step_preserves_representable_growth_for_a_large_stock() {
+        let m = FisheryModel::load_default().expect("the pack loads");
+        let mut stock = FishStock::unexploited(Resilience::Medium, 1.0e308)
+            .expect("positive carrying capacity");
+        stock.biomass_t = 5.0e307;
+
+        let landed = stock
+            .fish(&m, 1.0e-23, f64::from_bits(1))
+            .expect("representable subnormal time step");
+
+        assert!(landed > 0.0);
+        assert!(stock.landed_t > 0.0);
     }
 
     #[test]
