@@ -563,6 +563,12 @@ mod tests {
 
         assert!(surplus.is_finite() && surplus > 0.0);
         assert!((surplus / 4.0e-200 - 1.0).abs() < 1.0e-12);
+
+        let landed = stock
+            .fish(&model, 1.0e-200, YEAR_S)
+            .expect("the fishery can land a positive request from representable growth");
+        assert_eq!(landed, 1.0e-200);
+        assert_eq!(stock.landed_t, 1.0e-200);
     }
 
     #[test]
