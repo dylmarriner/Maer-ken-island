@@ -106,3 +106,11 @@ Verification:
 - Commit `4bc42dc589370188330c8497a2517d681d882f42` applies the exact formatter output.
 - Clippy and fast tests were not run in that job because formatting failed first; no assertion failure is recorded.
 - A fresh exact-head workflow is required for this formatter correction. Do not use the previous successful run as evidence for this new head.
+
+
+## Regression fixture correction
+
+The first added invalid-name test encoded literal backslash-plus-letter sequences instead of Rust newline/NUL escape sequences. That would not exercise the control-character branch. The test literals now use actual Rust escapes (`\\n` and `\\0` in source), so the cases construct newline and NUL characters at runtime.
+
+- Commit: `7bb89f037ee8f9f785a5536326b9c5c939de08ed`.
+- The exact-head formatting run on the preceding commit is not evidence for this corrected test input. A new exact-head workflow is required.
