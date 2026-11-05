@@ -2137,3 +2137,24 @@ async fn a_client_is_told_what_this_backend_can_do_before_it_asks_for_anything()
          could write one would send an operator to a button that refuses"
     );
 }
+
+
+#[tokio::test]
+async fn browser_map_cell_inspector_renders_the_uncalibrated_marine_estimate() {
+    let port = a_shared_dashboard();
+    let (status, response) = get(port, "/static/island.js").await;
+    assert_eq!(status, 200, "{response}");
+    let script = body_of(&response);
+    let on_map_click = script
+        .split("async function onMapClick")
+        .nth(1)
+        .expect("the browser map click handler is served");
+
+    assert!(on_map_click.contains("marine_aquatic_species"));
+    assert!(on_map_click.contains("marine_aquatic_individuals"));
+    assert!(on_map_click.contains("marine_aquatic_biomass_t"));
+    assert!(
+        on_map_click.contains("Uncalibrated upstream estimate; not harvestable stock or catch."),
+        "the browser inspector must label this as an upstream estimate, not a fishery stock"
+    );
+}
