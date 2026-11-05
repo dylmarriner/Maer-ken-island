@@ -212,6 +212,32 @@ pub struct MarineAquaticNode {
     pub biomass_t: f64,
 }
 
+/** A marine population-to-biomass projection must remain finite and physically valid. */
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MarineProjectionError {
+    InvalidCellArea,
+    InvalidSpeciesIndex { index: usize },
+    InvalidDensity { species_id: u64 },
+    InvalidBodyMass { species_id: u64 },
+    NonFiniteIndividuals { species_id: u64 },
+    NonFiniteBiomass { species_id: u64 },
+}
+
+impl std::fmt::Display for MarineProjectionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::InvalidCellArea => f.write_str("marine projection cell area must be finite and positive"),
+            Self::InvalidSpeciesIndex { index } => write!(f, "marine projection index {index} is outside the species catalogue"),
+            Self::InvalidDensity { species_id } => write!(f, "marine species {species_id} has invalid upstream density"),
+            Self::InvalidBodyMass { species_id } => write!(f, "marine species {species_id} has invalid body mass"),
+            Self::NonFiniteIndividuals { species_id } => write!(f, "marine species {species_id} population overflowed"),
+            Self::NonFiniteBiomass { species_id } => write!(f, "marine species {species_id} biomass overflowed"),
+        }
+    }
+}
+
+impl std::error::Error for MarineProjectionError {}
+
 /// Upstream's species on the island's ground.
 #[derive(Debug, Clone)]
 pub struct IslandBiota {
@@ -507,27 +533,69 @@ impl IslandBiota {
     /// Only OpenOcean and ReefSea species are included. River-affinity aquatic
     /// species remain available through `animal_nodes`, but are not treated
     /// as part of the inshore marine fishery.
-    pub fn marine_aquatic_nodes(&self, cell: usize) -> Vec<MarineAquaticNode> {
+    /// Checked form of the marine projection. Invalid source values and
+    /// arithmetic overflow are reported instead of leaking NaN/infinity into
+    /// API responses, maps or later fishery calculations.
+    pub fn try_marine_aquatic_nodes(
+        &self,
+        cell: usize,
+    ) -> Result<Vec<MarineAquaticNode>, MarineProjectionError> {
         let mask = self.habitat.get(cell).copied().unwrap_or(0);
         if mask == 0 {
-            return Vec::new();
+            return Ok(Vec::new());
         }
-        self.marine_aquatic_species
-            .iter()
-            .filter_map(|&species| {
-                let s = self.species.get(species)?;
-                if mask & bit(&s.affinity) == 0 {
-                    return None;
-                }
-                let individuals = s.upstream_density_per_m2 * self.cell_area_m2;
-                Some(MarineAquaticNode {
-                    cell,
-                    species,
-                    individuals,
-                    biomass_t: individuals * s.body_mass_kg / 1_000.0,
-                })
-            })
-            .collect()
+        if !self.cell_area_m2.is_finite() || self.cell_area_m2 <= 0.0 {
+            return Err(MarineProjectionError::InvalidCellArea);
+        }
+
+        let mut nodes = Vec::with_capacity(self.marine_aquatic_species.len());
+        for &species in &self.marine_aquatic_species {
+            let s = self
+                .species
+                .get(species)
+                .ok_or(MarineProjectionError::InvalidSpeciesIndex { index: species })?;
+            if mask & bit(&s.affinity) == 0 {
+                continue;
+            }
+            if !s.upstream_density_per_m2.is_finite() || s.upstream_density_per_m2 < 0.0 {
+                return Err(MarineProjectionError::InvalidDensity {
+                    species_id: s.species_id,
+                });
+            }
+            if !s.body_mass_kg.is_finite() || s.body_mass_kg <= 0.0 {
+                return Err(MarineProjectionError::InvalidBodyMass {
+                    species_id: s.species_id,
+                });
+            }
+
+            let individuals = s.upstream_density_per_m2 * self.cell_area_m2;
+            if !individuals.is_finite() || individuals < 0.0 {
+                return Err(MarineProjectionError::NonFiniteIndividuals {
+                    species_id: s.species_id,
+                });
+            }
+            let biomass_t = individuals * s.body_mass_kg / 1_000.0;
+            if !biomass_t.is_finite() || biomass_t < 0.0 {
+                return Err(MarineProjectionError::NonFiniteBiomass {
+                    species_id: s.species_id,
+                });
+            }
+            nodes.push(MarineAquaticNode {
+                cell,
+                species,
+                individuals,
+                biomass_t,
+            });
+        }
+        Ok(nodes)
+    }
+
+    /// Convenience form for invariant-preserving internal callers. It fails
+    /// fast if the upstream-derived projection is invalid; callers that need
+    /// a recoverable error should use try_marine_aquatic_nodes.
+    pub fn marine_aquatic_nodes(&self, cell: usize) -> Vec<MarineAquaticNode> {
+        self.try_marine_aquatic_nodes(cell)
+            .unwrap_or_else(|error| panic!("invalid marine aquatic projection: {error}"))
     }
 
     /// The plants on medium cell `cell`, as resource nodes: each plant
@@ -614,6 +682,75 @@ mod tests {
             upstream_density_per_m2: 1.0,
             abundance: Abundance::UpstreamDensity,
         }
+    }
+    fn marine_biota(
+        species: Vec<IslandSpecies>,
+        marine_aquatic_species: Vec<usize>,
+        cell_area_m2: f64,
+    ) -> IslandBiota {
+        IslandBiota {
+            species,
+            marine_aquatic_species,
+            habitat: vec![bit(&TerrainAffinity::OpenOcean)],
+            cell_area_m2,
+            producer_weight: [0.0; 10],
+            grazer_weight: [0.0; 10],
+        }
+    }
+
+    #[test]
+    fn marine_projection_rejects_invalid_density_and_body_mass() {
+        let mut invalid_density = species(11, SpeciesCategory::Aquatic, TerrainAffinity::OpenOcean);
+        invalid_density.upstream_density_per_m2 = f64::INFINITY;
+        let biota = marine_biota(vec![invalid_density], vec![0], 1.0);
+        assert_eq!(
+            biota.try_marine_aquatic_nodes(0),
+            Err(MarineProjectionError::InvalidDensity { species_id: 11 })
+        );
+
+        let mut invalid_mass = species(12, SpeciesCategory::Aquatic, TerrainAffinity::OpenOcean);
+        invalid_mass.body_mass_kg = f64::NAN;
+        let biota = marine_biota(vec![invalid_mass], vec![0], 1.0);
+        assert_eq!(
+            biota.try_marine_aquatic_nodes(0),
+            Err(MarineProjectionError::InvalidBodyMass { species_id: 12 })
+        );
+    }
+
+    #[test]
+    fn marine_projection_rejects_population_and_biomass_overflow() {
+        let mut invalid_population = species(21, SpeciesCategory::Aquatic, TerrainAffinity::OpenOcean);
+        invalid_population.upstream_density_per_m2 = f64::MAX;
+        let biota = marine_biota(vec![invalid_population], vec![0], 2.0);
+        assert_eq!(
+            biota.try_marine_aquatic_nodes(0),
+            Err(MarineProjectionError::NonFiniteIndividuals { species_id: 21 })
+        );
+
+        let mut invalid_biomass = species(22, SpeciesCategory::Aquatic, TerrainAffinity::OpenOcean);
+        invalid_biomass.upstream_density_per_m2 = 1.0e200;
+        invalid_biomass.body_mass_kg = 1.0e200;
+        let biota = marine_biota(vec![invalid_biomass], vec![0], 1.0);
+        assert_eq!(
+            biota.try_marine_aquatic_nodes(0),
+            Err(MarineProjectionError::NonFiniteBiomass { species_id: 22 })
+        );
+    }
+
+    #[test]
+    fn marine_projection_rejects_invalid_cell_area_and_stale_species_indices() {
+        let valid = species(31, SpeciesCategory::Aquatic, TerrainAffinity::OpenOcean);
+        let biota = marine_biota(vec![valid.clone()], vec![0], 0.0);
+        assert_eq!(
+            biota.try_marine_aquatic_nodes(0),
+            Err(MarineProjectionError::InvalidCellArea)
+        );
+
+        let biota = marine_biota(vec![valid], vec![1], 1.0);
+        assert_eq!(
+            biota.try_marine_aquatic_nodes(0),
+            Err(MarineProjectionError::InvalidSpeciesIndex { index: 1 })
+        );
     }
 
     #[test]
