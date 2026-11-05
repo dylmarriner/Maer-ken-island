@@ -82,3 +82,14 @@ Exact-head CI is required for the updated PR head. No local Cargo result is
 claimed in this run; custom OpenCommander device discovery is returning HTTP
 429. Do not merge until formatting, Clippy, fast tests, desktop/backend and
 week/year acceptance all pass on the new head.
+
+
+## Exact-head formatting correction for diagnostic API hardening
+
+Workflow [#42018795867](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42018795867)
+checked the PR merge ref and passed the dashboard, repository scripts, dependency
+audit and computer service. The Rust formatting job found one extra blank line
+before `diagnostic_methods_reject_invalid_models_and_stock_state`; Clippy and
+fast tests were skipped by that formatting failure. The exact rustfmt spacing
+was applied in the source. This formatting-only correction does not change
+simulation behaviour. A fresh exact-head run is required.
