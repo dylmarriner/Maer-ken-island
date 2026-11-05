@@ -633,9 +633,12 @@ impl IslandBiota {
                 });
             }
             // The species vector is public. Reordering is caught by species_id;
-            // changing category or affinity must also invalidate the derived
-            // habitat index rather than silently omitting or misclassifying stock.
-            if s.category != SpeciesCategory::Aquatic || s.affinity != indexed.affinity {
+            // changing category, affinity or abundance must also invalidate the
+            // derived index rather than misclassifying a non-density species as fish.
+            if s.category != SpeciesCategory::Aquatic
+                || s.affinity != indexed.affinity
+                || s.abundance != Abundance::UpstreamDensity
+            {
                 return Err(MarineProjectionError::StaleSpeciesMetadata {
                     index: species,
                     species_id: s.species_id,
