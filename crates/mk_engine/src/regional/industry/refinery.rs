@@ -383,5 +383,4 @@ mod tests {
             assert!(validate_assay_yields(&cuts).is_err(), "accepted {cuts:?}");
         }
     }
-
 }
