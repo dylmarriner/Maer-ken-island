@@ -348,7 +348,6 @@ mod tests {
         assert!((stock.surplus_t_per_year(&m).unwrap() - 18.0).abs() < 1e-9);
     }
 
-
     #[test]
     fn diagnostic_methods_reject_invalid_models_and_stock_state() {
         let m = FisheryModel::load_default().expect("the pack loads");
