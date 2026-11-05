@@ -291,7 +291,10 @@ fn negative_offtake_caps_are_rejected_without_mutating_field_or_ledger() {
 #[test]
 fn finite_offtake_cap_is_never_exceeded_by_floating_point_rounding() {
     let m = &base().model;
-    let mut field = fields().into_iter().next().unwrap();
+    let mut field = fields()
+        .into_iter()
+        .find(|field| field.remaining_oil_m3() > 0.0)
+        .expect("the island should contain an oil-bearing field");
     let remaining = field.remaining_oil_m3();
     let share = 1.0 - (-m.decline_per_year).exp();
     let potential = remaining * share;
@@ -312,8 +315,14 @@ fn finite_offtake_cap_is_never_exceeded_by_floating_point_rounding() {
 #[test]
 fn positive_infinite_offtake_cap_matches_unbounded_production() {
     let m = &base().model;
-    let mut unbounded = fields().into_iter().next().unwrap();
-    let mut explicit = fields().into_iter().next().unwrap();
+    let mut unbounded = fields()
+        .into_iter()
+        .find(|field| field.remaining_oil_m3() > 0.0)
+        .expect("the island should contain an oil-bearing field");
+    let mut explicit = fields()
+        .into_iter()
+        .find(|field| field.remaining_oil_m3() > 0.0)
+        .expect("the island should contain an oil-bearing field");
     let mut unbounded_ledger = Ledger::new();
     let mut explicit_ledger = Ledger::new();
 
