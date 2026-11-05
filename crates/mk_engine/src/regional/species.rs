@@ -232,6 +232,10 @@ pub enum MarineProjectionError {
         index: usize,
         species_id: u64,
     },
+    InvalidMarineAbundance {
+        index: usize,
+        species_id: u64,
+    },
     InvalidDensity {
         species_id: u64,
     },
@@ -271,6 +275,10 @@ impl std::fmt::Display for MarineProjectionError {
                 f,
                 "marine projection index {index} for species {species_id} no longer matches its surveyed aquatic metadata"
             ),
+            Self::InvalidMarineAbundance { index, species_id } => write!(
+                f,
+                "marine aquatic species {species_id} at index {index} must use upstream-density abundance"
+            ),
             Self::InvalidDensity { species_id } => write!(
                 f,
                 "marine species {species_id} has invalid upstream density"
@@ -293,7 +301,9 @@ impl std::error::Error for MarineProjectionError {}
 /// Upstream's species on the island's ground.
 #[derive(Debug, Clone)]
 pub struct IslandBiota {
-    pub species: Vec<IslandSpecies>,
+    // Keep the catalogue private: the cached marine index and carbon weights
+    // must never be bypassed by direct external Vec mutation.
+    species: Vec<IslandSpecies>,
     /// Stable indices of OpenOcean/ReefSea aquatic species, built once at survey
     /// so a cell lookup does not rescan every founding species.
     marine_aquatic_species: Vec<MarineAquaticSpeciesIndex>,
@@ -348,6 +358,41 @@ fn marine_aquatic_species_indices(species: &[IslandSpecies]) -> Vec<MarineAquati
         .collect()
 }
 
+/// Rebuild the per-affinity carbon denominators after a controlled catalogue edit.
+fn species_weights(species: &[IslandSpecies]) -> ([f64; 10], [f64; 10]) {
+    let mut producer_weight = [0.0; 10];
+    let mut grazer_weight = [0.0; 10];
+    for s in species {
+        let at = slot(&s.affinity);
+        match s.abundance {
+            Abundance::ProducerCarbon => producer_weight[at] += s.upstream_population as f64,
+            Abundance::GrazerCarbon => grazer_weight[at] += s.upstream_population as f64,
+            Abundance::UpstreamDensity => {}
+        }
+    }
+    (producer_weight, grazer_weight)
+}
+
+/// A marine aquatic species must be projected from upstream density, not
+/// either of the island's carbon pools.
+fn validate_marine_species_metadata(species: &[IslandSpecies]) -> Result<(), MarineProjectionError> {
+    for (index, s) in species.iter().enumerate() {
+        if s.category == SpeciesCategory::Aquatic
+            && matches!(
+                s.affinity,
+                TerrainAffinity::OpenOcean | TerrainAffinity::ReefSea
+            )
+            && s.abundance != Abundance::UpstreamDensity
+        {
+            return Err(MarineProjectionError::InvalidMarineAbundance {
+                index,
+                species_id: s.species_id,
+            });
+        }
+    }
+    Ok(())
+}
+
 /// The 64-bit seed upstream's biosphere takes, from the scenario's 32
 /// bytes: the first eight, little-endian, as `BiosphereSystem::new` lays
 /// a `u64` into its own seed.
@@ -358,6 +403,29 @@ fn biosphere_seed(seed: &[u8; 32]) -> u64 {
 }
 
 impl IslandBiota {
+    /// Read-only view of the derived species catalogue.
+    pub fn species(&self) -> &[IslandSpecies] {
+        &self.species
+    }
+
+    /// Replace the derived catalogue while rebuilding every cache that depends
+    /// on species membership or abundance. Marine aquatic entries using a
+    /// carbon-pool abundance are rejected before any state is changed.
+    pub fn replace_species_catalogue(
+        &mut self,
+        species: Vec<IslandSpecies>,
+    ) -> Result<(), MarineProjectionError> {
+        validate_marine_species_metadata(&species)?;
+        let marine_aquatic_species = marine_aquatic_species_indices(&species);
+        let (producer_weight, grazer_weight) = species_weights(&species);
+
+        self.species = species;
+        self.marine_aquatic_species = marine_aquatic_species;
+        self.producer_weight = producer_weight;
+        self.grazer_weight = grazer_weight;
+        Ok(())
+    }
+
     /// Place upstream's founding species, generated from the scenario's
     /// `seed`, on the island's habitats.
     pub fn survey(
@@ -417,16 +485,7 @@ impl IslandBiota {
             }
         }
 
-        let mut producer_weight = [0.0; 10];
-        let mut grazer_weight = [0.0; 10];
-        for s in &species {
-            let at = slot(&s.affinity);
-            match s.abundance {
-                Abundance::ProducerCarbon => producer_weight[at] += s.upstream_population as f64,
-                Abundance::GrazerCarbon => grazer_weight[at] += s.upstream_population as f64,
-                Abundance::UpstreamDensity => {}
-            }
-        }
+        let (producer_weight, grazer_weight) = species_weights(&species);
 
         Self {
             species,
