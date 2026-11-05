@@ -286,7 +286,9 @@ impl FishStock {
         }
         self.validate_state()?;
 
-        let raw_growth = self.surplus_t_per_year(model)? * dt_s / YEAR_S;
+        // Divide the time interval first so a representable annual growth
+        // amount does not overflow in the intermediate multiplication by seconds.
+        let raw_growth = self.surplus_t_per_year(model)? * (dt_s / YEAR_S);
         if !raw_growth.is_finite() || raw_growth < 0.0 {
             return Err(FisheryError::NonFiniteGrowth);
         }
@@ -579,6 +581,22 @@ mod tests {
             Err(FisheryError::NonFiniteGrowth)
         );
         assert_eq!(stock, before);
+    }
+
+    #[test]
+    fn large_representable_annual_growth_avoids_intermediate_overflow() {
+        let m = FisheryModel::load_default().expect("the pack loads");
+        let mut stock = FishStock::unexploited(Resilience::Medium, 1.0e308)
+            .expect("positive carrying capacity");
+        stock.biomass_t = 5.0e307;
+
+        let landed = stock
+            .fish(&m, 1.0e307, YEAR_S)
+            .expect("representable one-year growth");
+
+        assert!((landed / 1.0e307 - 1.0).abs() < 1e-12);
+        assert!((stock.biomass_t / 1.0e307 - 5.25).abs() < 1e-12);
+        assert!((stock.landed_t / 1.0e307 - 1.0).abs() < 1e-12);
     }
 
     #[test]
