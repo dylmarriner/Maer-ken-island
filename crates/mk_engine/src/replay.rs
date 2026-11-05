@@ -574,8 +574,8 @@ mod tests {
     fn replay_manager_rejects_blank_session_names_without_mutating_manager() {
         let mut manager = ReplayManager::new();
         let state = WorldState::new(Arc::new(CanonLocked::default()), [0x5a; 32]);
-        let session = ReplaySession::from_world_state(state, ReplayOptions::default())
-            .expect("session");
+        let session =
+            ReplaySession::from_world_state(state, ReplayOptions::default()).expect("session");
 
         assert!(matches!(
             manager.add_session(" \t\n".to_owned(), session),
