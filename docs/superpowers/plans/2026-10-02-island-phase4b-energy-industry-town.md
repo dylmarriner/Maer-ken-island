@@ -230,3 +230,10 @@ A supermarket sells food; it does not make it. With no imports, every calorie th
 - [ ] **Step 2:** Run the acceptance test; add `island_preview world` overlays for the river, plants, grid and town.
 - [ ] **Step 3:** Benchmark with the full town population and record it in the Phase-5 baseline; if the default scale misses the performance targets, record the measured cost and offer the owner a smaller founding town.
 - [ ] **Step 4:** Commit `feat(island): hydro, petroleum, town and economy on the dashboard`.
+
+
+---
+
+### Engineering note — fishery arithmetic (2026-11-06)
+
+The standalone Schaefer stock model now handles the extreme low-biomass case where the floating-point ratio `B / k` underflows to zero even though the depensated surplus `r B² / (k d)` is still representable. The normal path is unchanged; logarithmic evaluation is used only for that underflow edge. The model remains deliberately unintegrated until sourced species-specific stock capacity, resilience and effort/CPUE inputs exist. Exact-head formatting, Clippy and fast-test CI are required before this change is considered verified.
