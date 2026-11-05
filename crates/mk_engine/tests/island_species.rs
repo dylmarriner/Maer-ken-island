@@ -516,7 +516,8 @@ fn replacing_species_catalogue_rebuilds_grazer_weights() {
         .expect("the grazer affinity has habitat");
     species[grazer_index].upstream_population = species[grazer_index]
         .upstream_population
-        .saturating_add(1_000);
+        .checked_add(1_000)
+        .expect("the test population remains within u64");
 
     let expected_denominator: f64 = species
         .iter()
@@ -526,6 +527,7 @@ fn replacing_species_catalogue_rebuilds_grazer_weights() {
         })
         .map(|candidate| candidate.upstream_population as f64)
         .sum();
+    assert!(expected_denominator > 0.0);
     let expected = b.ecology.herbivore_kgc_m2.data()[cell]
         * b.domain.cell_area_m2(M)
         * species[grazer_index].upstream_population as f64
