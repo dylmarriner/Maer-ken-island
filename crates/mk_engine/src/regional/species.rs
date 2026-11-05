@@ -38,6 +38,7 @@
 //! seed and the fields whenever they are asked for, so snapshots and the
 //! week digest do not move, and an older snapshot needs no migration.
 
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use mk_core::biomes::BiomeType;
@@ -212,10 +213,114 @@ pub struct MarineAquaticNode {
     pub biomass_t: f64,
 }
 
+/** A marine population-to-biomass projection must remain finite and physically valid. */
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MarineProjectionError {
+    InvalidCellIndex {
+        cell: usize,
+    },
+    InvalidCellArea,
+    InvalidSpeciesIndex {
+        index: usize,
+    },
+    StaleSpeciesIndex {
+        index: usize,
+        expected_species_id: u64,
+        actual_species_id: u64,
+    },
+    /// The cached marine index no longer matches this species' surveyed category or affinity.
+    StaleSpeciesMetadata {
+        index: usize,
+        species_id: u64,
+    },
+    InvalidMarineAbundance {
+        index: usize,
+        species_id: u64,
+    },
+    DuplicateSpeciesId {
+        first_index: usize,
+        duplicate_index: usize,
+        species_id: u64,
+    },
+    InvalidDensity {
+        species_id: u64,
+    },
+    InvalidBodyMass {
+        species_id: u64,
+    },
+    NonFiniteIndividuals {
+        species_id: u64,
+    },
+    NonFiniteBiomass {
+        species_id: u64,
+    },
+}
+
+impl std::fmt::Display for MarineProjectionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::InvalidCellIndex { cell } => {
+                write!(f, "marine projection cell {cell} is outside the habitat grid")
+            }
+            Self::InvalidCellArea => {
+                f.write_str("marine projection cell area must be finite and positive")
+            }
+            Self::InvalidSpeciesIndex { index } => write!(
+                f,
+                "marine projection index {index} is outside the species catalogue"
+            ),
+            Self::StaleSpeciesIndex {
+                index,
+                expected_species_id,
+                actual_species_id,
+            } => write!(
+                f,
+                "marine projection index {index} expected species {expected_species_id} but found {actual_species_id}"
+            ),
+            Self::StaleSpeciesMetadata { index, species_id } => write!(
+                f,
+                "marine projection index {index} for species {species_id} no longer matches its surveyed aquatic metadata"
+            ),
+            Self::InvalidMarineAbundance { index, species_id } => write!(
+                f,
+                "marine aquatic species {species_id} at index {index} must use upstream-density abundance"
+            ),
+            Self::DuplicateSpeciesId {
+                first_index,
+                duplicate_index,
+                species_id,
+            } => write!(
+                f,
+                "species catalogue repeats id {species_id} at indices {first_index} and {duplicate_index}"
+            ),
+            Self::InvalidDensity { species_id } => write!(
+                f,
+                "marine species {species_id} has invalid upstream density"
+            ),
+            Self::InvalidBodyMass { species_id } => {
+                write!(f, "marine species {species_id} has invalid body mass")
+            }
+            Self::NonFiniteIndividuals { species_id } => {
+                write!(f, "marine species {species_id} population overflowed")
+            }
+            Self::NonFiniteBiomass { species_id } => {
+                write!(f, "marine species {species_id} biomass overflowed")
+            }
+        }
+    }
+}
+
+impl std::error::Error for MarineProjectionError {}
+
 /// Upstream's species on the island's ground.
 #[derive(Debug, Clone)]
 pub struct IslandBiota {
-    pub species: Vec<IslandSpecies>,
+    // Keep the catalogue private: the cached marine index and carbon weights
+    // must never be bypassed by direct external Vec mutation.
+    species: Vec<IslandSpecies>,
+    /// Stable indices of OpenOcean/ReefSea aquatic species, built once at survey
+    /// so a cell lookup does not rescan every founding species.
+    marine_aquatic_species: Vec<MarineAquaticSpeciesIndex>,
     /// Per medium cell, a bit per [`AFFINITIES`] entry it is habitat for.
     habitat: Vec<u16>,
     cell_area_m2: f64,
@@ -234,6 +339,82 @@ fn abundance_of(category: &SpeciesCategory) -> Abundance {
     }
 }
 
+/// A cached species index carries its identity as well as its position.
+/// IslandBiota exposes its species catalogue for read access, so this guard
+/// prevents a later reorder through a mutable owner from silently aliasing a
+/// different species at the same vector index.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct MarineAquaticSpeciesIndex {
+    index: usize,
+    species_id: u64,
+    affinity: TerrainAffinity,
+}
+
+/// Species eligible for the read-only marine biomass projection. Keeping this
+/// stable, identity-checked index avoids scanning all founding species for every
+/// single-cell dashboard request.
+fn marine_aquatic_species_indices(species: &[IslandSpecies]) -> Vec<MarineAquaticSpeciesIndex> {
+    species
+        .iter()
+        .enumerate()
+        .filter(|(_, s)| {
+            s.category == SpeciesCategory::Aquatic
+                && matches!(
+                    &s.affinity,
+                    TerrainAffinity::OpenOcean | TerrainAffinity::ReefSea
+                )
+        })
+        .map(|(index, s)| MarineAquaticSpeciesIndex {
+            index,
+            species_id: s.species_id,
+            affinity: s.affinity.clone(),
+        })
+        .collect()
+}
+
+/// Rebuild the per-affinity carbon denominators after a controlled catalogue edit.
+fn species_weights(species: &[IslandSpecies]) -> ([f64; 10], [f64; 10]) {
+    let mut producer_weight = [0.0; 10];
+    let mut grazer_weight = [0.0; 10];
+    for s in species {
+        let at = slot(&s.affinity);
+        match s.abundance {
+            Abundance::ProducerCarbon => producer_weight[at] += s.upstream_population as f64,
+            Abundance::GrazerCarbon => grazer_weight[at] += s.upstream_population as f64,
+            Abundance::UpstreamDensity => {}
+        }
+    }
+    (producer_weight, grazer_weight)
+}
+
+/// Validate catalogue-wide identity and the marine projection's abundance source.
+fn validate_species_catalogue(species: &[IslandSpecies]) -> Result<(), MarineProjectionError> {
+    let mut first_index_by_id = BTreeMap::new();
+    for (index, s) in species.iter().enumerate() {
+        if let Some(first_index) = first_index_by_id.get(&s.species_id).copied() {
+            return Err(MarineProjectionError::DuplicateSpeciesId {
+                first_index,
+                duplicate_index: index,
+                species_id: s.species_id,
+            });
+        }
+        first_index_by_id.insert(s.species_id, index);
+        if s.category == SpeciesCategory::Aquatic
+            && matches!(
+                &s.affinity,
+                TerrainAffinity::OpenOcean | TerrainAffinity::ReefSea
+            )
+            && s.abundance != Abundance::UpstreamDensity
+        {
+            return Err(MarineProjectionError::InvalidMarineAbundance {
+                index,
+                species_id: s.species_id,
+            });
+        }
+    }
+    Ok(())
+}
+
 /// The 64-bit seed upstream's biosphere takes, from the scenario's 32
 /// bytes: the first eight, little-endian, as `BiosphereSystem::new` lays
 /// a `u64` into its own seed.
@@ -244,6 +425,29 @@ fn biosphere_seed(seed: &[u8; 32]) -> u64 {
 }
 
 impl IslandBiota {
+    /// Read-only view of the derived species catalogue.
+    pub fn species(&self) -> &[IslandSpecies] {
+        &self.species
+    }
+
+    /// Replace the derived catalogue while rebuilding every cache that depends
+    /// on species membership or abundance. Duplicate identities and marine
+    /// aquatic entries using a carbon-pool abundance are rejected before state changes.
+    pub fn replace_species_catalogue(
+        &mut self,
+        species: Vec<IslandSpecies>,
+    ) -> Result<(), MarineProjectionError> {
+        validate_species_catalogue(&species)?;
+        let marine_aquatic_species = marine_aquatic_species_indices(&species);
+        let (producer_weight, grazer_weight) = species_weights(&species);
+
+        self.species = species;
+        self.marine_aquatic_species = marine_aquatic_species;
+        self.producer_weight = producer_weight;
+        self.grazer_weight = grazer_weight;
+        Ok(())
+    }
+
     /// Place upstream's founding species, generated from the scenario's
     /// `seed`, on the island's habitats.
     pub fn survey(
@@ -271,6 +475,10 @@ impl IslandBiota {
                 upstream_population: s.population_size,
             })
             .collect();
+        validate_species_catalogue(&species).unwrap_or_else(|error| {
+            panic!("invalid upstream species catalogue: {error}");
+        });
+        let marine_aquatic_species = marine_aquatic_species_indices(&species);
 
         let (rows, cols) = (domain.rows(MEDIUM), domain.cols(MEDIUM));
         let is_sea = |r: usize, c: usize| *elevation_m.get(r, c) <= 0.0;
@@ -302,19 +510,11 @@ impl IslandBiota {
             }
         }
 
-        let mut producer_weight = [0.0; 10];
-        let mut grazer_weight = [0.0; 10];
-        for s in &species {
-            let at = slot(&s.affinity);
-            match s.abundance {
-                Abundance::ProducerCarbon => producer_weight[at] += s.upstream_population as f64,
-                Abundance::GrazerCarbon => grazer_weight[at] += s.upstream_population as f64,
-                Abundance::UpstreamDensity => {}
-            }
-        }
+        let (producer_weight, grazer_weight) = species_weights(&species);
 
         Self {
             species,
+            marine_aquatic_species,
             habitat,
             cell_area_m2: domain.cell_area_m2(MEDIUM),
             producer_weight,
@@ -484,32 +684,105 @@ impl IslandBiota {
     /// Only OpenOcean and ReefSea species are included. River-affinity aquatic
     /// species remain available through `animal_nodes`, but are not treated
     /// as part of the inshore marine fishery.
-    pub fn marine_aquatic_nodes(&self, cell: usize) -> Vec<MarineAquaticNode> {
-        let mask = self.habitat.get(cell).copied().unwrap_or(0);
+    /// Checked form of the marine projection. Invalid source values and
+    /// arithmetic overflow are reported instead of leaking NaN/infinity into
+    /// API responses, maps or later fishery calculations.
+    pub fn try_marine_aquatic_nodes(
+        &self,
+        cell: usize,
+    ) -> Result<Vec<MarineAquaticNode>, MarineProjectionError> {
+        let mask = *self
+            .habitat
+            .get(cell)
+            .ok_or(MarineProjectionError::InvalidCellIndex { cell })?;
+        if !self.cell_area_m2.is_finite() || self.cell_area_m2 <= 0.0 {
+            return Err(MarineProjectionError::InvalidCellArea);
+        }
         if mask == 0 {
+            return Ok(Vec::new());
+        }
+
+        let mut nodes = Vec::with_capacity(self.marine_aquatic_species.len());
+        for indexed in &self.marine_aquatic_species {
+            let species = indexed.index;
+            let s = self
+                .species
+                .get(species)
+                .ok_or(MarineProjectionError::InvalidSpeciesIndex { index: species })?;
+            if s.species_id != indexed.species_id {
+                return Err(MarineProjectionError::StaleSpeciesIndex {
+                    index: species,
+                    expected_species_id: indexed.species_id,
+                    actual_species_id: s.species_id,
+                });
+            }
+            // External callers can only replace the catalogue through
+            // replace_species_catalogue, which rebuilds the index and weights.
+            // Keep these identity/metadata checks as defence against internal drift.
+            if s.category != SpeciesCategory::Aquatic
+                || s.affinity != indexed.affinity
+                || s.abundance != Abundance::UpstreamDensity
+            {
+                return Err(MarineProjectionError::StaleSpeciesMetadata {
+                    index: species,
+                    species_id: s.species_id,
+                });
+            }
+            if mask & bit(&s.affinity) == 0 {
+                continue;
+            }
+            if !s.upstream_density_per_m2.is_finite() || s.upstream_density_per_m2 < 0.0 {
+                return Err(MarineProjectionError::InvalidDensity {
+                    species_id: s.species_id,
+                });
+            }
+            if !s.body_mass_kg.is_finite() || s.body_mass_kg <= 0.0 {
+                return Err(MarineProjectionError::InvalidBodyMass {
+                    species_id: s.species_id,
+                });
+            }
+
+            let individuals = s.upstream_density_per_m2 * self.cell_area_m2;
+            if !individuals.is_finite() || individuals < 0.0 {
+                return Err(MarineProjectionError::NonFiniteIndividuals {
+                    species_id: s.species_id,
+                });
+            }
+            // Divide the larger factor before multiplying. This avoids an
+            // overflowing kilogram product without underflowing a tiny body
+            // mass before a large population can scale it back into range.
+            let (scaled_individuals, scaled_mass_kg) = if individuals >= s.body_mass_kg {
+                (individuals / 1_000.0, s.body_mass_kg)
+            } else {
+                (individuals, s.body_mass_kg / 1_000.0)
+            };
+            let biomass_t = scaled_individuals * scaled_mass_kg;
+            if !biomass_t.is_finite() || biomass_t < 0.0 {
+                return Err(MarineProjectionError::NonFiniteBiomass {
+                    species_id: s.species_id,
+                });
+            }
+            nodes.push(MarineAquaticNode {
+                cell,
+                species,
+                individuals,
+                biomass_t,
+            });
+        }
+        Ok(nodes)
+    }
+
+    /// Convenience form for invariant-preserving internal callers. It fails
+    /// fast if the upstream-derived projection is invalid; callers that need
+    /// a recoverable error should use try_marine_aquatic_nodes.
+    pub fn marine_aquatic_nodes(&self, cell: usize) -> Vec<MarineAquaticNode> {
+        // Preserve the legacy convenience API's out-of-range empty result.
+        // Callers that need a typed bounds error use try_marine_aquatic_nodes.
+        if cell >= self.habitat.len() {
             return Vec::new();
         }
-        self.species
-            .iter()
-            .enumerate()
-            .filter(|(_, s)| {
-                s.category == SpeciesCategory::Aquatic
-                    && matches!(
-                        &s.affinity,
-                        TerrainAffinity::OpenOcean | TerrainAffinity::ReefSea
-                    )
-                    && mask & bit(&s.affinity) != 0
-            })
-            .map(|(species, s)| {
-                let individuals = s.upstream_density_per_m2 * self.cell_area_m2;
-                MarineAquaticNode {
-                    cell,
-                    species,
-                    individuals,
-                    biomass_t: individuals * s.body_mass_kg / 1_000.0,
-                }
-            })
-            .collect()
+        self.try_marine_aquatic_nodes(cell)
+            .unwrap_or_else(|error| panic!("invalid marine aquatic projection: {error}"))
     }
 
     /// The plants on medium cell `cell`, as resource nodes: each plant
@@ -580,6 +853,265 @@ mod tests {
         has_a_river: true,
         in_the_sea: true,
     };
+
+    fn species(
+        species_id: u64,
+        category: SpeciesCategory,
+        affinity: TerrainAffinity,
+    ) -> IslandSpecies {
+        IslandSpecies {
+            species_id,
+            name: format!("species-{species_id}"),
+            category,
+            affinity,
+            body_mass_kg: 1.0,
+            upstream_population: 1,
+            upstream_density_per_m2: 1.0,
+            abundance: Abundance::UpstreamDensity,
+        }
+    }
+    fn marine_biota(
+        species: Vec<IslandSpecies>,
+        marine_aquatic_species: Vec<MarineAquaticSpeciesIndex>,
+        cell_area_m2: f64,
+    ) -> IslandBiota {
+        IslandBiota {
+            species,
+            marine_aquatic_species,
+            habitat: vec![bit(&TerrainAffinity::OpenOcean)],
+            cell_area_m2,
+            producer_weight: [0.0; 10],
+            grazer_weight: [0.0; 10],
+        }
+    }
+
+    #[test]
+    fn checked_marine_projection_rejects_out_of_range_cells() {
+        let biota = marine_biota(Vec::new(), Vec::new(), 1.0);
+
+        assert_eq!(
+            biota.try_marine_aquatic_nodes(1),
+            Err(MarineProjectionError::InvalidCellIndex { cell: 1 })
+        );
+        // Existing callers of the infallible compatibility method retain the
+        // previous empty result for an out-of-range cell.
+        assert!(biota.marine_aquatic_nodes(1).is_empty());
+    }
+
+    #[test]
+    fn marine_projection_validates_cell_area_before_empty_habitat_short_circuit() {
+        let mut invalid_area = marine_biota(Vec::new(), Vec::new(), 0.0);
+        invalid_area.habitat[0] = 0;
+        assert_eq!(
+            invalid_area.try_marine_aquatic_nodes(0),
+            Err(MarineProjectionError::InvalidCellArea)
+        );
+
+        let mut valid_empty_cell = marine_biota(Vec::new(), Vec::new(), 1.0);
+        valid_empty_cell.habitat[0] = 0;
+        assert_eq!(valid_empty_cell.try_marine_aquatic_nodes(0), Ok(Vec::new()));
+    }
+
+    #[test]
+    fn marine_projection_rejects_invalid_density_and_body_mass() {
+        let mut invalid_density = species(11, SpeciesCategory::Aquatic, TerrainAffinity::OpenOcean);
+        invalid_density.upstream_density_per_m2 = f64::INFINITY;
+        let biota = marine_biota(
+            vec![invalid_density],
+            vec![MarineAquaticSpeciesIndex {
+                index: 0,
+                species_id: 11,
+                affinity: TerrainAffinity::OpenOcean,
+            }],
+            1.0,
+        );
+        assert_eq!(
+            biota.try_marine_aquatic_nodes(0),
+            Err(MarineProjectionError::InvalidDensity { species_id: 11 })
+        );
+
+        let mut invalid_mass = species(12, SpeciesCategory::Aquatic, TerrainAffinity::OpenOcean);
+        invalid_mass.body_mass_kg = f64::NAN;
+        let biota = marine_biota(
+            vec![invalid_mass],
+            vec![MarineAquaticSpeciesIndex {
+                index: 0,
+                species_id: 12,
+                affinity: TerrainAffinity::OpenOcean,
+            }],
+            1.0,
+        );
+        assert_eq!(
+            biota.try_marine_aquatic_nodes(0),
+            Err(MarineProjectionError::InvalidBodyMass { species_id: 12 })
+        );
+    }
+
+    #[test]
+    fn marine_projection_rejects_population_and_biomass_overflow() {
+        let mut invalid_population =
+            species(21, SpeciesCategory::Aquatic, TerrainAffinity::OpenOcean);
+        invalid_population.upstream_density_per_m2 = f64::MAX;
+        let biota = marine_biota(
+            vec![invalid_population],
+            vec![MarineAquaticSpeciesIndex {
+                index: 0,
+                species_id: 21,
+                affinity: TerrainAffinity::OpenOcean,
+            }],
+            2.0,
+        );
+        assert_eq!(
+            biota.try_marine_aquatic_nodes(0),
+            Err(MarineProjectionError::NonFiniteIndividuals { species_id: 21 })
+        );
+
+        let mut invalid_biomass = species(22, SpeciesCategory::Aquatic, TerrainAffinity::OpenOcean);
+        invalid_biomass.upstream_density_per_m2 = 1.0e200;
+        invalid_biomass.body_mass_kg = 1.0e200;
+        let biota = marine_biota(
+            vec![invalid_biomass],
+            vec![MarineAquaticSpeciesIndex {
+                index: 0,
+                species_id: 22,
+                affinity: TerrainAffinity::OpenOcean,
+            }],
+            1.0,
+        );
+        assert_eq!(
+            biota.try_marine_aquatic_nodes(0),
+            Err(MarineProjectionError::NonFiniteBiomass { species_id: 22 })
+        );
+    }
+
+    #[test]
+    fn marine_projection_scales_the_larger_factor_before_multiplication() {
+        let mut large_population =
+            species(23, SpeciesCategory::Aquatic, TerrainAffinity::OpenOcean);
+        large_population.upstream_density_per_m2 = 1.0e308;
+        large_population.body_mass_kg = 10.0;
+        let biota = marine_biota(
+            vec![large_population],
+            vec![MarineAquaticSpeciesIndex {
+                index: 0,
+                species_id: 23,
+                affinity: TerrainAffinity::OpenOcean,
+            }],
+            1.0,
+        );
+
+        let nodes = biota.try_marine_aquatic_nodes(0).unwrap();
+        assert_eq!(nodes.len(), 1);
+        assert_eq!(nodes[0].individuals, 1.0e308);
+        assert!(nodes[0].biomass_t.is_finite());
+        assert!((nodes[0].biomass_t / 1.0e306 - 1.0).abs() < 1.0e-12);
+
+        // Dividing the tiny mass first would underflow it to zero. Scaling
+        // the larger population factor preserves the finite tonne result.
+        let mut tiny_mass = species(24, SpeciesCategory::Aquatic, TerrainAffinity::OpenOcean);
+        tiny_mass.upstream_density_per_m2 = 1.0e308;
+        tiny_mass.body_mass_kg = f64::from_bits(1);
+        let biota = marine_biota(
+            vec![tiny_mass],
+            vec![MarineAquaticSpeciesIndex {
+                index: 0,
+                species_id: 24,
+                affinity: TerrainAffinity::OpenOcean,
+            }],
+            1.0,
+        );
+        let nodes = biota.try_marine_aquatic_nodes(0).unwrap();
+        assert!(nodes[0].biomass_t.is_finite());
+        assert!(nodes[0].biomass_t > 0.0);
+        let expected_tonnes = (1.0e308 / 1_000.0) * f64::from_bits(1);
+        assert!((nodes[0].biomass_t / expected_tonnes - 1.0).abs() < 1.0e-12);
+    }
+
+    #[test]
+    fn marine_projection_rejects_cached_indices_that_alias_after_species_reordering() {
+        let first = species(41, SpeciesCategory::Aquatic, TerrainAffinity::OpenOcean);
+        let second = species(42, SpeciesCategory::Aquatic, TerrainAffinity::OpenOcean);
+        let mut biota = marine_biota(
+            vec![first, second],
+            vec![MarineAquaticSpeciesIndex {
+                index: 0,
+                species_id: 41,
+                affinity: TerrainAffinity::OpenOcean,
+            }],
+            1.0,
+        );
+
+        // The catalogue is publicly mutable; a cached index must not silently
+        // become a projection of a different species after a reorder.
+        biota.species.swap(0, 1);
+        assert_eq!(
+            biota.try_marine_aquatic_nodes(0),
+            Err(MarineProjectionError::StaleSpeciesIndex {
+                index: 0,
+                expected_species_id: 41,
+                actual_species_id: 42,
+            })
+        );
+    }
+
+    #[test]
+    fn marine_projection_rejects_invalid_cell_area_and_stale_species_indices() {
+        let valid = species(31, SpeciesCategory::Aquatic, TerrainAffinity::OpenOcean);
+        let biota = marine_biota(
+            vec![valid.clone()],
+            vec![MarineAquaticSpeciesIndex {
+                index: 0,
+                species_id: 31,
+                affinity: TerrainAffinity::OpenOcean,
+            }],
+            0.0,
+        );
+        assert_eq!(
+            biota.try_marine_aquatic_nodes(0),
+            Err(MarineProjectionError::InvalidCellArea)
+        );
+
+        let biota = marine_biota(
+            vec![valid],
+            vec![MarineAquaticSpeciesIndex {
+                index: 1,
+                species_id: 31,
+                affinity: TerrainAffinity::OpenOcean,
+            }],
+            1.0,
+        );
+        assert_eq!(
+            biota.try_marine_aquatic_nodes(0),
+            Err(MarineProjectionError::InvalidSpeciesIndex { index: 1 })
+        );
+    }
+
+    #[test]
+    fn marine_aquatic_index_keeps_only_open_ocean_and_reef_aquatic_species_in_order() {
+        let species = vec![
+            species(1, SpeciesCategory::Aquatic, TerrainAffinity::OpenOcean),
+            species(2, SpeciesCategory::Aquatic, TerrainAffinity::River),
+            species(3, SpeciesCategory::Aquatic, TerrainAffinity::ReefSea),
+            species(4, SpeciesCategory::Herbivore, TerrainAffinity::OpenOcean),
+            species(5, SpeciesCategory::Aquatic, TerrainAffinity::Hill),
+        ];
+
+        assert_eq!(
+            marine_aquatic_species_indices(&species),
+            vec![
+                MarineAquaticSpeciesIndex {
+                    index: 0,
+                    species_id: 1,
+                    affinity: TerrainAffinity::OpenOcean,
+                },
+                MarineAquaticSpeciesIndex {
+                    index: 2,
+                    species_id: 3,
+                    affinity: TerrainAffinity::ReefSea,
+                },
+            ]
+        );
+    }
 
     #[test]
     fn every_affinity_has_a_bit_of_its_own() {
@@ -712,5 +1244,44 @@ mod tests {
         assert!(habitat_of(open, BiomeType::ReefSea, sea));
         // The same biome on land is a lake.
         assert!(!habitat_of(open, BiomeType::CoastalWaters, NOTHING));
+    }
+}
+
+#[cfg(test)]
+mod marine_index_tests {
+    use super::*;
+
+    #[test]
+    fn checked_projection_rejects_internal_stale_metadata() {
+        let species = IslandSpecies {
+            species_id: 1,
+            name: "test marine species".to_owned(),
+            category: SpeciesCategory::Aquatic,
+            affinity: TerrainAffinity::OpenOcean,
+            body_mass_kg: 1.0,
+            upstream_population: 1,
+            upstream_density_per_m2: 1.0,
+            abundance: Abundance::UpstreamDensity,
+        };
+        let mut biota = IslandBiota {
+            species: vec![species.clone()],
+            marine_aquatic_species: marine_aquatic_species_indices(&[species]),
+            habitat: vec![bit(&TerrainAffinity::OpenOcean)],
+            cell_area_m2: 1.0,
+            producer_weight: [0.0; 10],
+            grazer_weight: [0.0; 10],
+        };
+
+        // This is only possible inside the module; public callers cannot
+        // bypass replace_species_catalogue and leave the cached index stale.
+        biota.species[0].category = SpeciesCategory::Tree;
+
+        assert!(matches!(
+            biota.try_marine_aquatic_nodes(0),
+            Err(MarineProjectionError::StaleSpeciesMetadata {
+                index: 0,
+                species_id: 1,
+            })
+        ));
     }
 }
