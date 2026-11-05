@@ -36,6 +36,16 @@ snapshot schema or valid-input result is intentionally changed.
 - Local Cargo checks were not run because the custom OpenCommander device session
   terminates before command execution.
 
+## Follow-up: validate raw prior bounds
+
+The first validation pass checked the derived midpoint, which could still hide an
+invalid source range (for example, a negative lower bound paired with a larger
+positive upper bound). The loader now validates both published bounds for
+finiteness, non-negativity and ordering before deriving the midpoint. The
+midpoint calculation subtracts before adding so large finite bounds cannot
+overflow an intermediate sum. Regression tests cover negative, reversed,
+non-finite and large finite bounds.
+
 ## Next
 
 After exact-head CI passes, continue the sourced fishery-to-human food chain work:
