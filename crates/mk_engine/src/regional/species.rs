@@ -611,11 +611,11 @@ impl IslandBiota {
             .habitat
             .get(cell)
             .ok_or(MarineProjectionError::InvalidCellIndex { cell })?;
-        if mask == 0 {
-            return Ok(Vec::new());
-        }
         if !self.cell_area_m2.is_finite() || self.cell_area_m2 <= 0.0 {
             return Err(MarineProjectionError::InvalidCellArea);
+        }
+        if mask == 0 {
+            return Ok(Vec::new());
         }
 
         let mut nodes = Vec::with_capacity(self.marine_aquatic_species.len());
@@ -812,6 +812,20 @@ mod tests {
         // Existing callers of the infallible compatibility method retain the
         // previous empty result for an out-of-range cell.
         assert!(biota.marine_aquatic_nodes(1).is_empty());
+    }
+
+    #[test]
+    fn marine_projection_validates_cell_area_before_empty_habitat_short_circuit() {
+        let mut invalid_area = marine_biota(Vec::new(), Vec::new(), 0.0);
+        invalid_area.habitat[0] = 0;
+        assert_eq!(
+            invalid_area.try_marine_aquatic_nodes(0),
+            Err(MarineProjectionError::InvalidCellArea)
+        );
+
+        let mut valid_empty_cell = marine_biota(Vec::new(), Vec::new(), 1.0);
+        valid_empty_cell.habitat[0] = 0;
+        assert_eq!(valid_empty_cell.try_marine_aquatic_nodes(0), Ok(Vec::new()));
     }
 
     #[test]
