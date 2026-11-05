@@ -93,3 +93,14 @@ before `diagnostic_methods_reject_invalid_models_and_stock_state`; Clippy and
 fast tests were skipped by that formatting failure. The exact rustfmt spacing
 was applied in the source. This formatting-only correction does not change
 simulation behaviour. A fresh exact-head run is required.
+
+
+## Exact-head failure and arithmetic correction (2026-11-06)
+
+- Workflow [#42019071845](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42019071845) passed formatting and Clippy, and passed the week/year reference-pack acceptance, installed backend, repository scripts, web dashboard, computer service and dependency audit.
+- The fast Rust test job found one real failure: `landed_total_overflow_returns_an_error_without_mutating_the_stock` received `NonFiniteGrowth` before it could reach the intended landed-total overflow check.
+- Root cause: annual growth was calculated as `surplus * dt_s / YEAR_S`; multiplying a large but representable annual surplus by seconds overflowed before division.
+- Fix: calculate `surplus * (dt_s / YEAR_S)`, avoiding the unnecessary intermediate while still rejecting a genuinely non-finite final growth value.
+- Added a positive regression for a large but representable one-year growth step; the existing landed-total-overflow regression now reaches its intended error branch.
+- Source/test commit: `18a36a1b40bbad5a9abc91e76dad4506023515b2`.
+- The failed run is not a pass. A fresh exact-head workflow is required; the desktop acceptance job was also still running at inspection.
