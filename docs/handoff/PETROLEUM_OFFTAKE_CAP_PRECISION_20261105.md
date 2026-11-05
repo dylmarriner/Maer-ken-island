@@ -65,3 +65,13 @@ was changed.
 - Current branch head: `f546139b3a0e9fa3bd8b51a9da4f420a404c1373`.
 - These follow-ups do not alter the production algorithm or test assertions.
   A fresh exact-head CI run remains mandatory.
+
+
+## First exact-head CI correction
+
+Workflow [#41990190567](https://github.com/dylmarriner/Maer-ken-island/actions/runs/41990190567)
+failed at `cargo fmt --all -- --check` on one assertion-wrapping difference in
+the new negative-cap regression. The exact formatter layout was applied in the
+follow-up commit. Clippy and fast tests were skipped by the formatting failure;
+the independent reference-pack, desktop and installed-backend jobs were still
+running at the time of this correction. A fresh exact-head run is required.
