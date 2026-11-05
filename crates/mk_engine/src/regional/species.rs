@@ -881,7 +881,8 @@ mod tests {
 
     #[test]
     fn marine_projection_scales_the_larger_factor_before_multiplication() {
-        let mut large_population = species(23, SpeciesCategory::Aquatic, TerrainAffinity::OpenOcean);
+        let mut large_population =
+            species(23, SpeciesCategory::Aquatic, TerrainAffinity::OpenOcean);
         large_population.upstream_density_per_m2 = 1.0e308;
         large_population.body_mass_kg = 10.0;
         let biota = marine_biota(
