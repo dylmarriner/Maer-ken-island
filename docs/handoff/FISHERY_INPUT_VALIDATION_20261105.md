@@ -79,3 +79,25 @@ fishery-only change. Custom OpenCommander `list_devices` returns
 Next: finish exact-head fast tests, merge only after the full required checks pass,
 then implement the next source-backed fishery-to-human slice. Preserve the
 single-writer/replay and append-only persistence invariants.
+
+
+## Follow-up: bound aggregate-step fish growth
+
+A second numerical edge was found after reviewing the discrete Schaefer step. The
+instantaneous surplus rate multiplied by a very long `dt_s` could exceed the
+stock's entire unoccupied carrying-capacity headroom. A single aggregate step
+could then land more fish than could physically be added to that stock.
+
+- Cap one step's estimated growth at `k_t - biomass_t`, after validating the
+  raw growth estimate is finite and non-negative.
+- Add a regression with a 100-year aggregate interval; the catch must not exceed
+  the 500 t of remaining capacity in the 1,000 t stock.
+- This is a conservative single-step upper bound, not a claim that the model
+  resolves repeated multi-year spawning/harvest cycles. The simulation's normal
+  hourly cadence is unchanged.
+- No reference values, snapshots, replay hashes or canonical simulation inputs
+  were changed by this guard.
+
+The new exact-head CI run must verify this follow-up together with the existing
+input-validation regressions before merge. The prior workflow run on
+`88feff87` is superseded by this code commit.
