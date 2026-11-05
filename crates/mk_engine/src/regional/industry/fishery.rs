@@ -184,23 +184,59 @@ impl FishStock {
         })
     }
 
-    /// The stock's surplus production at its present biomass (t a year).
-    pub fn surplus_t_per_year(&self, model: &FisheryModel) -> f64 {
-        if self.k_t <= 0.0 {
-            return 0.0;
+    fn validate_state(&self) -> Result<(), FisheryError> {
+        if !self.k_t.is_finite() || self.k_t <= 0.0 {
+            return Err(FisheryError::InvalidCarryingCapacity);
         }
+        if !self.biomass_t.is_finite()
+            || self.biomass_t < 0.0
+            || self.biomass_t > self.k_t
+            || !self.landed_t.is_finite()
+            || self.landed_t < 0.0
+        {
+            return Err(FisheryError::InvalidStockState);
+        }
+        Ok(())
+    }
+
+    /// The stock's surplus production at its present biomass (t a year).
+    ///
+    /// Invalid model/state and non-finite arithmetic are explicit errors; zero
+    /// is reserved for a valid stock with no surplus.
+    pub fn surplus_t_per_year(&self, model: &FisheryModel) -> Result<f64, FisheryError> {
+        if !model.is_valid() {
+            return Err(FisheryError::InvalidModel);
+        }
+        self.validate_state()?;
+
         let p = self.biomass_t / self.k_t;
         let surplus = model.r(self.resilience) * (1.0 - p) * self.biomass_t;
-        if p < model.depensation_below {
+        let surplus = if p < model.depensation_below {
             surplus * p / model.depensation_below
         } else {
             surplus
+        };
+        if !surplus.is_finite() || surplus < 0.0 {
+            return Err(FisheryError::NonFiniteGrowth);
         }
+        Ok(surplus)
     }
 
     /// The most the stock can give year on year (t), `r k / 4`.
-    pub fn msy_t(&self, model: &FisheryModel) -> f64 {
-        model.r(self.resilience) * self.k_t / 4.0
+    ///
+    /// Divide carrying capacity before multiplying so a representable result
+    /// does not overflow in the intermediate `r * k`.
+    pub fn msy_t(&self, model: &FisheryModel) -> Result<f64, FisheryError> {
+        if !model.is_valid() {
+            return Err(FisheryError::InvalidModel);
+        }
+        self.validate_state()?;
+
+        let msy = model.r(self.resilience) * (self.k_t / 4.0);
+        if !msy.is_finite() || msy < 0.0 {
+            return Err(FisheryError::NonFiniteGrowth);
+        }
+        Ok(msy)
     }
 
     /// Step `dt_s`, fishing for `wanted_t` over the step.
@@ -223,18 +259,9 @@ impl FishStock {
         if !dt_s.is_finite() || dt_s < 0.0 {
             return Err(FisheryError::InvalidTimeStep);
         }
-        if !self.k_t.is_finite()
-            || self.k_t <= 0.0
-            || !self.biomass_t.is_finite()
-            || self.biomass_t < 0.0
-            || self.biomass_t > self.k_t
-            || !self.landed_t.is_finite()
-            || self.landed_t < 0.0
-        {
-            return Err(FisheryError::InvalidStockState);
-        }
+        self.validate_state()?;
 
-        let raw_growth = self.surplus_t_per_year(model).max(0.0) * dt_s / YEAR_S;
+        let raw_growth = self.surplus_t_per_year(model)? * dt_s / YEAR_S;
         if !raw_growth.is_finite() || raw_growth < 0.0 {
             return Err(FisheryError::NonFiniteGrowth);
         }
@@ -313,12 +340,60 @@ mod tests {
         let m = FisheryModel::load_default().expect("the pack loads");
         let mut stock = FishStock::unexploited(Resilience::Medium, 1_000.0)
             .expect("positive carrying capacity");
-        assert_eq!(stock.surplus_t_per_year(&m), 0.0);
+        assert_eq!(stock.surplus_t_per_year(&m).unwrap(), 0.0);
         stock.biomass_t = 500.0;
-        assert!((stock.surplus_t_per_year(&m) - stock.msy_t(&m)).abs() < 1e-9);
+        assert!((stock.surplus_t_per_year(&m).unwrap() - stock.msy_t(&m).unwrap()).abs() < 1e-9);
         stock.biomass_t = 100.0;
         // 0.5 × 0.9 × 100 = 45, then × 4 × 0.1 for depensation.
-        assert!((stock.surplus_t_per_year(&m) - 18.0).abs() < 1e-9);
+        assert!((stock.surplus_t_per_year(&m).unwrap() - 18.0).abs() < 1e-9);
+    }
+
+
+    #[test]
+    fn diagnostic_methods_reject_invalid_models_and_stock_state() {
+        let m = FisheryModel::load_default().expect("the pack loads");
+        let stock = FishStock::unexploited(Resilience::Medium, 1_000.0)
+            .expect("positive carrying capacity");
+
+        let mut invalid_model = m.clone();
+        invalid_model.r_per_year[Resilience::Medium as usize] = f64::NAN;
+        assert_eq!(
+            stock.surplus_t_per_year(&invalid_model),
+            Err(FisheryError::InvalidModel)
+        );
+        assert_eq!(stock.msy_t(&invalid_model), Err(FisheryError::InvalidModel));
+
+        let mut invalid_capacity = stock.clone();
+        invalid_capacity.k_t = f64::INFINITY;
+        assert_eq!(
+            invalid_capacity.surplus_t_per_year(&m),
+            Err(FisheryError::InvalidCarryingCapacity)
+        );
+        assert_eq!(
+            invalid_capacity.msy_t(&m),
+            Err(FisheryError::InvalidCarryingCapacity)
+        );
+
+        let mut invalid_biomass = stock;
+        invalid_biomass.biomass_t = f64::NAN;
+        assert_eq!(
+            invalid_biomass.surplus_t_per_year(&m),
+            Err(FisheryError::InvalidStockState)
+        );
+        assert_eq!(
+            invalid_biomass.msy_t(&m),
+            Err(FisheryError::InvalidStockState)
+        );
+    }
+
+    #[test]
+    fn msy_avoids_intermediate_overflow_when_the_result_is_finite() {
+        let mut model = FisheryModel::load_default().expect("the pack loads");
+        model.r_per_year[Resilience::Medium as usize] = 4.0;
+        let stock = FishStock::unexploited(Resilience::Medium, f64::MAX * 0.5)
+            .expect("finite positive carrying capacity");
+
+        assert_eq!(stock.msy_t(&model), Ok(f64::MAX * 0.5));
     }
 
     #[test]
@@ -332,10 +407,10 @@ mod tests {
             let before = stock.biomass_t;
             let landed = stock.fish(&m, 10.0, day).expect("valid fishing step");
             assert!(stock.biomass_t >= before - 1e-9, "the stock never shrinks");
-            assert!(landed <= stock.msy_t(&m) * day / YEAR_S + 1e-9);
+            assert!(landed <= stock.msy_t(&m).unwrap() * day / YEAR_S + 1e-9);
         }
         assert!(stock.landed_t > 0.0);
-        assert!(stock.landed_t <= stock.msy_t(&m) * 3_653.0 * day / YEAR_S + 1e-6);
+        assert!(stock.landed_t <= stock.msy_t(&m).unwrap() * 3_653.0 * day / YEAR_S + 1e-6);
     }
 
     #[test]
