@@ -140,6 +140,15 @@ pub fn cell_lines(cell: &Cell) -> Vec<String> {
             npp * 1_000.0
         ));
     }
+    if let (Some(species), Some(individuals), Some(biomass_t)) = (
+        cell.marine_aquatic_species,
+        cell.marine_aquatic_individuals,
+        cell.marine_aquatic_biomass_t,
+    ) {
+        lines.push(format!(
+            "Marine life (uncalibrated upstream estimate): {species} species, {individuals:.0} individuals, {biomass_t:.3} t live biomass"
+        ));
+    }
     lines
 }
 
@@ -265,6 +274,9 @@ mod tests {
             npp_kgc_m2_yr: None,
             mean_temperature_c: None,
             annual_rain_mm: None,
+            marine_aquatic_species: None,
+            marine_aquatic_individuals: None,
+            marine_aquatic_biomass_t: None,
         };
         let old = cell_lines(&cell);
         assert_eq!(old.len(), 3);
@@ -273,9 +285,16 @@ mod tests {
         cell.mean_temperature_c = Some(11.84);
         cell.annual_rain_mm = Some(1_234.0);
         cell.npp_kgc_m2_yr = Some(0.567);
+        cell.marine_aquatic_species = Some(4);
+        cell.marine_aquatic_individuals = Some(12_500.0);
+        cell.marine_aquatic_biomass_t = Some(7.25);
         let new = cell_lines(&cell);
         assert_eq!(new[3], "Temperate forest");
         assert_eq!(new[4], "Climate: 11.8 °C mean, 1234 mm of rain a year");
         assert_eq!(new[5], "Plants grow 567 g C per m² a year");
+        assert_eq!(
+            new[6],
+            "Marine life (uncalibrated upstream estimate): 4 species, 12500 individuals, 7.250 t live biomass"
+        );
     }
 }
