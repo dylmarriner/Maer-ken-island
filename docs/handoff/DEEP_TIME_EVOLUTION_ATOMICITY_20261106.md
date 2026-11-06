@@ -2,8 +2,8 @@
 
 **Repository:** `dylmarriner/Maer-ken-island`  
 **Branch:** `fix/deep-time-evolution-atomicity-20261106`  
-**Base:** PR #106 branch `fix/deep-time-geographic-range-fraction-20261106-rebased`  
-**Stacked PR:** #107 (draft)
+**Base:** `main` at `3057ea4274f8d6a131fa44a24380e0c7c145057a` (PR #106 is merged)  
+**PR:** #107
 
 ## Finding
 
@@ -31,11 +31,11 @@ Existing normal-step deterministic and fractional-range tests remain in place.
 
 ## Verification
 
-- Exact-head GitHub Actions is required. The PR is stacked on #106 because the current range validator's fallible drift path is part of that branch.
-- First exact-head workflow [#42171306926](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42171306926) failed at `cargo fmt --all -- --check` only; the log identified one multiline call and commit `63d330ed` applies the exact rustfmt output. Clippy and fast tests did not run in that attempt.
-- No local Cargo result is claimed: custom OpenCommander device discovery returned HTTP 429.
-- The latest parent PR #106 workflow is still running its Rust fast tests, desktop and week/year acceptance; this follow-up needs its own exact-head CI after PR #107 is opened.
-- The staged approach clones the current species vector and evolution state per step. Review runtime impact under the repository's long-horizon profile before merge; correctness is the immediate goal, and the performance cost must be measured rather than guessed.
+- PR #106 is merged into `main` as `3057ea4274f8d6a131fa44a24380e0c7c145057a`. Its exact-head workflow [#42169416524](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42169416524) passed formatting, Clippy, fast Rust tests, desktop, installed backend, web dashboard, computer service, repository scripts, dependency audit and week/year reference-pack acceptance. Nightly slow tests were skipped by design.
+- PR #107 is based directly on `main` at that merge commit; it is no longer stacked on the now-merged #106 branch.
+- The current source/test head is `6ac9a66f86292a67595efe4ad98d7c8286067700`. A fresh exact-head workflow is required for the environmental-stress guard and speciation-parity regression; prior successful workflow [#42172213109](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42172213109) predates these tests and does not verify them.
+- No local Cargo result is claimed: custom OpenCommander discovery returned HTTP 429. Do not substitute another remote-desktop connector.
+- The staging value copies only fields owned by the evolution pipeline; the append-only extinction history is not copied. Long-horizon performance still needs exact-head CI and the repository's acceptance profile before merge.
 
 ## Safety
 
@@ -61,3 +61,24 @@ Codex review identified that cloning the whole `DeepTimeEvolution` copied the ac
 - This removes per-tick copying of accumulated extinction events without changing event ordering, RNG derivation, snapshots or the extinction phase.
 - Review finding: PR #107 thread `PRRT_kwDOU2IUOc60ZaJe`; keep unresolved until the exact-head performance correction and regression are verified.
 - Exact-head CI after this change is required. No local Cargo result is claimed while custom OpenCommander is returning HTTP 429.
+
+
+## Follow-up: environmental-stress fail-fast boundary (6 November 2026)
+
+The climate integration normalises global environmental stress to the closed interval [0, 1]. Direct callers could previously pass NaN, infinities or out-of-range values; NaN could flow into selection arithmetic and silently collapse population values instead of producing an explicit error.
+
+- Added a preflight before staging that requires finite environmental stress in [0, 1].
+- Regression cases cover NaN, positive/negative infinity, negative stress and stress above one.
+- Each rejected call asserts byte-identical evolution state, species and RNG registry.
+- Source/test commit: `1e40b1df4df21a73bc2f83e981448373bd1d9653`.
+- Constant-casing cleanup: `6ac9a66f86292a67595efe4ad98d7c8286067700`.
+
+## Follow-up: successful speciation parity (6 November 2026)
+
+The earlier success-parity fixture used a 2,500-year step and could not reach the 18,000-year speciation threshold. The new deterministic fixture searches a bounded seed range for a keyed draw below the fixture's minimum speciation probability, then compares staged and direct ordered execution.
+
+- Requires the child species to exist and the parent's `last_speciation_times` entry to be committed.
+- Compares emitted events, serialized evolution state, species/genomes and RNG state.
+- Seeds existing append-only extinction history and requires it to remain identical.
+- The test closes the review gap without changing the evolution phase order or random-key derivation.
+- Exact-head CI remains pending; no test pass is claimed.
