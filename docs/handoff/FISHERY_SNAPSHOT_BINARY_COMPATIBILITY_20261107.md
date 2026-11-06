@@ -56,3 +56,8 @@ A further review found that `msy_t` avoided overflow by multiplying carrying cap
 ## Exact-head formatting correction — 7 November 2026
 
 Workflow [#42248051888](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42248051888) reached the new Rust source and stopped at `cargo fmt --all -- --check` on one chained assertion in the subnormal MSY regression. The formatter's exact line wrap is applied in the follow-up commit. Clippy and fast tests did not run in that attempt; the other parallel jobs were still in progress when the branch was superseded. A fresh exact-head workflow is required.
+
+
+## Final exact-head verification — 7 November 2026
+
+PR #109 was merged to `main` as `0613dffca65a87e4db147300d9d57805a744ea07`. Exact-head workflow [#42257092937](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42257092937) passed the fixed legacy bincode fixture and all required fast Rust, formatting, Clippy, desktop, installed-backend, web-dashboard, computer-service, repository-script, dependency-audit and week/year reference-pack jobs. The nightly slow suite was skipped by design.
