@@ -2546,6 +2546,12 @@ impl WorldState {
         }
         let mut loaded: WorldState = serde_json::from_slice(&snapshot.data)
             .map_err(|e| SnapshotError::DeserializationError(e.to_string()))?;
+        if loaded.tick != snapshot.tick {
+            return Err(SnapshotError::DeserializationError(format!(
+                "snapshot envelope tick {} does not match persisted world tick {}",
+                snapshot.tick, loaded.tick
+            )));
+        }
         let stored_canon_digest = loaded.canon_derived.canon_digest;
         mk_core::canon::validator::validate_canon(&loaded.canon)
             .map_err(|e| SnapshotError::DeserializationError(format!("invalid canon: {e}")))?;
@@ -2856,6 +2862,20 @@ mod snapshot_tests {
             WorldState::from_snapshot(&snapshot),
             Err(SnapshotError::DigestMismatch)
         ));
+    }
+
+    #[test]
+    fn snapshot_with_mismatched_envelope_tick_is_rejected() {
+        let world = WorldState::new(Arc::new(CanonLocked::default()), [18u8; 32]);
+        let mut snapshot = world.create_snapshot().expect("snapshot is created");
+        snapshot.tick += 1;
+
+        let error = WorldState::from_snapshot(&snapshot).expect_err("mismatched envelope tick");
+        assert!(
+            matches!(error, SnapshotError::DeserializationError(ref message)
+                if message.contains("snapshot envelope tick 1 does not match persisted world tick 0")),
+            "unexpected error: {error}"
+        );
     }
 
     #[test]

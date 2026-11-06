@@ -39,3 +39,8 @@ Workflow [#42167966575](https://github.com/dylmarriner/Maer-ken-island/actions/r
 ## Exact-head compile correction
 
 Workflow [#42168311597](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42168311597) passed formatting and reached Clippy. Compilation then found two test-only E0382 partial moves: the `matches!` assertions moved the error message before the diagnostic formatted the whole error. Both patterns now borrow the message with `ref`; production restore logic was unaffected. Fresh exact-head CI is required.
+
+
+## Replay envelope tick integrity
+
+The replay snapshot envelope carries a public `tick` beside the digested state payload. That tick was not compared with the deserialized world's tick, so a valid payload digest could accompany contradictory envelope metadata. `WorldState::from_snapshot` now rejects that mismatch before schema validation or state exposure. A regression changes only the envelope tick and proves rejection while leaving the payload digest valid.
