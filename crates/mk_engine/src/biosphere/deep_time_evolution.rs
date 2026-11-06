@@ -880,7 +880,7 @@ mod geographic_range_tests {
     fn successful_staged_step_commits_speciation_history_and_matches_ordered_pipeline() {
         const DT_YEARS: f64 = 25_000.0;
         const SPECIES_ID: u64 = 7;
-        const SPECiation_ROLL_CEILING: f64 = 0.0005;
+        const SPECIATION_ROLL_CEILING: f64 = 0.0005;
 
         // Find a deterministic seed whose keyed speciation draw is below the
         // minimum probability for this fixture. The range drift at this
@@ -896,7 +896,7 @@ mod geographic_range_tests {
                     0,
                     1,
                 );
-                (probe.gen_f64_01(key) < SPECiation_ROLL_CEILING).then_some(seed)
+                (probe.gen_f64_01(key) < SPECIATION_ROLL_CEILING).then_some(seed)
             })
             .expect("a deterministic seed must reach the speciation probability");
 
