@@ -29,3 +29,8 @@ Fresh exact-head CI is required. The current PR workflow must run formatting, Cl
 ## Safety
 
 No persisted customer/world snapshot was rewritten, no migration or data repair was performed, and no live simulation state was changed.
+
+
+## Exact-head formatting correction
+
+Workflow [#42167966575](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42167966575) reached the new head and failed only at `cargo fmt --all -- --check`: three long temporary-directory expressions in `io/snapshot.rs` needed rustfmt line wrapping. No Clippy or Rust tests ran in that workflow. Commit `e2f38185c6dfb776475960cadd07183e02b3e4cf` applies the exact formatting output. A fresh exact-head workflow is required; the failed run does not verify the implementation.
