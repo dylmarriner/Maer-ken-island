@@ -736,14 +736,16 @@ mod geographic_range_tests {
 
     #[test]
     fn negative_or_non_finite_step_duration_is_rejected_before_clock_advance() {
-        let mut rng = RngRegistry::new([9; 32]);
-        let mut species = vec![test_species(0.4, &rng)];
-        let mut evolution = DeepTimeEvolution::new();
+        for invalid_dt in [f64::NAN, f64::INFINITY, -1.0] {
+            let mut rng = RngRegistry::new([9; 32]);
+            let mut species = vec![test_species(0.4, &rng)];
+            let mut evolution = DeepTimeEvolution::new();
 
-        assert!(evolution
-            .step_evolution_processes(&mut species, f64::NAN, 0.0, &mut rng)
-            .is_err());
-        assert_eq!(evolution.step_index, 0);
-        assert_eq!(evolution.current_time_years, 0.0);
+            assert!(evolution
+                .step_evolution_processes(&mut species, invalid_dt, 0.0, &mut rng)
+                .is_err());
+            assert_eq!(evolution.step_index, 0);
+            assert_eq!(evolution.current_time_years, 0.0);
+        }
     }
 }
