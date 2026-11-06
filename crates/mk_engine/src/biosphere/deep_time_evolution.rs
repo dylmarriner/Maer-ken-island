@@ -261,7 +261,8 @@ impl DeepTimeEvolution {
         // append-only histories remain in place; only newly-created speciation
         // timestamps from the staging object are appended after success.
         self.current_time_years = staged_evolution.current_time_years;
-        self.last_speciation_times.extend(staged_evolution.last_speciation_times);
+        self.last_speciation_times
+            .extend(staged_evolution.last_speciation_times);
         self.recovery_state = staged_evolution.recovery_state;
         self.intelligence_regression_active = staged_evolution.intelligence_regression_active;
         self.adaptive_radiation_potential = staged_evolution.adaptive_radiation_potential;
@@ -319,7 +320,13 @@ impl DeepTimeEvolution {
         self.apply_drift(species, dt_years, rng)?;
 
         // Check for speciation
-        self.process_speciation(species, dt_years, rng, &mut events, prior_speciation_history);
+        self.process_speciation(
+            species,
+            dt_years,
+            rng,
+            &mut events,
+            prior_speciation_history,
+        );
 
         // Apply intelligence regression
         self.apply_intelligence_regression(species, dt_years, &mut events);
@@ -1050,8 +1057,12 @@ mod geographic_range_tests {
             MAX_ADAPTIVE_RADIATION_AMPLIFICATION;
         direct_evolution.recovery_state.adaptive_radiation_potential =
             MAX_ADAPTIVE_RADIATION_AMPLIFICATION;
-        staged_evolution.last_speciation_times.push((SPECIES_ID, 0.0));
-        direct_evolution.last_speciation_times.push((SPECIES_ID, 0.0));
+        staged_evolution
+            .last_speciation_times
+            .push((SPECIES_ID, 0.0));
+        direct_evolution
+            .last_speciation_times
+            .push((SPECIES_ID, 0.0));
 
         let history = ExtinctionEvent {
             event_id: 43,
@@ -1067,7 +1078,13 @@ mod geographic_range_tests {
             .step_evolution_processes(&mut staged_species, DT_YEARS, 0.0, &mut staged_rng)
             .expect("staged speciation step succeeds");
         let direct_events = direct_evolution
-            .step_evolution_processes_inner(&mut direct_species, DT_YEARS, 0.0, &[], &mut direct_rng)
+            .step_evolution_processes_inner(
+                &mut direct_species,
+                DT_YEARS,
+                0.0,
+                &[],
+                &mut direct_rng,
+            )
             .expect("ordered speciation pipeline succeeds");
 
         assert_eq!(staged_species.len(), 2, "the fixture must create one child");
