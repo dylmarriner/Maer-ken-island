@@ -2488,7 +2488,9 @@ impl WorldState {
             0 => {
                 self.deep_time
                     .validate(&self.biosphere_state.species)
-                    .map_err(|error| format!("legacy snapshot schema 0 is incompatible: {error}"))?;
+                    .map_err(|error| {
+                        format!("legacy snapshot schema 0 is incompatible: {error}")
+                    })?;
                 self.snapshot_schema_version = WORLD_STATE_SNAPSHOT_SCHEMA_VERSION;
                 Ok(())
             }
@@ -2496,7 +2498,8 @@ impl WorldState {
                 .deep_time
                 .validate(&self.biosphere_state.species),
             version => Err(format!(
-                "snapshot schema version {version} is not supported; current version is {WORLD_STATE_SNAPSHOT_SCHEMA_VERSION}"
+                "snapshot schema version {version} is not supported; current version is {}",
+                WORLD_STATE_SNAPSHOT_SCHEMA_VERSION
             )),
         }
     }
@@ -2834,7 +2837,7 @@ mod snapshot_tests {
             Err(SnapshotError::DigestMismatch)
         ));
     }
-    
+
     fn legacy_snapshot(
         world: &WorldState,
         schema_version: Option<u64>,
@@ -2901,9 +2904,17 @@ mod snapshot_tests {
     #[test]
     fn future_snapshot_schema_is_rejected_before_state_is_exposed() {
         let world = WorldState::new(Arc::new(CanonLocked::default()), [15u8; 32]);
-        let snapshot = legacy_snapshot(&world, Some(WORLD_STATE_SNAPSHOT_SCHEMA_VERSION as u64 + 1), false);
+        let snapshot = legacy_snapshot(
+            &world,
+            Some(WORLD_STATE_SNAPSHOT_SCHEMA_VERSION as u64 + 1),
+            false,
+        );
         let error = WorldState::from_snapshot(&snapshot).expect_err("future schema");
-        assert!(error.to_string().contains("snapshot schema version 2 is not supported"));
+        assert!(
+            error
+                .to_string()
+                .contains("snapshot schema version 2 is not supported")
+        );
     }
 }
 
