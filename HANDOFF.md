@@ -173,3 +173,13 @@ cargo run -p island -- serve --scenario fixtures/island/default_scenario.json   
 
 - [Fishery subnormal MSY quarter-scaling correction](https://github.com/dylmarriner/Maer-ken-island/commit/93c4b040c050d708dafbb350cd2ca3c00e46cc9b) — PR #109 follow-up. For the exact 1/4 peak fraction, scale the rate before multiplying the smallest subnormal carrying capacity so the final operation performs the rounding. Regression distinguishes 22,149 from the prior 22,150 subnormal units. Source/test commit `93c4b040`; a fresh exact-head workflow is required, no pass claimed yet.
 - [Fishery MSY subnormal preservation](docs/handoff/FISHERY_SNAPSHOT_BINARY_COMPATIBILITY_20261107.md) — PR #109 follow-up. `msy_t` now avoids losing representable subnormal results when applying the piecewise peak fraction to carrying capacity. Regression covers 1, 3 and 7 subnormal units at `r = 4`. Exact-head CI is required for this follow-up; the preceding legacy-snapshot workflow #42237465516 passed all required jobs.
+
+## 2026-11-07 cumulative landed-delta tolerance follow-up
+
+- Exact-head workflow [#42287871714](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42287871714) reported 855 passed and one failure: strict bit equality rejected ordinary repeated daily catches.
+- Replaced bit equality with a (1\times10^{-12}) relative error bound. Positive increments that disappear are still rejected, and the (2^{53}+3\rightarrow4) rounded-up regression remains rejected.
+- Source/test commit: `a6e6bcea956fe1a8709d41b6c40b6e28fb6547e6`.
+- First follow-up workflow [#42292206209](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42292206209) stopped at rustfmt before Clippy/tests. Formatting was corrected in `a5e28aca48cb7df1906c7e6595dbc92e806ab2ff`.
+- Fresh exact-head workflow [#42292522642](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42292522642) was pending at the latest inspection.
+
+Remaining: verify formatting, Clippy and the full fast suite on the latest head; then reconcile with PR #111 before merging. Preserve the no-snapshot-layout-change constraint.
