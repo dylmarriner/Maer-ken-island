@@ -821,11 +821,16 @@ mod tests {
         assert!(surplus.is_finite() && surplus > 0.0);
         assert!((surplus / 4.0e-200 - 1.0).abs() < 1.0e-12);
 
+        // A partial catch would leave roughly 3e-200 tonnes of growth, which
+        // cannot be represented when added to 1e-100 tonnes of existing biomass.
+        // Harvest the full representable surplus here; the dedicated partial-
+        // harvest regression below proves that an unrecordable remainder is rejected.
         let landed = stock
-            .fish(&model, 1.0e-200, YEAR_S)
-            .expect("the fishery can land a positive request from representable growth");
-        assert_eq!(landed, 1.0e-200);
-        assert_eq!(stock.landed_t, 1.0e-200);
+            .fish(&model, surplus, YEAR_S)
+            .expect("the fishery can land the full representable surplus");
+        assert_eq!(landed, surplus);
+        assert_eq!(stock.biomass_t, 1.0e-100);
+        assert_eq!(stock.landed_t, surplus);
     }
 
     #[test]
