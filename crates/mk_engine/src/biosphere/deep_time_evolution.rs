@@ -199,6 +199,33 @@ impl DeepTimeEvolution {
         environmental_stress: f64,
         rng: &mut RngRegistry,
     ) -> Result<Vec<String>, String> {
+        // Mutation and drift can fail after earlier phases have changed the
+        // clock, carrying capacities, genomes or populations. Stage every
+        // mutable input and publish the transition only after all phases pass.
+        let mut staged_evolution = self.clone();
+        let mut staged_species = species.clone();
+        let mut staged_rng = rng.clone();
+
+        let events = staged_evolution.step_evolution_processes_inner(
+            &mut staged_species,
+            dt_years,
+            environmental_stress,
+            &mut staged_rng,
+        )?;
+
+        *self = staged_evolution;
+        *species = staged_species;
+        *rng = staged_rng;
+        Ok(events)
+    }
+
+    fn step_evolution_processes_inner(
+        &mut self,
+        species: &mut Vec<Species>,
+        dt_years: f64,
+        environmental_stress: f64,
+        rng: &mut RngRegistry,
+    ) -> Result<Vec<String>, String> {
         if !dt_years.is_finite() || dt_years < 0.0 {
             return Err("deep-time step duration must be finite and non-negative".to_string());
         }
