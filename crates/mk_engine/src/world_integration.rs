@@ -2829,6 +2829,77 @@ mod snapshot_tests {
             Err(SnapshotError::DigestMismatch)
         ));
     }
+    
+    fn legacy_snapshot(
+        world: &WorldState,
+        schema_version: Option<u64>,
+        invalid_geographic_range: bool,
+    ) -> WorldSnapshot {
+        let current = world.create_snapshot().expect("current snapshot");
+        let mut value: serde_json::Value =
+            serde_json::from_slice(&current.data).expect("snapshot JSON");
+        value
+            .as_object_mut()
+            .expect("world state object")
+            .remove("snapshot_schema_version");
+        if let Some(version) = schema_version {
+            value["snapshot_schema_version"] = serde_json::json!(version);
+        }
+        if invalid_geographic_range {
+            let species = value["biosphere_state"]["species"]
+                .as_array_mut()
+                .expect("persisted founding species");
+            let species_43 = species
+                .iter_mut()
+                .find(|species| species["species_id"].as_u64() == Some(43))
+                .expect("species 43");
+            species_43["geographic_range"] = serde_json::json!(1.0175);
+        }
+        let data = serde_json::to_vec(&value).expect("legacy snapshot JSON");
+        let digest = blake3::hash(&data).into();
+        WorldSnapshot {
+            tick: current.tick,
+            data,
+            digest,
+        }
+    }
+
+    #[test]
+    fn valid_legacy_snapshot_upgrades_schema_without_changing_replay_state() {
+        let world = WorldState::new(Arc::new(CanonLocked::default()), [13u8; 32]);
+        let snapshot = legacy_snapshot(&world, None, false);
+        let mut restored = WorldState::from_snapshot(&snapshot).expect("valid legacy snapshot");
+        assert_eq!(
+            restored.snapshot_schema_version,
+            WORLD_STATE_SNAPSHOT_SCHEMA_VERSION
+        );
+        assert_eq!(restored.hash_chain.current, world.hash_chain.current);
+
+        let mut original = world;
+        original.step_world(1).expect("original step");
+        restored.step_world(1).expect("restored step");
+        assert_eq!(restored.hash_chain.current, original.hash_chain.current);
+    }
+
+    #[test]
+    fn legacy_snapshot_with_invalid_geographic_range_is_rejected_at_load() {
+        let world = WorldState::new(Arc::new(CanonLocked::default()), [14u8; 32]);
+        let snapshot = legacy_snapshot(&world, None, true);
+        let error = WorldState::from_snapshot(&snapshot).expect_err("invalid legacy range");
+        assert!(
+            error.to_string().contains("legacy snapshot schema 0 is incompatible"),
+            "unexpected error: {error}"
+        );
+        assert!(error.to_string().contains("Species 43"));
+    }
+
+    #[test]
+    fn future_snapshot_schema_is_rejected_before_state_is_exposed() {
+        let world = WorldState::new(Arc::new(CanonLocked::default()), [15u8; 32]);
+        let snapshot = legacy_snapshot(&world, Some(WORLD_STATE_SNAPSHOT_SCHEMA_VERSION as u64 + 1), false);
+        let error = WorldState::from_snapshot(&snapshot).expect_err("future schema");
+        assert!(error.to_string().contains("snapshot schema version 2 is not supported"));
+    }
 }
 
 #[cfg(test)]
