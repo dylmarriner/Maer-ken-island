@@ -142,3 +142,28 @@ Exact-head CI must rerun formatting, Clippy, fast tests, desktop/backend and bot
 - `c0204d3a61416aaf8a50d7137645d773dcac313c` — update the canonical remaining-work checklist.
 - `365a76c96dfdcd394731ff0f24cc5f3ea4265f6c` — record the imported-code divergence in `UPSTREAM.md` and update PR #106.
 - The persisted-clock validation regression is added in this follow-up commit; exact-head CI remains mandatory.
+
+
+## Snapshot compatibility review — explicit fail-fast policy (6 November 2026)
+
+Codex review identified that an older `WorldState` snapshot can contain geographic ranges written before the new invariant. Inspection confirmed both `WorldState::from_snapshot` and the file-based `io::snapshot::load_snapshot` restore the persisted `BiosphereSystem::species` catalogue.
+
+I did **not** clamp those saved ranges. The previous drift implementation applied `max(1.0)`, so after evolution it could force every species to at least a whole-planet range and could leave many species above one. The original fractional values cannot be reconstructed losslessly from the saved state alone. Silently replacing them with 1.0 would rewrite scientific state and make the replay origin differ from the saved state. The implementation-ready roadmap's persistence rule requires incompatible schema/state to be rejected rather than silently normalised.
+
+Implemented:
+- Add persisted `snapshot_schema_version` (current version 1) to `WorldState`; old snapshots without the field deserialize as schema 0.
+- Both snapshot loaders verify the original digest first, then call the same schema/state validator.
+- A schema-0 snapshot whose physical state already satisfies current deep-time invariants upgrades only the metadata to version 1; the species, RNG, clock, hash chain and event history are unchanged.
+- A schema-0 snapshot with an invalid geographic range is rejected at load with an explicit compatibility error, before replay or a later evolution step can fail.
+- Unknown future schema versions are rejected.
+- New snapshot creation and file persistence refuse non-current schema state.
+- `DeepTimeEvolution::validate` now checks geographic ranges, and `WorldState::validate` includes deep-time invariants.
+
+Regression coverage:
+- Valid legacy snapshot upgrades metadata and produces the same next-step hash as the original state.
+- Invalid legacy species 43 range is rejected by `WorldState::from_snapshot`.
+- Future schema version is rejected.
+- The file-based loader upgrades valid legacy state and rejects the same invalid legacy range.
+- Existing digest/tamper checks remain before schema validation.
+
+This is an explicit compatibility boundary, not a data migration. No saved files or append-only logs were rewritten, no RNG keys/order changed, and `snapshot_schema_version` is persistence metadata excluded from the subsystem replay hash chain. Exact-head CI must verify the new loader tests before merge.
