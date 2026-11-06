@@ -85,3 +85,13 @@ The earlier success-parity fixture used a 2,500-year step and could not reach th
 
 
 - Exact rustfmt correction from the new run's formatter diff: `5d14be7d21d811271099be8b346e32dd3d8f4ddb`. The current exact-head workflow is [#42180786470](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42180786470), queued at the time this handoff was updated.
+
+
+## Exact-head CI correction (6 November 2026)
+
+Workflow [#42181591105](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42181591105) on head `af28f807481b065f950f6529866b7320ee1d58ef` passed `cargo fmt --all -- --check`, then Clippy failed on one test-only `unused_mut` warning at the deterministic seed probe. Fast tests were skipped because Clippy runs first.
+
+- Removed the unnecessary `mut` from the probe registry; `gen_f64_01` takes an immutable reference.
+- Fix commit: `be427c097f4e4aa9112f152218878c905e5ed9a6`.
+- The other completed jobs in that run passed: web dashboard, computer service, repository scripts and dependency audit. Desktop, installed backend and week/year acceptance were still running when inspected; no result is claimed for them here.
+- Fresh exact-head CI is required for `be427c0`. The prior workflow is a confirmed Clippy failure, not a passing test run.
