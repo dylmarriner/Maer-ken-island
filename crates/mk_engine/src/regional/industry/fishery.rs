@@ -22,6 +22,12 @@ use crate::validation::{ReferenceDomain, ReferenceLibrary};
 
 const YEAR_S: f64 = 365.25 * 86_400.0;
 
+// Repeated binary64 additions can move a cumulative total by a few ULPs.
+// Bound the recorded-delta error relative to the catch, rather than demanding
+// bit equality (which rejects ordinary repeated catches), while still refusing
+// materially distorted increments such as 2^53 + 3 rounding to 4.
+const LANDED_TOTAL_RELATIVE_TOLERANCE: f64 = 1.0e-12;
+
 /// Invalid fishery inputs are explicit errors; a failed step never mutates its stock.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FisheryError {
@@ -457,8 +463,14 @@ impl FishStock {
         if !landed_t.is_finite() {
             return Err(FisheryError::LandedTotalOverflow);
         }
-        // Never report a positive catch that the persisted cumulative total cannot record.
-        if catch > 0.0 && landed_t == self.landed_t {
+        // The cumulative total may round by a few bits after repeated ordinary
+        // catches. Accept only a tightly bounded relative error, and never accept
+        // a positive catch that disappears or is materially rounded up/down.
+        let recorded_delta = landed_t - self.landed_t;
+        if catch > 0.0
+            && (recorded_delta <= 0.0
+                || (recorded_delta - catch).abs() > catch * LANDED_TOTAL_RELATIVE_TOLERANCE)
+        {
             return Err(FisheryError::LandedTotalUnrepresentable);
         }
         // A partial catch must leave its unharvested growth in the stored stock.
@@ -1288,6 +1300,59 @@ mod tests {
             stock, before,
             "a partial catch must not discard unrepresentable residual growth"
         );
+    }
+
+    #[test]
+    fn landed_increment_rounded_to_a_different_amount_is_rejected_without_mutation() {
+        let mut model = FisheryModel::load_default().expect("the pack loads");
+        model.r_per_year[Resilience::Medium as usize] = 0.5;
+        model.depensation_below = 0.25;
+
+        let mut stock = FishStock::unexploited(Resilience::Medium, 1_000.0)
+            .expect("positive carrying capacity");
+        stock.biomass_t = 500.0;
+        stock.landed_t = 9_007_199_254_740_992.0; // 2^53
+        let before = stock.clone();
+        let requested = 3.0;
+
+        // At 2^53, adding three rounds up to four tonnes in binary64.
+        assert_eq!(stock.landed_t + requested - stock.landed_t, 4.0);
+        assert!(
+            stock
+                .sustainable_catch_limit_t(&model, YEAR_S)
+                .expect("valid one-year growth")
+                > requested
+        );
+
+        assert_eq!(
+            stock.fish(&model, requested, YEAR_S),
+            Err(FisheryError::LandedTotalUnrepresentable)
+        );
+        assert_eq!(
+            stock, before,
+            "a rounded cumulative increment must not commit biomass or landed mass"
+        );
+    }
+
+    #[test]
+    fn ordinary_cumulative_rounding_stays_within_the_landed_total_tolerance() {
+        let mut model = FisheryModel::load_default().expect("the pack loads");
+        model.r_per_year[Resilience::Medium as usize] = 0.5;
+        model.depensation_below = 0.25;
+
+        let mut stock = FishStock::unexploited(Resilience::Medium, 1_000.0)
+            .expect("positive carrying capacity");
+        stock.biomass_t = 500.0;
+        stock.landed_t = 0.3;
+
+        let landed = stock
+            .fish(&model, 0.1, YEAR_S)
+            .expect("ordinary floating-point accumulation remains usable");
+
+        assert_eq!(landed, 0.1);
+        let recorded_delta = stock.landed_t - 0.3;
+        assert!(recorded_delta > 0.0);
+        assert!((recorded_delta - landed).abs() <= landed * LANDED_TOTAL_RELATIVE_TOLERANCE);
     }
 
     #[test]
