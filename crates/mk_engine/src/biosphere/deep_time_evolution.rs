@@ -829,6 +829,18 @@ mod geographic_range_tests {
         assert_eq!(species[0].population_size, population_before);
         assert_eq!(species[0].geographic_range.to_bits(), range_before);
     }
+
+    #[test]
+    fn persisted_clock_validation_rejects_non_finite_and_negative_values() {
+        for invalid_clock in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY, -1.0] {
+            let mut evolution = DeepTimeEvolution::new();
+            evolution.current_time_years = invalid_clock;
+            assert_eq!(
+                evolution.validate(&[]),
+                Err("deep-time clock must be finite and non-negative".to_string())
+            );
+        }
+    }
 }
 
 #[cfg(test)]
