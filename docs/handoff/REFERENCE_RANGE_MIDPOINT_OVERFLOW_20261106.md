@@ -40,3 +40,16 @@ No real-world reference value or source pack was changed. No physical parameter,
 A second numerical edge was found during review: halving each endpoint or halving the endpoint difference can underflow before the midpoint is rounded. The helper now sums opposite-sign endpoints directly (safe from overflow) and sums small same-sign endpoints before halving; only large same-sign ranges use the bounded-difference formula.
 
 Regression `range_midpoint_preserves_rounding_for_adjacent_subnormals` covers positive and negative adjacent subnormal ties and a range spanning zero. This is a numerical utility correction only; no published reference value or simulation state changed. Exact-head Rust formatting, Clippy, fast tests, desktop/backend and week/year acceptance remain required.
+
+
+## Wide-exponent-gap double-rounding follow-up
+
+A further exact-arithmetic review found that `min + (max - min) * 0.5` can still be one ULP wrong when subtracting endpoints rounds before the final addition. The original extreme-range and adjacent-subnormal tests did not cover this exponent-gap case.
+
+- The midpoint helper now uses `(min + max) * 0.5` only when both magnitudes are at most `f64::MAX / 2`; that sum cannot overflow and preserves subnormal tie rounding.
+- Otherwise it uses `min * 0.5 + max * 0.5`. Halving the large finite endpoints is exact and the final addition performs the rounding once, without an overflowing intermediate sum.
+- Added positive and negative regressions for `min = 3 × 2^969` and `max = 2^1023`. The positive expected result is bit pattern `0x7fd0000000000001`; the prior difference-based formula returned `0x7fd0000000000000`.
+- Commits: `2471472c` (midpoint algorithm), `f07a3d29` (regressions).
+- Exact-head workflow `#42205227479` was pending for `f07a3d29` when this handoff was written. The earlier run's passed dashboard/scripts/audit jobs do not verify the new code. Rust format, Clippy, fast tests, desktop, backend and week/year acceptance must pass on the new head.
+
+No source-pack values, citations, physical parameters, deviations, simulation state, snapshot/replay format, hash baseline, budget or offline limit changed.
