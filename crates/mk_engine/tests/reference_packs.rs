@@ -474,7 +474,6 @@ fn range_midpoint_avoids_double_rounding_for_wide_exponent_gaps() {
     assert_eq!(negative.central(), Some(-expected));
 }
 
-
 #[test]
 fn range_midpoint_rounds_small_subnormal_pairs_to_even() {
     // Exhaustively cover a small subnormal neighbourhood. Subnormal bit
