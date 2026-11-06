@@ -1,6 +1,6 @@
 # Handoff
 
-Updated 2026-11-07 against `main` after PR #109 merge `0613dffca65a87e4db147300d9d57805a744ea07`. This is the front door for
+Updated 2026-11-07 against `main` after PR #110 merge `148ac98c95e58aac7b2065dd0cc68884790f4168`. This is the front door for
 whoever picks the island up next, human or agent. It says what the project is, where it stands,
 how to build and check it, and where everything else is written down.
 
@@ -8,7 +8,9 @@ how to build and check it, and where everything else is written down.
 
 ## Latest engineering handoff — 7 November 2026
 
-- [Fishery landed-total atomicity and precision](docs/handoff/FISHERY_LANDED_OVERFLOW_ATOMICITY_20261107.md) — PR #110 follow-up. `FishStock::fish` rejects both cumulative-total overflow and positive catches that round away at the stored total's binary64 precision, before committing biomass or landed total. Regressions prove the whole stock remains unchanged on both error paths; exact-head workflow #42274516200 is still running.
+- [Fishery biomass remainder precision](docs/handoff/FISHERY_BIOMASS_REMAINDER_PRECISION_20261107.md) — follow-up branch `fix/fishery-biomass-remainder-precision-20261107`. A partial catch is rejected when positive unharvested growth rounds away at the stored biomass scale; the regression proves the entire stock remains unchanged. Exact-head CI pending.
+
+- [Fishery landed-total atomicity and precision](docs/handoff/FISHERY_LANDED_OVERFLOW_ATOMICITY_20261107.md) — PR #110 merged to `main` as `148ac98c95e58aac7b2065dd0cc68884790f4168`. Exact-head workflow [#42275024667](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42275024667) passed formatting, Clippy, fast Rust tests, desktop build/tests/rendering/input acceptance, installed backend, web dashboard, computer service, repository scripts, dependency audit and week/year reference-pack acceptance; nightly slow tests were skipped by design.
 
 - [FishStock binary snapshot compatibility](docs/handoff/FISHERY_SNAPSHOT_BINARY_COMPATIBILITY_20261107.md) — merged in PR #109 to `main` as `0613dffca65a87e4db147300d9d57805a744ea07`. A fixed 28-byte bincode 1.3 fixture pins the legacy field order and encoding. Exact-head workflow [#42257092937](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42257092937) passed the required Rust, desktop, backend, dashboard, computer-service, dependency and week/year acceptance jobs; nightly slow tests were skipped by design.
 

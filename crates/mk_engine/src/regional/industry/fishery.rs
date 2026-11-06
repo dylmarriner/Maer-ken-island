@@ -33,6 +33,7 @@ pub enum FisheryError {
     NonFiniteGrowth,
     LandedTotalOverflow,
     LandedTotalUnrepresentable,
+    BiomassRemainderUnrepresentable,
 }
 
 impl std::fmt::Display for FisheryError {
@@ -49,6 +50,9 @@ impl std::fmt::Display for FisheryError {
             Self::LandedTotalOverflow => "cumulative landed biomass overflowed",
             Self::LandedTotalUnrepresentable => {
                 "cumulative landed biomass increment is not representable at stored precision"
+            }
+            Self::BiomassRemainderUnrepresentable => {
+                "remaining biomass growth is not representable at stored precision"
             }
         };
         f.write_str(message)
@@ -456,6 +460,12 @@ impl FishStock {
         // Never report a positive catch that the persisted cumulative total cannot record.
         if catch > 0.0 && landed_t == self.landed_t {
             return Err(FisheryError::LandedTotalUnrepresentable);
+        }
+        // A partial catch must leave its unharvested growth in the stored stock.
+        // If that positive remainder rounds away at the current biomass scale,
+        // accepting the catch would silently discard it and break mass balance.
+        if catch > 0.0 && remaining_growth > 0.0 && biomass_t == self.biomass_t {
+            return Err(FisheryError::BiomassRemainderUnrepresentable);
         }
 
         self.biomass_t = biomass_t;
@@ -1230,6 +1240,48 @@ mod tests {
         assert_eq!(
             stock, before,
             "a catch that cannot be represented in the cumulative total must not commit biomass"
+        );
+    }
+
+    #[test]
+    fn partial_harvest_rejects_unrepresentable_remaining_growth_without_mutation() {
+        let mut model = FisheryModel::load_default().expect("the pack loads");
+        model.r_per_year[Resilience::Medium as usize] = 0.5;
+        model.depensation_below = 0.25;
+
+        // At 2^52 the binary64 spacing is one tonne. A small positive remainder
+        // is therefore lost when added to this biomass, even though the catch
+        // itself remains representable in the cumulative landed total.
+        let mut stock = FishStock::unexploited(
+            Resilience::Medium,
+            9_007_199_254_740_992.0, // 2^53
+        )
+        .expect("finite positive carrying capacity");
+        stock.biomass_t = 4_503_599_627_370_496.0; // 2^52
+
+        let surplus = stock
+            .surplus_t_per_year(&model)
+            .expect("valid annual surplus");
+        let dt_s = YEAR_S * 0.125 / surplus;
+        let grown = stock
+            .growth_capacity_t(&model, dt_s)
+            .expect("small positive interval growth");
+        let wanted = grown / 2.0;
+        let remaining_growth = grown - wanted;
+
+        assert!(wanted > 0.0);
+        assert!(remaining_growth > 0.0 && remaining_growth < 0.5);
+        assert_eq!(stock.biomass_t + remaining_growth, stock.biomass_t);
+        assert_ne!(stock.landed_t + wanted, stock.landed_t);
+
+        let before = stock.clone();
+        assert_eq!(
+            stock.fish(&model, wanted, dt_s),
+            Err(FisheryError::BiomassRemainderUnrepresentable)
+        );
+        assert_eq!(
+            stock, before,
+            "a partial catch must not discard unrepresentable residual growth"
         );
     }
 
