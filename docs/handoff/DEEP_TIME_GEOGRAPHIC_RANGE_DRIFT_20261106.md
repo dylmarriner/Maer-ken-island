@@ -53,3 +53,10 @@ Verify this exact branch head in CI. If replay/reference acceptance identifies a
 ## Rebase after PR #102 merge
 
 PR #102 was merged into main as `2f11b5e9a3cd84a35f6cb69e1966cd3cd72391ed`. This branch is being rebased onto that commit so the deep-time correction does not carry a conflicting copy of the marine handoff/roadmap changes. The prior formatting correction remains in the source. The new exact-head CI run after the rebase is the merge gate; the older workflow #42140215387 was started against the pre-rebase branch head and is not sufficient evidence for the rebased commit.
+
+## Rebased exact-head verification
+
+- Rebased onto current main after PR #102 merged at `2f11b5e9a3cd84a35f6cb69e1966cd3cd72391ed`.
+- Rebased source head: `e4f40db380a0eab1a05545618835c9d6ead91430`.
+- Workflow [#42140215387](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42140215387) ran against the pre-rebase head `466e3f0d`; it is not exact-head evidence for the rebased commit.
+- This handoff update requests a fresh PR workflow for the rebased branch. Merge remains blocked until that exact-head run passes all required jobs.
