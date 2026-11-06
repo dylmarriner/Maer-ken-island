@@ -437,3 +437,14 @@ have no upstream counterpart.
    repertoire credits nothing and decays the traces. `decision_weight` (0.5) is an engine
    assumption, not canon or a source. **Changes upstream behaviour** (every human's choices, so
    the island's week digest moves); needs an upstream PR.
+
+7. `mk_engine::biosphere::DeepTimeEvolution::step_evolution_processes`, `apply_drift` and
+   logistic population growth — preserve fractional planetary geographic ranges instead of
+   forcing every positive range to 1.0; prevalidate range drift before mutation; use the
+   equivalent decaying-exponential logistic form so finite deep-time horizons do not overflow
+   `exp(+r·dt)`; and preflight the finite non-negative evolution clock, its next value and the
+   checked RNG step index before advancing state. The range/logistic corrections intentionally
+   change biosphere outputs for the corrected model; the clock guard changes only invalid or
+   overflowing state transitions. RNG keys, stream derivation, normal step ordering, snapshot
+   formats and append-only logs are unchanged. Exact-head week/year reference acceptance and
+   replay-hash evidence are required before any digest re-pin.
