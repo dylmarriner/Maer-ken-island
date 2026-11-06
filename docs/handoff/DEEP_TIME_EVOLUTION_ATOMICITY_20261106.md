@@ -1,0 +1,40 @@
+# Deep-time evolution atomicity — 6 November 2026
+
+**Repository:** `dylmarriner/Maer-ken-island`  
+**Branch:** `fix/deep-time-evolution-atomicity-20261106`  
+**Base:** PR #106 branch `fix/deep-time-geographic-range-fraction-20261106-rebased`  
+**Stacked PR:** #107 (draft)
+
+## Finding
+
+`step_evolution_processes` advanced the evolution clock and step index, then mutated carrying capacities/populations/genomes before invoking fallible mutation and geographic-drift phases. If a later phase returned an error, the caller received a failed step while part of the step had already become visible. That violates the engine's fail-fast deterministic transition boundary.
+
+## Change
+
+- Stage `DeepTimeEvolution`, the species vector and `RngRegistry` on clones.
+- Execute the existing ordered evolution pipeline against staged values.
+- Commit all three mutable inputs only after every fallible phase succeeds.
+- Preserve phase order, keyed RNG derivation, clock arithmetic, species ordering, snapshot schema and append-only log behavior.
+- No LLM call, new ecological parameter or external side effect.
+
+## Regression
+
+A deterministic seed search uses a maximal finite horizon to force the late geographic-range drift validator to reject a negative candidate after population growth has changed the staged population. The test asserts the original evolution state, species vector and RNG registry remain byte-for-byte identical after the rejected transition.
+
+Existing normal-step deterministic and fractional-range tests remain in place.
+
+## Commits
+
+- `bdc97507` — stage and atomically commit evolution transitions.
+- `febdf236` — late-failure atomicity regression.
+
+## Verification
+
+- Exact-head GitHub Actions is required. The PR is stacked on #106 because the current range validator's fallible drift path is part of that branch.
+- No local Cargo result is claimed: custom OpenCommander device discovery returned HTTP 429.
+- The latest parent PR #106 workflow is still running its Rust fast tests, desktop and week/year acceptance; this follow-up needs its own exact-head CI after PR #107 is opened.
+- The staged approach clones the current species vector and evolution state per step. Review runtime impact under the repository's long-horizon profile before merge; correctness is the immediate goal, and the performance cost must be measured rather than guessed.
+
+## Safety
+
+No live simulation state, canon, physical parameters, snapshot format, production infrastructure or external service was changed.
