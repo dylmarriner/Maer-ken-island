@@ -1335,6 +1335,38 @@ mod tests {
     }
 
     #[test]
+    fn landed_increment_rounded_down_is_rejected_without_mutation() {
+        let mut model = FisheryModel::load_default().expect("the pack loads");
+        model.r_per_year[Resilience::Medium as usize] = 0.5;
+        model.depensation_below = 0.25;
+
+        let mut stock = FishStock::unexploited(Resilience::Medium, 1_000.0)
+            .expect("positive carrying capacity");
+        stock.biomass_t = 500.0;
+        stock.landed_t = 9_007_199_254_740_992.0; // 2^53
+        let before = stock.clone();
+        let requested = 5.0;
+
+        // At 2^53, adding five is a tie that rounds down to a four-tonne delta.
+        assert_eq!(stock.landed_t + requested - stock.landed_t, 4.0);
+        assert!(
+            stock
+                .sustainable_catch_limit_t(&model, YEAR_S)
+                .expect("valid one-year growth")
+                > requested
+        );
+
+        assert_eq!(
+            stock.fish(&model, requested, YEAR_S),
+            Err(FisheryError::LandedTotalUnrepresentable)
+        );
+        assert_eq!(
+            stock, before,
+            "a rounded-down cumulative increment must not commit biomass or landed mass"
+        );
+    }
+
+    #[test]
     fn ordinary_cumulative_rounding_stays_within_the_landed_total_tolerance() {
         let mut model = FisheryModel::load_default().expect("the pack loads");
         model.r_per_year[Resilience::Medium as usize] = 0.5;
