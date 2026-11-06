@@ -254,7 +254,7 @@ mod tests {
 
         let error = load_snapshot(&path).expect_err("invalid legacy range");
         assert!(
-            matches!(error, SnapshotError::SerializeError(message)
+            matches!(error, SnapshotError::SerializeError(ref message)
                 if message.contains("legacy snapshot schema 0 is incompatible")
                     && message.contains("Species 43")),
             "unexpected error: {error}"

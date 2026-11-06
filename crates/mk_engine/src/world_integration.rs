@@ -2876,7 +2876,7 @@ mod snapshot_tests {
 
         let error = WorldState::from_snapshot(&snapshot).expect_err("mismatched canon digest");
         assert!(
-            matches!(error, SnapshotError::DeserializationError(message)
+            matches!(error, SnapshotError::DeserializationError(ref message)
                 if message.contains("snapshot canon digest does not match persisted canon")),
             "unexpected error: {error}"
         );
