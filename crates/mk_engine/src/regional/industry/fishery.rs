@@ -292,18 +292,21 @@ impl FishStock {
         // growth rate. The old order could overflow at rate * biomass even
         // when the final depensated surplus was representable.
         let surplus = if p < model.depensation_below {
-            if p == 0.0 && self.biomass_t > 0.0 && rate > 0.0 {
-                // B / K can underflow to zero even when r * B² / (K * d)
-                // is representable. In that rare case evaluate the equivalent
-                // positive product in log space rather than silently reporting
-                // zero surplus for a non-empty stock.
-                let log_surplus = rate.log2() + 2.0 * self.biomass_t.log2()
+            let biomass_factor = (1.0 - p) * (p / model.depensation_below);
+            let direct = rate * (self.biomass_t * biomass_factor);
+            if direct == 0.0 && self.biomass_t > 0.0 && rate > 0.0 {
+                // Either B / K or the subsequent B * factor product can
+                // underflow even when the final r * B² / (K * d) surplus is
+                // representable. Re-evaluate every positive-input zero result
+                // in log space instead of silently reporting no recruitment.
+                let log_surplus = rate.log2()
+                    + 2.0 * self.biomass_t.log2()
                     - self.k_t.log2()
-                    - model.depensation_below.log2();
+                    - model.depensation_below.log2()
+                    + (1.0 - p).log2();
                 log_surplus.exp2()
             } else {
-                let biomass_factor = (1.0 - p) * (p / model.depensation_below);
-                rate * (self.biomass_t * biomass_factor)
+                direct
             }
         } else {
             rate * (1.0 - p) * self.biomass_t
@@ -1230,6 +1233,44 @@ mod tests {
 
         assert!(landed > 0.0);
         assert!(stock.landed_t > 0.0);
+    }
+
+    #[test]
+    fn low_biomass_surplus_uses_log_space_when_intermediate_product_underflows() {
+        let model = FisheryModel {
+            r_per_year: [0.0, 1.0e308, 0.0, 0.0],
+            depensation_below: 0.25,
+        };
+        let mut stock = FishStock::unexploited(Resilience::Medium, 1.0e308)
+            .expect("positive carrying capacity");
+        stock.biomass_t = 5.0e-16;
+
+        let p = stock.biomass_t / stock.k_t;
+        let biomass_factor = (1.0 - p) * (p / model.depensation_below);
+        assert!(p > 0.0, "the ratio itself remains representable");
+        assert!(biomass_factor > 0.0, "the depensation factor remains representable");
+        assert_eq!(
+            stock.biomass_t * biomass_factor,
+            0.0,
+            "the biomass-times-factor intermediate underflows"
+        );
+
+        let log_expected = model.r(Resilience::Medium).log2()
+            + 2.0 * stock.biomass_t.log2()
+            - stock.k_t.log2()
+            - model.depensation_below.log2()
+            + (1.0 - p).log2();
+        let expected = log_expected.exp2();
+        let surplus = stock
+            .surplus_t_per_year(&model)
+            .expect("the mathematically representable surplus is finite");
+
+        assert!(expected > 0.0);
+        assert!(surplus > 0.0, "positive recruitment must not disappear");
+        assert!(
+            (surplus / expected - 1.0).abs() <= 1.0e-12,
+            "log-space fallback should preserve the representable result"
+        );
     }
 
     #[test]
