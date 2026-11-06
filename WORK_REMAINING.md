@@ -1,6 +1,6 @@
 # Work remaining
 
-Latest fishery atomicity regressions (PR #110): both cumulative landed-total overflow and a positive catch that rounds away at the stored total's binary64 precision must reject before committing biomass or landed totals. Exact-head fast Rust and full acceptance CI is required before marking these invariants complete.
+Fishery landed-total atomicity (PR #110): merged to main as `148ac98c95e58aac7b2065dd0cc68884790f4168`; exact-head workflow [#42275024667](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42275024667) passed formatting, Clippy, fast Rust tests, desktop, installed backend, web dashboard, computer service, repository scripts, dependency audit and week/year reference-pack acceptance; nightly slow tests were skipped by design. Follow-up PR #111 rejects any positive catch whose persisted cumulative delta differs from the actual catch, including rounding up/down rather than only rounding to zero. Exact-head CI is required.
 
 Updated 2026-11-07 after PR #109 merged as `0613dff`; fishery remains standalone pending sourced species-specific stock and effort data and owner-approved workforce integration.
 
