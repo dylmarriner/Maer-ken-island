@@ -108,3 +108,8 @@ The snapshot restore path calls `DeepTimeEvolution::validate`, but the validator
 - No snapshot schema, canon, RNG derivation, append-only log format, physical parameter, or simulation ordering change.
 
 Exact-head CI is required; no local Cargo pass is claimed while the custom OpenCommander connector is returning HTTP 429.
+
+
+## Follow-up: exact-head rustfmt correction (6 November 2026)
+
+Workflow [#42183421772](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42183421772) reached the new persisted-state validation and reported only rustfmt differences in `deep_time_evolution.rs`. The formatter's exact line wraps are now applied. Clippy and fast tests were skipped after the formatting gate failed; no source-test pass is claimed. A fresh exact-head workflow is required for the corrected head.

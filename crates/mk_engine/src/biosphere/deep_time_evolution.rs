@@ -727,7 +727,8 @@ impl DeepTimeEvolution {
         if !self.current_time_years.is_finite() || self.current_time_years < 0.0 {
             return Err("deep-time clock must be finite and non-negative".to_string());
         }
-        if !self.adaptive_radiation_potential.is_finite() || self.adaptive_radiation_potential < 0.0 {
+        if !self.adaptive_radiation_potential.is_finite() || self.adaptive_radiation_potential < 0.0
+        {
             return Err("adaptive radiation potential must be finite and non-negative".to_string());
         }
         if !self.recovery_state.time_since_extinction_years.is_finite()
@@ -744,7 +745,10 @@ impl DeepTimeEvolution {
             || !(0.0..=MAX_ADAPTIVE_RADIATION_AMPLIFICATION)
                 .contains(&self.recovery_state.adaptive_radiation_potential)
         {
-            return Err("recovery adaptive radiation potential must be finite and within [0, max]".to_string());
+            return Err(
+                "recovery adaptive radiation potential must be finite and within [0, max]"
+                    .to_string(),
+            );
         }
         for (&species_id, &capacity) in &self.carrying_capacities {
             if !capacity.is_finite() || capacity < 1.0 || capacity > u64::MAX as f64 {
@@ -1185,27 +1189,55 @@ mod geographic_range_tests {
         for invalid in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY, -1.0] {
             let mut evolution = DeepTimeEvolution::new();
             evolution.recovery_state.time_since_extinction_years = invalid;
-            assert!(evolution.validate(&species).unwrap_err().contains("recovery clock"));
+            assert!(evolution
+                .validate(&species)
+                .unwrap_err()
+                .contains("recovery clock"));
 
             let mut evolution = DeepTimeEvolution::new();
             evolution.recovery_state.recovery_rate_multiplier = invalid;
-            assert!(evolution.validate(&species).unwrap_err().contains("recovery rate multiplier"));
+            assert!(evolution
+                .validate(&species)
+                .unwrap_err()
+                .contains("recovery rate multiplier"));
 
             let mut evolution = DeepTimeEvolution::new();
             evolution.adaptive_radiation_potential = invalid;
-            assert!(evolution.validate(&species).unwrap_err().contains("adaptive radiation potential"));
+            assert!(evolution
+                .validate(&species)
+                .unwrap_err()
+                .contains("adaptive radiation potential"));
         }
 
-        for invalid in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY, -0.1, MAX_ADAPTIVE_RADIATION_AMPLIFICATION + 0.1] {
+        for invalid in [
+            f64::NAN,
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+            -0.1,
+            MAX_ADAPTIVE_RADIATION_AMPLIFICATION + 0.1,
+        ] {
             let mut evolution = DeepTimeEvolution::new();
             evolution.recovery_state.adaptive_radiation_potential = invalid;
-            assert!(evolution.validate(&species).unwrap_err().contains("recovery adaptive radiation"));
+            assert!(evolution
+                .validate(&species)
+                .unwrap_err()
+                .contains("recovery adaptive radiation"));
         }
 
-        for invalid in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY, 0.0, -1.0, (u64::MAX as f64) * 2.0] {
+        for invalid in [
+            f64::NAN,
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+            0.0,
+            -1.0,
+            (u64::MAX as f64) * 2.0,
+        ] {
             let mut evolution = DeepTimeEvolution::new();
             evolution.carrying_capacities.insert(7, invalid);
-            assert!(evolution.validate(&species).unwrap_err().contains("carrying capacity"));
+            assert!(evolution
+                .validate(&species)
+                .unwrap_err()
+                .contains("carrying capacity"));
         }
 
         let mut valid = DeepTimeEvolution::new();
@@ -1232,7 +1264,10 @@ mod geographic_range_tests {
                 severity: ExtinctionSeverity::Minor,
                 affected_species: vec![7],
             });
-            assert!(evolution.validate(&species).unwrap_err().contains("Extinction event 91"));
+            assert!(evolution
+                .validate(&species)
+                .unwrap_err()
+                .contains("Extinction event 91"));
         }
     }
 
