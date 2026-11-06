@@ -41,6 +41,7 @@ The test proves `B/K` and the depensation factor are positive, `B * factor` unde
 ## Verification
 
 - Local Cargo tests were not run; custom OpenCommander device discovery has returned transient MCP 429/404 errors.
+- First exact-head workflow #42307400642 identified only rustfmt differences in the new source/test lines; those exact formatter changes were applied in `302dcd59`. The first run's other jobs are not evidence for the new head.
 - A fresh exact-head GitHub Actions run is required for formatting, Clippy, fast Rust tests, desktop, installed backend, dashboard, computer service, scripts, dependency audit and week/year reference-pack acceptance.
 - Do not merge until the exact branch head passes all required jobs.
 
