@@ -146,6 +146,16 @@ fn validate_geographic_ranges(species: &[Species]) -> Result<(), String> {
     Ok(())
 }
 
+/// The live climate integration supplies a normalised global stress in [0, 1].
+/// Reject invalid direct inputs instead of allowing NaN to collapse population
+/// arithmetic or out-of-domain values to distort mutation and selection.
+fn validate_environmental_stress(value: f64) -> Result<(), String> {
+    if !value.is_finite() || !(0.0..=1.0).contains(&value) {
+        return Err("environmental stress must be finite and within [0, 1]".to_string());
+    }
+    Ok(())
+}
+
 impl DeepTimeEvolution {
     fn rng_key(&self, salt: u32) -> RngKey {
         RngKey::new(SubsystemId::Biosphere, salt, 0, self.step_index)
@@ -199,6 +209,11 @@ impl DeepTimeEvolution {
         environmental_stress: f64,
         rng: &mut RngRegistry,
     ) -> Result<Vec<String>, String> {
+        // The world integration normalises climate stress to [0, 1]. Keep the
+        // same fail-fast contract for direct engine callers before cloning or
+        // staging any state.
+        validate_environmental_stress(environmental_stress)?;
+
         // Mutation and drift can fail after earlier phases have changed the
         // clock, carrying capacities, genomes or populations. Stage the state
         // this pipeline mutates, but deliberately exclude extinction_events:
@@ -823,6 +838,124 @@ mod geographic_range_tests {
         }
 
         assert_eq!(run([10; 32]), run([10; 32]));
+    }
+
+    #[test]
+    fn invalid_environmental_stress_is_rejected_without_mutating_evolution_species_or_rng() {
+        for invalid_stress in [
+            f64::NAN,
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+            -0.01,
+            1.01,
+        ] {
+            let mut rng = RngRegistry::new([14; 32]);
+            let mut species = vec![test_species(0.4, &rng)];
+            let mut evolution = DeepTimeEvolution::new();
+            let evolution_before = serde_json::to_vec(&evolution).expect("initial evolution");
+            let species_before = serde_json::to_vec(&species).expect("initial species");
+            let rng_before = serde_json::to_vec(&rng).expect("initial RNG");
+
+            let error = evolution
+                .step_evolution_processes(&mut species, 1.0, invalid_stress, &mut rng)
+                .expect_err("invalid environmental stress must fail closed");
+
+            assert_eq!(
+                error,
+                "environmental stress must be finite and within [0, 1]"
+            );
+            assert_eq!(
+                serde_json::to_vec(&evolution).expect("unchanged evolution"),
+                evolution_before
+            );
+            assert_eq!(
+                serde_json::to_vec(&species).expect("unchanged species"),
+                species_before
+            );
+            assert_eq!(serde_json::to_vec(&rng).expect("unchanged RNG"), rng_before);
+        }
+    }
+
+    #[test]
+    fn successful_staged_step_commits_speciation_history_and_matches_ordered_pipeline() {
+        const DT_YEARS: f64 = 25_000.0;
+        const SPECIES_ID: u64 = 7;
+        const SPECiation_ROLL_CEILING: f64 = 0.0005;
+
+        // Find a deterministic seed whose keyed speciation draw is below the
+        // minimum probability for this fixture. The range drift at this
+        // horizon is bounded tightly enough that the threshold remains safe.
+        let seed = (0_u64..100_000)
+            .find_map(|candidate| {
+                let mut seed = [0_u8; 32];
+                seed[..8].copy_from_slice(&candidate.to_le_bytes());
+                let mut probe = RngRegistry::new(seed);
+                let key = RngKey::new(
+                    SubsystemId::Biosphere,
+                    SPECIES_ID as u32 ^ 40_001,
+                    0,
+                    1,
+                );
+                (probe.gen_f64_01(key) < SPECiation_ROLL_CEILING).then_some(seed)
+            })
+            .expect("a deterministic seed must reach the speciation probability");
+
+        let mut staged_rng = RngRegistry::new(seed);
+        let mut direct_rng = RngRegistry::new(seed);
+        let mut staged_species = vec![test_species(1.0, &staged_rng)];
+        let mut direct_species = vec![test_species(1.0, &direct_rng)];
+        let mut staged_evolution = DeepTimeEvolution::new();
+        let mut direct_evolution = DeepTimeEvolution::new();
+        staged_evolution.recovery_state.adaptive_radiation_potential =
+            MAX_ADAPTIVE_RADIATION_AMPLIFICATION;
+        direct_evolution.recovery_state.adaptive_radiation_potential =
+            MAX_ADAPTIVE_RADIATION_AMPLIFICATION;
+
+        let history = ExtinctionEvent {
+            event_id: 43,
+            start_time_years: 1_000.0,
+            duration_years: 250.0,
+            severity: ExtinctionSeverity::Minor,
+            affected_species: vec![7, 8],
+        };
+        staged_evolution.extinction_events.push(history.clone());
+        direct_evolution.extinction_events.push(history);
+
+        let staged_events = staged_evolution
+            .step_evolution_processes(&mut staged_species, DT_YEARS, 0.0, &mut staged_rng)
+            .expect("staged speciation step succeeds");
+        let direct_events = direct_evolution
+            .step_evolution_processes_inner(&mut direct_species, DT_YEARS, 0.0, &mut direct_rng)
+            .expect("ordered speciation pipeline succeeds");
+
+        assert_eq!(staged_species.len(), 2, "the fixture must create one child");
+        assert_eq!(
+            staged_evolution.last_speciation_times,
+            vec![(SPECIES_ID, DT_YEARS)],
+            "the staged transition must commit the parent's speciation timestamp"
+        );
+        assert!(
+            staged_events
+                .iter()
+                .any(|event| event == "Speciation: parent 7 -> child 8"),
+            "the staged transition must emit the speciation event"
+        );
+        assert_eq!(staged_events, direct_events);
+        assert_eq!(
+            serde_json::to_vec(&staged_evolution).expect("staged evolution"),
+            serde_json::to_vec(&direct_evolution).expect("direct evolution"),
+            "staging must preserve speciation history and every successful evolution-state bit"
+        );
+        assert_eq!(
+            serde_json::to_vec(&staged_species).expect("staged species"),
+            serde_json::to_vec(&direct_species).expect("direct species"),
+            "staging must preserve the new lineage and its genome state"
+        );
+        assert_eq!(
+            serde_json::to_vec(&staged_rng).expect("staged RNG"),
+            serde_json::to_vec(&direct_rng).expect("direct RNG"),
+            "staging must preserve the keyed RNG stream"
+        );
     }
 
     #[test]
