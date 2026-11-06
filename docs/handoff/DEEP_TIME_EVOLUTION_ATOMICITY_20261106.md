@@ -40,3 +40,12 @@ Existing normal-step deterministic and fractional-range tests remain in place.
 ## Safety
 
 No live simulation state, canon, physical parameters, snapshot format, production infrastructure or external service was changed.
+
+
+## Follow-up: successful-path deterministic parity (6 November 2026)
+
+The atomicity wrapper now has a companion success-path regression. With the same seed, species, clock and inputs, the public staged transition is compared against the ordered inner evolution pipeline. The test requires identical emitted events and byte-identical serialized evolution state, species/genomes and keyed RNG state. This guards against a correct rollback path accidentally changing successful deterministic output or consuming a different RNG stream.
+
+- Test: `successful_staged_step_matches_ordered_pipeline_state_and_rng`.
+- The previous exact-head workflow [#42172213109](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42172213109) passed formatting, Clippy, fast Rust tests, desktop, installed backend, dashboard, scripts, dependency audit and week/year reference acceptance on the prior head `27611fe9`; it does **not** verify this follow-up.
+- A fresh exact-head CI run is required for this test. No local Cargo result is claimed.

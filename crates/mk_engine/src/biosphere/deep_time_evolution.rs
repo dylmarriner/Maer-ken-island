@@ -804,6 +804,41 @@ mod geographic_range_tests {
     }
 
     #[test]
+    fn successful_staged_step_matches_ordered_pipeline_state_and_rng() {
+        let seed = [13; 32];
+        let mut staged_rng = RngRegistry::new(seed);
+        let mut direct_rng = RngRegistry::new(seed);
+        let mut staged_species = vec![test_species(0.4, &staged_rng)];
+        let mut direct_species = vec![test_species(0.4, &direct_rng)];
+        let mut staged_evolution = DeepTimeEvolution::new();
+        let mut direct_evolution = DeepTimeEvolution::new();
+
+        let staged_events = staged_evolution
+            .step_evolution_processes(&mut staged_species, 2_500.0, 0.2, &mut staged_rng)
+            .expect("staged public step succeeds");
+        let direct_events = direct_evolution
+            .step_evolution_processes_inner(&mut direct_species, 2_500.0, 0.2, &mut direct_rng)
+            .expect("ordered inner pipeline succeeds");
+
+        assert_eq!(staged_events, direct_events);
+        assert_eq!(
+            serde_json::to_vec(&staged_evolution).expect("staged evolution"),
+            serde_json::to_vec(&direct_evolution).expect("direct evolution"),
+            "staging must preserve every successful evolution-state bit"
+        );
+        assert_eq!(
+            serde_json::to_vec(&staged_species).expect("staged species"),
+            serde_json::to_vec(&direct_species).expect("direct species"),
+            "staging must preserve successful species and genome state"
+        );
+        assert_eq!(
+            serde_json::to_vec(&staged_rng).expect("staged RNG"),
+            serde_json::to_vec(&direct_rng).expect("direct RNG"),
+            "staging must preserve the keyed RNG stream"
+        );
+    }
+
+    #[test]
     fn invalid_geographic_range_fails_before_evolution_state_changes() {
         let mut rng = RngRegistry::new([8; 32]);
         let mut species = vec![test_species(f64::NAN, &rng)];
