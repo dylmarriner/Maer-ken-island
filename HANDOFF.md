@@ -8,7 +8,7 @@ how to build and check it, and where everything else is written down.
 
 ## Latest engineering handoff — 7 November 2026
 
-- [Fishery landed-total overflow atomicity](docs/handoff/FISHERY_LANDED_OVERFLOW_ATOMICITY_20261107.md) — PR #110 follow-up. A regression drives a valid harvest into `LandedTotalOverflow` and proves biomass and landed totals remain struct equality unchanged after the rejected single-writer step. No simulation behaviour changes on successful steps; exact-head CI is required.
+- [Fishery landed-total atomicity and precision](docs/handoff/FISHERY_LANDED_OVERFLOW_ATOMICITY_20261107.md) — PR #110 follow-up. `FishStock::fish` rejects both cumulative-total overflow and positive catches that round away at the stored total's binary64 precision, before committing biomass or landed total. Regressions prove the whole stock remains unchanged on both error paths; exact-head workflow #42274516200 is still running.
 
 - [FishStock binary snapshot compatibility](docs/handoff/FISHERY_SNAPSHOT_BINARY_COMPATIBILITY_20261107.md) — merged in PR #109 to `main` as `0613dffca65a87e4db147300d9d57805a744ea07`. A fixed 28-byte bincode 1.3 fixture pins the legacy field order and encoding. Exact-head workflow [#42257092937](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42257092937) passed the required Rust, desktop, backend, dashboard, computer-service, dependency and week/year acceptance jobs; nightly slow tests were skipped by design.
 
