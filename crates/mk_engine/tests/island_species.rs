@@ -8,7 +8,9 @@ use mk_core::canon::CanonLocked;
 use mk_engine::biosphere::{SpeciesCategory, TerrainAffinity};
 use mk_engine::regional::ecology::RegionalEcologyState;
 use mk_engine::regional::physical::RegionalPhysicalState;
-use mk_engine::regional::species::{Abundance, IslandBiota, NodeStock, AFFINITIES};
+use mk_engine::regional::species::{
+    Abundance, IslandBiota, MarineProjectionError, NodeStock, AFFINITIES,
+};
 use mk_island::{DomainLevel, IslandDomain, IslandProfile};
 
 const M: DomainLevel = DomainLevel::Medium;
@@ -98,7 +100,7 @@ fn the_island_has_its_trees_its_open_ground_plants_and_its_sea_life() {
     let carbon = b.biota.carbon_by_species(&b.ecology);
     let living = |category: SpeciesCategory| {
         b.biota
-            .species
+            .species()
             .iter()
             .zip(&carbon)
             .filter(|(s, c)| s.category == category && c.is_some_and(|c| c > 0.0))
@@ -138,13 +140,13 @@ fn the_plants_carbon_is_the_producer_field_before_and_after_a_step() {
 
     // And one at a time agrees with all at once.
     let all = b.biota.carbon_by_species(&stepped);
-    let one_by_one: f64 = (0..b.biota.species.len())
-        .filter(|&i| b.biota.species[i].abundance == Abundance::ProducerCarbon)
+    let one_by_one: f64 = (0..b.biota.species().len())
+        .filter(|&i| b.biota.species()[i].abundance == Abundance::ProducerCarbon)
         .filter_map(|i| b.biota.carbon_kgc(i, &stepped))
         .sum();
     let summed: f64 = b
         .biota
-        .species
+        .species()
         .iter()
         .zip(&all)
         .filter(|(s, _)| s.abundance == Abundance::ProducerCarbon)
@@ -179,7 +181,7 @@ fn the_grazers_carbon_is_the_grazer_pool_on_their_plains_and_no_more() {
 #[test]
 fn everything_else_is_upstreams_density_over_the_islands_habitat() {
     let b = base();
-    for (i, s) in b.biota.species.iter().enumerate() {
+    for (i, s) in b.biota.species().iter().enumerate() {
         match s.abundance {
             Abundance::UpstreamDensity => {
                 let n = b.biota.population(i).unwrap();
@@ -193,7 +195,7 @@ fn everything_else_is_upstreams_density_over_the_islands_habitat() {
         }
     }
     // A species with no ground on the island has nobody on it.
-    for (i, s) in b.biota.species.iter().enumerate() {
+    for (i, s) in b.biota.species().iter().enumerate() {
         if b.biota.habitat_area_m2(&s.affinity) == 0.0 {
             assert!(b.biota.population(i).is_none_or(|n| n == 0.0));
         }
@@ -204,12 +206,12 @@ fn everything_else_is_upstreams_density_over_the_islands_habitat() {
 fn the_animal_nodes_add_up_to_each_species_on_the_island() {
     let b = base();
     let cells = b.ecology.herbivore_kgc_m2.data().len();
-    let mut head = vec![0.0; b.biota.species.len()];
-    let mut carbon = vec![0.0; b.biota.species.len()];
+    let mut head = vec![0.0; b.biota.species().len()];
+    let mut carbon = vec![0.0; b.biota.species().len()];
     for cell in 0..cells {
         for node in b.biota.animal_nodes(cell, &b.ecology) {
             assert_eq!(node.cell, cell);
-            let s = &b.biota.species[node.species];
+            let s = &b.biota.species()[node.species];
             assert!(b.biota.is_habitat(cell, &s.affinity), "{}", s.name);
             match node.stock {
                 NodeStock::Head(n) => head[node.species] += n,
@@ -217,7 +219,7 @@ fn the_animal_nodes_add_up_to_each_species_on_the_island() {
             }
         }
     }
-    for (i, s) in b.biota.species.iter().enumerate() {
+    for (i, s) in b.biota.species().iter().enumerate() {
         match s.abundance {
             Abundance::ProducerCarbon => assert_eq!((head[i], carbon[i]), (0.0, 0.0)),
             Abundance::GrazerCarbon => {
@@ -243,11 +245,11 @@ fn the_animal_nodes_add_up_to_each_species_on_the_island() {
     // The sea's fish are nodes in the sea.
     let fish = b
         .biota
-        .species
+        .species()
         .iter()
         .position(|s| s.category == SpeciesCategory::Aquatic && is_marine(&s.affinity));
     if let Some(fish) = fish {
-        let affinity = &b.biota.species[fish].affinity;
+        let affinity = &b.biota.species()[fish].affinity;
         let cell = b.biota.habitat_cells(affinity).next().expect("sea habitat");
         assert!(b
             .biota
@@ -261,15 +263,15 @@ fn the_animal_nodes_add_up_to_each_species_on_the_island() {
 fn marine_aquatic_nodes_project_population_to_biomass_without_a_second_stock() {
     let b = base();
     let cells = b.ecology.herbivore_kgc_m2.data().len();
-    let mut individuals = vec![0.0; b.biota.species.len()];
-    let mut biomass_t = vec![0.0; b.biota.species.len()];
+    let mut individuals = vec![0.0; b.biota.species().len()];
+    let mut biomass_t = vec![0.0; b.biota.species().len()];
     let mut node_count = 0usize;
 
     for cell in 0..cells {
         let animals = b.biota.animal_nodes(cell, &b.ecology);
         for node in b.biota.marine_aquatic_nodes(cell) {
             node_count += 1;
-            let species = &b.biota.species[node.species];
+            let species = &b.biota.species()[node.species];
             assert_eq!(species.category, SpeciesCategory::Aquatic);
             assert!(is_marine(&species.affinity), "{}", species.name);
             assert!(b.biota.is_habitat(cell, &species.affinity));
@@ -295,7 +297,7 @@ fn marine_aquatic_nodes_project_population_to_biomass_without_a_second_stock() {
     }
 
     assert!(node_count > 0, "the island has marine aquatic species");
-    for (index, species) in b.biota.species.iter().enumerate() {
+    for (index, species) in b.biota.species().iter().enumerate() {
         if species.category == SpeciesCategory::Aquatic && is_marine(&species.affinity) {
             let expected_individuals = b.biota.population(index).unwrap_or(0.0);
             let expected_biomass_t = expected_individuals * species.body_mass_kg / 1_000.0;
@@ -322,7 +324,7 @@ fn marine_aquatic_nodes_project_population_to_biomass_without_a_second_stock() {
 fn the_plant_nodes_add_up_to_each_plant_species_on_the_island() {
     let b = base();
     let cells = b.ecology.biomass_kgc_m2.data().len();
-    let mut carbon = vec![0.0; b.biota.species.len()];
+    let mut carbon = vec![0.0; b.biota.species().len()];
     for cell in 0..cells {
         for node in b.biota.plant_nodes(cell, &b.ecology) {
             match node.stock {
@@ -331,7 +333,7 @@ fn the_plant_nodes_add_up_to_each_plant_species_on_the_island() {
             }
         }
     }
-    for (i, s) in b.biota.species.iter().enumerate() {
+    for (i, s) in b.biota.species().iter().enumerate() {
         if s.abundance == Abundance::ProducerCarbon {
             let whole = b.biota.carbon_kgc(i, &b.ecology).unwrap();
             assert!(
@@ -350,8 +352,8 @@ fn the_plant_nodes_add_up_to_each_plant_species_on_the_island() {
 fn the_survey_is_the_same_every_time_for_the_same_seed() {
     let b = base();
     let again = IslandBiota::survey(b.canon.clone(), &b.seed, &b.domain, &b.ecology, &b.physical);
-    assert_eq!(again.species.len(), b.biota.species.len());
-    for (x, y) in again.species.iter().zip(&b.biota.species) {
+    assert_eq!(again.species().len(), b.biota.species().len());
+    for (x, y) in again.species().iter().zip(b.biota.species()) {
         assert_eq!((x.species_id, &x.name), (y.species_id, &y.name));
         assert_eq!(x.upstream_population, y.upstream_population);
     }
@@ -373,4 +375,220 @@ fn the_survey_is_the_same_every_time_for_the_same_seed() {
         .biota
         .species_in(forest)
         .any(|s| s.affinity == TerrainAffinity::OpenOcean));
+}
+
+#[test]
+fn marine_projection_rebuilds_membership_after_category_changes() {
+    let b = base();
+    let mut biota = b.biota.clone();
+    let mut species = biota.species().to_vec();
+    let species_index = species
+        .iter()
+        .position(|species| {
+            species.category == SpeciesCategory::Aquatic && is_marine(&species.affinity)
+        })
+        .expect("the island has a marine aquatic species");
+    let affinity = species[species_index].affinity.clone();
+    let cell = biota
+        .habitat_cells(&affinity)
+        .next()
+        .expect("marine habitat");
+
+    species[species_index].category = SpeciesCategory::Tree;
+    biota
+        .replace_species_catalogue(species)
+        .expect("the replacement catalogue remains valid");
+
+    let nodes = biota
+        .try_marine_aquatic_nodes(cell)
+        .expect("the rebuilt marine index is valid");
+    assert!(!nodes.iter().any(|node| node.species == species_index));
+}
+
+#[test]
+fn marine_projection_rebuilds_membership_after_affinity_changes() {
+    let b = base();
+    let mut biota = b.biota.clone();
+    let mut species = biota.species().to_vec();
+    let species_index = species
+        .iter()
+        .position(|species| {
+            species.category == SpeciesCategory::Aquatic && is_marine(&species.affinity)
+        })
+        .expect("the island has a marine aquatic species");
+    let original_affinity = species[species_index].affinity.clone();
+    let cell = biota
+        .habitat_cells(&original_affinity)
+        .next()
+        .expect("marine habitat");
+
+    species[species_index].affinity = TerrainAffinity::River;
+    biota
+        .replace_species_catalogue(species)
+        .expect("the replacement catalogue remains valid");
+
+    let nodes = biota
+        .try_marine_aquatic_nodes(cell)
+        .expect("the rebuilt marine index is valid");
+    assert!(!nodes.iter().any(|node| node.species == species_index));
+}
+
+#[test]
+fn marine_projection_rejects_carbon_abundance_for_marine_species_without_mutating_catalogue() {
+    let b = base();
+    let species_index = b
+        .biota
+        .species()
+        .iter()
+        .position(|species| {
+            species.category == SpeciesCategory::Aquatic && is_marine(&species.affinity)
+        })
+        .expect("the island has a marine aquatic species");
+    let species_id = b.biota.species()[species_index].species_id;
+
+    for invalid_abundance in [Abundance::ProducerCarbon, Abundance::GrazerCarbon] {
+        let mut biota = b.biota.clone();
+        let mut species = biota.species().to_vec();
+        species[species_index].abundance = invalid_abundance;
+
+        assert_eq!(
+            biota.replace_species_catalogue(species),
+            Err(MarineProjectionError::InvalidMarineAbundance {
+                index: species_index,
+                species_id,
+            })
+        );
+        assert_eq!(
+            biota.species()[species_index].abundance,
+            Abundance::UpstreamDensity,
+            "rejected replacement must leave the original catalogue intact"
+        );
+    }
+}
+
+#[test]
+fn marine_projection_indexes_species_that_become_eligible_after_catalogue_replacement() {
+    let b = base();
+    let mut biota = b.biota.clone();
+    let mut species = biota.species().to_vec();
+    let species_index = species
+        .iter()
+        .position(|species| {
+            species.category != SpeciesCategory::Aquatic || !is_marine(&species.affinity)
+        })
+        .expect("the catalogue has a non-marine species");
+    species[species_index].category = SpeciesCategory::Aquatic;
+    species[species_index].affinity = TerrainAffinity::OpenOcean;
+    species[species_index].abundance = Abundance::UpstreamDensity;
+    let species_id = species[species_index].species_id;
+
+    biota
+        .replace_species_catalogue(species)
+        .expect("the replacement catalogue is valid");
+
+    let cell = biota
+        .habitat_cells(&TerrainAffinity::OpenOcean)
+        .next()
+        .expect("the island has open-ocean habitat");
+    let nodes = biota
+        .try_marine_aquatic_nodes(cell)
+        .expect("the rebuilt index includes newly eligible species");
+
+    assert!(
+        nodes.iter().any(|node| node.species == species_index),
+        "newly eligible species {species_id} must be indexed after replacement"
+    );
+}
+
+#[test]
+fn replacing_species_catalogue_rejects_duplicate_ids_without_mutating_caches() {
+    let b = base();
+    let mut biota = b.biota.clone();
+    let original_ids: Vec<_> = biota
+        .species()
+        .iter()
+        .map(|species| species.species_id)
+        .collect();
+    let marine_cell = biota
+        .habitat_cells(&TerrainAffinity::OpenOcean)
+        .next()
+        .expect("the island has open-ocean habitat");
+    let before_nodes = biota
+        .try_marine_aquatic_nodes(marine_cell)
+        .expect("the original marine projection is valid");
+
+    let mut replacement = biota.species().to_vec();
+    let duplicate_id = replacement[0].species_id;
+    replacement[1].species_id = duplicate_id;
+
+    assert_eq!(
+        biota.replace_species_catalogue(replacement),
+        Err(MarineProjectionError::DuplicateSpeciesId {
+            first_index: 0,
+            duplicate_index: 1,
+            species_id: duplicate_id,
+        })
+    );
+    assert_eq!(
+        biota
+            .species()
+            .iter()
+            .map(|species| species.species_id)
+            .collect::<Vec<_>>(),
+        original_ids,
+        "a rejected duplicate-ID replacement must leave the original catalogue intact"
+    );
+    assert_eq!(
+        biota.try_marine_aquatic_nodes(marine_cell).unwrap(),
+        before_nodes,
+        "a rejected duplicate-ID replacement must leave the cached marine projection intact"
+    );
+}
+
+#[test]
+fn replacing_species_catalogue_rebuilds_grazer_weights() {
+    let b = base();
+    let mut biota = b.biota.clone();
+    let mut species = biota.species().to_vec();
+    let grazer_index = species
+        .iter()
+        .position(|species| species.abundance == Abundance::GrazerCarbon)
+        .expect("the island has grazer species");
+    let affinity = species[grazer_index].affinity.clone();
+    let cell = biota
+        .habitat_cells(&affinity)
+        .next()
+        .expect("the grazer affinity has habitat");
+    species[grazer_index].upstream_population = species[grazer_index]
+        .upstream_population
+        .checked_add(1_000)
+        .expect("the test population remains within u64");
+
+    let expected_denominator: f64 = species
+        .iter()
+        .filter(|candidate| {
+            candidate.abundance == Abundance::GrazerCarbon
+                && biota.is_habitat(cell, &candidate.affinity)
+        })
+        .map(|candidate| candidate.upstream_population as f64)
+        .sum();
+    assert!(expected_denominator > 0.0);
+    let expected = b.ecology.herbivore_kgc_m2.data()[cell]
+        * b.domain.cell_area_m2(M)
+        * species[grazer_index].upstream_population as f64
+        / expected_denominator;
+
+    biota
+        .replace_species_catalogue(species)
+        .expect("the replacement catalogue is valid");
+
+    let node = biota
+        .animal_nodes(cell, &b.ecology)
+        .into_iter()
+        .find(|node| node.species == grazer_index)
+        .expect("the updated grazer remains a node");
+    match node.stock {
+        NodeStock::CarbonKgc(actual) => assert!(close(actual, expected)),
+        NodeStock::Head(_) => panic!("grazer carbon must remain a carbon node"),
+    }
 }
