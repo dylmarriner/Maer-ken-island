@@ -439,3 +439,22 @@ fn constants_taken_from_the_packs_still_agree_with_them() {
         );
     }
 }
+
+#[test]
+fn range_midpoint_preserves_rounding_for_adjacent_subnormals() {
+    let one_ulp = f64::from_bits(1);
+    let two_ulps = f64::from_bits(2);
+    let three_ulps = f64::from_bits(3);
+
+    // 1.5 ulps rounds to the even 2-ulp representation.
+    let positive = range_item("positive_subnormal", one_ulp, two_ulps, None);
+    assert_eq!(positive.central(), Some(two_ulps));
+
+    // -2.5 ulps rounds to the even -2-ulp representation.
+    let negative = range_item("negative_subnormal", -three_ulps, -two_ulps, None);
+    assert_eq!(negative.central(), Some(-two_ulps));
+
+    // The exact midpoint is half an ulp, which rounds to positive zero.
+    let spanning_zero = range_item("subnormal_spanning_zero", -one_ulp, two_ulps, None);
+    assert_eq!(spanning_zero.central(), Some(0.0));
+}
