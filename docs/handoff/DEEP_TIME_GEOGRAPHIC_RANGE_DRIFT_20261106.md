@@ -172,3 +172,8 @@ This is an explicit compatibility boundary, not a data migration. No saved files
 Follow-up implementation commits: `e857b030` (schema metadata/replay loader), `ac8a72aa` (geographic validation), `a3d91eaa` (file loader), `d6f01314` (replay snapshot tests), `73a2cf00` (file snapshot tests), `964275b8` (world validation), `50e0a442`/`c9431c99` (canon validation order), and `2001fc8b` (finite/non-negative speciation-time preflight before sorting). Rust formatting and checklist/handoff follow-ups are recorded in the PR description.
 
 Latest code/test head: `2001fc8b819cc2dff68e12b7b12a0bda5a341141`. Exact-head workflow [#42166054878](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42166054878) is pending. The prior all-green workflow #42156312276 predates these compatibility changes and does not verify them. Custom OpenCommander remains HTTP 429; no local Cargo result is claimed. Keep PR #106 unmerged until the new exact-head formatting, Clippy, fast Rust tests, both snapshot restore paths, desktop/backend and week/year reference acceptance all pass.
+
+
+### Legacy drift-floor detection
+
+A further review of the old `apply_drift` implementation showed that its `max(1.0)` floor could leave **every** species at or above 1.0 after an evolution step, not only the founding outlier. Schema-0 loading now also rejects an evolved snapshot (`step_index > 0` or positive deep-time clock) whose entire persisted species set is at least 1.0. That pattern proves the old floor erased the fractional distribution even when no value is greater than one. Commit `092df668` adds the fail-fast detector; `015b0aaf` adds a regression proving an all-one evolved legacy state is rejected. It is not safe to upgrade such a snapshot by metadata alone.
