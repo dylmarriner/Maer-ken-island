@@ -123,8 +123,11 @@ export async function handleMapCellClick(event, {
     ];
     const marineProjectionAvailable =
       Number.isSafeInteger(c.marine_aquatic_species) &&
+      c.marine_aquatic_species >= 0 &&
       Number.isFinite(c.marine_aquatic_individuals) &&
-      Number.isFinite(c.marine_aquatic_biomass_t);
+      c.marine_aquatic_individuals >= 0 &&
+      Number.isFinite(c.marine_aquatic_biomass_t) &&
+      c.marine_aquatic_biomass_t >= 0;
     if (marineProjectionAvailable) {
       details.push(
         el(
