@@ -472,6 +472,27 @@ mod tests {
     }
 
     #[test]
+    fn fish_stock_bincode_snapshot_preserves_the_legacy_derived_field_layout() {
+        let mut stock = FishStock::unexploited(Resilience::Medium, 1_000.0)
+            .expect("positive carrying capacity");
+        stock.biomass_t = 420.0;
+        stock.landed_t = 17.0;
+
+        // bincode 1.3's legacy fixed-int, little-endian layout: the u32 enum
+        // discriminant followed by k_t, biomass_t and landed_t as f64 values.
+        // This is the byte layout emitted by the former derived Serialize impl.
+        let expected: [u8; 28] = [
+            1, 0, 0, 0,
+            0, 0, 0, 0, 0, 64, 143, 64,
+            0, 0, 0, 0, 0, 64, 122, 64,
+            0, 0, 0, 0, 0, 0, 49, 64,
+        ];
+
+        let encoded = bincode::serialize(&stock).expect("valid stock serializes");
+        assert_eq!(encoded.as_slice(), expected.as_slice());
+    }
+
+    #[test]
     fn fish_stock_serialization_rejects_invalid_physical_state() {
         let valid = FishStock::unexploited(Resilience::Medium, 1_000.0)
             .expect("positive carrying capacity");
