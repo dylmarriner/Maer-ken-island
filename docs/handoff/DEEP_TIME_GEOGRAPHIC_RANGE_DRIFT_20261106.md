@@ -82,3 +82,10 @@ No deployment, live simulation, external LLM call, production data change or inf
 - Commit `bdac1c7376819796dc75bbf46a3497379138213b` applies the exact rustfmt output and removes the extra trailing blank line.
 - The week/year reference-pack and desktop/backend jobs from #42143127232 were still running at inspection; they predate the formatting fix and do not verify the latest head.
 - A fresh exact-head workflow is required for `bdac1c73`. Keep PR #103 draft until formatting, Clippy, fast tests, desktop/backend and week/year reference acceptance all pass.
+
+## Exact-head Clippy iteration
+
+- The fresh workflow [#42143299829](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42143299829) passed formatting, then Clippy failed on three unnecessary `mut` bindings in the new population-growth tests (seeds 11, 12 and 13). Fast tests were skipped after Clippy failed.
+- This was a source lint failure, not an environment failure. The three test-only bindings now use immutable `RngRegistry` values in commit `1a910cd167fc17cbae34657de9c45e9dcd3e4c94`.
+- The same run's repository scripts, computer service, dependency audit and web dashboard passed. Week/year reference acceptance, installed backend and desktop jobs were still running at inspection; they predate the Clippy correction and do not verify the latest head.
+- A fresh exact-head workflow is required for `1a910cd1`. Keep PR #103 draft until formatting, Clippy, fast tests, desktop/backend and week/year acceptance pass.
