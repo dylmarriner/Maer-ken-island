@@ -32,6 +32,7 @@ pub enum FisheryError {
     InvalidStockState,
     NonFiniteGrowth,
     LandedTotalOverflow,
+    LandedTotalUnrepresentable,
 }
 
 impl std::fmt::Display for FisheryError {
@@ -46,6 +47,9 @@ impl std::fmt::Display for FisheryError {
             Self::InvalidStockState => "fish stock state is outside its valid domain",
             Self::NonFiniteGrowth => "fish stock growth is not finite",
             Self::LandedTotalOverflow => "cumulative landed biomass overflowed",
+            Self::LandedTotalUnrepresentable => {
+                "cumulative landed biomass increment is not representable at stored precision"
+            }
         };
         f.write_str(message)
     }
@@ -449,6 +453,10 @@ impl FishStock {
         if !landed_t.is_finite() {
             return Err(FisheryError::LandedTotalOverflow);
         }
+        // Never report a positive catch that the persisted cumulative total cannot record.
+        if catch > 0.0 && landed_t == self.landed_t {
+            return Err(FisheryError::LandedTotalUnrepresentable);
+        }
 
         self.biomass_t = biomass_t;
         self.landed_t = landed_t;
@@ -619,6 +627,28 @@ mod tests {
         assert!(
             bincode::deserialize::<FishStock>(&binary).is_err(),
             "non-finite binary stock snapshot must fail to deserialize"
+        );
+    }
+
+    #[test]
+    fn fish_landed_total_overflow_leaves_the_single_writer_state_unchanged() {
+        let mut model = FisheryModel::load_default().expect("the pack loads");
+        model.r_per_year[Resilience::Medium as usize] = 0.5;
+        model.depensation_below = 0.25;
+
+        let mut stock = FishStock::unexploited(Resilience::Medium, 1.0e308)
+            .expect("finite positive carrying capacity");
+        stock.biomass_t = 5.0e307;
+        stock.landed_t = f64::MAX;
+        let before = stock.clone();
+
+        assert_eq!(
+            stock.fish(&model, f64::MAX, YEAR_S),
+            Err(FisheryError::LandedTotalOverflow),
+        );
+        assert_eq!(
+            stock, before,
+            "a failed harvest must not commit biomass or landed-total changes"
         );
     }
 
@@ -1173,6 +1203,34 @@ mod tests {
 
         assert!(landed > 0.0);
         assert!(stock.landed_t > 0.0);
+    }
+
+    #[test]
+    fn landed_increment_below_cumulative_total_precision_is_rejected_without_mutation() {
+        let model = FisheryModel::load_default().expect("the pack loads");
+        let mut stock = FishStock::unexploited(Resilience::Medium, 1_000.0)
+            .expect("positive carrying capacity");
+        stock.biomass_t = 500.0;
+        stock.landed_t = 9_007_199_254_740_992.0; // 2^53
+        let before = stock.clone();
+
+        // At 2^53, adding one tonne rounds back to the same binary64 value.
+        assert_eq!(stock.landed_t + 1.0, stock.landed_t);
+        assert!(
+            stock
+                .sustainable_catch_limit_t(&model, YEAR_S)
+                .expect("valid one-year growth")
+                > 1.0
+        );
+
+        assert_eq!(
+            stock.fish(&model, 1.0, YEAR_S),
+            Err(FisheryError::LandedTotalUnrepresentable)
+        );
+        assert_eq!(
+            stock, before,
+            "a catch that cannot be represented in the cumulative total must not commit biomass"
+        );
     }
 
     #[test]

@@ -1,6 +1,6 @@
 # Handoff
 
-Updated 2026-11-07 against `main` at `42bf9cc43c8024644a452a00127ed39b676d19ff`. This is the front door for
+Updated 2026-11-07 against `main` after PR #109 merge `0613dffca65a87e4db147300d9d57805a744ea07`. This is the front door for
 whoever picks the island up next, human or agent. It says what the project is, where it stands,
 how to build and check it, and where everything else is written down.
 
@@ -8,7 +8,9 @@ how to build and check it, and where everything else is written down.
 
 ## Latest engineering handoff — 7 November 2026
 
-- [FishStock binary snapshot compatibility](docs/handoff/FISHERY_SNAPSHOT_BINARY_COMPATIBILITY_20261107.md) — PR #109 follow-up. A fixed 28-byte bincode 1.3 fixture now pins the legacy derived-serializer field order and exact encoding for a valid stock. This guards persisted snapshot compatibility independently of a same-version round trip. Exact-head CI is required; no local Cargo result is claimed.
+- [Fishery landed-total atomicity and precision](docs/handoff/FISHERY_LANDED_OVERFLOW_ATOMICITY_20261107.md) — PR #110 follow-up. `FishStock::fish` rejects both cumulative-total overflow and positive catches that round away at the stored total's binary64 precision, before committing biomass or landed total. Regressions prove the whole stock remains unchanged on both error paths; exact-head workflow #42274516200 is still running.
+
+- [FishStock binary snapshot compatibility](docs/handoff/FISHERY_SNAPSHOT_BINARY_COMPATIBILITY_20261107.md) — merged in PR #109 to `main` as `0613dffca65a87e4db147300d9d57805a744ea07`. A fixed 28-byte bincode 1.3 fixture pins the legacy field order and encoding. Exact-head workflow [#42257092937](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42257092937) passed the required Rust, desktop, backend, dashboard, computer-service, dependency and week/year acceptance jobs; nightly slow tests were skipped by design.
 
 - [Marine biomass cell inspector](https://github.com/dylmarriner/Maer-ken-island/commit/6294504efe9261b4794dd0778c96ba4712fdd141) — PR #93 merged into main as `6294504efe9261b4794dd0778c96ba4712fdd141`. Exact-head workflow [#42166273507](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42166273507) passed the browser DOM click regression, Rust formatting/Clippy/fast tests, desktop, installed backend, week/year reference acceptance, computer service, repository scripts and dependency audit; nightly slow tests were skipped by design. The two prior Codex/Kilo findings were fixed and their review threads resolved.
 - [Deep-time geographic-range, logistic-growth and snapshot compatibility corrections](docs/handoff/DEEP_TIME_GEOGRAPHIC_RANGE_DRIFT_20261106.md) — PR #106 merged into main as `3057ea4274f8d6a131fa44a24380e0c7c145057a`. Exact-head workflow [#42169416524](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42169416524) passed formatting, Clippy, fast Rust tests, desktop, installed backend, web dashboard, computer service, repository scripts, dependency audit and week/year reference-pack acceptance; nightly slow tests were skipped by design.
