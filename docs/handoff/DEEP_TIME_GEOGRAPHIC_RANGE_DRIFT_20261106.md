@@ -120,3 +120,17 @@ The divergence is explained by the intentional founding-species correction in th
 - The deterministic hash test and this handoff were carried onto current main during the PR #106 rebase. The code-bearing rebase head was `b5e6893d1c83e62d61db52c5387d6eac5e3f3d3a`; the later commit in this handoff is documentation-only.
 - Fresh exact-head workflow [#42154339053](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42154339053) is running. Dashboard, computer service and repository scripts have passed; formatting/Clippy/fast tests, desktop, installed backend, week/year acceptance and dependency audit are still running at latest inspection.
 - No pass is inferred from workflow #42147228604, which predates the hash correction and rebase. Keep PR #106 draft until #42154339053 completes green.
+
+
+## Follow-up: fail closed on deep-time clock and RNG-step overflow (6 November 2026)
+
+The same fail-fast boundary now checks the existing simulation clock and its next value before mutating the evolution clock, step index or species. It also uses checked addition for the RNG step index so a saturated `u64` cannot wrap and reuse deterministic RNG keys.
+
+- Reject a non-finite or negative persisted evolution clock.
+- Reject a finite duration whose addition would overflow the clock.
+- Reject `step_index == u64::MAX` before incrementing.
+- Add regressions proving both overflow paths leave the clock, step index, population and geographic range unchanged.
+- Extend `DeepTimeEvolution::validate` to reject invalid persisted clock state.
+- No RNG stream, key derivation, step ordering, snapshot format or simulation parameter changes.
+
+Exact-head CI must rerun formatting, Clippy, fast tests, desktop/backend and both week/year reference-pack acceptance jobs. The previous run is superseded by this follow-up commit; no local Cargo result is claimed while custom OpenCommander returns HTTP 429.
