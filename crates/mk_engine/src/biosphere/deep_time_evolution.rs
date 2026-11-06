@@ -654,6 +654,7 @@ impl DeepTimeEvolution {
         if !self.current_time_years.is_finite() || self.current_time_years < 0.0 {
             return Err("deep-time clock must be finite and non-negative".to_string());
         }
+        validate_geographic_ranges(species)?;
 
         // Invariant: no species should have two recorded speciation events
         // closer together than MINIMUM_SPECIATION_TIMESCALE_YEARS. (A species
