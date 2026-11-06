@@ -623,6 +623,28 @@ mod tests {
     }
 
     #[test]
+    fn fish_landed_total_overflow_leaves_the_single_writer_state_unchanged() {
+        let mut model = FisheryModel::load_default().expect("the pack loads");
+        model.r_per_year[Resilience::Medium as usize] = 0.5;
+        model.depensation_below = 0.25;
+
+        let mut stock = FishStock::unexploited(Resilience::Medium, 1.0e308)
+            .expect("finite positive carrying capacity");
+        stock.biomass_t = 5.0e307;
+        stock.landed_t = f64::MAX;
+        let before = stock.clone();
+
+        assert_eq!(
+            stock.fish(&model, f64::MAX, YEAR_S),
+            Err(FisheryError::LandedTotalOverflow),
+        );
+        assert_eq!(
+            stock, before,
+            "a failed harvest must not commit biomass or landed-total changes"
+        );
+    }
+
+    #[test]
     fn invalid_carrying_capacity_is_rejected_at_stock_construction() {
         for k_t in [0.0, -1.0, f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
             assert_eq!(
