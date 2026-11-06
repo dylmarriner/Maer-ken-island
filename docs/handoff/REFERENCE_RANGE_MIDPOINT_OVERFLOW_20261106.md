@@ -34,3 +34,9 @@ Initial exact-head workflow [#42198602010](https://github.com/dylmarriner/Maer-k
 ## Safety
 
 No real-world reference value or source pack was changed. No physical parameter, fishery calibration, deviation, simulation state, snapshot/replay format, hash baseline, budget or offline limit changed.
+
+## Subnormal midpoint rounding follow-up
+
+A second numerical edge was found during review: halving each endpoint or halving the endpoint difference can underflow before the midpoint is rounded. The helper now sums opposite-sign endpoints directly (safe from overflow) and sums small same-sign endpoints before halving; only large same-sign ranges use the bounded-difference formula.
+
+Regression `range_midpoint_preserves_rounding_for_adjacent_subnormals` covers positive and negative adjacent subnormal ties and a range spanning zero. This is a numerical utility correction only; no published reference value or simulation state changed. Exact-head Rust formatting, Clippy, fast tests, desktop/backend and week/year acceptance remain required.
