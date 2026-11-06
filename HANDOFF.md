@@ -175,3 +175,12 @@ cargo run -p island -- serve --scenario fixtures/island/default_scenario.json   
 
 - [Fishery subnormal MSY quarter-scaling correction](https://github.com/dylmarriner/Maer-ken-island/commit/93c4b040c050d708dafbb350cd2ca3c00e46cc9b) — PR #109 follow-up. For the exact 1/4 peak fraction, scale the rate before multiplying the smallest subnormal carrying capacity so the final operation performs the rounding. Regression distinguishes 22,149 from the prior 22,150 subnormal units. Source/test commit `93c4b040`; a fresh exact-head workflow is required, no pass claimed yet.
 - [Fishery MSY subnormal preservation](docs/handoff/FISHERY_SNAPSHOT_BINARY_COMPATIBILITY_20261107.md) — PR #109 follow-up. `msy_t` now avoids losing representable subnormal results when applying the piecewise peak fraction to carrying capacity. Regression covers 1, 3 and 7 subnormal units at `r = 4`. Exact-head CI is required for this follow-up; the preceding legacy-snapshot workflow #42237465516 passed all required jobs.
+
+## 2026-11-07 fishery residual-growth regression follow-up
+
+- Exact-head workflow [#42285280868](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42285280868) passed formatting, Clippy, desktop, installed backend, dashboard, computer service, dependency audit and reference acceptance. Fast Rust tests reported 855 passed and one failure: the depensation-underflow baseline requested a partial catch whose remaining growth cannot be represented at the existing biomass scale.
+- The production guard correctly rejected that partial harvest before mutation. The baseline now requests the full representable surplus; the dedicated partial-harvest regression continues to assert fail-closed atomicity.
+- Test commit: `6704c1180ffbbe9ef3220a23c706dd18fe1c6e23`.
+- Fresh exact-head workflow [#42292221961](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42292221961) was still running at the latest inspection.
+
+Remaining: complete all required jobs, review the exact-head test result, then merge PR #111 only if green. Reconcile this fishery file with PR #112 after one of the two is merged; do not merge stale overlapping branches.
