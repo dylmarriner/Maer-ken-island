@@ -1,12 +1,14 @@
 # Handoff
 
-Updated 2026-11-07 against `main` at `42bf9cc43c8024644a452a00127ed39b676d19ff`. This is the front door for
+Updated 2026-11-07 against `main` after PR #109 merge `0613dffca65a87e4db147300d9d57805a744ea07`. This is the front door for
 whoever picks the island up next, human or agent. It says what the project is, where it stands,
 how to build and check it, and where everything else is written down.
 
 **What is left to do, and what each item needs, is in [`WORK_REMAINING.md`](WORK_REMAINING.md).**
 
 ## Latest engineering handoff — 7 November 2026
+
+- [Fishery landed-total overflow atomicity](docs/handoff/FISHERY_LANDED_OVERFLOW_ATOMICITY_20261107.md) — PR #110 follow-up. A regression drives a valid harvest into `LandedTotalOverflow` and proves biomass and landed totals remain byte-for-byte/equality unchanged after the rejected single-writer step. No simulation behaviour changes on successful steps; exact-head CI is required.
 
 - [FishStock binary snapshot compatibility](docs/handoff/FISHERY_SNAPSHOT_BINARY_COMPATIBILITY_20261107.md) — PR #109 follow-up. A fixed 28-byte bincode 1.3 fixture now pins the legacy derived-serializer field order and exact encoding for a valid stock. This guards persisted snapshot compatibility independently of a same-version round trip. Exact-head CI is required; no local Cargo result is claimed.
 
