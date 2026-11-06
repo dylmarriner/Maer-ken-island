@@ -1,8 +1,8 @@
 # Deep-time geographic-range and logistic-growth corrections — 6 November 2026
 
 Repository: `dylmarriner/Maer-ken-island`
-Branch: `fix/deep-time-geographic-range-fraction-20261106`
-Base: `main` at `373a1b71517b82352b40208e4546bc0d3e4d24a1`
+Branch: `fix/deep-time-geographic-range-fraction-20261106-rebased`
+Base: `main` at `5a0410f87a9a1b947c1bf481dc1f83202573b17b` (after the verified fishery diagnostic merge, PR #105)
 
 ## Finding 1: geographic-range drift
 
@@ -117,6 +117,6 @@ Workflow [#42147228604](https://github.com/dylmarriner/Maer-ken-island/actions/r
 
 The divergence is explained by the intentional founding-species correction in this PR: species 43 previously began with geographic range 1.0175, greater than the entire planetary surface. Capping the generated fraction at 1.0 changes the default biosphere state and therefore the ten-step deterministic world hash. The validation was not weakened. The baseline test now records the measured hash and this reason.
 
-- Test commit: `e5847ecbbf5fe2e4199be56997aff0e3169e72aa`.
-- A fresh exact-head CI run is required; no pass is inferred from the pre-correction workflow.
-- Week/year reference acceptance passed on the preceding code head, but must be rechecked on this exact head.
+- The deterministic hash test and this handoff were carried onto current main during the PR #106 rebase; the current exact head is `b5e6893d1c83e62d61db52c5387d6eac5e3f3d3a`.
+- Fresh exact-head workflow [#42154339053](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42154339053) is running. Dashboard, computer service and repository scripts have passed; formatting/Clippy/fast tests, desktop, installed backend, week/year acceptance and dependency audit are still running at latest inspection.
+- No pass is inferred from workflow #42147228604, which predates the hash correction and rebase. Keep PR #106 draft until #42154339053 completes green.
