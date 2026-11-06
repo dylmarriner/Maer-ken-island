@@ -13,6 +13,7 @@ import {
   el,
   emptyState,
   fillChrome,
+  handleMapCellClick,
   getImage,
   getJson,
   readIfAvailable,
@@ -943,59 +944,18 @@ function sayScale(canvas) {
 }
 
 async function onMapClick(event) {
-  const canvas = mapCanvas();
-  const out = document.getElementById("map-cell");
-  if (!view.ready) return;
-  const box = canvas.getBoundingClientRect();
-  const [x, y] = toMetres(canvas, event.clientX - box.left, event.clientY - box.top);
-  const col = Math.floor(x / ground.cellM);
-  const row = Math.floor(y / ground.cellM);
-  if (col < 0 || row < 0 || col >= ground.cols || row >= ground.rows) return;
-  try {
-    const data = await getJson(`/api/cell/${row}/${col}`);
-    const c = data.cell;
-    const details = [
-      el("p", `Row ${c.row}, column ${c.col} — ${c.latitude.toFixed(4)}°, ${c.longitude.toFixed(4)}°`, { class: "cell-where" }),
-      el(
-        "p",
-        c.land
-          ? `Land, ${c.elevation_m.toFixed(0)} m above sea level. ${c.buildable ? "A structure could stand here." : "Too steep to build on."}`
-          : `Sea, ${(-c.elevation_m).toFixed(0)} m deep. Nobody can be created here and nothing can be built.`,
-        { class: "cell-what" },
-      ),
-    ];
-    const marineProjectionAvailable =
-      Number.isSafeInteger(c.marine_aquatic_species) &&
-      Number.isFinite(c.marine_aquatic_individuals) &&
-      Number.isFinite(c.marine_aquatic_biomass_t);
-    if (marineProjectionAvailable) {
-      details.push(
-        el(
-          "p",
-          `${c.marine_aquatic_species.toLocaleString()} marine aquatic species; ` +
-            `${c.marine_aquatic_individuals.toLocaleString(undefined, { maximumSignificantDigits: 4 })} ` +
-            `upstream-derived individuals; ` +
-            `${c.marine_aquatic_biomass_t.toLocaleString(undefined, { maximumSignificantDigits: 4 })} t live biomass. ` +
-            "Uncalibrated upstream estimate; not harvestable stock or catch.",
-          { class: "cell-marine" },
-        ),
-      );
-    }
-    out.replaceChildren(...details);
-    // The point of clicking. Before this the intervention form offered
-    // exactly one place -- the estate -- so the whole rest of the island
-    // was unreachable from the page. A clicked cell becomes a place, and
-    // is selected.
-    clickedPlace = {
-      label: `Clicked — cell ${c.row}, ${c.col}${c.land ? "" : " (sea)"}`,
-      latitude: c.latitude,
-      longitude: c.longitude,
-    };
-    await fillPlacesAndPeople();
-    whereEl.value = String(places.findIndex((p) => p === clickedPlace));
-  } catch (error) {
-    out.replaceChildren(el("p", explain(error), { class: "cell-what" }));
-  }
+  return handleMapCellClick(event, {
+    canvas: mapCanvas(),
+    output: document.getElementById("map-cell"),
+    viewReady: view.ready,
+    ground,
+    toMetres,
+    getJson,
+    setClickedPlace: (place) => { clickedPlace = place; },
+    fillPlacesAndPeople,
+    getPlaces: () => places,
+    whereEl,
+  });
 }
 
 // Zoom about the pointer rather than the centre, so the thing under the

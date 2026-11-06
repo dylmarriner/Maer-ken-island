@@ -41,3 +41,8 @@ The API fields and desktop inspector were present, but `apps/island/static/islan
 Workflow [#42109939191](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42109939191) passed repository scripts, desktop application, dashboard, week/year reference acceptance, dependency audit, installed backend and computer service. The Rust fast-check job stopped at `cargo fmt --all -- --check` because there was one extra blank line before the browser cell-inspector test in `apps/island/tests/serve.rs`; Clippy and fast tests were skipped.
 
 Commit `84dc5f5a` applies the exact rustfmt output. A fresh exact-head run must pass formatting, Clippy and fast tests before merge. The prior workflow's other green jobs are evidence for the prior head only.
+
+
+## Review follow-up — browser DOM regression
+
+The browser click path now delegates to the exported `handleMapCellClick` helper in `apps/island/static/app.js`. The web dashboard CI runs `scripts/tests/marine_cell_inspector.test.mjs`, which simulates a map click and asserts the actual inspector nodes contain the upstream species count, individuals, live biomass and the uncalibrated/not-harvestable disclaimer. It also verifies invalid marine projection fields are omitted without hiding ordinary cell details, and clicks before the view is ready make no request. This addresses the source-only assertion gap and the review request for visible DOM coverage. Exact-head CI is required; no local or CI pass is claimed until that workflow completes.

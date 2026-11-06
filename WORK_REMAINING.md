@@ -153,7 +153,7 @@ animal and fish resource nodes (done 2026-10-23, §2b).
     any other animal at upstream's density over the cell), adding up to the species on the
     island; hunting and fishing them, and the fishery model on the sea's fish, are still to
     come, and the densities stay upstream's (D55).
-  - Marine biomass bridge (2026-11-06): `IslandBiota::marine_aquatic_nodes` projects the same
+  - Marine biomass bridge (2026-11-06): `IslandBiota::marine_aquatic_nodes` projects the same The browser click path is now exercised by a Node DOM regression that checks the visible species, individuals, biomass and disclaimer.
     upstream head counts into tonnes per medium cell, with a conservation test against
     `animal_nodes` and whole-island species populations. The browser map and desktop cell inspectors now
     report the habitat's species count, individual count and live biomass, explicitly labelled
