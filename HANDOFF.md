@@ -1,6 +1,6 @@
 # Handoff
 
-Updated 2026-11-07 against `main` after PR #109 merge `0613dffca65a87e4db147300d9d57805a744ea07`. This is the front door for
+Updated 2026-11-07 against `main` after PR #110 merge `148ac98c95e58aac7b2065dd0cc68884790f4168`. This is the front door for
 whoever picks the island up next, human or agent. It says what the project is, where it stands,
 how to build and check it, and where everything else is written down.
 
@@ -8,7 +8,9 @@ how to build and check it, and where everything else is written down.
 
 ## Latest engineering handoff — 7 November 2026
 
-- [Fishery landed-total atomicity and precision](docs/handoff/FISHERY_LANDED_OVERFLOW_ATOMICITY_20261107.md) — PR #110 follow-up. `FishStock::fish` rejects both cumulative-total overflow and positive catches that round away at the stored total's binary64 precision, before committing biomass or landed total. Regressions prove the whole stock remains unchanged on both error paths; exact-head workflow #42274516200 is still running.
+- [Fishery biomass remainder precision](docs/handoff/FISHERY_BIOMASS_REMAINDER_PRECISION_20261107.md) — follow-up branch `fix/fishery-biomass-remainder-precision-20261107`. A partial catch is rejected when positive unharvested growth rounds away at the stored biomass scale; the regression proves the entire stock remains unchanged. Exact-head CI pending.
+
+- [Fishery landed-total atomicity and precision](docs/handoff/FISHERY_LANDED_OVERFLOW_ATOMICITY_20261107.md) — PR #110 merged to `main` as `148ac98c95e58aac7b2065dd0cc68884790f4168`. Exact-head workflow [#42275024667](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42275024667) passed formatting, Clippy, fast Rust tests, desktop build/tests/rendering/input acceptance, installed backend, web dashboard, computer service, repository scripts, dependency audit and week/year reference-pack acceptance; nightly slow tests were skipped by design.
 
 - [FishStock binary snapshot compatibility](docs/handoff/FISHERY_SNAPSHOT_BINARY_COMPATIBILITY_20261107.md) — merged in PR #109 to `main` as `0613dffca65a87e4db147300d9d57805a744ea07`. A fixed 28-byte bincode 1.3 fixture pins the legacy field order and encoding. Exact-head workflow [#42257092937](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42257092937) passed the required Rust, desktop, backend, dashboard, computer-service, dependency and week/year acceptance jobs; nightly slow tests were skipped by design.
 
@@ -173,3 +175,12 @@ cargo run -p island -- serve --scenario fixtures/island/default_scenario.json   
 
 - [Fishery subnormal MSY quarter-scaling correction](https://github.com/dylmarriner/Maer-ken-island/commit/93c4b040c050d708dafbb350cd2ca3c00e46cc9b) — PR #109 follow-up. For the exact 1/4 peak fraction, scale the rate before multiplying the smallest subnormal carrying capacity so the final operation performs the rounding. Regression distinguishes 22,149 from the prior 22,150 subnormal units. Source/test commit `93c4b040`; a fresh exact-head workflow is required, no pass claimed yet.
 - [Fishery MSY subnormal preservation](docs/handoff/FISHERY_SNAPSHOT_BINARY_COMPATIBILITY_20261107.md) — PR #109 follow-up. `msy_t` now avoids losing representable subnormal results when applying the piecewise peak fraction to carrying capacity. Regression covers 1, 3 and 7 subnormal units at `r = 4`. Exact-head CI is required for this follow-up; the preceding legacy-snapshot workflow #42237465516 passed all required jobs.
+
+## 2026-11-07 fishery residual-growth regression follow-up
+
+- Exact-head workflow [#42285280868](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42285280868) passed formatting, Clippy, desktop, installed backend, dashboard, computer service, dependency audit and reference acceptance. Fast Rust tests reported 855 passed and one failure: the depensation-underflow baseline requested a partial catch whose remaining growth cannot be represented at the existing biomass scale.
+- The production guard correctly rejected that partial harvest before mutation. The baseline now requests the full representable surplus; the dedicated partial-harvest regression continues to assert fail-closed atomicity.
+- Test commit: `6704c1180ffbbe9ef3220a23c706dd18fe1c6e23`.
+- Fresh exact-head workflow [#42292221961](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42292221961) was still running at the latest inspection.
+
+Remaining: complete all required jobs, review the exact-head test result, then merge PR #111 only if green. Reconcile this fishery file with PR #112 after one of the two is merged; do not merge stale overlapping branches.
