@@ -391,8 +391,8 @@ cost the resting baseline (D22).
 
 ## Reference library numerical safety — 6 November 2026
 
-`ReferenceItem::central()` now computes an implicit midpoint for finite ordered ranges without overflowing when large same-sign endpoints are added or opposite-sign endpoints are subtracted. Explicit published `typical` values remain authoritative, and equal subnormal endpoints remain unchanged.
+`ReferenceItem::central()` computes implicit midpoints for finite ordered ranges without overflow. Opposite-sign and small same-sign endpoints are summed before halving so subnormal ties round correctly; large same-sign endpoints use a bounded difference. Explicit published `typical` values remain authoritative.
 
-Evidence: `crates/mk_engine/tests/reference_packs.rs::range_midpoint_stays_finite_for_valid_extreme_bounds` (PR #109). Initial exact-head workflow #42198602010 caught one rustfmt wrap in the explicit-typical case; corrected verbatim in `cf77459d`; the fallback was kept eager in `828f748b` to avoid an unnecessary-lazy-evaluation Clippy warning. Fresh exact-head CI is pending.
+Evidence: `crates/mk_engine/tests/reference_packs.rs::range_midpoint_stays_finite_for_valid_extreme_bounds` and `range_midpoint_preserves_rounding_for_adjacent_subnormals` (PR #109). The latter covers positive/negative adjacent subnormal ties and a cross-zero half-ulp tie. Follow-up commits: `1f1ec455`, `6e1632ec`, `58ba448`. Exact-head workflow #42200812805 on `58ba448` has repository scripts, computer service, web dashboard and dependency audit passed; Rust format/Clippy/fast tests, desktop, installed backend and week/year acceptance remain in progress. Nightly slow tests are skipped by design.
 
 This is a numerical utility correction only. No reference-pack value, citation, physical parameter, deviation, simulation state, snapshot schema or replay hash changed.
