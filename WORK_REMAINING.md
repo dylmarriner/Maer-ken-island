@@ -1,6 +1,6 @@
 # Work remaining
 
-Updated 2026-11-06 against `main` at `3057ea4274f8d6a131fa44a24380e0c7c145057a` (fishery PRs #104–#105 merged; marine inspector PR #93 merged later at `6294504`; deep-time PR #106 merged at `3057ea`; atomicity PR #107 remains open).
+Updated 2026-11-06 against `main` at `0ddbd878eca26e11c114e0c434653316f4d7da96` (fishery PRs #104–#105, marine inspector PR #93, deep-time PR #106 and atomicity PR #107 are merged).
 what is not done, and for each item, **what it takes to do it**: the sources or data it needs,
 the decisions only the owner can make, the files it touches, the tests that prove it and when it
 counts as finished. Read [`HANDOFF.md`](HANDOFF.md) first for what exists.
@@ -165,14 +165,19 @@ serving the species to the map and the cell inspector; animal and fish resource 
     upstream head counts into tonnes per medium cell, with a conservation test against
     `animal_nodes` and whole-island species populations. The browser map and desktop cell inspectors now
     report the habitat's species count, individual count and live biomass, explicitly labelled
-    as an uncalibrated upstream-derived estimate; land and river cells are not assigned marine
-    stock. It is a read-only view, not a second population. Fishery harvest remains open: no
+    as an uncalibrated upstream-derived estimate and explicitly not harvestable stock or catch;
+    land and river cells are not assigned marine stock. The desktop inspector rejects negative
+    and non-finite projections before rendering. It is a read-only view, not a second population. Fishery harvest remains open: no
     species-specific resilience class, unexploited carrying capacity or catch-per-unit-effort
     source is attached to these upstream species.
   - Browser inspector DOM regression (2026-11-06): `scripts/tests/marine_cell_inspector.test.mjs`
     drives the same exported `handleMapCellClick` helper used by the island page and verifies
     visible species, individual and biomass values, the uncalibrated/not-harvestable disclaimer,
     omission of negative, non-finite or unsafe projections, and no request before the view is ready.
+  - Desktop inspector regression (2026-11-06): `apps/island_ui/src/inspectors.rs` rejects
+    negative and non-finite individual/biomass projections and shows the same not-harvestable
+    warning. Exact-head workflow #42194076317 passed the desktop build/unit tests and fast Rust
+    suite; fresh exact-head CI is required after branch reconciliation.
   - Salt (2026-10-23): `industry/salt_works.rs` makes solar salt at Dominion Salt's Lake
     Grassmere yield per hectare of production area (pack, 42.4-49.4 t/ha/yr); it ignores the
     rain that swings Grassmere's harvest from nil to 130,000 t, and no works is sited yet (a
