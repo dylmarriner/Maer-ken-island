@@ -336,11 +336,7 @@ impl FishStock {
     /// The maximum interval growth the stock can add without exceeding K.
     /// Shared by the read-only diagnostic and the mutating fish operation so
     /// the displayed limit cannot drift from the enforced catch cap.
-    fn growth_capacity_t(
-        &self,
-        model: &FisheryModel,
-        dt_s: f64,
-    ) -> Result<f64, FisheryError> {
+    fn growth_capacity_t(&self, model: &FisheryModel, dt_s: f64) -> Result<f64, FisheryError> {
         if !dt_s.is_finite() || dt_s < 0.0 {
             return Err(FisheryError::InvalidTimeStep);
         }
@@ -760,7 +756,10 @@ mod tests {
         let landed = stock
             .fish(&model, f64::MAX, YEAR_S)
             .expect("valid fishing step");
-        assert_eq!(landed, limit, "fish() must enforce the reported interval cap");
+        assert_eq!(
+            landed, limit,
+            "fish() must enforce the reported interval cap"
+        );
         assert_eq!(stock.biomass_t, before.biomass_t);
         assert_eq!(stock.landed_t, limit);
     }
