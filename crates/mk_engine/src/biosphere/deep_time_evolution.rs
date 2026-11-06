@@ -200,9 +200,22 @@ impl DeepTimeEvolution {
         rng: &mut RngRegistry,
     ) -> Result<Vec<String>, String> {
         // Mutation and drift can fail after earlier phases have changed the
-        // clock, carrying capacities, genomes or populations. Stage every
-        // mutable input and publish the transition only after all phases pass.
-        let mut staged_evolution = self.clone();
+        // clock, carrying capacities, genomes or populations. Stage the state
+        // this pipeline mutates, but deliberately exclude extinction_events:
+        // that append-only history is updated by the separate extinction phase
+        // and can grow for millions of ticks in long-horizon runs. Cloning it
+        // on every evolution step would make runtime grow with accumulated
+        // history rather than with the current step's working set.
+        let mut staged_evolution = Self {
+            current_time_years: self.current_time_years,
+            last_speciation_times: self.last_speciation_times.clone(),
+            extinction_events: Vec::new(),
+            recovery_state: self.recovery_state.clone(),
+            intelligence_regression_active: self.intelligence_regression_active,
+            adaptive_radiation_potential: self.adaptive_radiation_potential,
+            carrying_capacities: self.carrying_capacities.clone(),
+            step_index: self.step_index,
+        };
         let mut staged_species = species.clone();
         let mut staged_rng = rng.clone();
 
@@ -213,7 +226,16 @@ impl DeepTimeEvolution {
             &mut staged_rng,
         )?;
 
-        *self = staged_evolution;
+        // Commit only fields owned by this evolution pipeline. The original
+        // append-only extinction history remains in place and is never copied
+        // or replaced by the staging object.
+        self.current_time_years = staged_evolution.current_time_years;
+        self.last_speciation_times = staged_evolution.last_speciation_times;
+        self.recovery_state = staged_evolution.recovery_state;
+        self.intelligence_regression_active = staged_evolution.intelligence_regression_active;
+        self.adaptive_radiation_potential = staged_evolution.adaptive_radiation_potential;
+        self.carrying_capacities = staged_evolution.carrying_capacities;
+        self.step_index = staged_evolution.step_index;
         *species = staged_species;
         *rng = staged_rng;
         Ok(events)
@@ -812,6 +834,15 @@ mod geographic_range_tests {
         let mut direct_species = vec![test_species(0.4, &direct_rng)];
         let mut staged_evolution = DeepTimeEvolution::new();
         let mut direct_evolution = DeepTimeEvolution::new();
+        let history = ExtinctionEvent {
+            event_id: 42,
+            start_time_years: 100.0,
+            duration_years: 500.0,
+            severity: ExtinctionSeverity::Minor,
+            affected_species: vec![7, 8, 9],
+        };
+        staged_evolution.extinction_events.push(history.clone());
+        direct_evolution.extinction_events.push(history);
 
         let staged_events = staged_evolution
             .step_evolution_processes(&mut staged_species, 2_500.0, 0.2, &mut staged_rng)
@@ -923,6 +954,13 @@ mod geographic_range_tests {
             let mut species = vec![test_species(0.4, &rng)];
             let mut evolution = DeepTimeEvolution::new();
             evolution.carrying_capacities.insert(7, 200_000.0);
+            evolution.extinction_events.push(ExtinctionEvent {
+                event_id: 43,
+                start_time_years: 50.0,
+                duration_years: 250.0,
+                severity: ExtinctionSeverity::Background,
+                affected_species: vec![7],
+            });
 
             let evolution_before = serde_json::to_vec(&evolution).expect("evolution state");
             let species_before = serde_json::to_vec(&species).expect("species state");

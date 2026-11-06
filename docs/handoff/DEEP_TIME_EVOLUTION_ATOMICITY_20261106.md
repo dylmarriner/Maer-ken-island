@@ -49,3 +49,15 @@ The atomicity wrapper now has a companion success-path regression. With the same
 - Test: `successful_staged_step_matches_ordered_pipeline_state_and_rng`.
 - The previous exact-head workflow [#42172213109](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42172213109) passed formatting, Clippy, fast Rust tests, desktop, installed backend, dashboard, scripts, dependency audit and week/year reference acceptance on the prior head `27611fe9`; it does **not** verify this follow-up.
 - A fresh exact-head CI run is required for this test. No local Cargo result is claimed.
+
+
+## Follow-up: keep append-only extinction history out of per-step staging (6 November 2026)
+
+Codex review identified that cloning the whole `DeepTimeEvolution` copied the accumulated `extinction_events` history on every evolution tick. Since the separate extinction phase appends to that history and long-horizon acceptance may execute up to a million evolution ticks, repeated history copies could make runtime scale roughly quadratically with the horizon.
+
+- The staging value now copies only fields mutated by `step_evolution_processes_inner`; its extinction history is empty.
+- Successful commit writes back only those owned fields, leaving the original append-only extinction history untouched.
+- Success-path parity and late-drift rollback regressions now seed existing extinction history and assert it remains byte-identical.
+- This removes per-tick copying of accumulated extinction events without changing event ordering, RNG derivation, snapshots or the extinction phase.
+- Review finding: PR #107 thread `PRRT_kwDOU2IUOc60ZaJe`; keep unresolved until the exact-head performance correction and regression are verified.
+- Exact-head CI after this change is required. No local Cargo result is claimed while custom OpenCommander is returning HTTP 429.
