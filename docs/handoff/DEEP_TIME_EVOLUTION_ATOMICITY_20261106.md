@@ -95,3 +95,16 @@ Workflow [#42181591105](https://github.com/dylmarriner/Maer-ken-island/actions/r
 - Fix commit: `be427c097f4e4aa9112f152218878c905e5ed9a6`.
 - The other completed jobs in that run passed: web dashboard, computer service, repository scripts and dependency audit. Desktop, installed backend and week/year acceptance were still running when inspected; no result is claimed for them here.
 - Fresh exact-head CI is required for `be427c0`. The prior workflow is a confirmed Clippy failure, not a passing test run.
+
+
+## Follow-up: validate persisted deep-time numeric state (6 November 2026)
+
+The snapshot restore path calls `DeepTimeEvolution::validate`, but the validator previously checked the simulation clock, geographic ranges, speciation times and intelligence ceiling while leaving other persisted numeric inputs unchecked. NaN or invalid carrying-capacity/recovery values could therefore survive restore and poison later population or speciation calculations.
+
+- Validate top-level and recovery adaptive-radiation values, recovery time, recovery-rate multiplier, and every persisted carrying capacity.
+- Validate append-only extinction-event start/duration values and reject an overflowing event end time.
+- Evolution steps now validate their starting persisted state before staging and reject recovery-clock overflow before any mutation.
+- Regression tests cover NaN, infinities, negative/out-of-domain values, invalid capacities, malformed extinction history, and byte-identical state/species/RNG preservation when preflight rejects a step.
+- No snapshot schema, canon, RNG derivation, append-only log format, physical parameter, or simulation ordering change.
+
+Exact-head CI is required; no local Cargo pass is claimed while the custom OpenCommander connector is returning HTTP 429.

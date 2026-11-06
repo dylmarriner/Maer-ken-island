@@ -258,6 +258,10 @@ timber still takes exactly one tick (D9); felled wood never dries (D40); the hyd
 wears (D39); the actions with no Compendium row
 cost the resting baseline (D22).
 
+### Deep-time persisted state invariants
+
+`DeepTimeEvolution::validate` is used by both current-schema and legacy snapshot restore validation. It now rejects non-finite or negative recovery clocks/multipliers, invalid adaptive-radiation values, carrying capacities outside the finite population domain, and malformed append-only extinction-event timestamps. Evolution steps validate their starting persisted state and preflight recovery-clock overflow before staging or mutating any state. Regression coverage asserts rejected states leave evolution, species and keyed RNG byte-identical.
+
 ## Not done
 
 `WORK_REMAINING.md` is the full list with what each item needs; this section is the summary.

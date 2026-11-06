@@ -209,10 +209,19 @@ impl DeepTimeEvolution {
         environmental_stress: f64,
         rng: &mut RngRegistry,
     ) -> Result<Vec<String>, String> {
+        if !dt_years.is_finite() || dt_years < 0.0 {
+            return Err("deep-time step duration must be finite and non-negative".to_string());
+        }
         // The world integration normalises climate stress to [0, 1]. Keep the
         // same fail-fast contract for direct engine callers before cloning or
         // staging any state.
         validate_environmental_stress(environmental_stress)?;
+        self.validate(species)?;
+
+        let next_recovery_time = self.recovery_state.time_since_extinction_years + dt_years;
+        if !next_recovery_time.is_finite() {
+            return Err("deep-time recovery clock overflowed".to_string());
+        }
 
         // Mutation and drift can fail after earlier phases have changed the
         // clock, carrying capacities, genomes or populations. Stage the state
@@ -718,6 +727,52 @@ impl DeepTimeEvolution {
         if !self.current_time_years.is_finite() || self.current_time_years < 0.0 {
             return Err("deep-time clock must be finite and non-negative".to_string());
         }
+        if !self.adaptive_radiation_potential.is_finite() || self.adaptive_radiation_potential < 0.0 {
+            return Err("adaptive radiation potential must be finite and non-negative".to_string());
+        }
+        if !self.recovery_state.time_since_extinction_years.is_finite()
+            || self.recovery_state.time_since_extinction_years < 0.0
+        {
+            return Err("recovery clock must be finite and non-negative".to_string());
+        }
+        if !self.recovery_state.recovery_rate_multiplier.is_finite()
+            || self.recovery_state.recovery_rate_multiplier < 0.0
+        {
+            return Err("recovery rate multiplier must be finite and non-negative".to_string());
+        }
+        if !self.recovery_state.adaptive_radiation_potential.is_finite()
+            || !(0.0..=MAX_ADAPTIVE_RADIATION_AMPLIFICATION)
+                .contains(&self.recovery_state.adaptive_radiation_potential)
+        {
+            return Err("recovery adaptive radiation potential must be finite and within [0, max]".to_string());
+        }
+        for (&species_id, &capacity) in &self.carrying_capacities {
+            if !capacity.is_finite() || capacity < 1.0 || capacity > u64::MAX as f64 {
+                return Err(format!(
+                    "Species {species_id} has invalid carrying capacity {capacity:?}; expected a finite value in [1, u64::MAX]"
+                ));
+            }
+        }
+        for event in &self.extinction_events {
+            if !event.start_time_years.is_finite() || event.start_time_years < 0.0 {
+                return Err(format!(
+                    "Extinction event {} has an invalid start time",
+                    event.event_id
+                ));
+            }
+            if !event.duration_years.is_finite() || event.duration_years < 0.0 {
+                return Err(format!(
+                    "Extinction event {} has an invalid duration",
+                    event.event_id
+                ));
+            }
+            if !(event.start_time_years + event.duration_years).is_finite() {
+                return Err(format!(
+                    "Extinction event {} has an overflowing end time",
+                    event.event_id
+                ));
+            }
+        }
         validate_geographic_ranges(species)?;
 
         // Invariant: no species should have two recorded speciation events
@@ -1120,6 +1175,95 @@ mod geographic_range_tests {
             found_late_failure,
             "at least one deterministic seed should trigger the negative extreme range drift"
         );
+    }
+
+    #[test]
+    fn persisted_numeric_state_validation_rejects_invalid_recovery_and_capacity_values() {
+        let rng = RngRegistry::new([21; 32]);
+        let species = vec![test_species(0.4, &rng)];
+
+        for invalid in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY, -1.0] {
+            let mut evolution = DeepTimeEvolution::new();
+            evolution.recovery_state.time_since_extinction_years = invalid;
+            assert!(evolution.validate(&species).unwrap_err().contains("recovery clock"));
+
+            let mut evolution = DeepTimeEvolution::new();
+            evolution.recovery_state.recovery_rate_multiplier = invalid;
+            assert!(evolution.validate(&species).unwrap_err().contains("recovery rate multiplier"));
+
+            let mut evolution = DeepTimeEvolution::new();
+            evolution.adaptive_radiation_potential = invalid;
+            assert!(evolution.validate(&species).unwrap_err().contains("adaptive radiation potential"));
+        }
+
+        for invalid in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY, -0.1, MAX_ADAPTIVE_RADIATION_AMPLIFICATION + 0.1] {
+            let mut evolution = DeepTimeEvolution::new();
+            evolution.recovery_state.adaptive_radiation_potential = invalid;
+            assert!(evolution.validate(&species).unwrap_err().contains("recovery adaptive radiation"));
+        }
+
+        for invalid in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY, 0.0, -1.0, (u64::MAX as f64) * 2.0] {
+            let mut evolution = DeepTimeEvolution::new();
+            evolution.carrying_capacities.insert(7, invalid);
+            assert!(evolution.validate(&species).unwrap_err().contains("carrying capacity"));
+        }
+
+        let mut valid = DeepTimeEvolution::new();
+        valid.carrying_capacities.insert(7, 1.0);
+        valid.carrying_capacities.insert(8, u64::MAX as f64);
+        assert!(valid.validate(&species).is_ok());
+    }
+
+    #[test]
+    fn persisted_extinction_history_rejects_invalid_times_and_overflow() {
+        let rng = RngRegistry::new([22; 32]);
+        let species = vec![test_species(0.4, &rng)];
+        for (start, duration) in [
+            (f64::NAN, 1.0),
+            (0.0, f64::INFINITY),
+            (-1.0, 1.0),
+            (f64::MAX, f64::MAX),
+        ] {
+            let mut evolution = DeepTimeEvolution::new();
+            evolution.extinction_events.push(ExtinctionEvent {
+                event_id: 91,
+                start_time_years: start,
+                duration_years: duration,
+                severity: ExtinctionSeverity::Minor,
+                affected_species: vec![7],
+            });
+            assert!(evolution.validate(&species).unwrap_err().contains("Extinction event 91"));
+        }
+    }
+
+    #[test]
+    fn invalid_persisted_state_and_recovery_clock_overflow_fail_before_mutation() {
+        let mut rng = RngRegistry::new([23; 32]);
+        let mut species = vec![test_species(0.4, &rng)];
+        let mut evolution = DeepTimeEvolution::new();
+        evolution.carrying_capacities.insert(7, f64::NAN);
+
+        let evolution_before = serde_json::to_vec(&evolution).expect("initial evolution");
+        let species_before = serde_json::to_vec(&species).expect("initial species");
+        let rng_before = serde_json::to_vec(&rng).expect("initial RNG");
+        assert!(evolution
+            .step_evolution_processes(&mut species, 1.0, 0.0, &mut rng)
+            .unwrap_err()
+            .contains("carrying capacity"));
+        assert_eq!(serde_json::to_vec(&evolution).unwrap(), evolution_before);
+        assert_eq!(serde_json::to_vec(&species).unwrap(), species_before);
+        assert_eq!(serde_json::to_vec(&rng).unwrap(), rng_before);
+
+        let mut evolution = DeepTimeEvolution::new();
+        evolution.recovery_state.time_since_extinction_years = f64::MAX;
+        let evolution_before = serde_json::to_vec(&evolution).expect("recovery clock");
+        assert_eq!(
+            evolution.step_evolution_processes(&mut species, f64::MAX, 0.0, &mut rng),
+            Err("deep-time recovery clock overflowed".to_string())
+        );
+        assert_eq!(serde_json::to_vec(&evolution).unwrap(), evolution_before);
+        assert_eq!(serde_json::to_vec(&species).unwrap(), species_before);
+        assert_eq!(serde_json::to_vec(&rng).unwrap(), rng_before);
     }
 
     #[test]
