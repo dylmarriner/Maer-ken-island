@@ -116,6 +116,36 @@ pub struct RecoveryState {
     pub adaptive_radiation_potential: f64,
 }
 
+/// Validate the upstream geographic-range fraction before any evolution state changes.
+///
+/// The biosphere templates express range as a fraction of planetary surface, so
+/// every live species must occupy a finite, non-zero share no greater than one.
+fn drifted_geographic_range(
+    species_id: u64,
+    current: f64,
+    drift_factor: f64,
+) -> Result<f64, String> {
+    if !current.is_finite() || current <= 0.0 || current > 1.0 {
+        return Err(format!(
+            "Species {species_id} has invalid geographic range {current:?}; expected a finite fraction in (0, 1]"
+        ));
+    }
+    let next = current * (1.0 + drift_factor);
+    if !next.is_finite() || next <= 0.0 {
+        return Err(format!(
+            "Species {species_id} geographic-range drift produced invalid fraction {next:?}"
+        ));
+    }
+    Ok(next.min(1.0))
+}
+
+fn validate_geographic_ranges(species: &[Species]) -> Result<(), String> {
+    for sp in species {
+        drifted_geographic_range(sp.species_id, sp.geographic_range, 0.0)?;
+    }
+    Ok(())
+}
+
 impl DeepTimeEvolution {
     fn rng_key(&self, salt: u32) -> RngKey {
         RngKey::new(SubsystemId::Biosphere, salt, 0, self.step_index)
@@ -169,10 +199,26 @@ impl DeepTimeEvolution {
         environmental_stress: f64,
         rng: &mut RngRegistry,
     ) -> Result<Vec<String>, String> {
+        if !dt_years.is_finite() || dt_years < 0.0 {
+            return Err("deep-time step duration must be finite and non-negative".to_string());
+        }
+        validate_geographic_ranges(species)?;
+        if !self.current_time_years.is_finite() || self.current_time_years < 0.0 {
+            return Err("deep-time clock must be finite and non-negative".to_string());
+        }
+        let next_time_years = self.current_time_years + dt_years;
+        if !next_time_years.is_finite() {
+            return Err("deep-time clock overflowed".to_string());
+        }
+        let next_step_index = self
+            .step_index
+            .checked_add(1)
+            .ok_or_else(|| "deep-time step index overflowed".to_string())?;
+
         let mut events = Vec::new();
 
-        self.step_index += 1;
-        self.current_time_years += dt_years;
+        self.step_index = next_step_index;
+        self.current_time_years = next_time_years;
 
         // Apply population growth toward each species' carrying capacity.
         // This is the only counterbalance to mortality (selection pressure,
@@ -189,7 +235,7 @@ impl DeepTimeEvolution {
         self.apply_selection(species, dt_years, environmental_stress, rng);
 
         // Apply genetic drift
-        self.apply_drift(species, dt_years, rng);
+        self.apply_drift(species, dt_years, rng)?;
 
         // Check for speciation
         self.process_speciation(species, dt_years, rng, &mut events);
@@ -298,8 +344,14 @@ impl DeepTimeEvolution {
                 .carrying_capacities
                 .entry(sp.species_id)
                 .or_insert_with(|| n0.max(1.0));
-            let exp_rt = (POPULATION_INTRINSIC_GROWTH_RATE_PER_YEAR * dt_years).exp();
-            let n_t = capacity * n0 * exp_rt / (capacity + n0 * (exp_rt - 1.0));
+
+            // Use the decaying-exponential form of the logistic solution.
+            // exp(+r·dt) overflows for long but finite horizons, turning
+            // inf/inf into NaN and collapsing the population to one.
+            let decay = (-POPULATION_INTRINSIC_GROWTH_RATE_PER_YEAR * dt_years).exp();
+            let capacity_to_initial_ratio = capacity / n0;
+            let denominator = 1.0 + (capacity_to_initial_ratio - 1.0) * decay;
+            let n_t = capacity / denominator;
             sp.population_size = n_t.max(1.0).round() as u64;
         }
     }
@@ -359,9 +411,29 @@ impl DeepTimeEvolution {
     /// its spread over an interval grows with the square root of the
     /// interval: each step's kick scales with `√dt`, which keeps a year of
     /// short steps as noisy as one yearly step.
-    fn apply_drift(&self, species: &mut [Species], dt_years: f64, rng: &mut RngRegistry) {
-        let noise_scale = dt_years.max(0.0).sqrt();
-        for sp in species.iter_mut() {
+    fn apply_drift(
+        &self,
+        species: &mut [Species],
+        dt_years: f64,
+        rng: &mut RngRegistry,
+    ) -> Result<(), String> {
+        let noise_scale = dt_years.sqrt();
+        // RngRegistry derives each stream from its key, so these range draws
+        // are repeatable and do not consume a shared mutable random stream.
+        // Validate every candidate before mutating any species in this phase.
+        let next_ranges = species
+            .iter()
+            .map(|sp| {
+                let range_drift =
+                    rng.gen_f64_range(self.rng_key(sp.species_id as u32 ^ 20_002), -0.005, 0.005)
+                        * TRAIT_DRIFT_DAMPING
+                        * noise_scale
+                        * 0.0001;
+                drifted_geographic_range(sp.species_id, sp.geographic_range, range_drift)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        for (sp, next_range) in species.iter_mut().zip(next_ranges) {
             let drift_factor =
                 rng.gen_f64_range(self.rng_key(sp.species_id as u32 ^ 20_001), -0.01, 0.01)
                     * TRAIT_DRIFT_DAMPING
@@ -370,14 +442,9 @@ impl DeepTimeEvolution {
             sp.population_size = (sp.population_size as f64 * (1.0 + drift_factor))
                 .round()
                 .max(1.0) as u64;
-
-            let range_drift =
-                rng.gen_f64_range(self.rng_key(sp.species_id as u32 ^ 20_002), -0.005, 0.005)
-                    * TRAIT_DRIFT_DAMPING
-                    * noise_scale
-                    * 0.0001;
-            sp.geographic_range = (sp.geographic_range * (1.0 + range_drift)).max(1.0);
+            sp.geographic_range = next_range;
         }
+        Ok(())
     }
 
     fn process_extinction_events(
@@ -584,6 +651,11 @@ impl DeepTimeEvolution {
     }
 
     pub fn validate(&self, species: &[Species]) -> Result<(), String> {
+        if !self.current_time_years.is_finite() || self.current_time_years < 0.0 {
+            return Err("deep-time clock must be finite and non-negative".to_string());
+        }
+        validate_geographic_ranges(species)?;
+
         // Invariant: no species should have two recorded speciation events
         // closer together than MINIMUM_SPECIATION_TIMESCALE_YEARS. (A species
         // that speciated within the last cooldown window is normal and
@@ -591,6 +663,11 @@ impl DeepTimeEvolution {
         let mut times_by_species: std::collections::HashMap<u64, Vec<f64>> =
             std::collections::HashMap::new();
         for &(species_id, speciation_time) in &self.last_speciation_times {
+            if !speciation_time.is_finite() || speciation_time < 0.0 {
+                return Err(format!(
+                    "Species {species_id} has an invalid speciation time"
+                ));
+            }
             times_by_species
                 .entry(species_id)
                 .or_default()
@@ -627,5 +704,215 @@ impl DeepTimeEvolution {
 impl Default for DeepTimeEvolution {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod geographic_range_tests {
+    use super::*;
+    use mk_core::ids::KenzIeSubclass;
+
+    fn test_species(range: f64, rng: &RngRegistry) -> Species {
+        Species::new(
+            7,
+            Genome::new(7, rng, KenzIeSubclass::Alpha),
+            100_000,
+            range,
+        )
+    }
+
+    #[test]
+    fn validation_rejects_nonfinite_and_negative_speciation_times_without_panicking() {
+        for invalid_time in [f64::NAN, f64::INFINITY, -1.0] {
+            let mut evolution = DeepTimeEvolution::new();
+            evolution.last_speciation_times.push((7, invalid_time));
+            let error = evolution
+                .validate(&[])
+                .expect_err("invalid speciation time");
+            assert!(error.contains("Species 7 has an invalid speciation time"));
+        }
+    }
+
+    #[test]
+    fn one_evolution_step_preserves_fractional_geographic_range() {
+        let mut rng = RngRegistry::new([7; 32]);
+        let mut species = vec![test_species(0.4, &rng)];
+        let mut evolution = DeepTimeEvolution::new();
+
+        evolution
+            .step_evolution_processes(&mut species, 1.0, 0.0, &mut rng)
+            .expect("valid fractional geographic range");
+
+        let range = species[0].geographic_range;
+        assert!(range > 0.39 && range < 0.41, "range jumped to {range}");
+        assert_ne!(
+            range, 1.0,
+            "fractional range must not be forced to the whole planet"
+        );
+    }
+
+    #[test]
+    fn geographic_range_drift_never_exceeds_the_planetary_surface() {
+        assert_eq!(drifted_geographic_range(7, 0.999, 0.01).unwrap(), 1.0);
+    }
+
+    #[test]
+    fn geographic_range_drift_is_bit_repeatable_for_the_same_seed() {
+        fn run(seed: [u8; 32]) -> (u64, u64, u64, u64) {
+            let mut rng = RngRegistry::new(seed);
+            let mut species = vec![test_species(0.4, &rng)];
+            let mut evolution = DeepTimeEvolution::new();
+            evolution
+                .step_evolution_processes(&mut species, 1.0, 0.0, &mut rng)
+                .expect("valid deterministic step");
+            (
+                species[0].population_size,
+                species[0].geographic_range.to_bits(),
+                evolution.step_index,
+                evolution.current_time_years.to_bits(),
+            )
+        }
+
+        assert_eq!(run([10; 32]), run([10; 32]));
+    }
+
+    #[test]
+    fn invalid_geographic_range_fails_before_evolution_state_changes() {
+        let mut rng = RngRegistry::new([8; 32]);
+        let mut species = vec![test_species(f64::NAN, &rng)];
+        let population_before = species[0].population_size;
+        let mut evolution = DeepTimeEvolution::new();
+
+        let error = evolution
+            .step_evolution_processes(&mut species, 1.0, 0.0, &mut rng)
+            .expect_err("non-finite range must fail closed");
+
+        assert!(error.contains("invalid geographic range"));
+        assert_eq!(evolution.step_index, 0);
+        assert_eq!(evolution.current_time_years, 0.0);
+        assert_eq!(species[0].population_size, population_before);
+    }
+
+    #[test]
+    fn negative_or_non_finite_step_duration_is_rejected_before_clock_advance() {
+        for invalid_dt in [f64::NAN, f64::INFINITY, -1.0] {
+            let mut rng = RngRegistry::new([9; 32]);
+            let mut species = vec![test_species(0.4, &rng)];
+            let mut evolution = DeepTimeEvolution::new();
+
+            assert!(evolution
+                .step_evolution_processes(&mut species, invalid_dt, 0.0, &mut rng)
+                .is_err());
+            assert_eq!(evolution.step_index, 0);
+            assert_eq!(evolution.current_time_years, 0.0);
+        }
+    }
+
+    #[test]
+    fn clock_overflow_is_rejected_before_clock_or_species_mutation() {
+        let mut rng = RngRegistry::new([11; 32]);
+        let mut species = vec![test_species(0.4, &rng)];
+        let population_before = species[0].population_size;
+        let range_before = species[0].geographic_range.to_bits();
+        let mut evolution = DeepTimeEvolution::new();
+        evolution.current_time_years = f64::MAX;
+
+        let error = evolution
+            .step_evolution_processes(&mut species, f64::MAX, 0.0, &mut rng)
+            .expect_err("finite inputs whose sum overflows must fail closed");
+
+        assert_eq!(error, "deep-time clock overflowed");
+        assert_eq!(evolution.step_index, 0);
+        assert_eq!(evolution.current_time_years, f64::MAX);
+        assert_eq!(species[0].population_size, population_before);
+        assert_eq!(species[0].geographic_range.to_bits(), range_before);
+    }
+
+    #[test]
+    fn step_index_overflow_is_rejected_before_clock_or_species_mutation() {
+        let mut rng = RngRegistry::new([12; 32]);
+        let mut species = vec![test_species(0.4, &rng)];
+        let population_before = species[0].population_size;
+        let range_before = species[0].geographic_range.to_bits();
+        let mut evolution = DeepTimeEvolution::new();
+        evolution.step_index = u64::MAX;
+
+        let error = evolution
+            .step_evolution_processes(&mut species, 1.0, 0.0, &mut rng)
+            .expect_err("the RNG step counter must not wrap");
+
+        assert_eq!(error, "deep-time step index overflowed");
+        assert_eq!(evolution.step_index, u64::MAX);
+        assert_eq!(evolution.current_time_years, 0.0);
+        assert_eq!(species[0].population_size, population_before);
+        assert_eq!(species[0].geographic_range.to_bits(), range_before);
+    }
+
+    #[test]
+    fn persisted_clock_validation_rejects_non_finite_and_negative_values() {
+        for invalid_clock in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY, -1.0] {
+            let mut evolution = DeepTimeEvolution::new();
+            evolution.current_time_years = invalid_clock;
+            assert_eq!(
+                evolution.validate(&[]),
+                Err("deep-time clock must be finite and non-negative".to_string())
+            );
+        }
+    }
+}
+
+#[cfg(test)]
+mod population_growth_tests {
+    use super::*;
+    use mk_core::ids::KenzIeSubclass;
+
+    fn test_species(population: u64, rng: &RngRegistry) -> Species {
+        Species::new(
+            7,
+            Genome::new(7, rng, KenzIeSubclass::Alpha),
+            population,
+            0.4,
+        )
+    }
+
+    #[test]
+    fn logistic_growth_saturates_at_capacity_for_long_finite_horizons() {
+        for initial_population in [100_000, 400_000] {
+            let rng = RngRegistry::new([11; 32]);
+            let mut species = vec![test_species(initial_population, &rng)];
+            let mut evolution = DeepTimeEvolution::new();
+            evolution.carrying_capacities.insert(7, 200_000.0);
+
+            evolution.apply_population_growth(&mut species, 1_000_000.0);
+
+            assert_eq!(
+                species[0].population_size, 200_000,
+                "population {initial_population} should converge to its capacity"
+            );
+        }
+    }
+
+    #[test]
+    fn logistic_growth_preserves_the_closed_form_at_ordinary_horizons() {
+        let rng = RngRegistry::new([12; 32]);
+        let mut species = vec![test_species(100_000, &rng)];
+        let mut evolution = DeepTimeEvolution::new();
+        evolution.carrying_capacities.insert(7, 200_000.0);
+
+        evolution.apply_population_growth(&mut species, 100.0);
+
+        assert_eq!(species[0].population_size, 124_492);
+    }
+
+    #[test]
+    fn zero_duration_does_not_change_population() {
+        let rng = RngRegistry::new([13; 32]);
+        let mut species = vec![test_species(100_000, &rng)];
+        let mut evolution = DeepTimeEvolution::new();
+        evolution.carrying_capacities.insert(7, 200_000.0);
+
+        evolution.apply_population_growth(&mut species, 0.0);
+
+        assert_eq!(species[0].population_size, 100_000);
     }
 }
