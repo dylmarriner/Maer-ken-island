@@ -2,7 +2,9 @@
 
 Fishery landed-total atomicity and precision (PR #110) merged to `main` as `148ac98c95e58aac7b2065dd0cc68884790f4168`. Exact-head workflow [#42275024667](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42275024667) passed formatting, Clippy, fast Rust tests, desktop build/tests/rendering/input acceptance, installed backend, web dashboard, computer service, repository scripts, dependency audit and week/year reference-pack acceptance; nightly slow tests were skipped by design.
 
-Latest fishery biomass-remainder precision follow-up (branch `fix/fishery-biomass-remainder-precision-20261107`): reject a partial catch when its positive residual growth rounds away at the stored biomass scale. The regression asserts the full stock remains unchanged. Exact-head Rust and full acceptance CI are pending.
+Fishery biomass-remainder precision (PR #111) merged to `main` as `b41bb5cf24bddca5df2bc556612c5edfc8b91bde`. Exact-head workflow [#42292739398](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42292739398) passed formatting, Clippy, fast Rust tests, desktop, installed backend, dashboard, computer service, repository scripts, dependency audit and week/year reference-pack acceptance; nightly slow tests were skipped by design.
+
+Rebased cumulative landed-increment precision follow-up (PR #113): rejects positive catches whose persisted cumulative delta disappears or is materially rounded up/down, while permitting ordinary floating-point accumulation within a 1e-12 relative bound. Source/test commit `186766a19108338f0bd75a28dd00ef2bd1cc8b76`; exact-head CI on the rebased head is pending. Previous PR #112 workflow [#42292742448](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42292742448) passed all required jobs before rebase, but does not verify the new head.
 
 Updated 2026-11-07 after PR #110 merged as `148ac98`; fishery remains standalone pending sourced species-specific stock and effort data and owner-approved workforce integration.
 
