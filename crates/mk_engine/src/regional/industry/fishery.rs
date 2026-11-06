@@ -465,8 +465,7 @@ impl FishStock {
         let recorded_delta = landed_t - self.landed_t;
         if catch > 0.0
             && (recorded_delta <= 0.0
-                || (recorded_delta - catch).abs()
-                    > catch * LANDED_TOTAL_RELATIVE_TOLERANCE)
+                || (recorded_delta - catch).abs() > catch * LANDED_TOTAL_RELATIVE_TOLERANCE)
         {
             return Err(FisheryError::LandedTotalUnrepresentable);
         }
@@ -1296,9 +1295,7 @@ mod tests {
         assert_eq!(landed, 0.1);
         let recorded_delta = stock.landed_t - 0.3;
         assert!(recorded_delta > 0.0);
-        assert!(
-            (recorded_delta - landed).abs() <= landed * LANDED_TOTAL_RELATIVE_TOLERANCE
-        );
+        assert!((recorded_delta - landed).abs() <= landed * LANDED_TOTAL_RELATIVE_TOLERANCE);
     }
 
     #[test]
