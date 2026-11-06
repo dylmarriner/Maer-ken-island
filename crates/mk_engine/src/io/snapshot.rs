@@ -106,11 +106,11 @@ pub fn load_snapshot(path: &Path) -> Result<(SnapshotHeader, WorldState), Snapsh
 
     let mut state: WorldState = serde_json::from_slice(state_bytes)
         .map_err(|e| SnapshotError::SerializeError(e.to_string()))?;
+    let stored_canon_digest = state.canon_derived.canon_digest;
+    mk_core::canon::validator::validate_canon(&state.canon).map_err(SnapshotError::InvalidCanon)?;
     state
         .validate_snapshot_schema()
         .map_err(SnapshotError::SerializeError)?;
-    let stored_canon_digest = state.canon_derived.canon_digest;
-    mk_core::canon::validator::validate_canon(&state.canon).map_err(SnapshotError::InvalidCanon)?;
 
     // JSON numeric normalization can produce a byte-level digest difference
     // after a load even when the canon values are semantically unchanged.
