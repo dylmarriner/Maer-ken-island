@@ -382,3 +382,12 @@ cost the resting baseline (D22).
 - The five-year run was made before meals and drinks were booked where people stand; it has not been repeated on the new bookkeeping, so its end state describes the earlier one. It also predates the merge with `main`.
 - Children: they are small, grow on the WHO curves, eat what their own respiration burned, and under five years old stay with their mother. Older children choose their own actions, but not an adult's: under 12 they do not mine, build, craft, code or use email and search, and under 16 they take no part in harm or intimacy (`humans/autonomy.rs` `age_substitute`; the thresholds are round numbers, not sourced); a child whose mother has died is not cared for; schooling and play are not modelled.
 - Upstream pull requests for every divergence in `UPSTREAM.md`.
+
+
+## Reference library numerical safety — 6 November 2026
+
+`ReferenceItem::central()` now computes an implicit midpoint for finite ordered ranges without overflowing when large same-sign endpoints are added or opposite-sign endpoints are subtracted. Explicit published `typical` values remain authoritative, and equal subnormal endpoints remain unchanged.
+
+Evidence: `crates/mk_engine/tests/reference_packs.rs::range_midpoint_stays_finite_for_valid_extreme_bounds`.
+
+This is a numerical utility correction only. No reference-pack value, citation, physical parameter, deviation, simulation state, snapshot schema or replay hash changed. Exact-head `cargo fmt`, Clippy and fast workspace tests remain required before merge.

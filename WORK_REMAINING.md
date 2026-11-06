@@ -1,6 +1,6 @@
 # Work remaining
 
-Updated 2026-11-06 against `main` at `d6f6ce7a1c5f01bf5a14d158fad32dbbcdaffb0a` (after the fishery arithmetic and snapshot-validation work in PRs #89–#91). This is the single list of
+Updated 2026-11-06 against `main` at `3057ea4274f8d6a131fa44a24380e0c7c145057a` (current main after the deep-time snapshot corrections). This is the single list of
 what is not done, and for each item, **what it takes to do it**: the sources or data it needs,
 the decisions only the owner can make, the files it touches, the tests that prove it and when it
 counts as finished. Read [`HANDOFF.md`](HANDOFF.md) first for what exists.
@@ -42,6 +42,7 @@ this list holds the current state. The evidence for what is *done* is in
 | Living world | D9: actions take one tick | In part: felling, hauling, splitting, shed, panning, foraging and water trips timed, learned by practice (R11); Craft, Explore and social actions one tick | Cited durations per task |
 | Living world | D31: NPP ignores soil nutrients | Open | Regional soils model and data |
 | Runtime | Phase 4 Task 2b: deep-time spin-up | **Done** (2026-10-14) | — |
+| Runtime | Reference range central values | Overflow-safe midpoint arithmetic implemented; exact-head reference-pack regression and workspace CI pending | Exact-head Rust verification |
 | Biosphere | Deep-time geographic-range drift, long-horizon growth, clock overflow and snapshot compatibility | Founding species ranges are capped at 1.0; finite `(0, 1]` ranges, finite non-negative duration, finite next clock and checked RNG step-index are preflighted before evolution state changes; keyed drift preserves fractions and logistic growth uses a stable decaying-exponential closed form. `WorldState` schema 1 validates both replay/file loads: valid schema-0 snapshots upgrade metadata only; invalid legacy ranges and future versions fail at load, never silently clamp; both restore paths also reject a stored derived-canon digest that does not match the validated canon; replay snapshots also reject an envelope tick that differs from the digested world-state tick; evolved schema-0 snapshots with speciation history and fractional species are rejected as unrecoverable mixed legacy state | Exact-head regression, legacy/current/future snapshot tests, deterministic hash baseline and week/year replay/reference acceptance for corrected output |
 | Industry | Phase 4b Task 1 remainder: reference tables | Done 2026-10-14 (nine packs); gaps listed in §4a | A few items (see §4a) |
 | Industry | Phase 4b Task 4: oil and gas field (D14, D19) | Fields, decline and carbon done 2026-10-14 (D58); in `IslandLife` with the diesel depot 2026-10-22; wells, blowouts and produced water 2026-10-23; rising water cut, spills open | Water-cut series; a blowout's spill volume |
