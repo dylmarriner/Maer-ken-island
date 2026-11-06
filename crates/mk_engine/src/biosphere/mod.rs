@@ -552,7 +552,7 @@ impl BiosphereSystem {
             let population_size = template
                 .base_population
                 .saturating_sub((idx as u64 % 97) * 511);
-            let geographic_range = template.base_range + ((idx % 23) as f64 * 0.0125);
+            let geographic_range = (template.base_range + ((idx % 23) as f64 * 0.0125)).min(1.0);
             let mut sp = Species::new(
                 species_id,
                 genome,
@@ -982,6 +982,27 @@ mod tests {
             "land total {}",
             stats.terrestrial_npp_kgc_yr
         );
+    }
+
+    #[test]
+    fn founding_species_geographic_ranges_are_valid_planetary_surface_fractions() {
+        let biosphere = BiosphereSystem::default();
+        let species = biosphere.founding_species();
+
+        assert_eq!(species.len(), 4_096);
+        assert!(species.iter().all(|sp| {
+            sp.geographic_range.is_finite()
+                && sp.geographic_range > 0.0
+                && sp.geographic_range <= 1.0
+        }));
+
+        // Species 43 is a Pelagic template whose unbounded base-plus-spread
+        // formula previously produced 1.0175, more than one planetary surface.
+        let species_43 = species
+            .iter()
+            .find(|sp| sp.species_id == 43)
+            .expect("founding catalogue includes species 43");
+        assert_eq!(species_43.geographic_range, 1.0);
     }
 
     #[test]
