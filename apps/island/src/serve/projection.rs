@@ -300,6 +300,9 @@ pub struct Terrain {
     pub npp_kgc_m2_yr: Vec<f64>,
     pub mean_temperature_c: Vec<f64>,
     pub annual_rain_mm: Vec<f64>,
+    /// Static, scenario-derived species/habitat view for marine cell inspection.
+    /// It is not simulation state and never participates in the state digest.
+    pub biota: Arc<mk_engine::regional::species::IslandBiota>,
 }
 
 impl Terrain {
@@ -317,6 +320,15 @@ impl Terrain {
                 )
             })
             .collect();
+        // Rebuild the same deterministic, read-only species projection from
+        // the scenario seed. IslandLife does not retain a second population.
+        let biota = Arc::new(mk_engine::regional::species::IslandBiota::survey(
+            life.canon.clone(),
+            &life.scenario.seed,
+            &life.domain,
+            &life.ecology,
+            &life.physical,
+        ));
         Self {
             domain: life.domain.clone(),
             elevation_m: life.physical.geophysics.elevation_m.clone(),
@@ -338,6 +350,7 @@ impl Terrain {
                 .iter()
                 .map(|(_, mm_day)| mm_day * EARTH_YEAR_DAYS)
                 .collect(),
+            biota,
         }
     }
 }
@@ -457,6 +470,16 @@ pub fn cell_of(terrain: &Terrain, row: usize, col: usize) -> Option<Cell> {
     // `lat_lon_at_m` answers in radians -- it is the function that put a
     // birth 0.716 degrees from the equator earlier in this branch.
     let (latitude, longitude) = terrain.domain.lat_lon_at_m(x_m, y_m);
+    let marine_nodes = terrain.biota.marine_aquatic_nodes(row * cols + col);
+    let marine_aquatic = if marine_nodes.is_empty() {
+        (None, None, None)
+    } else {
+        (
+            Some(marine_nodes.len()),
+            Some(marine_nodes.iter().map(|node| node.individuals).sum()),
+            Some(marine_nodes.iter().map(|node| node.biomass_t).sum()),
+        )
+    };
     Some(Cell {
         row,
         col,
@@ -478,6 +501,9 @@ pub fn cell_of(terrain: &Terrain, row: usize, col: usize) -> Option<Cell> {
         npp_kgc_m2_yr: terrain.npp_kgc_m2_yr.get(row * cols + col).copied(),
         mean_temperature_c: terrain.mean_temperature_c.get(row * cols + col).copied(),
         annual_rain_mm: terrain.annual_rain_mm.get(row * cols + col).copied(),
+        marine_aquatic_species: marine_aquatic.0,
+        marine_aquatic_individuals: marine_aquatic.1,
+        marine_aquatic_biomass_t: marine_aquatic.2,
     })
 }
 

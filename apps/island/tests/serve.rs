@@ -1206,6 +1206,12 @@ async fn a_cell_of_the_island_can_be_asked_about_by_row_and_column() {
     // The estate is on land and buildable; that is where the founders live.
     assert_eq!(cell["land"], true, "{cell}");
     assert_eq!(cell["buildable"], true, "{cell}");
+    assert!(
+        cell.get("marine_aquatic_species").is_none()
+            && cell.get("marine_aquatic_individuals").is_none()
+            && cell.get("marine_aquatic_biomass_t").is_none(),
+        "land cells must not be given marine populations: {cell}"
+    );
 
     // And it says what grows there and in what climate, for the
     // inspector: the estate is wooded temperate land at about 41 degrees
@@ -1242,6 +1248,77 @@ async fn a_cell_of_the_island_can_be_asked_about_by_row_and_column() {
         "says why: {}",
         body_of(&response)
     );
+}
+
+#[tokio::test]
+async fn a_sea_cell_reports_the_upstream_marine_biomass_projection() {
+    let port = a_shared_dashboard();
+
+    // The small fixture's south-west corner is in the required ocean buffer.
+    let (status, response) = get(port, "/api/cell/0/0").await;
+    assert_eq!(status, 200, "{response}");
+    let body: serde_json::Value = serde_json::from_str(body_of(&response)).unwrap();
+    let cell = &body["cell"];
+    assert_eq!(cell["land"], false, "{cell}");
+
+    let species = cell["marine_aquatic_species"]
+        .as_u64()
+        .expect("marine species count");
+    let individuals = cell["marine_aquatic_individuals"]
+        .as_f64()
+        .expect("upstream-derived marine individuals");
+    let biomass_t = cell["marine_aquatic_biomass_t"]
+        .as_f64()
+        .expect("upstream-derived marine biomass in tonnes");
+
+    assert!(species > 0, "the ocean cell has aquatic species: {cell}");
+    assert!(
+        individuals.is_finite() && individuals > 0.0,
+        "the projection is finite and positive: {cell}"
+    );
+    assert!(
+        biomass_t.is_finite() && biomass_t > 0.0,
+        "the projected live biomass is finite and positive: {cell}"
+    );
+}
+
+#[tokio::test]
+async fn marine_cell_inspection_does_not_change_the_island_digest() {
+    let (world, port, server) = a_running_dashboard().await;
+    world.set_paused(true);
+    // Let any step already in flight finish before taking the baseline.
+    tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+
+    let (status, response) = get(port, "/api/world").await;
+    assert_eq!(status, 200, "{response}");
+    let before: serde_json::Value = serde_json::from_str(body_of(&response)).unwrap();
+    let before_digest = before["digest"]["value"]
+        .as_str()
+        .expect("a canonical digest")
+        .to_string();
+    let before_tick = before["digest"]["at_tick"]
+        .as_u64()
+        .expect("the digest tick");
+
+    let (status, response) = get(port, "/api/cell/0/0").await;
+    assert_eq!(status, 200, "{response}");
+
+    let (status, response) = get(port, "/api/world").await;
+    assert_eq!(status, 200, "{response}");
+    let after: serde_json::Value = serde_json::from_str(body_of(&response)).unwrap();
+    assert_eq!(
+        after["digest"]["value"].as_str(),
+        Some(before_digest.as_str()),
+        "reading the derived marine projection must not mutate canonical state"
+    );
+    assert_eq!(
+        after["digest"]["at_tick"].as_u64(),
+        Some(before_tick),
+        "a read-only cell query must not advance the simulation"
+    );
+
+    server.abort();
+    world.stop();
 }
 
 #[tokio::test]
@@ -2058,5 +2135,35 @@ async fn a_client_is_told_what_this_backend_can_do_before_it_asks_for_anything()
         !version.capabilities.snapshots,
         "this fixture was started with no snapshot directory, and saying it \
          could write one would send an operator to a button that refuses"
+    );
+}
+
+#[tokio::test]
+async fn browser_map_cell_inspector_renders_the_uncalibrated_marine_estimate() {
+    let port = a_shared_dashboard();
+    let (status, response) = get(port, "/static/island.js").await;
+    assert_eq!(status, 200, "{response}");
+    let page_script = body_of(&response);
+    assert!(
+        page_script.contains("handleMapCellClick"),
+        "the island page must wire the shared map-cell click handler"
+    );
+
+    // Marine rendering lives in the shared helper so the dashboard's Node DOM
+    // test can exercise the exact implementation used by this page.
+    let (status, response) = get(port, "/static/app.js").await;
+    assert_eq!(status, 200, "{response}");
+    let shared_script = body_of(&response);
+    let handler = shared_script
+        .split("export async function handleMapCellClick")
+        .nth(1)
+        .expect("the shared map-cell click handler is served");
+
+    assert!(handler.contains("marine_aquatic_species"));
+    assert!(handler.contains("marine_aquatic_individuals"));
+    assert!(handler.contains("marine_aquatic_biomass_t"));
+    assert!(
+        handler.contains("Uncalibrated upstream estimate; not harvestable stock or catch."),
+        "the browser inspector must label this as an upstream estimate, not a fishery stock"
     );
 }
