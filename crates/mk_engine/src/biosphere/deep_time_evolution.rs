@@ -801,8 +801,7 @@ mod population_growth_tests {
             evolution.apply_population_growth(&mut species, 1_000_000.0);
 
             assert_eq!(
-                species[0].population_size,
-                200_000,
+                species[0].population_size, 200_000,
                 "population {initial_population} should converge to its capacity"
             );
         }
@@ -832,4 +831,3 @@ mod population_growth_tests {
         assert_eq!(species[0].population_size, 100_000);
     }
 }
-
