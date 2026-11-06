@@ -458,3 +458,18 @@ fn range_midpoint_preserves_rounding_for_adjacent_subnormals() {
     let spanning_zero = range_item("subnormal_spanning_zero", -one_ulp, two_ulps, None);
     assert_eq!(spanning_zero.central(), Some(0.0));
 }
+
+#[test]
+fn range_midpoint_avoids_double_rounding_for_wide_exponent_gaps() {
+    // min = 3 * 2^969 and max = 2^1023. Halving the rounded difference
+    // loses one ulp; the exact midpoint rounds to the next representable value.
+    let min = f64::from_bits(0x7c98_0000_0000_0000);
+    let max = f64::from_bits(0x7fe0_0000_0000_0000);
+    let expected = f64::from_bits(0x7fd0_0000_0000_0001);
+
+    let positive = range_item("positive_wide_gap", min, max, None);
+    assert_eq!(positive.central(), Some(expected));
+
+    let negative = range_item("negative_wide_gap", -max, -min, None);
+    assert_eq!(negative.central(), Some(-expected));
+}
