@@ -58,3 +58,15 @@ Correction on this branch:
 - A fresh exact-head CI run is required for the corrected test and documentation. The prior workflow is not evidence for this new head.
 
 No simulation state, RNG, replay digest, snapshot, append-only log, physical parameter, external service or production infrastructure changed.
+
+
+## Follow-up: reject invalid negative marine projections (6 November 2026)
+
+A second production pass tightened the shared browser inspector's projection guard. Finite values alone were not sufficient: a malformed API payload could still render a negative species count, individual count or biomass value. The handler now requires:
+- species count: non-negative safe integer;
+- represented individuals: finite and non-negative;
+- live biomass tonnes: finite and non-negative.
+
+Commit `f8137fc7c4cb779f3a33334b615c5c6d39977e25` implements the guard in the same `handleMapCellClick` helper used by the island page. Commit `d46d3062bcfb90e2784d51aba4deea77d27431c5` expands the Node DOM regression across unsafe integers, negative species/individual/biomass values, infinity and NaN. The ordinary cell details remain visible when the marine projection is omitted.
+
+`WORK_REMAINING.md` now states the exact invalid-value boundary (commit `f864aa7ca8f9afcd0614e7dc489d4fe11e9000e6`). Fresh exact-head CI is required for the new code/test head; no local Node test result is claimed.
