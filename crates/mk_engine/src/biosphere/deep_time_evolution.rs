@@ -842,13 +842,7 @@ mod geographic_range_tests {
 
     #[test]
     fn invalid_environmental_stress_is_rejected_without_mutating_evolution_species_or_rng() {
-        for invalid_stress in [
-            f64::NAN,
-            f64::INFINITY,
-            f64::NEG_INFINITY,
-            -0.01,
-            1.01,
-        ] {
+        for invalid_stress in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY, -0.01, 1.01] {
             let mut rng = RngRegistry::new([14; 32]);
             let mut species = vec![test_species(0.4, &rng)];
             let mut evolution = DeepTimeEvolution::new();
@@ -890,12 +884,7 @@ mod geographic_range_tests {
                 let mut seed = [0_u8; 32];
                 seed[..8].copy_from_slice(&candidate.to_le_bytes());
                 let mut probe = RngRegistry::new(seed);
-                let key = RngKey::new(
-                    SubsystemId::Biosphere,
-                    SPECIES_ID as u32 ^ 40_001,
-                    0,
-                    1,
-                );
+                let key = RngKey::new(SubsystemId::Biosphere, SPECIES_ID as u32 ^ 40_001, 0, 1);
                 (probe.gen_f64_01(key) < SPECIATION_ROLL_CEILING).then_some(seed)
             })
             .expect("a deterministic seed must reach the speciation probability");
