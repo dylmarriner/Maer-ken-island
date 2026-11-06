@@ -138,3 +138,10 @@ A second inspection of the append-only speciation history found that the evoluti
 - A deterministic regression seeds two parent events at 18,000 and 36,000 years, advances the clock to 36,010 years, and proves the parent remains in cooldown: no child, event or RNG draw is consumed.
 - Commit: `c312a74ed28f27badae69f15a85f57886a71e9ef`.
 - Exact-head CI for this follow-up is required; no pass is claimed yet.
+
+
+## Follow-up: stage only new speciation timestamps (6 November 2026)
+
+The staging object no longer clones or replaces `last_speciation_times`. The original append-only history is borrowed read-only by the staged pipeline; the staged object starts with an empty history and accumulates only timestamps created in the current step. After the complete ordered pipeline succeeds, those new entries are appended to the original vector. On failure, the original history is untouched. This removes another O(history) copy from every evolution tick while preserving the persisted vector format and rollback semantics.
+
+The staged-speciation regression now starts with an existing parent timestamp, proves the new timestamp is appended rather than replacing prior history, and runs the full persistence-boundary validator on the result. Direct ordered-pipeline parity tests pass the existing history through the original state. Source commit: `7a46b67cbdc76be90339f4c57295fbd0d5f78d15`. Exact-head CI is pending.
