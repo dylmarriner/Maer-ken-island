@@ -46,3 +46,15 @@ Commit `84dc5f5a` applies the exact rustfmt output. A fresh exact-head run must 
 ## Review follow-up — browser DOM regression
 
 The browser click path now delegates to the exported `handleMapCellClick` helper in `apps/island/static/app.js`. The web dashboard CI runs `scripts/tests/marine_cell_inspector.test.mjs`, which simulates a map click and asserts the actual inspector nodes contain the upstream species count, individuals, live biomass and the uncalibrated/not-harvestable disclaimer. It also verifies invalid marine projection fields are omitted without hiding ordinary cell details, and clicks before the view is ready make no request. This addresses the source-only assertion gap and the review request for visible DOM coverage. Exact-head CI is required; no local or CI pass is claimed until that workflow completes.
+
+
+## Exact-head Rust integration failure and correction (2026-11-06)
+
+Workflow [#42159513778](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42159513778) passed formatting and Clippy, but the fast Rust suite failed one assertion in `browser_map_cell_inspector_renders_the_uncalibrated_marine_estimate`. The test still searched for marine fields inside `island.js:onMapClick` after the click path had been extracted into the shared `app.js:handleMapCellClick` helper. The browser DOM test itself passed; the failing assertion was stale source-location coupling, not a missing UI field.
+
+Correction on this branch:
+- Commit `4bdb413b3349c472f66984a5513f16555235c825` updates the Rust integration test to assert that `island.js` wires `handleMapCellClick`, then inspect the served shared `app.js` helper for the three marine fields and safety disclaimer.
+- Commit `04bf72a02becb24d16a625f4e46ea04cdc724675` repairs the browser-inspector entry in `WORK_REMAINING.md`; the previous insertion had split a sentence in the marine biomass bullet.
+- A fresh exact-head CI run is required for the corrected test and documentation. The prior workflow is not evidence for this new head.
+
+No simulation state, RNG, replay digest, snapshot, append-only log, physical parameter, external service or production infrastructure changed.
