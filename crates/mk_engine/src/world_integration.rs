@@ -2495,10 +2495,11 @@ impl WorldState {
                         entry.geographic_range.is_finite() && entry.geographic_range >= 1.0
                     })
                 {
-                    return Err(
-                        "legacy snapshot schema 0 is incompatible: the previous geographic-range drift floor erased fractional ranges; lossless migration is impossible"
-                            .to_string(),
-                    );
+                    return Err(concat!(
+                        "legacy snapshot schema 0 is incompatible: the previous geographic-range ",
+                        "drift floor erased fractional ranges; lossless migration is impossible"
+                    )
+                    .to_string());
                 }
                 self.deep_time.validate(species).map_err(|error| {
                     format!("legacy snapshot schema 0 is incompatible: {error}")
