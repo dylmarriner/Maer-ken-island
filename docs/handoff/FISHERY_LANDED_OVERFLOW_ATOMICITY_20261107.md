@@ -31,3 +31,11 @@ The regression clones the stock before the call and asserts the entire `FishStoc
 - Regression and repository handoff/status updates are committed on this branch.
 - Exact-head CI must pass formatting, Clippy, fast Rust tests, desktop/backend, web/computer service, dependency audit and week/year reference-pack acceptance.
 - No local Cargo result is claimed because custom OpenCommander currently returns HTTP 429.
+
+## Follow-up — cumulative precision loss
+
+A separate numerical boundary is now tracked: a positive catch can be smaller than half an ULP of a large but finite cumulative landed total. In that case IEEE-754 addition can leave `landed_t` unchanged even though `fish()` returns a positive catch. This would report material as landed without persisting it in the stock's cumulative total.
+
+The next source change must reject this case before either biomass or landed total is committed, with a typed error and a regression using `landed_t = 2^53` and a one-tonne catch. The test must prove the exact addition is unchanged and the complete stock remains byte-for-byte/value-equal after rejection.
+
+No compensation field or snapshot schema change is proposed; preserving the existing serialized field layout is preferred. Exact-head Rust and acceptance CI is required.
