@@ -735,7 +735,8 @@ impl DeepTimeEvolution {
         if !self.current_time_years.is_finite() || self.current_time_years < 0.0 {
             return Err("deep-time clock must be finite and non-negative".to_string());
         }
-        if !self.adaptive_radiation_potential.is_finite() || self.adaptive_radiation_potential < 0.0 {
+        if !self.adaptive_radiation_potential.is_finite() || self.adaptive_radiation_potential < 0.0
+        {
             return Err("adaptive radiation potential must be finite and non-negative".to_string());
         }
         if !self.recovery_state.time_since_extinction_years.is_finite()
