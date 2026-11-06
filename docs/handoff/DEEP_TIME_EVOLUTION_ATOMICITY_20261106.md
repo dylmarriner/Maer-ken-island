@@ -27,10 +27,12 @@ Existing normal-step deterministic and fractional-range tests remain in place.
 
 - `bdc97507` — stage and atomically commit evolution transitions.
 - `febdf236` — late-failure atomicity regression.
+- `63d330ed` — exact rustfmt correction from the first PR workflow.
 
 ## Verification
 
 - Exact-head GitHub Actions is required. The PR is stacked on #106 because the current range validator's fallible drift path is part of that branch.
+- First exact-head workflow [#42171306926](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42171306926) failed at `cargo fmt --all -- --check` only; the log identified one multiline call and commit `63d330ed` applies the exact rustfmt output. Clippy and fast tests did not run in that attempt.
 - No local Cargo result is claimed: custom OpenCommander device discovery returned HTTP 429.
 - The latest parent PR #106 workflow is still running its Rust fast tests, desktop and week/year acceptance; this follow-up needs its own exact-head CI after PR #107 is opened.
 - The staged approach clones the current species vector and evolution state per step. Review runtime impact under the repository's long-horizon profile before merge; correctness is the immediate goal, and the performance cost must be measured rather than guessed.
