@@ -893,12 +893,7 @@ mod geographic_range_tests {
             let species_before = serde_json::to_vec(&species).expect("species state");
             let rng_before = serde_json::to_vec(&rng).expect("RNG state");
 
-            let result = evolution.step_evolution_processes(
-                &mut species,
-                f64::MAX,
-                0.0,
-                &mut rng,
-            );
+            let result = evolution.step_evolution_processes(&mut species, f64::MAX, 0.0, &mut rng);
 
             let Err(error) = result else {
                 continue;
