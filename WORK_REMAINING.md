@@ -42,6 +42,7 @@ this list holds the current state. The evidence for what is *done* is in
 | Living world | D9: actions take one tick | In part: felling, hauling, splitting, shed, panning, foraging and water trips timed, learned by practice (R11); Craft, Explore and social actions one tick | Cited durations per task |
 | Living world | D31: NPP ignores soil nutrients | Open | Regional soils model and data |
 | Runtime | Phase 4 Task 2b: deep-time spin-up | **Done** (2026-10-14) | — |
+| Biosphere | Deep-time species geographic-range drift | Fractional planetary ranges are preserved; finite `(0, 1]` range and finite non-negative step duration are validated before evolution state changes | Exact-head regression and replay/reference acceptance for corrected deterministic output |
 | Industry | Phase 4b Task 1 remainder: reference tables | Done 2026-10-14 (nine packs); gaps listed in §4a | A few items (see §4a) |
 | Industry | Phase 4b Task 4: oil and gas field (D14, D19) | Fields, decline and carbon done 2026-10-14 (D58); in `IslandLife` with the diesel depot 2026-10-22; wells, blowouts and produced water 2026-10-23; rising water cut, spills open | Water-cut series; a blowout's spill volume |
 | Industry | Phase 4b Task 5: refinery, gas plant, fuel depot (D16) | Topping refinery done 2026-10-14; diesel depot 2026-10-22 (D58); gas plant 2026-10-23; reformer open | Reformate yield |
@@ -127,8 +128,10 @@ habitats, plants and grazers as shares of the island's carbon fields, other guil
 density times the island's habitat area. The catalogue is private; callers read through
 `species()` and replace through `replace_species_catalogue`, which rebuilds marine membership
 and producer/grazer weights atomically. Survey and replacement reject duplicate species IDs.
-The checked marine projection rejects invalid cell indices/area, stale identity or metadata,
-invalid abundance, non-finite density/body mass and non-finite population/biomass conversions.
+The catalogue boundary rejects invalid marine abundance, non-finite/negative upstream density
+and non-finite/non-positive body mass before publication; the checked marine projection repeats
+those guards alongside cell bounds/area, stale identity/metadata and finite population/biomass
+conversion.
 **Left:** Earth-calibrated densities and a carbon pool for each consumer guild (realism R8, R10);
 serving the species to the map and the cell inspector; animal and fish resource nodes (done
 2026-10-23, §2b).

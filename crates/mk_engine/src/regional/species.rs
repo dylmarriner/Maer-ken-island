@@ -387,7 +387,9 @@ fn species_weights(species: &[IslandSpecies]) -> ([f64; 10], [f64; 10]) {
     (producer_weight, grazer_weight)
 }
 
-/// Validate catalogue-wide identity and the marine projection's abundance source.
+/// Validate catalogue-wide identity and every marine projection input before
+/// a replacement can become visible. The per-cell checked projection repeats
+/// these guards as defence in depth.
 fn validate_species_catalogue(species: &[IslandSpecies]) -> Result<(), MarineProjectionError> {
     let mut first_index_by_id = BTreeMap::new();
     for (index, s) in species.iter().enumerate() {
@@ -404,12 +406,23 @@ fn validate_species_catalogue(species: &[IslandSpecies]) -> Result<(), MarinePro
                 &s.affinity,
                 TerrainAffinity::OpenOcean | TerrainAffinity::ReefSea
             )
-            && s.abundance != Abundance::UpstreamDensity
         {
-            return Err(MarineProjectionError::InvalidMarineAbundance {
-                index,
-                species_id: s.species_id,
-            });
+            if s.abundance != Abundance::UpstreamDensity {
+                return Err(MarineProjectionError::InvalidMarineAbundance {
+                    index,
+                    species_id: s.species_id,
+                });
+            }
+            if !s.upstream_density_per_m2.is_finite() || s.upstream_density_per_m2 < 0.0 {
+                return Err(MarineProjectionError::InvalidDensity {
+                    species_id: s.species_id,
+                });
+            }
+            if !s.body_mass_kg.is_finite() || s.body_mass_kg <= 0.0 {
+                return Err(MarineProjectionError::InvalidBodyMass {
+                    species_id: s.species_id,
+                });
+            }
         }
     }
     Ok(())

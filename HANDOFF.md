@@ -8,13 +8,16 @@ how to build and check it, and where everything else is written down.
 
 ## Latest engineering handoff — 6 November 2026
 
-- [Marine species stack reconciliation](docs/handoff/MARINE_SPECIES_STACK_RECONCILIATION_20261106.md) — PR #102. Reconciles the marine catalogue/index work from #95, #96 and #98 onto current main: private catalogue, controlled cache rebuild, duplicate-ID rejection, checked projection and cell-area validation before the empty-habitat return. Exact-head CI is pending; no local Cargo result is claimed.
+- [Deep-time geographic-range drift correction](docs/handoff/DEEP_TIME_GEOGRAPHIC_RANGE_DRIFT_20261106.md) — PR #103, rebased onto the PR #102 merge. Preserves fractional planetary ranges rather than forcing all species to 1.0; validates range and duration before state changes. Exact-head workflow #42141050362 is pending.
+
+- [Marine catalogue value validation](docs/handoff/MARINE_CATALOGUE_VALUE_VALIDATION_20261106.md) — PR #104 branch `fix/marine-catalogue-value-validation-20261106`, rebased onto the PR #102 merge. It validates finite non-negative upstream density and finite positive body mass for every OpenOcean/ReefSea aquatic species before a catalogue replacement is published; regressions prove rejected replacements preserve the original catalogue and projection. Exact-head public GitHub Actions is required; local Cargo remains unavailable while OpenCommander returns HTTP 429.
+- [Marine species stack reconciliation](docs/handoff/MARINE_SPECIES_STACK_RECONCILIATION_20261106.md) — PR #102 merged into main as `2f11b5e9a3cd84a35f6cb69e1966cd3cd72391ed`. Exact-head workflow [#42133095121](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42133095121) passed formatting, Clippy, fast tests, desktop/backend, week/year reference acceptance, dashboard, computer service, scripts and dependency audit; nightly slow tests were skipped by design. No local Cargo result is claimed.
 
 - [Fishery MSY biomass target](docs/handoff/FISHERY_MSY_BIOMASS_TARGET_20261106.md) — PR #101. Adds a read-only `msy_biomass_t` diagnostic derived from the same piecewise peak as MSY, with boundary, invalid-state and extreme-capacity regressions.
 - Follow-up commit `e356c66b` corrects the extreme-capacity target expectation in that regression; the prior workflow head predates this correction, so only the new exact-head run can verify it.
 - PR #100 (piecewise MSY) was merged into main at `55851f7a10d6ab3653b5ef013e6eba8de8e13c52`. Exact-head workflow [#42117060148](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42117060148) passed every required job, including fast Rust tests, desktop build/tests/rendering, installed backend, week/year reference-pack acceptance, dashboard, computer service, scripts and dependency audit. The nightly slow tier was skipped by design.
 - PR #97's subnormal-safe surplus correction remains in main at `1d70e9e2941675aef4d10fb8f94816cfe4610c70`.
-- PR #101 exact-head CI is required before merge. Custom OpenCommander returned HTTP 429, so no local Cargo test is claimed.
+- PR #101 (MSY biomass target) merged into main as `373a1b71517b82352b40208e4546bc0d3e4d24a1`. Exact-head workflow [#42117060148](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42117060148) passed required fast Rust, desktop/backend, week/year reference-pack, dashboard, computer service, scripts and dependency-audit checks; nightly slow tests were skipped by design. Custom OpenCommander returned HTTP 429, so no local Cargo test is claimed.
 - Fishery remains standalone until sourced species-specific stock and effort data are available; no carrying capacities or CPUE values were invented.
 
 ## What this is
