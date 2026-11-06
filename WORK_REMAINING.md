@@ -1,5 +1,8 @@
 # Work remaining
 
+
+Latest reference-range follow-up (PR #109): midpoint arithmetic now avoids overflow, subnormal tie loss and one-ULP double rounding for wide exponent gaps. Regression and exact-head CI evidence are recorded in `docs/handoff/REFERENCE_RANGE_MIDPOINT_OVERFLOW_20261106.md`; do not mark this item complete until the latest exact-head Rust, desktop, backend and week/year jobs pass.
+
 Updated 2026-11-06 against `main` at `0ddbd878eca26e11c114e0c434653316f4d7da96` (fishery PRs #104–#105, marine inspector PR #93, deep-time PR #106 and atomicity PR #107 are merged).
 what is not done, and for each item, **what it takes to do it**: the sources or data it needs,
 the decisions only the owner can make, the files it touches, the tests that prove it and when it
