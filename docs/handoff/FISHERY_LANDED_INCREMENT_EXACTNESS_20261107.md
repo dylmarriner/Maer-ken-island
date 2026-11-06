@@ -12,13 +12,7 @@ For example, at a cumulative total of (2^{53}), adding 3 tonnes in binary64 roun
 
 ## Implementation
 
-`FishStock::fish` now requires:
-
-```rust
-landed_t - self.landed_t == catch
-```
-
-for every positive catch, after checking that the cumulative total is finite and before committing either biomass or landed mass. The existing `LandedTotalUnrepresentable` error covers both zero-recorded and distorted increments. The serialized `FishStock` layout is unchanged.
+`FishStock::fish` now computes the persisted increment as `recorded_delta = landed_t - self.landed_t` after checking the projected total is finite. For a positive catch it rejects when the recorded delta is non-positive or when `abs(recorded_delta - catch) > catch * 1e-12`. This allows ordinary accumulated binary64 rounding while rejecting vanished or materially distorted mass before either biomass or landed mass is committed. The existing `LandedTotalUnrepresentable` error covers both cases. The serialized `FishStock` layout is unchanged.
 
 ## Regression
 
