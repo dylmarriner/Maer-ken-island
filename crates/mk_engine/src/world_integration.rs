@@ -2533,11 +2533,11 @@ impl WorldState {
         }
         let mut loaded: WorldState = serde_json::from_slice(&snapshot.data)
             .map_err(|e| SnapshotError::DeserializationError(e.to_string()))?;
+        mk_core::canon::validator::validate_canon(&loaded.canon)
+            .map_err(|e| SnapshotError::DeserializationError(format!("invalid canon: {e}")))?;
         loaded
             .validate_snapshot_schema()
             .map_err(SnapshotError::DeserializationError)?;
-        mk_core::canon::validator::validate_canon(&loaded.canon)
-            .map_err(|e| SnapshotError::DeserializationError(format!("invalid canon: {e}")))?;
         loaded.canon_derived = Arc::new(mk_core::canon::CanonDerived::from(&loaded.canon));
         Ok(loaded)
     }
