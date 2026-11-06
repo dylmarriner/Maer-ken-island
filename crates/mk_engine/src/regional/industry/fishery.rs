@@ -32,6 +32,7 @@ pub enum FisheryError {
     InvalidStockState,
     NonFiniteGrowth,
     LandedTotalOverflow,
+    LandedTotalUnrepresentable,
 }
 
 impl std::fmt::Display for FisheryError {
@@ -46,6 +47,9 @@ impl std::fmt::Display for FisheryError {
             Self::InvalidStockState => "fish stock state is outside its valid domain",
             Self::NonFiniteGrowth => "fish stock growth is not finite",
             Self::LandedTotalOverflow => "cumulative landed biomass overflowed",
+            Self::LandedTotalUnrepresentable => {
+                "cumulative landed biomass increment is not representable at stored precision"
+            }
         };
         f.write_str(message)
     }
@@ -448,6 +452,10 @@ impl FishStock {
         }
         if !landed_t.is_finite() {
             return Err(FisheryError::LandedTotalOverflow);
+        }
+        // Never report a positive catch that the persisted cumulative total cannot record.
+        if catch > 0.0 && landed_t == self.landed_t {
+            return Err(FisheryError::LandedTotalUnrepresentable);
         }
 
         self.biomass_t = biomass_t;
