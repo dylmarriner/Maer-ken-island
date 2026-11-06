@@ -883,7 +883,7 @@ mod geographic_range_tests {
             .find_map(|candidate| {
                 let mut seed = [0_u8; 32];
                 seed[..8].copy_from_slice(&candidate.to_le_bytes());
-                let mut probe = RngRegistry::new(seed);
+                let probe = RngRegistry::new(seed);
                 let key = RngKey::new(SubsystemId::Biosphere, SPECIES_ID as u32 ^ 40_001, 0, 1);
                 (probe.gen_f64_01(key) < SPECIATION_ROLL_CEILING).then_some(seed)
             })
