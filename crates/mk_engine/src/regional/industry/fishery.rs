@@ -403,7 +403,11 @@ impl FishStock {
         }
 
         let catch = wanted_t.min(grown);
-        let biomass_t = (post_growth - catch).min(self.k_t);
+        // Subtract the catch from growth before adding the remainder to biomass.
+        // (biomass + grown) - catch can lose low bits to cancellation and make a
+        // fully harvested stock appear to shrink even though catch == growth.
+        let remaining_growth = grown - catch;
+        let biomass_t = (self.biomass_t + remaining_growth).min(self.k_t);
         let landed_t = self.landed_t + catch;
         if !biomass_t.is_finite() {
             return Err(FisheryError::NonFiniteGrowth);
@@ -741,6 +745,37 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn harvesting_all_interval_growth_does_not_reduce_biomass_from_rounding() {
+        let model = FisheryModel {
+            r_per_year: [0.0, 0.0012, 0.0, 0.0],
+            depensation_below: 0.25,
+        };
+        let biomass = 2.0_f64.powi(62);
+        let mut stock = FishStock {
+            resilience: Resilience::Medium,
+            k_t: biomass * 2.0,
+            biomass_t: biomass,
+            landed_t: 0.0,
+        };
+        let before = stock.biomass_t;
+        let growth = stock
+            .sustainable_catch_limit_t(&model, YEAR_S)
+            .expect("valid interval growth");
+        assert!(growth > 0.0);
+
+        let landed = stock
+            .fish(&model, f64::MAX, YEAR_S)
+            .expect("the requested catch is capped at interval growth");
+
+        assert_eq!(landed, growth);
+        assert_eq!(
+            stock.biomass_t, before,
+            "harvesting all growth must leave the original biomass unchanged"
+        );
+        assert_eq!(stock.landed_t, growth);
     }
 
     #[test]
