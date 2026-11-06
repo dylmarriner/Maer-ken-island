@@ -70,3 +70,8 @@ A second production pass tightened the shared browser inspector's projection gua
 Commit `f8137fc7c4cb779f3a33334b615c5c6d39977e25` implements the guard in the same `handleMapCellClick` helper used by the island page. Commit `d46d3062bcfb90e2784d51aba4deea77d27431c5` expands the Node DOM regression across unsafe integers, negative species/individual/biomass values, infinity and NaN. The ordinary cell details remain visible when the marine projection is omitted.
 
 `WORK_REMAINING.md` now states the exact invalid-value boundary (commit `f864aa7ca8f9afcd0614e7dc489d4fe11e9000e6`). Fresh exact-head CI is required for the new code/test head; no local Node test result is claimed.
+
+
+## Fresh verification after negative-value guard (6 November 2026)
+
+Exact-head workflow [#42165297617](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42165297617) is running on code/test head `d46d3062bcfb90e2784d51aba4deea77d27431c5`; the later `bcd1e8d8` commit is handoff-only. Repository scripts, dependency audit, web dashboard (including the actual DOM regression), computer service and installed backend have passed. Formatting/Clippy/fast Rust tests, desktop and week/year reference acceptance remain in progress; nightly slow tests are skipped by design. Fresh Codex review requested after the negative-value guard. Do not merge until all required jobs and review are clear.
