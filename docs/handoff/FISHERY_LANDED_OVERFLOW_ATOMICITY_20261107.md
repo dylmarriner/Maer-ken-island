@@ -36,6 +36,11 @@ The regression clones the stock before the call and asserts the entire `FishStoc
 
 A separate numerical boundary is now tracked: a positive catch can be smaller than half an ULP of a large but finite cumulative landed total. In that case IEEE-754 addition can leave `landed_t` unchanged even though `fish()` returns a positive catch. This would report material as landed without persisting it in the stock's cumulative total.
 
-The next source change must reject this case before either biomass or landed total is committed, with a typed error and a regression using `landed_t = 2^53` and a one-tonne catch. The test must prove the exact addition is unchanged and the complete stock remains byte-for-byte/value-equal after rejection.
+Implemented on this branch:
+
+- Added `FisheryError::LandedTotalUnrepresentable` with an explicit display message.
+- `FishStock::fish` now rejects a positive catch when adding it leaves the cumulative `landed_t` unchanged at binary64 precision, before either biomass or landed total is committed.
+- Added a regression with `landed_t = 2^53` and a one-tonne catch. It proves the addition rounds back to the existing total, the error is returned, and the entire stock remains equal to its pre-step state.
+- No compensation field or snapshot schema change; the serialized `FishStock` layout remains unchanged.
 
 No compensation field or snapshot schema change is proposed; preserving the existing serialized field layout is preferred. Exact-head Rust and acceptance CI is required.
