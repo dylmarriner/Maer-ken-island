@@ -128,20 +128,18 @@ pub enum ReferenceValue {
     Table(ReferenceTable),
 }
 
-/// Compute a range midpoint without overflowing for finite ordered endpoints.
+/// Compute a correctly rounded midpoint without overflowing for finite endpoints.
 ///
-/// Opposite-sign endpoints can be summed safely, and summing before halving
-/// preserves correct rounding for subnormal values. Small same-sign endpoints
-/// use the same path; large same-sign endpoints use a bounded difference so
-/// their sum cannot overflow.
+/// When both endpoints are at most half the largest finite value, their sum
+/// cannot overflow and is formed before halving so subnormal ties are retained.
+/// Otherwise each endpoint is halved before addition. This avoids both an
+/// overflowing sum and the double-rounding error of halving a rounded difference.
 fn range_midpoint(min: f64, max: f64) -> f64 {
-    let opposite_signs = min.is_sign_negative() != max.is_sign_negative();
-    let small_same_sign = min.abs() <= f64::MAX * 0.5 && max.abs() <= f64::MAX * 0.5;
-
-    if opposite_signs || small_same_sign {
+    let half_max = f64::MAX * 0.5;
+    if min.abs() <= half_max && max.abs() <= half_max {
         (min + max) * 0.5
     } else {
-        min + (max - min) * 0.5
+        min * 0.5 + max * 0.5
     }
 }
 
