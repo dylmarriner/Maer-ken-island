@@ -169,4 +169,5 @@ cargo run -p island -- serve --scenario fixtures/island/default_scenario.json   
 - 2026-11-05: [Replay session default execution budget](docs/handoff/REPLAY_SESSION_DEFAULT_BUDGET_20261105.md) records the bounded default and exact-head verification gate.
 
 
+- [Fishery subnormal MSY quarter-scaling correction](https://github.com/dylmarriner/Maer-ken-island/commit/93c4b040c050d708dafbb350cd2ca3c00e46cc9b) — PR #109 follow-up. For the exact 1/4 peak fraction, scale the rate before multiplying the smallest subnormal carrying capacity so the final operation performs the rounding. Regression distinguishes 22,149 from the prior 22,150 subnormal units. Source/test commit `93c4b040`; a fresh exact-head workflow is required, no pass claimed yet.
 - [Fishery MSY subnormal preservation](docs/handoff/FISHERY_SNAPSHOT_BINARY_COMPATIBILITY_20261107.md) — PR #109 follow-up. `msy_t` now avoids losing representable subnormal results when applying the piecewise peak fraction to carrying capacity. Regression covers 1, 3 and 7 subnormal units at `r = 4`. Exact-head CI is required for this follow-up; the preceding legacy-snapshot workflow #42237465516 passed all required jobs.
