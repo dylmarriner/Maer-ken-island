@@ -2486,11 +2486,23 @@ impl WorldState {
     pub(crate) fn validate_snapshot_schema(&mut self) -> Result<(), String> {
         match self.snapshot_schema_version {
             0 => {
-                self.deep_time
-                    .validate(&self.biosphere_state.species)
-                    .map_err(|error| {
-                        format!("legacy snapshot schema 0 is incompatible: {error}")
-                    })?;
+                let species = &self.biosphere_state.species;
+                let evolved = self.deep_time.step_index > 0
+                    || self.deep_time.current_time_years > 0.0;
+                if evolved
+                    && !species.is_empty()
+                    && species.iter().all(|entry| {
+                        entry.geographic_range.is_finite() && entry.geographic_range >= 1.0
+                    })
+                {
+                    return Err(
+                        "legacy snapshot schema 0 is incompatible: the previous geographic-range drift floor erased fractional ranges; lossless migration is impossible"
+                            .to_string(),
+                    );
+                }
+                self.deep_time.validate(species).map_err(|error| {
+                    format!("legacy snapshot schema 0 is incompatible: {error}")
+                })?;
                 self.snapshot_schema_version = WORLD_STATE_SNAPSHOT_SCHEMA_VERSION;
                 Ok(())
             }
