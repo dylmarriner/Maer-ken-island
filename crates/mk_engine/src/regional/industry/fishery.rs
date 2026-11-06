@@ -316,23 +316,31 @@ impl FishStock {
         Ok(biomass)
     }
 
-    /// Step `dt_s`, fishing for `wanted_t` over the step.
+    /// Read-only upper bound on catch for one interval (tonnes).
     ///
-    /// The catch is capped at the stock's surplus over the step, so the fishery
-    /// never takes more than grows. Invalid inputs and arithmetic failures are
-    /// returned explicitly and leave the stock unchanged.
-    pub fn fish(
-        &mut self,
+    /// This uses the same single-step surplus estimate and carrying-capacity
+    /// cap as fish(). It is a planning diagnostic, not a quota, stock
+    /// assessment or forecast of future recruitment. It does not mutate the
+    /// stock, landed total or any simulation state.
+    pub fn sustainable_catch_limit_t(
+        &self,
         model: &FisheryModel,
-        wanted_t: f64,
         dt_s: f64,
     ) -> Result<f64, FisheryError> {
         if !model.is_valid() {
             return Err(FisheryError::InvalidModel);
         }
-        if !wanted_t.is_finite() || wanted_t < 0.0 {
-            return Err(FisheryError::InvalidCatchRequest);
-        }
+        self.growth_capacity_t(model, dt_s)
+    }
+
+    /// The maximum interval growth the stock can add without exceeding K.
+    /// Shared by the read-only diagnostic and the mutating fish operation so
+    /// the displayed limit cannot drift from the enforced catch cap.
+    fn growth_capacity_t(
+        &self,
+        model: &FisheryModel,
+        dt_s: f64,
+    ) -> Result<f64, FisheryError> {
         if !dt_s.is_finite() || dt_s < 0.0 {
             return Err(FisheryError::InvalidTimeStep);
         }
@@ -352,18 +360,41 @@ impl FishStock {
         if raw_growth.is_nan() || raw_growth < 0.0 {
             return Err(FisheryError::NonFiniteGrowth);
         }
-        // A single aggregate step cannot add more biomass than the stock's
-        // remaining headroom to carrying capacity. The instantaneous Schaefer
-        // rate is an Euler estimate; cap it so a coarse dt cannot create fish.
-        // Positive infinity means the unconstrained interval growth exceeds f64::MAX.
-        // The stock's remaining headroom is finite, so the physically valid result
-        // is still representable: cap at carrying capacity instead of rejecting the step.
+
+        // The instantaneous Schaefer rate is an Euler estimate. Cap a coarse
+        // interval at the finite remaining headroom rather than creating fish
+        // beyond carrying capacity. Positive infinity is therefore bounded.
         let headroom = self.k_t - self.biomass_t;
         let grown = if raw_growth.is_infinite() {
             headroom
         } else {
             raw_growth.min(headroom)
         };
+        if !grown.is_finite() || grown < 0.0 {
+            return Err(FisheryError::NonFiniteGrowth);
+        }
+        Ok(grown)
+    }
+
+    /// Step `dt_s`, fishing for `wanted_t` over the step.
+    ///
+    /// The catch is capped at the stock's surplus over the step, so the fishery
+    /// never takes more than grows. Invalid inputs and arithmetic failures are
+    /// returned explicitly and leave the stock unchanged.
+    pub fn fish(
+        &mut self,
+        model: &FisheryModel,
+        wanted_t: f64,
+        dt_s: f64,
+    ) -> Result<f64, FisheryError> {
+        if !model.is_valid() {
+            return Err(FisheryError::InvalidModel);
+        }
+        if !wanted_t.is_finite() || wanted_t < 0.0 {
+            return Err(FisheryError::InvalidCatchRequest);
+        }
+
+        let grown = self.growth_capacity_t(model, dt_s)?;
         let post_growth = self.biomass_t + grown;
         if !post_growth.is_finite() {
             return Err(FisheryError::NonFiniteGrowth);
@@ -710,6 +741,80 @@ mod tests {
         }
         assert!(stock.landed_t > 0.0);
         assert!(stock.landed_t <= stock.msy_t(&m).unwrap() * 3_653.0 * day / YEAR_S + 1e-6);
+    }
+
+    #[test]
+    fn sustainable_catch_limit_is_read_only_and_matches_the_fish_step() {
+        let model = FisheryModel::load_default().expect("the pack loads");
+        let mut stock = FishStock::unexploited(Resilience::Medium, 1_000.0)
+            .expect("positive carrying capacity");
+        stock.biomass_t = 500.0;
+        let before = stock.clone();
+
+        let limit = stock
+            .sustainable_catch_limit_t(&model, YEAR_S)
+            .expect("valid one-year interval");
+        assert!((limit - 125.0).abs() < 1e-10);
+        assert_eq!(stock, before, "the planning diagnostic must be read-only");
+
+        let landed = stock
+            .fish(&model, f64::MAX, YEAR_S)
+            .expect("valid fishing step");
+        assert_eq!(landed, limit, "fish() must enforce the reported interval cap");
+        assert_eq!(stock.biomass_t, before.biomass_t);
+        assert_eq!(stock.landed_t, limit);
+    }
+
+    #[test]
+    fn sustainable_catch_limit_is_capped_at_remaining_carrying_capacity() {
+        let model = FisheryModel::load_default().expect("the pack loads");
+        let mut stock = FishStock::unexploited(Resilience::Medium, 1_000.0)
+            .expect("positive carrying capacity");
+        stock.biomass_t = 999.9;
+        let before = stock.clone();
+
+        let limit = stock
+            .sustainable_catch_limit_t(&model, 100.0 * YEAR_S)
+            .expect("valid coarse interval");
+        assert!((limit - 0.1).abs() < 1e-9);
+        assert_eq!(stock, before, "the diagnostic must not advance biomass");
+
+        let landed = stock
+            .fish(&model, 1.0, 100.0 * YEAR_S)
+            .expect("valid coarse fishing step");
+        assert!((landed - limit).abs() < 1e-9);
+        assert!(stock.biomass_t <= stock.k_t);
+    }
+
+    #[test]
+    fn sustainable_catch_limit_rejects_invalid_inputs_without_mutating_the_stock() {
+        let model = FisheryModel::load_default().expect("the pack loads");
+        let stock = FishStock::unexploited(Resilience::Medium, 1_000.0)
+            .expect("positive carrying capacity");
+        let before = stock.clone();
+
+        for dt in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY, -1.0] {
+            assert_eq!(
+                stock.sustainable_catch_limit_t(&model, dt),
+                Err(FisheryError::InvalidTimeStep)
+            );
+            assert_eq!(stock, before);
+        }
+
+        let mut invalid_model = model.clone();
+        invalid_model.r_per_year[Resilience::Medium as usize] = f64::NAN;
+        assert_eq!(
+            stock.sustainable_catch_limit_t(&invalid_model, YEAR_S),
+            Err(FisheryError::InvalidModel)
+        );
+
+        let mut invalid_stock = before.clone();
+        invalid_stock.biomass_t = invalid_stock.k_t + 1.0;
+        assert_eq!(
+            invalid_stock.sustainable_catch_limit_t(&model, YEAR_S),
+            Err(FisheryError::InvalidStockState)
+        );
+        assert_eq!(invalid_stock.biomass_t, invalid_stock.k_t + 1.0);
     }
 
     #[test]
