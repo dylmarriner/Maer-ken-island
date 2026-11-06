@@ -473,3 +473,42 @@ fn range_midpoint_avoids_double_rounding_for_wide_exponent_gaps() {
     let negative = range_item("negative_wide_gap", -max, -min, None);
     assert_eq!(negative.central(), Some(-expected));
 }
+
+
+#[test]
+fn range_midpoint_rounds_small_subnormal_pairs_to_even() {
+    // Exhaustively cover a small subnormal neighbourhood. Subnormal bit
+    // patterns are integer multiples of the smallest representable value, so
+    // the exact midpoint rounds to round-to-nearest, ties-to-even on the sum.
+    for lower in 0..=64_u64 {
+        for upper in lower..=64_u64 {
+            let sum = lower + upper;
+            let floor = sum / 2;
+            let rounded = floor + u64::from(sum % 2 == 1 && floor % 2 == 1);
+
+            let positive = range_item(
+                "positive_subnormal_pair",
+                f64::from_bits(lower),
+                f64::from_bits(upper),
+                None,
+            );
+            assert_eq!(
+                positive.central().unwrap().to_bits(),
+                rounded,
+                "positive subnormal endpoints {lower} and {upper}",
+            );
+
+            let negative = range_item(
+                "negative_subnormal_pair",
+                -f64::from_bits(upper),
+                -f64::from_bits(lower),
+                None,
+            );
+            assert_eq!(
+                negative.central().unwrap().to_bits(),
+                (1_u64 << 63) | rounded,
+                "negative subnormal endpoints -{upper} and -{lower}",
+            );
+        }
+    }
+}
