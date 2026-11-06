@@ -29,3 +29,10 @@ The exact-head Rust formatting, Clippy, fast tests, desktop build/rendering, ins
 ## Safety
 
 No live simulation state, physical parameters, production infrastructure, deployment, external service, budget or offline limit was changed.
+
+
+## Verification update — 6 November 2026
+
+Exact-head workflow [#42194076317](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42194076317) on code head `39d9d13b591e30343f2fd0431f1e39af3ca340f8` passed Rust formatting, Clippy, fast Rust tests, desktop build and unit tests, installed backend, week/year reference acceptance, web dashboard, computer service, repository scripts and dependency audit. Nightly slow tests were skipped by design.
+
+PR #107 was merged into main after this run, so the desktop branch is being reconciled with the new main head. A fresh exact-head run is required before merge. Custom OpenCommander returned HTTP 429; no local Cargo result is claimed.

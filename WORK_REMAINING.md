@@ -1,6 +1,6 @@
 # Work remaining
 
-Updated 2026-11-06 against `main` at `d6f6ce7a1c5f01bf5a14d158fad32dbbcdaffb0a` (after the fishery arithmetic and snapshot-validation work in PRs #89–#91). This is the single list of
+Updated 2026-11-06 against `main` at `0ddbd878eca26e11c114e0c434653316f4d7da96` (fishery PRs #104–#105, marine inspector PR #93, deep-time PR #106 and atomicity PR #107 are merged).
 what is not done, and for each item, **what it takes to do it**: the sources or data it needs,
 the decisions only the owner can make, the files it touches, the tests that prove it and when it
 counts as finished. Read [`HANDOFF.md`](HANDOFF.md) first for what exists.
@@ -42,7 +42,7 @@ this list holds the current state. The evidence for what is *done* is in
 | Living world | D9: actions take one tick | In part: felling, hauling, splitting, shed, panning, foraging and water trips timed, learned by practice (R11); Craft, Explore and social actions one tick | Cited durations per task |
 | Living world | D31: NPP ignores soil nutrients | Open | Regional soils model and data |
 | Runtime | Phase 4 Task 2b: deep-time spin-up | **Done** (2026-10-14) | — |
-| Biosphere | Deep-time geographic-range drift, long-horizon growth, clock overflow and snapshot compatibility | Founding species ranges are capped at 1.0; finite `(0, 1]` ranges, finite non-negative duration, finite next clock and checked RNG step-index are preflighted before evolution state changes; keyed drift preserves fractions and logistic growth uses a stable decaying-exponential closed form. `WorldState` schema 1 validates both replay/file loads: valid schema-0 snapshots upgrade metadata only; invalid legacy ranges and future versions fail at load, never silently clamp; both restore paths also reject a stored derived-canon digest that does not match the validated canon; replay snapshots also reject an envelope tick that differs from the digested world-state tick; evolved schema-0 snapshots with speciation history and fractional species are rejected as unrecoverable mixed legacy state | Exact-head regression, legacy/current/future snapshot tests, deterministic hash baseline and week/year replay/reference acceptance for corrected output |
+| Biosphere | Deep-time geographic-range drift, long-horizon growth, clock overflow and snapshot compatibility | Founding species ranges are capped at 1.0; finite `(0, 1]` ranges, finite non-negative duration, finite next clock and checked RNG step-index are preflighted before evolution state changes; persisted validation also rejects non-finite/negative recovery clocks and multipliers, out-of-domain adaptive-radiation values, invalid carrying capacities and malformed append-only extinction-event times; the clock, species vector and RNG are staged and committed only after all fallible evolution phases succeed, so a late mutation/drift error cannot leave a partial step; staging copies only per-step mutable state and excludes both append-only extinction and speciation histories; prior speciation history is borrowed read-only, and only new timestamps are staged and appended after success, avoiding per-tick copies of accumulated logs; full extinction/speciation history validation runs at snapshot boundaries, while the per-step validator checks only mutable live state and species, avoiding O(ticks × history) rescans; future speciation timestamps fail closed; the append-chronological history is checked at restore and cooldown uses the latest parent event, not its first; direct callers of `step_evolution_processes` must call full `validate` first after restore or external state mutation because the hot-path preflight deliberately excludes append-only histories; success and failure regressions prove the existing history is preserved, and a success-path parity tests compare emitted events and serialized evolution/species/RNG state against the ordered inner pipeline, including a seeded speciation event and committed parent `last_speciation_times`; environmental stress is rejected unless finite and within `[0, 1]` before staging, with byte-identical rollback regressions; keyed drift preserves fractions and logistic growth uses a stable decaying-exponential closed form. `WorldState` schema 1 validates both replay/file loads: valid schema-0 snapshots upgrade metadata only; invalid legacy ranges and future versions fail at load, never silently clamp; both restore paths also reject a stored derived-canon digest that does not match the validated canon; replay snapshots also reject an envelope tick that differs from the digested world-state tick; evolved schema-0 snapshots with speciation history and fractional species are rejected as unrecoverable mixed legacy state | Exact-head regression, legacy/current/future snapshot tests, deterministic hash baseline and week/year replay/reference acceptance for corrected output |
 | Industry | Phase 4b Task 1 remainder: reference tables | Done 2026-10-14 (nine packs); gaps listed in §4a | A few items (see §4a) |
 | Industry | Phase 4b Task 4: oil and gas field (D14, D19) | Fields, decline and carbon done 2026-10-14 (D58); in `IslandLife` with the diesel depot 2026-10-22; wells, blowouts and produced water 2026-10-23; rising water cut, spills open | Water-cut series; a blowout's spill volume |
 | Industry | Phase 4b Task 5: refinery, gas plant, fuel depot (D16) | Topping refinery done 2026-10-14; diesel depot 2026-10-22 (D58); gas plant 2026-10-23; reformer open | Reformate yield |
@@ -165,14 +165,19 @@ serving the species to the map and the cell inspector; animal and fish resource 
     upstream head counts into tonnes per medium cell, with a conservation test against
     `animal_nodes` and whole-island species populations. The browser map and desktop cell inspectors now
     report the habitat's species count, individual count and live biomass, explicitly labelled
-    as an uncalibrated upstream-derived estimate; land and river cells are not assigned marine
-    stock. It is a read-only view, not a second population. Fishery harvest remains open: no
+    as an uncalibrated upstream-derived estimate and explicitly not harvestable stock or catch;
+    land and river cells are not assigned marine stock. The desktop inspector rejects negative
+    and non-finite projections before rendering. It is a read-only view, not a second population. Fishery harvest remains open: no
     species-specific resilience class, unexploited carrying capacity or catch-per-unit-effort
     source is attached to these upstream species.
   - Browser inspector DOM regression (2026-11-06): `scripts/tests/marine_cell_inspector.test.mjs`
     drives the same exported `handleMapCellClick` helper used by the island page and verifies
     visible species, individual and biomass values, the uncalibrated/not-harvestable disclaimer,
     omission of negative, non-finite or unsafe projections, and no request before the view is ready.
+  - Desktop inspector regression (2026-11-06): `apps/island_ui/src/inspectors.rs` rejects
+    negative and non-finite individual/biomass projections and shows the same not-harvestable
+    warning. Exact-head workflow #42194076317 passed the desktop build/unit tests and fast Rust
+    suite; fresh exact-head CI is required after branch reconciliation.
   - Salt (2026-10-23): `industry/salt_works.rs` makes solar salt at Dominion Salt's Lake
     Grassmere yield per hectare of production area (pack, 42.4-49.4 t/ha/yr); it ignores the
     rain that swings Grassmere's harvest from nil to 130,000 t, and no works is sited yet (a
