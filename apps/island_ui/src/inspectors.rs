@@ -203,6 +203,7 @@ mod tests {
         }
     }
 
+    /// A complete backend cell fixture for marine inspector display regressions.
     fn sample_cell() -> Cell {
         Cell {
             row: 3,
