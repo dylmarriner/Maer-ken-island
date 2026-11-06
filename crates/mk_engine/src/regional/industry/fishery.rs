@@ -799,7 +799,10 @@ mod tests {
                 .expect("positive subnormal carrying capacity");
 
             assert_eq!(
-                stock.msy_t(&model).expect("representable subnormal MSY").to_bits(),
+                stock
+                    .msy_t(&model)
+                    .expect("representable subnormal MSY")
+                    .to_bits(),
                 units,
                 "MSY must preserve {units} units of subnormal carrying capacity"
             );

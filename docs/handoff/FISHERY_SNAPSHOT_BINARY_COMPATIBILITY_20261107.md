@@ -51,3 +51,8 @@ A further review found that `msy_t` avoided overflow by multiplying carrying cap
 - Regression covers 1, 3 and 7 units of the smallest subnormal value with `r = 4` and peak fraction `0.25`, where the exact result is the original carrying capacity.
 - No reference values, stock calibration, snapshot format, replay hash, simulation state, offline limit or budget limit changed.
 - The preceding exact-head workflow [#42237465516](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42237465516) passed all required jobs on the legacy-snapshot-read head. This new source/test change requires its own exact-head CI run.
+
+
+## Exact-head formatting correction — 7 November 2026
+
+Workflow [#42248051888](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42248051888) reached the new Rust source and stopped at `cargo fmt --all -- --check` on one chained assertion in the subnormal MSY regression. The formatter's exact line wrap is applied in the follow-up commit. Clippy and fast tests did not run in that attempt; the other parallel jobs were still in progress when the branch was superseded. A fresh exact-head workflow is required.
