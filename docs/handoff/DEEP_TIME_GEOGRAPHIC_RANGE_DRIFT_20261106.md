@@ -177,3 +177,6 @@ Latest code/test head: `2001fc8b819cc2dff68e12b7b12a0bda5a341141`. Exact-head wo
 ### Legacy drift-floor detection
 
 A further review of the old `apply_drift` implementation showed that its `max(1.0)` floor could leave **every** species at or above 1.0 after an evolution step, not only the founding outlier. Schema-0 loading now also rejects an evolved snapshot (`step_index > 0` or positive deep-time clock) whose entire persisted species set is at least 1.0. That pattern proves the old floor erased the fractional distribution even when no value is greater than one. Commit `092df668` adds the fail-fast detector; `015b0aaf` adds a regression proving an all-one evolved legacy state is rejected. It is not safe to upgrade such a snapshot by metadata alone.
+
+
+Formatting follow-up: commit `e0bab91b` wraps the legacy drift-floor incompatibility message without changing behavior. Latest code/test head is `e0bab91b6ad9fdca68f58bd0ffba6f81a474c4a2`; workflow #42166375249 covers the preceding head `015b0aaf` and is not exact-head evidence for this formatting commit. A fresh workflow is required before merge.
