@@ -42,7 +42,7 @@ this list holds the current state. The evidence for what is *done* is in
 | Living world | D9: actions take one tick | In part: felling, hauling, splitting, shed, panning, foraging and water trips timed, learned by practice (R11); Craft, Explore and social actions one tick | Cited durations per task |
 | Living world | D31: NPP ignores soil nutrients | Open | Regional soils model and data |
 | Runtime | Phase 4 Task 2b: deep-time spin-up | **Done** (2026-10-14) | — |
-| Biosphere | Deep-time species geographic-range drift | Fractional planetary ranges are preserved; finite `(0, 1]` range and finite non-negative step duration are validated before evolution state changes | Exact-head regression and replay/reference acceptance for corrected deterministic output |
+| Biosphere | Deep-time geographic-range drift and long-horizon logistic growth | Fractional planetary ranges are preserved; logistic growth uses a decaying-exponential closed form that remains finite for long finite horizons | Exact-head regression and week/year replay/reference acceptance for corrected deterministic output |
 | Industry | Phase 4b Task 1 remainder: reference tables | Done 2026-10-14 (nine packs); gaps listed in §4a | A few items (see §4a) |
 | Industry | Phase 4b Task 4: oil and gas field (D14, D19) | Fields, decline and carbon done 2026-10-14 (D58); in `IslandLife` with the diesel depot 2026-10-22; wells, blowouts and produced water 2026-10-23; rising water cut, spills open | Water-cut series; a blowout's spill volume |
 | Industry | Phase 4b Task 5: refinery, gas plant, fuel depot (D16) | Topping refinery done 2026-10-14; diesel depot 2026-10-22 (D58); gas plant 2026-10-23; reformer open | Reformate yield |
