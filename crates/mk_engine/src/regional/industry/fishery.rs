@@ -482,10 +482,8 @@ mod tests {
         // discriminant followed by k_t, biomass_t and landed_t as f64 values.
         // This is the byte layout emitted by the former derived Serialize impl.
         let expected: [u8; 28] = [
-            1, 0, 0, 0,
-            0, 0, 0, 0, 0, 64, 143, 64,
-            0, 0, 0, 0, 0, 64, 122, 64,
-            0, 0, 0, 0, 0, 0, 49, 64,
+            1, 0, 0, 0, 0, 0, 0, 0, 0, 64, 143, 64, 0, 0, 0, 0, 0, 64, 122, 64, 0, 0, 0, 0, 0, 0,
+            49, 64,
         ];
 
         let encoded = bincode::serialize(&stock).expect("valid stock serializes");
