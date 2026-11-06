@@ -876,6 +876,63 @@ mod geographic_range_tests {
     }
 
     #[test]
+    fn failed_late_drift_does_not_commit_clock_capacity_population_or_rng() {
+        let mut found_late_failure = false;
+
+        // A maximal finite horizon makes the range-drift kick large enough
+        // that deterministic seeds exercise the negative-range rejection.
+        // Population growth is configured to change the species before drift,
+        // proving that a later error cannot leak an earlier phase's mutation.
+        for seed in 0u8..128 {
+            let mut rng = RngRegistry::new([seed; 32]);
+            let mut species = vec![test_species(0.4, &rng)];
+            let mut evolution = DeepTimeEvolution::new();
+            evolution.carrying_capacities.insert(7, 200_000.0);
+
+            let evolution_before = serde_json::to_vec(&evolution).expect("evolution state");
+            let species_before = serde_json::to_vec(&species).expect("species state");
+            let rng_before = serde_json::to_vec(&rng).expect("RNG state");
+
+            let result = evolution.step_evolution_processes(
+                &mut species,
+                f64::MAX,
+                0.0,
+                &mut rng,
+            );
+
+            let Err(error) = result else {
+                continue;
+            };
+            assert!(
+                error.contains("geographic-range drift produced invalid fraction"),
+                "expected a late drift failure, got: {error}"
+            );
+            assert_eq!(
+                serde_json::to_vec(&evolution).expect("evolution state after rejection"),
+                evolution_before,
+                "failed transition must not advance clock, step index or carrying capacity"
+            );
+            assert_eq!(
+                serde_json::to_vec(&species).expect("species state after rejection"),
+                species_before,
+                "failed transition must not retain earlier population/genome mutations"
+            );
+            assert_eq!(
+                serde_json::to_vec(&rng).expect("RNG state after rejection"),
+                rng_before,
+                "failed transition must not publish staged RNG state"
+            );
+            found_late_failure = true;
+            break;
+        }
+
+        assert!(
+            found_late_failure,
+            "at least one deterministic seed should trigger the negative extreme range drift"
+        );
+    }
+
+    #[test]
     fn persisted_clock_validation_rejects_non_finite_and_negative_values() {
         for invalid_clock in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY, -1.0] {
             let mut evolution = DeepTimeEvolution::new();
