@@ -48,12 +48,7 @@ fn range_midpoint_stays_finite_for_valid_extreme_bounds() {
     let subnormal = range_item("subnormal", smallest_subnormal, smallest_subnormal, None);
     assert_eq!(subnormal.central(), Some(smallest_subnormal));
 
-    let explicit = range_item(
-        "explicit",
-        positive_min,
-        f64::MAX,
-        Some(f64::MAX * 0.9),
-    );
+    let explicit = range_item("explicit", positive_min, f64::MAX, Some(f64::MAX * 0.9));
     assert_eq!(explicit.central(), Some(f64::MAX * 0.9));
 }
 
