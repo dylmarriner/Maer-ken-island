@@ -226,15 +226,15 @@ impl DeepTimeEvolution {
         }
 
         // Mutation and drift can fail after earlier phases have changed the
-        // clock, carrying capacities, genomes or populations. Stage the state
-        // this pipeline mutates, but deliberately exclude extinction_events:
-        // that append-only history is updated by the separate extinction phase
-        // and can grow for millions of ticks in long-horizon runs. Cloning it
-        // on every evolution step would make runtime grow with accumulated
-        // history rather than with the current step's working set.
+        // clock, carrying capacities, genomes or populations. Stage mutable
+        // per-step state only. Both extinction_events and last_speciation_times
+        // are append-only histories: keep them in the original state for reads
+        // and stage only newly-created speciation timestamps. Cloning either
+        // history on every tick would make long-horizon runtime grow with the
+        // accumulated log rather than the current step's working set.
         let mut staged_evolution = Self {
             current_time_years: self.current_time_years,
-            last_speciation_times: self.last_speciation_times.clone(),
+            last_speciation_times: Vec::new(),
             extinction_events: Vec::new(),
             recovery_state: self.recovery_state.clone(),
             intelligence_regression_active: self.intelligence_regression_active,
@@ -249,14 +249,15 @@ impl DeepTimeEvolution {
             &mut staged_species,
             dt_years,
             environmental_stress,
+            &self.last_speciation_times,
             &mut staged_rng,
         )?;
 
-        // Commit only fields owned by this evolution pipeline. The original
-        // append-only extinction history remains in place and is never copied
-        // or replaced by the staging object.
+        // Commit only fields owned by this evolution pipeline. Both original
+        // append-only histories remain in place; only newly-created speciation
+        // timestamps from the staging object are appended after success.
         self.current_time_years = staged_evolution.current_time_years;
-        self.last_speciation_times = staged_evolution.last_speciation_times;
+        self.last_speciation_times.extend(staged_evolution.last_speciation_times);
         self.recovery_state = staged_evolution.recovery_state;
         self.intelligence_regression_active = staged_evolution.intelligence_regression_active;
         self.adaptive_radiation_potential = staged_evolution.adaptive_radiation_potential;
@@ -272,6 +273,7 @@ impl DeepTimeEvolution {
         species: &mut Vec<Species>,
         dt_years: f64,
         environmental_stress: f64,
+        prior_speciation_history: &[(u64, f64)],
         rng: &mut RngRegistry,
     ) -> Result<Vec<String>, String> {
         if !dt_years.is_finite() || dt_years < 0.0 {
@@ -313,7 +315,7 @@ impl DeepTimeEvolution {
         self.apply_drift(species, dt_years, rng)?;
 
         // Check for speciation
-        self.process_speciation(species, dt_years, rng, &mut events);
+        self.process_speciation(species, dt_years, rng, &mut events, prior_speciation_history);
 
         // Apply intelligence regression
         self.apply_intelligence_regression(species, dt_years, &mut events);
@@ -608,6 +610,7 @@ impl DeepTimeEvolution {
         dt_years: f64,
         rng: &mut RngRegistry,
         events: &mut Vec<String>,
+        prior_speciation_history: &[(u64, f64)],
     ) {
         let mut new_species = Vec::new();
 
@@ -620,6 +623,13 @@ impl DeepTimeEvolution {
                 .rev()
                 .find(|(id, _)| *id == parent.species_id)
                 .map(|(_, time)| *time)
+                .or_else(|| {
+                    prior_speciation_history
+                        .iter()
+                        .rev()
+                        .find(|(id, _)| *id == parent.species_id)
+                        .map(|(_, time)| *time)
+                })
                 .unwrap_or(0.0);
 
             if self.current_time_years - last_speciation < MINIMUM_SPECIATION_TIMESCALE_YEARS {
@@ -1036,6 +1046,8 @@ mod geographic_range_tests {
             MAX_ADAPTIVE_RADIATION_AMPLIFICATION;
         direct_evolution.recovery_state.adaptive_radiation_potential =
             MAX_ADAPTIVE_RADIATION_AMPLIFICATION;
+        staged_evolution.last_speciation_times.push((SPECIES_ID, 0.0));
+        direct_evolution.last_speciation_times.push((SPECIES_ID, 0.0));
 
         let history = ExtinctionEvent {
             event_id: 43,
@@ -1051,15 +1063,18 @@ mod geographic_range_tests {
             .step_evolution_processes(&mut staged_species, DT_YEARS, 0.0, &mut staged_rng)
             .expect("staged speciation step succeeds");
         let direct_events = direct_evolution
-            .step_evolution_processes_inner(&mut direct_species, DT_YEARS, 0.0, &mut direct_rng)
+            .step_evolution_processes_inner(&mut direct_species, DT_YEARS, 0.0, &[], &mut direct_rng)
             .expect("ordered speciation pipeline succeeds");
 
         assert_eq!(staged_species.len(), 2, "the fixture must create one child");
         assert_eq!(
             staged_evolution.last_speciation_times,
-            vec![(SPECIES_ID, DT_YEARS)],
-            "the staged transition must commit the parent's speciation timestamp"
+            vec![(SPECIES_ID, 0.0), (SPECIES_ID, DT_YEARS)],
+            "the staged transition must append the new timestamp without replacing prior history"
         );
+        staged_evolution
+            .validate(&staged_species)
+            .expect("the appended history remains valid at the persistence boundary");
         assert!(
             staged_events
                 .iter()
@@ -1112,7 +1127,7 @@ mod geographic_range_tests {
 
         let rng_before = serde_json::to_vec(&rng).expect("RNG before cooldown");
         let mut events = Vec::new();
-        evolution.process_speciation(&mut species, 25_000.0, &mut rng, &mut events);
+        evolution.process_speciation(&mut species, 25_000.0, &mut rng, &mut events, &[]);
 
         assert_eq!(
             species.len(),
@@ -1154,7 +1169,7 @@ mod geographic_range_tests {
             .step_evolution_processes(&mut staged_species, 2_500.0, 0.2, &mut staged_rng)
             .expect("staged public step succeeds");
         let direct_events = direct_evolution
-            .step_evolution_processes_inner(&mut direct_species, 2_500.0, 0.2, &mut direct_rng)
+            .step_evolution_processes_inner(&mut direct_species, 2_500.0, 0.2, &[], &mut direct_rng)
             .expect("ordered inner pipeline succeeds");
 
         assert_eq!(staged_events, direct_events);
