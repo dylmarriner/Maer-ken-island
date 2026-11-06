@@ -169,6 +169,69 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
+    fn write_legacy_snapshot(path: &Path, invalid_geographic_range: bool) {
+        let world = test_world();
+        let mut value = serde_json::to_value(&world).expect("world state JSON");
+        value
+            .as_object_mut()
+            .expect("world state object")
+            .remove("snapshot_schema_version");
+        if invalid_geographic_range {
+            let species = value["biosphere_state"]["species"]
+                .as_array_mut()
+                .expect("persisted founding species");
+            let species_43 = species
+                .iter_mut()
+                .find(|species| species["species_id"].as_u64() == Some(43))
+                .expect("species 43");
+            species_43["geographic_range"] = serde_json::json!(1.0175);
+        }
+        let state_bytes = serde_json::to_vec(&value).expect("legacy state JSON");
+        let digest = blake3::hash(&state_bytes);
+        let mut bytes = Vec::with_capacity(DIGEST_LEN + state_bytes.len());
+        bytes.extend_from_slice(digest.as_bytes());
+        bytes.extend_from_slice(&state_bytes);
+        std::fs::write(path, bytes).expect("legacy snapshot file");
+    }
+
+    #[test]
+    fn valid_legacy_file_snapshot_upgrades_schema_without_state_rewrite() {
+        let dir = std::env::temp_dir().join(format!("mk_snapshot_legacy_valid_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("state.bin");
+        write_legacy_snapshot(&path, false);
+
+        let (_, loaded) = load_snapshot(&path).expect("valid legacy snapshot");
+        assert_eq!(loaded.snapshot_schema_version, WORLD_STATE_SNAPSHOT_SCHEMA_VERSION);
+        assert!(loaded
+            .biosphere_state
+            .species
+            .iter()
+            .all(|species| species.geographic_range.is_finite()
+                && species.geographic_range > 0.0
+                && species.geographic_range <= 1.0));
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn invalid_legacy_file_snapshot_is_rejected_at_load() {
+        let dir = std::env::temp_dir().join(format!("mk_snapshot_legacy_invalid_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("state.bin");
+        write_legacy_snapshot(&path, true);
+
+        let error = load_snapshot(&path).expect_err("invalid legacy range");
+        assert!(
+            matches!(error, SnapshotError::SerializeError(message)
+                if message.contains("legacy snapshot schema 0 is incompatible")
+                    && message.contains("Species 43")),
+            "unexpected error: {error}"
+        );
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
     #[test]
     fn snapshot_with_an_invalid_canon_is_rejected() {
         let dir = std::env::temp_dir().join(format!("mk_snapshot_canon_{}", std::process::id()));
