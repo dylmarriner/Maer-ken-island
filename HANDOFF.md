@@ -1,12 +1,17 @@
 # Handoff
 
-Written 2026-10-13 against `main` at `05fd6e5` (the merge of PR #6). This is the front door for
+Updated 2026-11-06 against `main` at `5a0410f87a9a1b947c1bf481dc1f83202573b17b`. This is the front door for
 whoever picks the island up next, human or agent. It says what the project is, where it stands,
 how to build and check it, and where everything else is written down.
 
 **What is left to do, and what each item needs, is in [`WORK_REMAINING.md`](WORK_REMAINING.md).**
 
 ## Latest engineering handoff — 6 November 2026
+
+- [Marine biomass cell inspector](docs/handoff/MARINE_AQUATIC_CELL_INSPECTOR_20261106.md) — PR #93 merged into main as `6294504efe9261b4794dd0778c96ba4712fdd141`. Exact-head workflow [#42166273507](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42166273507) passed the browser DOM click regression, Rust formatting/Clippy/fast tests, desktop, installed backend, week/year reference acceptance, computer service, repository scripts and dependency audit; nightly slow tests were skipped by design. The two prior Codex/Kilo findings were fixed and their review threads resolved.
+- [Deep-time evolution atomicity](docs/handoff/DEEP_TIME_EVOLUTION_ATOMICITY_20261106.md) — PR #107, stacked on PR #106. Evolution clock, species and RNG are staged and committed only after every fallible evolution phase succeeds. First exact-head run #42171306926 found one rustfmt-only line wrap; commit `63d330ed` applies the exact formatter output. Updated exact-head workflow [#42171844051](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42171844051) is in progress.
+- PR #106 exact-head workflow [#42169416524](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42169416524): web dashboard, installed backend, repository scripts, computer service, dependency audit and week/year reference acceptance have passed; desktop and fast Rust tests remain in progress. Nightly slow tests were skipped by design. Keep PR #106 unmerged until both in-progress jobs complete successfully.
+
 
 - [Snapshot canon-digest integrity](docs/handoff/SNAPSHOT_CANON_DIGEST_INTEGRITY_20261106.md) — PR #106 follow-up. Both the replay snapshot loader and file snapshot loader now compare the persisted `canon_derived.canon_digest` with a fresh digest derived from the validated `CanonLocked` before exposing restored state. A valid outer BLAKE3 payload digest no longer masks an internally inconsistent canon identity. Mismatches fail closed; derived values are recomputed only after the identity check. Regression tests cover both restore paths. Replay restore also requires the unhashed envelope tick to match the digested world-state tick. Schema-0 compatibility also rejects mixed fractional ranges when speciation history proves the old drift-before-speciation ordering may have erased parent fractions. Workflow #42169111579 reached the new code and failed only on three rustfmt line wraps in the mixed-state tests; the exact formatter output is applied in the next commit, with fresh exact-head CI required. Exact-head workflow #42167966575 caught three rustfmt-only line wraps in the new file-loader tests; commit `e2f38185` applies the formatter output. Workflow #42168311597 then passed formatting but Clippy compilation caught two test-only E0382 partial moves in error assertions; both now borrow the message with `ref`. Fresh exact-head CI is required.
 

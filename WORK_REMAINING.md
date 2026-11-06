@@ -1,6 +1,6 @@
 # Work remaining
 
-Written 2026-10-13 against `main` at the merge of PR #6 (`05fd6e5`). This is the single list of
+Updated 2026-11-06 against `main` at `5a0410f87a9a1b947c1bf481dc1f83202573b17b` (after merged fishery PRs #104–#105 and marine cell inspector PR #93). This is the single list of
 what is not done, and for each item, **what it takes to do it**: the sources or data it needs,
 the decisions only the owner can make, the files it touches, the tests that prove it and when it
 counts as finished. Read [`HANDOFF.md`](HANDOFF.md) first for what exists.
@@ -56,7 +56,7 @@ this list holds the current state. The evidence for what is *done* is in
 | Climate | D4: parametric weather systems | Open | Structural; large |
 | Climate | D38: a quarter of the land too dry | Diagnosed; specific humidity carried (2026-10-14) | A flux-driven rain-out (with D4) |
 | Climate | D29: energy audited per module | Water audited end to end every hour (2026-10-15); energy open | End-to-end energy ledger (with D3's prognostic surface energy balance) |
-| App | Phase 5 Tasks 3-8 | Partly done | See below; one owner pick (portraits) |
+| App | Phase 5 Tasks 3-8 | Partly done; marine cell inspector is implemented in web and desktop | See below; one owner pick (portraits) |
 | Gates | Gate 1, 2, 3 owner reviews | **Closed** (owner, 2026-10-13) | — |
 | Upstream | PRs for every divergence in `UPSTREAM.md` | Open | Owner's upstream access |
 | Realism | R0-R10: humans, work and the living world replicate Earth (section 8) | R0, R1 and R1b (fetching water by hand) done; R8 in part and R11 (learning by doing) started 2026-10-23; R12-R14 with the other session; R3 next | Engineering and sourcing |
