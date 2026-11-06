@@ -74,3 +74,11 @@ No deployment, live simulation, external LLM call, production data change or inf
 1. Verify this exact branch head in GitHub Actions.
 2. If week/year or replay digests move, inspect the audited state and reference evidence before changing any pin.
 3. Continue from `WORK_REMAINING.md`; the fishery remains standalone until sourced species-specific stock and effort data are available.
+
+## Exact-head CI iteration
+
+- Workflow [#42143127232](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42143127232) checked the updated PR #103 merge head and failed only at `cargo fmt --all -- --check`.
+- The formatter identified one multiline `assert_eq!` argument layout and one extra trailing blank line in the new population-growth test module. No Rust compile, Clippy or fast-test result is available from that job because formatting stopped the lane.
+- Commit `bdac1c7376819796dc75bbf46a3497379138213b` applies the exact rustfmt output and removes the extra trailing blank line.
+- The week/year reference-pack and desktop/backend jobs from #42143127232 were still running at inspection; they predate the formatting fix and do not verify the latest head.
+- A fresh exact-head workflow is required for `bdac1c73`. Keep PR #103 draft until formatting, Clippy, fast tests, desktop/backend and week/year reference acceptance all pass.
