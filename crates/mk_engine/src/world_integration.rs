@@ -2914,6 +2914,40 @@ mod snapshot_tests {
     }
 
     #[test]
+    fn evolved_legacy_snapshot_with_erased_fractional_ranges_is_rejected() {
+        let world = WorldState::new(Arc::new(CanonLocked::default()), [16u8; 32]);
+        let current = world.create_snapshot().expect("current snapshot");
+        let mut value: serde_json::Value =
+            serde_json::from_slice(&current.data).expect("snapshot JSON");
+        value
+            .as_object_mut()
+            .expect("world state object")
+            .remove("snapshot_schema_version");
+        value["deep_time"]["step_index"] = serde_json::json!(1);
+        for species in value["biosphere_state"]["species"]
+            .as_array_mut()
+            .expect("persisted founding species")
+        {
+            species["geographic_range"] = serde_json::json!(1.0);
+        }
+        let data = serde_json::to_vec(&value).expect("legacy snapshot JSON");
+        let digest = blake3::hash(&data).into();
+        let snapshot = WorldSnapshot {
+            tick: current.tick,
+            data,
+            digest,
+        };
+
+        let error = WorldState::from_snapshot(&snapshot).expect_err("lossy legacy state");
+        assert!(
+            error
+                .to_string()
+                .contains("previous geographic-range drift floor erased fractional ranges"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
     fn future_snapshot_schema_is_rejected_before_state_is_exposed() {
         let world = WorldState::new(Arc::new(CanonLocked::default()), [15u8; 32]);
         let snapshot = legacy_snapshot(
