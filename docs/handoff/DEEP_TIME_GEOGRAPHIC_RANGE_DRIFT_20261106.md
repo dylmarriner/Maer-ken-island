@@ -89,3 +89,12 @@ No deployment, live simulation, external LLM call, production data change or inf
 - This was a source lint failure, not an environment failure. The three test-only bindings now use immutable `RngRegistry` values in commit `1a910cd167fc17cbae34657de9c45e9dcd3e4c94`.
 - The same run's repository scripts, computer service, dependency audit and web dashboard passed. Week/year reference acceptance, installed backend and desktop jobs were still running at inspection; they predate the Clippy correction and do not verify the latest head.
 - A fresh exact-head workflow is required for `1a910cd1`. Keep PR #103 draft until formatting, Clippy, fast tests, desktop/backend and week/year acceptance pass.
+
+## Latest exact-head workflow
+
+- Code-bearing head: `1560e6cbbc194cc69393d5b8e323482a442e38a6`.
+- Workflow [#42143529000](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42143529000) has passed `cargo fmt --all -- --check` and Clippy after the earlier formatter and unused-mut corrections.
+- Fast Rust tests, week/year reference-pack acceptance, desktop application build/tests/rendering and installed-backend build/serve were still running at the latest inspection.
+- Repository scripts, computer service, web dashboard and dependency audit have passed. The nightly slow tier is skipped by design on this PR workflow.
+- The later `2ed66705` commit updates only the canonical `WORK_REMAINING.md` biosphere row; no application code or tests changed after the code-bearing head.
+- No local Cargo result is claimed because the authorised custom OpenCommander connector still returns HTTP 429. Keep PR #103 draft until the remaining exact-head jobs complete successfully.
