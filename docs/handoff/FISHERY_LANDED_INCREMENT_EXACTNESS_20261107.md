@@ -18,6 +18,8 @@ For example, at a cumulative total of (2^{53}), adding 3 tonnes in binary64 roun
 
 `landed_increment_rounded_to_a_different_amount_is_rejected_without_mutation` uses a valid Medium-resilience model and a stock with `landed_t = 2^53`. A requested 3-tonne catch is within the interval growth limit, but the projected cumulative total increases by 4 tonnes. The test expects `LandedTotalUnrepresentable` and asserts the entire stock remains unchanged.
 
+- `landed_increment_rounded_down_is_rejected_without_mutation` uses the same stock scale with a requested 5-tonne catch. The tie-to-even binary64 addition records only 4 tonnes; the guard rejects it before either biomass or landed mass changes. Regression commit `b6d6e11ccbbae169008c451e955258bc60d835f5`.
+
 ## Verification
 
 - Source and regression are committed in this PR.
