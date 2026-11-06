@@ -1,5 +1,9 @@
 # Work remaining
 
+Latest fishery atomicity regression (PR #110): an overflowing cumulative landed total must reject the harvest without partially committing biomass or landed totals. Exact-head fast Rust and full acceptance CI is required before marking the regression complete.
+
+Updated 2026-11-07 after PR #109 merged as `0613dff`; fishery remains standalone pending sourced species-specific stock and effort data and owner-approved workforce integration.
+
 
 Latest reference-range follow-up (PR #109): midpoint arithmetic now avoids overflow, subnormal tie loss and one-ULP double rounding for wide exponent gaps. Regression and exact-head CI evidence are recorded in `docs/handoff/REFERENCE_RANGE_MIDPOINT_OVERFLOW_20261106.md`; do not mark this item complete until the latest exact-head Rust, desktop, backend and week/year jobs pass.
 
