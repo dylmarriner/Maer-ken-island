@@ -488,6 +488,15 @@ mod tests {
 
         let encoded = bincode::serialize(&stock).expect("valid stock serializes");
         assert_eq!(encoded.as_slice(), expected.as_slice());
+
+        // Read the fixed bytes directly: a current-version round trip alone would
+        // not catch a reader that had drifted together with the current writer.
+        let restored: FishStock =
+            bincode::deserialize(&expected).expect("legacy derived snapshot remains readable");
+        assert_eq!(restored, stock);
+
+        let reencoded = bincode::serialize(&restored).expect("legacy snapshot reserializes");
+        assert_eq!(reencoded.as_slice(), expected.as_slice());
     }
 
     #[test]

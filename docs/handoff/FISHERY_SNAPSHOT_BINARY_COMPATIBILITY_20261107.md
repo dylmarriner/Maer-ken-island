@@ -13,7 +13,7 @@ Added a fixed golden bincode 1.3 fixture for a representative valid stock:
 - `biomass_t = 420.0`;
 - `landed_t = 17.0`.
 
-The test asserts the exact 28-byte little-endian representation emitted by the previous derived struct serializer. This pins the persisted field order and encoding independently of the current deserializer.
+The test asserts the exact 28-byte little-endian representation emitted by the previous derived struct serializer, then deserializes those fixed legacy bytes into `FishStock`, compares every field and re-serializes to the identical byte sequence. This pins both the writer layout and the reader's backward compatibility; a same-version round trip alone would not catch both sides drifting together.
 
 ## Regression and verification
 
@@ -25,3 +25,18 @@ The test asserts the exact 28-byte little-endian representation emitted by the p
 ## Next
 
 Run the exact PR #109 fast Rust suite and the required desktop/backend/week/year acceptance jobs. Keep the PR draft until those pass on this exact head.
+
+
+## Legacy snapshot read regression — 7 November 2026
+
+The golden fixture now verifies the read path as well as the write path:
+
+- The current serializer must emit the fixed 28-byte legacy representation.
+- The current deserializer must read those exact bytes and restore the expected `FishStock`.
+- Re-serializing the restored value must reproduce the same bytes.
+
+This closes the gap where the new serializer could match the old byte layout while a future deserializer change silently stopped reading historical snapshots.
+
+The preceding exact-head workflow [#42230618280](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42230618280) passed fast Rust tests, formatting, Clippy, desktop build/render/input/frame-cost acceptance, installed backend, week/year reference acceptance, web dashboard, computer service, repository scripts and dependency audit. This new legacy-read assertion is a follow-up after that green head; it requires a fresh exact-head workflow. No local Cargo pass is claimed.
+
+No snapshot format, schema version, simulation state, replay hash, reference value, stock parameter, offline limit or budget limit changed.
