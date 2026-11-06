@@ -99,24 +99,33 @@ test("clicking a marine map cell renders the estimate and disclaimer in the insp
   });
 });
 
-test("invalid marine projections are omitted without hiding ordinary cell details", async () => {
+test("negative, non-finite or unsafe marine projections are omitted without hiding ordinary cell details", async () => {
   await withDocument(async () => {
-    const fixture = clickFixture({
-      row: 1,
-      col: 1,
-      latitude: -40,
-      longitude: 175,
-      land: true,
-      elevation_m: 12,
-      buildable: true,
-      marine_aquatic_species: Number.MAX_SAFE_INTEGER + 1,
-      marine_aquatic_individuals: Infinity,
-      marine_aquatic_biomass_t: 4,
-    });
-    await handleMapCellClick({ clientX: 40, clientY: 32 }, fixture.dependencies);
-    assert.equal(fixture.output.children.length, 2);
-    assert.equal(fixture.output.children[1].attributes.class, "cell-what");
-    assert.equal(fixture.whereEl.value, "0");
+    const invalidProjections = [
+      { marine_aquatic_species: Number.MAX_SAFE_INTEGER + 1, marine_aquatic_individuals: 1, marine_aquatic_biomass_t: 1 },
+      { marine_aquatic_species: -1, marine_aquatic_individuals: 1, marine_aquatic_biomass_t: 1 },
+      { marine_aquatic_species: 1, marine_aquatic_individuals: -1, marine_aquatic_biomass_t: 1 },
+      { marine_aquatic_species: 1, marine_aquatic_individuals: 1, marine_aquatic_biomass_t: -1 },
+      { marine_aquatic_species: 1, marine_aquatic_individuals: Infinity, marine_aquatic_biomass_t: 1 },
+      { marine_aquatic_species: 1, marine_aquatic_individuals: 1, marine_aquatic_biomass_t: NaN },
+    ];
+
+    for (const projection of invalidProjections) {
+      const fixture = clickFixture({
+        row: 1,
+        col: 1,
+        latitude: -40,
+        longitude: 175,
+        land: true,
+        elevation_m: 12,
+        buildable: true,
+        ...projection,
+      });
+      await handleMapCellClick({ clientX: 40, clientY: 32 }, fixture.dependencies);
+      assert.equal(fixture.output.children.length, 2);
+      assert.equal(fixture.output.children[1].attributes.class, "cell-what");
+      assert.equal(fixture.whereEl.value, "0");
+    }
   });
 });
 
