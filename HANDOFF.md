@@ -8,6 +8,8 @@ how to build and check it, and where everything else is written down.
 
 ## Latest engineering handoff — 6 November 2026
 
+- [Snapshot canon-digest integrity](docs/handoff/SNAPSHOT_CANON_DIGEST_INTEGRITY_20261106.md) — PR #106 follow-up. Both the replay snapshot loader and file snapshot loader now compare the persisted `canon_derived.canon_digest` with a fresh digest derived from the validated `CanonLocked` before exposing restored state. A valid outer BLAKE3 payload digest no longer masks an internally inconsistent canon identity. Mismatches fail closed; derived values are recomputed only after the identity check. Regression tests cover both restore paths.
+
 - [Fishery interval sustainable-catch limit](docs/handoff/FISHERY_SUSTAINABLE_CATCH_LIMIT_20261106.md) — PR #105 merged into main as `5a0410f87a9a1b947c1bf481dc1f83202573b17b`. Exact-head workflow [#42146857592](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42146857592) passed formatting, Clippy, fast Rust tests, desktop build/tests/rendering, installed backend, week/year reference acceptance, dashboard, computer service, repository scripts and dependency audits; nightly slow tests were skipped by design. The read-only interval limit shares the exact growth-cap helper enforced by `FishStock::fish`.
 
 

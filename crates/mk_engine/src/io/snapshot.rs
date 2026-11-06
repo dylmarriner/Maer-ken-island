@@ -112,13 +112,15 @@ pub fn load_snapshot(path: &Path) -> Result<(SnapshotHeader, WorldState), Snapsh
         .validate_snapshot_schema()
         .map_err(SnapshotError::SerializeError)?;
 
-    // JSON numeric normalization can produce a byte-level digest difference
-    // after a load even when the canon values are semantically unchanged.
-    // Recompute all derived values from the loaded canon so the restored
-    // state cannot retain stale derived data. The outer BLAKE3 digest above
-    // still protects the persisted payload from accidental or unauthorised
-    // modification.
-    state.canon_derived = std::sync::Arc::new(mk_core::canon::CanonDerived::from(&state.canon));
+    // Recompute derived values from the persisted canon, but do not silently
+    // repair a snapshot whose stored digest claims a different canon. The
+    // outer payload digest proves byte integrity; this check proves that the
+    // inner canon identity agrees with the physical parameters being restored.
+    let recomputed_canon_derived = mk_core::canon::CanonDerived::from(&state.canon);
+    if stored_canon_digest != recomputed_canon_derived.canon_digest {
+        return Err(SnapshotError::CanonMismatch);
+    }
+    state.canon_derived = std::sync::Arc::new(recomputed_canon_derived);
 
     let header = SnapshotHeader {
         canon_digest: stored_canon_digest,
@@ -211,6 +213,31 @@ mod tests {
             .is_finite()
             && species.geographic_range > 0.0
             && species.geographic_range <= 1.0));
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn file_snapshot_with_mismatched_canon_digest_is_rejected() {
+        let dir = std::env::temp_dir().join(format!("mk_snapshot_canon_digest_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("state.bin");
+
+        let world = test_world();
+        let mut value = serde_json::to_value(&world).expect("world state JSON");
+        value["canon_derived"]["canon_digest"] =
+            serde_json::to_value([0u8; 32]).expect("zero canon digest");
+        let state_bytes = serde_json::to_vec(&value).expect("snapshot JSON");
+        let digest = blake3::hash(&state_bytes);
+        let mut bytes = Vec::with_capacity(DIGEST_LEN + state_bytes.len());
+        bytes.extend_from_slice(digest.as_bytes());
+        bytes.extend_from_slice(&state_bytes);
+        std::fs::write(&path, bytes).expect("mismatched snapshot file");
+
+        assert!(matches!(
+            load_snapshot(&path),
+            Err(SnapshotError::CanonMismatch)
+        ));
 
         std::fs::remove_dir_all(&dir).ok();
     }

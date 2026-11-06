@@ -2546,12 +2546,19 @@ impl WorldState {
         }
         let mut loaded: WorldState = serde_json::from_slice(&snapshot.data)
             .map_err(|e| SnapshotError::DeserializationError(e.to_string()))?;
+        let stored_canon_digest = loaded.canon_derived.canon_digest;
         mk_core::canon::validator::validate_canon(&loaded.canon)
             .map_err(|e| SnapshotError::DeserializationError(format!("invalid canon: {e}")))?;
         loaded
             .validate_snapshot_schema()
             .map_err(SnapshotError::DeserializationError)?;
-        loaded.canon_derived = Arc::new(mk_core::canon::CanonDerived::from(&loaded.canon));
+        let recomputed_canon_derived = mk_core::canon::CanonDerived::from(&loaded.canon);
+        if stored_canon_digest != recomputed_canon_derived.canon_digest {
+            return Err(SnapshotError::DeserializationError(
+                "snapshot canon digest does not match persisted canon".to_string(),
+            ));
+        }
+        loaded.canon_derived = Arc::new(recomputed_canon_derived);
         Ok(loaded)
     }
 
@@ -2849,6 +2856,30 @@ mod snapshot_tests {
             WorldState::from_snapshot(&snapshot),
             Err(SnapshotError::DigestMismatch)
         ));
+    }
+
+    #[test]
+    fn snapshot_with_mismatched_canon_digest_is_rejected() {
+        let world = WorldState::new(Arc::new(CanonLocked::default()), [17u8; 32]);
+        let current = world.create_snapshot().expect("snapshot is created");
+        let mut value: serde_json::Value =
+            serde_json::from_slice(&current.data).expect("snapshot JSON");
+        value["canon_derived"]["canon_digest"] =
+            serde_json::to_value([0u8; 32]).expect("zero canon digest");
+        let data = serde_json::to_vec(&value).expect("snapshot JSON");
+        let digest = blake3::hash(&data).into();
+        let snapshot = WorldSnapshot {
+            tick: current.tick,
+            data,
+            digest,
+        };
+
+        let error = WorldState::from_snapshot(&snapshot).expect_err("mismatched canon digest");
+        assert!(
+            matches!(error, SnapshotError::DeserializationError(message)
+                if message.contains("snapshot canon digest does not match persisted canon")),
+            "unexpected error: {error}"
+        );
     }
 
     fn legacy_snapshot(
