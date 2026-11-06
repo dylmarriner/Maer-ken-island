@@ -14,6 +14,7 @@
 //! them is only as good as those densities, and resilience is a class the
 //! caller supplies, since no species carries FishBase's.
 
+use serde::ser::SerializeStruct;
 use serde::{Deserialize, Serialize};
 
 use super::petroleum::MissingReference;
@@ -53,12 +54,18 @@ impl std::fmt::Display for FisheryError {
 impl std::error::Error for FisheryError {}
 
 /// Midpoint of a published growth-rate prior after validating both source bounds.
-/// Subtracting first avoids overflowing an otherwise representable midpoint.
+/// Sum before halving when bounded; otherwise halve each endpoint to avoid overflow
+/// and the double-rounding error from first rounding a wide endpoint difference.
 fn checked_rate_midpoint(min: f64, max: f64) -> Option<f64> {
     if !min.is_finite() || !max.is_finite() || min < 0.0 || max < min {
         return None;
     }
-    let midpoint = min + (max - min) * 0.5;
+    let half_max = f64::MAX * 0.5;
+    let midpoint = if min <= half_max && max <= half_max {
+        (min + max) * 0.5
+    } else {
+        min * 0.5 + max * 0.5
+    };
     if midpoint.is_finite() {
         Some(midpoint)
     } else {
@@ -161,13 +168,31 @@ impl FisheryModel {
 }
 
 /// One stock and what has been landed from it.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct FishStock {
     pub resilience: Resilience,
     /// Unexploited biomass (t).
     pub k_t: f64,
     pub biomass_t: f64,
     pub landed_t: f64,
+}
+
+/// Persist only physically valid stock states. Keep field order identical to the
+/// previous derived serializer so valid JSON and bincode snapshots retain their layout.
+impl Serialize for FishStock {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.validate_state().map_err(serde::ser::Error::custom)?;
+
+        let mut state = serializer.serialize_struct("FishStock", 4)?;
+        state.serialize_field("resilience", &self.resilience)?;
+        state.serialize_field("k_t", &self.k_t)?;
+        state.serialize_field("biomass_t", &self.biomass_t)?;
+        state.serialize_field("landed_t", &self.landed_t)?;
+        state.end()
+    }
 }
 
 #[derive(Deserialize)]
@@ -291,7 +316,22 @@ impl FishStock {
         self.validate_state()?;
 
         let (_, peak_surplus_fraction) = msy_peak_fractions(model.depensation_below);
-        let msy = model.r(self.resilience) * (self.k_t * peak_surplus_fraction);
+        let rate = model.r(self.resilience);
+        let scaled_capacity = self.k_t * peak_surplus_fraction;
+        let msy = if scaled_capacity < f64::MIN_POSITIVE && rate > 0.0 {
+            // A quarter is an exact binary scale. Apply it to the rate before
+            // the subnormal capacity so the final multiplication performs the
+            // only rounding; scaling K first can discard a representable result.
+            // Other peak fractions retain rate * K first: neither multiplication
+            // order is universally exact for their non-power-of-two significands.
+            if peak_surplus_fraction == 0.25 {
+                (rate * peak_surplus_fraction) * self.k_t
+            } else {
+                (rate * self.k_t) * peak_surplus_fraction
+            }
+        } else {
+            rate * scaled_capacity
+        };
         if !msy.is_finite() || msy < 0.0 {
             return Err(FisheryError::NonFiniteGrowth);
         }
@@ -397,7 +437,11 @@ impl FishStock {
         }
 
         let catch = wanted_t.min(grown);
-        let biomass_t = (post_growth - catch).min(self.k_t);
+        // Subtract the catch from growth before adding the remainder to biomass.
+        // (biomass + grown) - catch can lose low bits to cancellation and make a
+        // fully harvested stock appear to shrink even though catch == growth.
+        let remaining_growth = grown - catch;
+        let biomass_t = (self.biomass_t + remaining_growth).min(self.k_t);
         let landed_t = self.landed_t + catch;
         if !biomass_t.is_finite() {
             return Err(FisheryError::NonFiniteGrowth);
@@ -443,6 +487,80 @@ mod tests {
     }
 
     #[test]
+    fn fish_stock_bincode_snapshot_preserves_the_legacy_derived_field_layout() {
+        let mut stock = FishStock::unexploited(Resilience::Medium, 1_000.0)
+            .expect("positive carrying capacity");
+        stock.biomass_t = 420.0;
+        stock.landed_t = 17.0;
+
+        // bincode 1.3's legacy fixed-int, little-endian layout: the u32 enum
+        // discriminant followed by k_t, biomass_t and landed_t as f64 values.
+        // This is the byte layout emitted by the former derived Serialize impl.
+        let expected: [u8; 28] = [
+            1, 0, 0, 0, 0, 0, 0, 0, 0, 64, 143, 64, 0, 0, 0, 0, 0, 64, 122, 64, 0, 0, 0, 0, 0, 0,
+            49, 64,
+        ];
+
+        let encoded = bincode::serialize(&stock).expect("valid stock serializes");
+        assert_eq!(encoded.as_slice(), expected.as_slice());
+
+        // Read the fixed bytes directly: a current-version round trip alone would
+        // not catch a reader that had drifted together with the current writer.
+        let restored: FishStock =
+            bincode::deserialize(&expected).expect("legacy derived snapshot remains readable");
+        assert_eq!(restored, stock);
+
+        let reencoded = bincode::serialize(&restored).expect("legacy snapshot reserializes");
+        assert_eq!(reencoded.as_slice(), expected.as_slice());
+    }
+
+    #[test]
+    fn fish_stock_serialization_rejects_invalid_physical_state() {
+        let valid = FishStock::unexploited(Resilience::Medium, 1_000.0)
+            .expect("positive carrying capacity");
+        let mut invalid_stocks = Vec::new();
+
+        let mut invalid = valid.clone();
+        invalid.k_t = 0.0;
+        invalid_stocks.push(invalid);
+
+        let mut invalid = valid.clone();
+        invalid.k_t = -1.0;
+        invalid_stocks.push(invalid);
+
+        let mut invalid = valid.clone();
+        invalid.biomass_t = invalid.k_t + 1.0;
+        invalid_stocks.push(invalid);
+
+        let mut invalid = valid.clone();
+        invalid.biomass_t = -1.0;
+        invalid_stocks.push(invalid);
+
+        let mut invalid = valid.clone();
+        invalid.landed_t = -1.0;
+        invalid_stocks.push(invalid);
+
+        let mut invalid = valid.clone();
+        invalid.biomass_t = f64::NAN;
+        invalid_stocks.push(invalid);
+
+        let mut invalid = valid;
+        invalid.landed_t = f64::INFINITY;
+        invalid_stocks.push(invalid);
+
+        for stock in invalid_stocks {
+            assert!(
+                serde_json::to_vec(&stock).is_err(),
+                "invalid physical state must not be written to a JSON snapshot"
+            );
+            assert!(
+                bincode::serialize(&stock).is_err(),
+                "invalid physical state must not be written to a binary snapshot"
+            );
+        }
+    }
+
+    #[test]
     fn fish_stock_deserialization_rejects_invalid_physical_state() {
         for value in [
             serde_json::json!({
@@ -482,14 +600,22 @@ mod tests {
             );
         }
 
-        // Binary snapshots can encode non-finite floats even though JSON cannot.
-        let invalid = FishStock {
+        // Build the invalid wire payload separately: FishStock's public serializer
+        // now correctly refuses to emit an invalid physical state.
+        #[derive(Serialize)]
+        struct InvalidFishStockSnapshotFixture {
+            resilience: Resilience,
+            k_t: f64,
+            biomass_t: f64,
+            landed_t: f64,
+        }
+        let invalid = InvalidFishStockSnapshotFixture {
             resilience: Resilience::Medium,
             k_t: f64::INFINITY,
             biomass_t: 0.0,
             landed_t: 0.0,
         };
-        let binary = bincode::serialize(&invalid).expect("invalid fixture serializes");
+        let binary = bincode::serialize(&invalid).expect("invalid wire fixture serializes");
         assert!(
             bincode::deserialize::<FishStock>(&binary).is_err(),
             "non-finite binary stock snapshot must fail to deserialize"
@@ -526,6 +652,21 @@ mod tests {
         assert!(midpoint >= f64::MAX * 0.5);
         assert!(midpoint <= f64::MAX);
         assert!((checked_rate_midpoint(0.6, 1.5).unwrap() - 1.05).abs() < 1e-12);
+    }
+
+    #[test]
+    fn growth_rate_prior_midpoint_preserves_subnormal_ties_and_wide_exponent_gaps() {
+        // Half of the exact sum is 1.5 subnormal units and rounds to the even
+        // second unit. Halving the difference first underflows that half-unit.
+        let adjacent = checked_rate_midpoint(f64::from_bits(1), f64::from_bits(2))
+            .expect("finite non-negative bounds");
+        assert_eq!(adjacent.to_bits(), 2);
+
+        // A wide exponent gap makes min + (max - min) / 2 round one ULP low.
+        let min = 3.0 * 2.0_f64.powi(969);
+        let max = 2.0_f64.powi(1023);
+        let midpoint = checked_rate_midpoint(min, max).expect("finite midpoint");
+        assert_eq!(midpoint.to_bits(), 0x7fd0_0000_0000_0001);
     }
 
     #[test]
@@ -648,6 +789,51 @@ mod tests {
     }
 
     #[test]
+    fn msy_preserves_representable_subnormal_results_when_peak_scaling_would_underflow() {
+        let model = FisheryModel {
+            r_per_year: [0.0, 4.0, 0.0, 0.0],
+            depensation_below: 0.25,
+        };
+
+        // The exact result is K because r * peak_fraction is 4 * 0.25.
+        // Multiplying K by 0.25 first rounds these values down in the
+        // subnormal range, then incorrectly amplifies that rounded result.
+        for units in [1_u64, 3, 7] {
+            let carrying_capacity = f64::from_bits(units);
+            assert!(carrying_capacity * 0.25 < f64::MIN_POSITIVE);
+            let stock = FishStock::unexploited(Resilience::Medium, carrying_capacity)
+                .expect("positive subnormal carrying capacity");
+
+            assert_eq!(
+                stock
+                    .msy_t(&model)
+                    .expect("representable subnormal MSY")
+                    .to_bits(),
+                units,
+                "MSY must preserve {units} units of subnormal carrying capacity"
+            );
+        }
+    }
+
+    #[test]
+    fn msy_uses_exact_quarter_scaling_before_subnormal_capacity_rounding() {
+        let model = FisheryModel {
+            r_per_year: [0.0, f64::from_bits(0x40f5_a159_2be7_b6d7), 0.0, 0.0],
+            depensation_below: 0.25,
+        };
+        let stock = FishStock::unexploited(Resilience::Medium, f64::from_bits(1))
+            .expect("smallest positive subnormal carrying capacity");
+
+        // Exact binary scaling of the rate by 1/4 followed by one final
+        // multiplication rounds to 22,149 subnormal units. Multiplying K by
+        // 1/4 first and then amplifying the rounded intermediate gives 22,150.
+        assert_eq!(
+            stock.msy_t(&model).expect("finite subnormal MSY").to_bits(),
+            22_149
+        );
+    }
+
+    #[test]
     fn msy_avoids_intermediate_overflow_when_the_result_is_finite() {
         let mut model = FisheryModel::load_default().expect("the pack loads");
         model.r_per_year[Resilience::Medium as usize] = 4.0;
@@ -720,6 +906,37 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn harvesting_all_interval_growth_does_not_reduce_biomass_from_rounding() {
+        let model = FisheryModel {
+            r_per_year: [0.0, 0.0012, 0.0, 0.0],
+            depensation_below: 0.25,
+        };
+        let biomass = 2.0_f64.powi(62);
+        let mut stock = FishStock {
+            resilience: Resilience::Medium,
+            k_t: biomass * 2.0,
+            biomass_t: biomass,
+            landed_t: 0.0,
+        };
+        let before = stock.biomass_t;
+        let growth = stock
+            .sustainable_catch_limit_t(&model, YEAR_S)
+            .expect("valid interval growth");
+        assert!(growth > 0.0);
+
+        let landed = stock
+            .fish(&model, f64::MAX, YEAR_S)
+            .expect("the requested catch is capped at interval growth");
+
+        assert_eq!(landed, growth);
+        assert_eq!(
+            stock.biomass_t, before,
+            "harvesting all growth must leave the original biomass unchanged"
+        );
+        assert_eq!(stock.landed_t, growth);
     }
 
     #[test]
