@@ -319,10 +319,16 @@ impl FishStock {
         let rate = model.r(self.resilience);
         let scaled_capacity = self.k_t * peak_surplus_fraction;
         let msy = if scaled_capacity < f64::MIN_POSITIVE && rate > 0.0 {
-            // Scaling a subnormal K by the peak fraction first can discard
-            // representable MSY. The piecewise peak fraction is bounded below
-            // by 4/27, so K is small enough here that rate * K cannot overflow.
-            (rate * self.k_t) * peak_surplus_fraction
+            // A quarter is an exact binary scale. Apply it to the rate before
+            // the subnormal capacity so the final multiplication performs the
+            // only rounding; scaling K first can discard a representable result.
+            // Other peak fractions retain rate * K first: neither multiplication
+            // order is universally exact for their non-power-of-two significands.
+            if peak_surplus_fraction == 0.25 {
+                (rate * peak_surplus_fraction) * self.k_t
+            } else {
+                (rate * self.k_t) * peak_surplus_fraction
+            }
         } else {
             rate * scaled_capacity
         };
@@ -807,6 +813,24 @@ mod tests {
                 "MSY must preserve {units} units of subnormal carrying capacity"
             );
         }
+    }
+
+    #[test]
+    fn msy_uses_exact_quarter_scaling_before_subnormal_capacity_rounding() {
+        let model = FisheryModel {
+            r_per_year: [0.0, f64::from_bits(0x40f5_a159_2be7_b6d7), 0.0, 0.0],
+            depensation_below: 0.25,
+        };
+        let stock = FishStock::unexploited(Resilience::Medium, f64::from_bits(1))
+            .expect("smallest positive subnormal carrying capacity");
+
+        // Exact binary scaling of the rate by 1/4 followed by one final
+        // multiplication rounds to 22,149 subnormal units. Multiplying K by
+        // 1/4 first and then amplifying the rounded intermediate gives 22,150.
+        assert_eq!(
+            stock.msy_t(&model).expect("finite subnormal MSY").to_bits(),
+            22_149
+        );
     }
 
     #[test]
