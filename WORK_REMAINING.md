@@ -5,7 +5,7 @@ Latest fishery atomicity regression (PR #110): an overflowing cumulative landed 
 Updated 2026-11-07 after PR #109 merged as `0613dff`; fishery remains standalone pending sourced species-specific stock and effort data and owner-approved workforce integration.
 
 
-Latest reference-range follow-up (PR #109): midpoint arithmetic now avoids overflow, subnormal tie loss and one-ULP double rounding for wide exponent gaps. Regression and exact-head CI evidence are recorded in `docs/handoff/REFERENCE_RANGE_MIDPOINT_OVERFLOW_20261106.md`; do not mark this item complete until the latest exact-head Rust, desktop, backend and week/year jobs pass.
+Reference-range and fishery numerical hardening (PR #109): merged to `main` as `0613dffca65a87e4db147300d9d57805a744ea07`. Exact-head workflow [#42257092937](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42257092937) passed formatting, Clippy, fast Rust tests, desktop build/tests/rendering/input acceptance, installed backend build/serve, web dashboard, computer service, repository scripts, dependency audit and week/year reference-pack acceptance. Nightly slow tests were skipped by design.
 
 Updated 2026-11-07 against `main` at `42bf9cc43c8024644a452a00127ed39b676d19ff` (fishery PRs #104–#105, marine inspector PR #93, deep-time PRs #106–#107 and desktop marine inspector PR #108 are merged; PR #109 remains open for fishery numerical and snapshot work).
 what is not done, and for each item, **what it takes to do it**: the sources or data it needs,
