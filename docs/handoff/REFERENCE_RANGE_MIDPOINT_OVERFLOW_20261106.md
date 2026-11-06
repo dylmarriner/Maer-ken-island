@@ -64,3 +64,8 @@ The same difference-first midpoint pattern remained in `regional/industry/fisher
 - Code and tests: commit `${mkCode.commit_sha}`.
 - Previous exact-head workflow [#42206064482](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42206064482) passed formatting, Clippy, fast Rust tests, desktop build/tests/rendering, installed backend, week/year reference acceptance, dashboard, computer service, repository scripts and dependency audit on the prior head `44e200692e8d964fe9d176505255e314d4e3f9e9`. This follow-up invalidates that exact-head result; a fresh workflow on the new head is required.
 - No reference-pack values, physical parameters, stock calibration, simulation state, snapshot/replay format, hash baseline, budget or offline limit changed.
+
+
+## Final exact-head verification — 7 November 2026
+
+The reference-range corrections were merged in PR #109 as `0613dffca65a87e4db147300d9d57805a744ea07`. Exact-head workflow [#42257092937](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42257092937) passed formatting, Clippy, fast Rust tests, desktop build/tests/rendering/input/frame-cost acceptance, installed backend build/serve, web dashboard, computer service, repository scripts, dependency audit and week/year reference-pack acceptance. Nightly slow tests were skipped by design.
