@@ -484,7 +484,7 @@ fn range_midpoint_rounds_small_subnormal_pairs_to_even() {
         for upper in lower..=64_u64 {
             let sum = lower + upper;
             let floor = sum / 2;
-            let rounded = floor + u64::from(sum % 2 == 1 && floor % 2 == 1);
+            let rounded = floor + if sum % 2 == 1 && floor % 2 == 1 { 1 } else { 0 };
 
             let positive = range_item(
                 "positive_subnormal_pair",
