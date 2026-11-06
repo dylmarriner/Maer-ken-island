@@ -612,9 +612,12 @@ impl DeepTimeEvolution {
         let mut new_species = Vec::new();
 
         for parent in species.iter() {
+            // The history is append-chronological; the cooldown must use
+            // the most recent event for this parent, not its first speciation.
             let last_speciation = self
                 .last_speciation_times
                 .iter()
+                .rev()
                 .find(|(id, _)| *id == parent.species_id)
                 .map(|(_, time)| *time)
                 .unwrap_or(0.0);
@@ -809,6 +812,7 @@ impl DeepTimeEvolution {
         // performed at restore/audit boundaries rather than on every evolution tick.
         let mut times_by_species: std::collections::HashMap<u64, Vec<f64>> =
             std::collections::HashMap::new();
+        let mut previous_speciation_time: Option<f64> = None;
         for &(species_id, speciation_time) in &self.last_speciation_times {
             if !speciation_time.is_finite()
                 || speciation_time < 0.0
@@ -818,6 +822,12 @@ impl DeepTimeEvolution {
                     "Species {species_id} has an invalid speciation time"
                 ));
             }
+            if let Some(previous) = previous_speciation_time {
+                if speciation_time < previous {
+                    return Err("speciation history is not append-chronological".to_string());
+                }
+            }
+            previous_speciation_time = Some(speciation_time);
             times_by_species
                 .entry(species_id)
                 .or_default()
@@ -888,6 +898,19 @@ mod geographic_range_tests {
             .expect_err("future speciation history cannot be restored");
 
         assert!(error.contains("Species 7 has an invalid speciation time"));
+    }
+
+    #[test]
+    fn full_validation_rejects_out_of_order_speciation_history() {
+        let mut evolution = DeepTimeEvolution::new();
+        evolution.current_time_years = 100.0;
+        evolution.last_speciation_times = vec![(7, 80.0), (8, 60.0)];
+
+        let error = evolution
+            .validate(&[])
+            .expect_err("append-only speciation history must be chronological");
+
+        assert_eq!(error, "speciation history is not append-chronological");
     }
 
     #[test]
@@ -1058,6 +1081,54 @@ mod geographic_range_tests {
             serde_json::to_vec(&staged_rng).expect("staged RNG"),
             serde_json::to_vec(&direct_rng).expect("direct RNG"),
             "staging must preserve the keyed RNG stream"
+        );
+    }
+
+    #[test]
+    fn speciation_cooldown_uses_the_most_recent_parent_timestamp() {
+        const SPECIES_ID: u64 = 7;
+        const SPECIATION_ROLL_CEILING: f64 = 0.0005;
+
+        // This seed would speciate at the configured probability if the
+        // cooldown incorrectly used the parent's first historical event.
+        let seed = (0_u64..100_000)
+            .find_map(|candidate| {
+                let mut seed = [0_u8; 32];
+                seed[..8].copy_from_slice(&candidate.to_le_bytes());
+                let probe = RngRegistry::new(seed);
+                let key = RngKey::new(
+                    SubsystemId::Biosphere,
+                    SPECIES_ID as u32 ^ 40_001,
+                    0,
+                    1,
+                );
+                (probe.gen_f64_01(key) < SPECIATION_ROLL_CEILING).then_some(seed)
+            })
+            .expect("a deterministic seed must reach the speciation probability");
+
+        let mut rng = RngRegistry::new(seed);
+        let mut species = vec![test_species(1.0, &rng)];
+        let mut evolution = DeepTimeEvolution::new();
+        evolution.step_index = 1;
+        evolution.current_time_years = 36_010.0;
+        evolution.recovery_state.adaptive_radiation_potential =
+            MAX_ADAPTIVE_RADIATION_AMPLIFICATION;
+        evolution.last_speciation_times = vec![(SPECIES_ID, 18_000.0), (SPECIES_ID, 36_000.0)];
+
+        let rng_before = serde_json::to_vec(&rng).expect("RNG before cooldown");
+        let mut events = Vec::new();
+        evolution.process_speciation(&mut species, 25_000.0, &mut rng, &mut events);
+
+        assert_eq!(species.len(), 1, "the latest speciation is only ten years old");
+        assert!(events.is_empty(), "a recent parent must remain in cooldown");
+        assert_eq!(
+            evolution.last_speciation_times,
+            vec![(SPECIES_ID, 18_000.0), (SPECIES_ID, 36_000.0)]
+        );
+        assert_eq!(
+            serde_json::to_vec(&rng).expect("RNG after cooldown"),
+            rng_before,
+            "a skipped cooldown must not consume the keyed speciation draw"
         );
     }
 
