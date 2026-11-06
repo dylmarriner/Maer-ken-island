@@ -2487,8 +2487,8 @@ impl WorldState {
         match self.snapshot_schema_version {
             0 => {
                 let species = &self.biosphere_state.species;
-                let evolved = self.deep_time.step_index > 0
-                    || self.deep_time.current_time_years > 0.0;
+                let evolved =
+                    self.deep_time.step_index > 0 || self.deep_time.current_time_years > 0.0;
                 if evolved
                     && !species.is_empty()
                     && species.iter().all(|entry| {
@@ -2507,9 +2507,9 @@ impl WorldState {
                 self.snapshot_schema_version = WORLD_STATE_SNAPSHOT_SCHEMA_VERSION;
                 Ok(())
             }
-            WORLD_STATE_SNAPSHOT_SCHEMA_VERSION => self
-                .deep_time
-                .validate(&self.biosphere_state.species),
+            WORLD_STATE_SNAPSHOT_SCHEMA_VERSION => {
+                self.deep_time.validate(&self.biosphere_state.species)
+            }
             version => Err(format!(
                 "snapshot schema version {version} is not supported; current version is {}",
                 WORLD_STATE_SNAPSHOT_SCHEMA_VERSION
@@ -2908,7 +2908,9 @@ mod snapshot_tests {
         let snapshot = legacy_snapshot(&world, None, true);
         let error = WorldState::from_snapshot(&snapshot).expect_err("invalid legacy range");
         assert!(
-            error.to_string().contains("legacy snapshot schema 0 is incompatible"),
+            error
+                .to_string()
+                .contains("legacy snapshot schema 0 is incompatible"),
             "unexpected error: {error}"
         );
         assert!(error.to_string().contains("Species 43"));
@@ -2957,11 +2959,9 @@ mod snapshot_tests {
             false,
         );
         let error = WorldState::from_snapshot(&snapshot).expect_err("future schema");
-        assert!(
-            error
-                .to_string()
-                .contains("snapshot schema version 2 is not supported")
-        );
+        assert!(error
+            .to_string()
+            .contains("snapshot schema version 2 is not supported"));
     }
 }
 
