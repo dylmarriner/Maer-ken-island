@@ -35,3 +35,9 @@ No live island state, production infrastructure, external service, snapshot form
 ## Follow-up: browser map inspector (2026-11-06)
 
 The API fields and desktop inspector were present, but `apps/island/static/island.js:onMapClick` still rendered only coordinates and land/sea details. The browser click handler now renders marine species count, upstream-derived individuals and live biomass tonnes when all three API values are finite, with an explicit label that this is an uncalibrated upstream estimate and not harvestable stock or catch. `style.css` gives the estimate a separate, tabular-numeric line. `apps/island/tests/serve.rs` verifies the served browser handler contains the three fields and the safety label.
+
+## Exact-head formatting finding and correction
+
+Workflow [#42109939191](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42109939191) passed repository scripts, desktop application, dashboard, week/year reference acceptance, dependency audit, installed backend and computer service. The Rust fast-check job stopped at `cargo fmt --all -- --check` because there was one extra blank line before the browser cell-inspector test in `apps/island/tests/serve.rs`; Clippy and fast tests were skipped.
+
+Commit `84dc5f5a` applies the exact rustfmt output. A fresh exact-head run must pass formatting, Clippy and fast tests before merge. The prior workflow's other green jobs are evidence for the prior head only.
