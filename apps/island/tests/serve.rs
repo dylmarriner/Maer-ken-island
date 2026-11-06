@@ -2138,7 +2138,6 @@ async fn a_client_is_told_what_this_backend_can_do_before_it_asks_for_anything()
     );
 }
 
-
 #[tokio::test]
 async fn browser_map_cell_inspector_renders_the_uncalibrated_marine_estimate() {
     let port = a_shared_dashboard();
