@@ -113,3 +113,17 @@ Exact-head CI is required; no local Cargo pass is claimed while the custom OpenC
 ## Follow-up: exact-head rustfmt correction (6 November 2026)
 
 Workflow [#42183421772](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42183421772) reached the new persisted-state validation and reported only rustfmt differences in `deep_time_evolution.rs`. The formatter's exact line wraps are now applied. Clippy and fast tests were skipped after the formatting gate failed; no source-test pass is claimed. A fresh exact-head workflow is required for the corrected head.
+
+
+## Follow-up: keep append-only history validation off the evolution hot path (6 November 2026)
+
+The new persisted-state preflight initially reused the full snapshot validator on every evolution step. That validator scans both append-only extinction events and speciation timestamps. On long-horizon runs this makes per-step validation grow with the accumulated history.
+
+- Split mutable-state checks into `validate_evolution_step_state` and append-only history checks into `validate_append_only_history`.
+- `step_evolution_processes` now checks the live clock, recovery state, carrying capacities, species ranges and intelligence ceiling without rescanning historical vectors on every 10-year step.
+- The full public `validate` still performs both checks. `WorldState` snapshot validation calls it for current and legacy snapshot restore, so persisted histories remain fail-closed at the trust boundary.
+- Full history validation now also rejects a speciation timestamp later than the persisted simulation clock.
+- Regression coverage proves the hot-path validator excludes append-only histories while the full validator rejects malformed history, and that future speciation timestamps cannot be restored.
+- The explicit staging initializer/commit block is documented as a paired maintenance point for future mutable fields.
+- Commit: `fe5c22efed7ca370e3363ba8d46eebfd6943b5a5`.
+- Previous exact head `ab106d75` passed workflow [#42183725408](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42183725408), including formatting, Clippy, fast Rust tests, desktop, installed backend, dashboard, computer service, scripts, dependency audit and week/year reference acceptance. Nightly slow tests were skipped by design. The new head requires its own exact-head run; no new pass is claimed yet.
