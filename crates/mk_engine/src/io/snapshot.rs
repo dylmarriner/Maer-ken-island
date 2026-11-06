@@ -198,7 +198,8 @@ mod tests {
 
     #[test]
     fn valid_legacy_file_snapshot_upgrades_schema_without_state_rewrite() {
-        let dir = std::env::temp_dir().join(format!("mk_snapshot_legacy_valid_{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("mk_snapshot_legacy_valid_{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("state.bin");
         write_legacy_snapshot(&path, false);
@@ -219,7 +220,8 @@ mod tests {
 
     #[test]
     fn file_snapshot_with_mismatched_canon_digest_is_rejected() {
-        let dir = std::env::temp_dir().join(format!("mk_snapshot_canon_digest_{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("mk_snapshot_canon_digest_{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("state.bin");
 
@@ -244,7 +246,8 @@ mod tests {
 
     #[test]
     fn invalid_legacy_file_snapshot_is_rejected_at_load() {
-        let dir = std::env::temp_dir().join(format!("mk_snapshot_legacy_invalid_{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("mk_snapshot_legacy_invalid_{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("state.bin");
         write_legacy_snapshot(&path, true);
