@@ -793,7 +793,7 @@ mod population_growth_tests {
     #[test]
     fn logistic_growth_saturates_at_capacity_for_long_finite_horizons() {
         for initial_population in [100_000, 400_000] {
-            let mut rng = RngRegistry::new([11; 32]);
+            let rng = RngRegistry::new([11; 32]);
             let mut species = vec![test_species(initial_population, &rng)];
             let mut evolution = DeepTimeEvolution::new();
             evolution.carrying_capacities.insert(7, 200_000.0);
@@ -809,7 +809,7 @@ mod population_growth_tests {
 
     #[test]
     fn logistic_growth_preserves_the_closed_form_at_ordinary_horizons() {
-        let mut rng = RngRegistry::new([12; 32]);
+        let rng = RngRegistry::new([12; 32]);
         let mut species = vec![test_species(100_000, &rng)];
         let mut evolution = DeepTimeEvolution::new();
         evolution.carrying_capacities.insert(7, 200_000.0);
@@ -821,7 +821,7 @@ mod population_growth_tests {
 
     #[test]
     fn zero_duration_does_not_change_population() {
-        let mut rng = RngRegistry::new([13; 32]);
+        let rng = RngRegistry::new([13; 32]);
         let mut species = vec![test_species(100_000, &rng)];
         let mut evolution = DeepTimeEvolution::new();
         evolution.carrying_capacities.insert(7, 200_000.0);
