@@ -1096,12 +1096,7 @@ mod geographic_range_tests {
                 let mut seed = [0_u8; 32];
                 seed[..8].copy_from_slice(&candidate.to_le_bytes());
                 let probe = RngRegistry::new(seed);
-                let key = RngKey::new(
-                    SubsystemId::Biosphere,
-                    SPECIES_ID as u32 ^ 40_001,
-                    0,
-                    1,
-                );
+                let key = RngKey::new(SubsystemId::Biosphere, SPECIES_ID as u32 ^ 40_001, 0, 1);
                 (probe.gen_f64_01(key) < SPECIATION_ROLL_CEILING).then_some(seed)
             })
             .expect("a deterministic seed must reach the speciation probability");
@@ -1119,7 +1114,11 @@ mod geographic_range_tests {
         let mut events = Vec::new();
         evolution.process_speciation(&mut species, 25_000.0, &mut rng, &mut events);
 
-        assert_eq!(species.len(), 1, "the latest speciation is only ten years old");
+        assert_eq!(
+            species.len(),
+            1,
+            "the latest speciation is only ten years old"
+        );
         assert!(events.is_empty(), "a recent parent must remain in cooldown");
         assert_eq!(
             evolution.last_speciation_times,
