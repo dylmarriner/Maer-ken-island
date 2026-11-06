@@ -33,7 +33,7 @@ Existing normal-step deterministic and fractional-range tests remain in place.
 
 - PR #106 is merged into `main` as `3057ea4274f8d6a131fa44a24380e0c7c145057a`. Its exact-head workflow [#42169416524](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42169416524) passed formatting, Clippy, fast Rust tests, desktop, installed backend, web dashboard, computer service, repository scripts, dependency audit and week/year reference-pack acceptance. Nightly slow tests were skipped by design.
 - PR #107 is based directly on `main` at that merge commit; it is no longer stacked on the now-merged #106 branch.
-- The current source/test head is `6ac9a66f86292a67595efe4ad98d7c8286067700`. A fresh exact-head workflow is required for the environmental-stress guard and speciation-parity regression; prior successful workflow [#42172213109](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42172213109) predates these tests and does not verify them.
+- The current source/test head is `5d14be7d21d811271099be8b346e32dd3d8f4ddb`. Exact-head workflow [#42180786470](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42180786470) was created for the current head and is queued; prior successful workflow [#42172213109](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42172213109) predates these tests and does not verify them.
 - No local Cargo result is claimed: custom OpenCommander discovery returned HTTP 429. Do not substitute another remote-desktop connector.
 - The staging value copies only fields owned by the evolution pipeline; the append-only extinction history is not copied. Long-horizon performance still needs exact-head CI and the repository's acceptance profile before merge.
 
@@ -82,3 +82,6 @@ The earlier success-parity fixture used a 2,500-year step and could not reach th
 - Seeds existing append-only extinction history and requires it to remain identical.
 - The test closes the review gap without changing the evolution phase order or random-key derivation.
 - Exact-head CI remains pending; no test pass is claimed.
+
+
+- Exact rustfmt correction from the new run's formatter diff: `5d14be7d21d811271099be8b346e32dd3d8f4ddb`. The current exact-head workflow is [#42180786470](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42180786470), queued at the time this handoff was updated.
