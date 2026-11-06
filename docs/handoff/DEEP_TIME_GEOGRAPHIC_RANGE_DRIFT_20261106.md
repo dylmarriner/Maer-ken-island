@@ -134,3 +134,11 @@ The same fail-fast boundary now checks the existing simulation clock and its nex
 - No RNG stream, key derivation, step ordering, snapshot format or simulation parameter changes.
 
 Exact-head CI must rerun formatting, Clippy, fast tests, desktop/backend and both week/year reference-pack acceptance jobs. The previous run is superseded by this follow-up commit; no local Cargo result is claimed while custom OpenCommander returns HTTP 429.
+
+
+## Exact commits for the clock guard follow-up
+
+- `56c6777cd3f7b1884cb431ad139e8b1be6365e4c` — preflight clock addition and checked RNG step index; add overflow regressions.
+- `c0204d3a61416aaf8a50d7137645d773dcac313c` — update the canonical remaining-work checklist.
+- `365a76c96dfdcd394731ff0f24cc5f3ea4265f6c` — record the imported-code divergence in `UPSTREAM.md` and update PR #106.
+- The persisted-clock validation regression is added in this follow-up commit; exact-head CI remains mandatory.
