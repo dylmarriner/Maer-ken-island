@@ -196,10 +196,7 @@ mod tests {
 
     #[test]
     fn valid_legacy_file_snapshot_upgrades_schema_without_state_rewrite() {
-        let dir = std::env::temp_dir().join(format!(
-            "mk_snapshot_legacy_valid_{}",
-            std::process::id()
-        ));
+        let dir = std::env::temp_dir().join(format!("mk_snapshot_legacy_valid_{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("state.bin");
         write_legacy_snapshot(&path, false);
@@ -209,23 +206,18 @@ mod tests {
             loaded.snapshot_schema_version,
             WORLD_STATE_SNAPSHOT_SCHEMA_VERSION
         );
-        assert!(loaded
-            .biosphere_state
-            .species
-            .iter()
-            .all(|species| species.geographic_range.is_finite()
-                && species.geographic_range > 0.0
-                && species.geographic_range <= 1.0));
+        assert!(loaded.biosphere_state.species.iter().all(|species| species
+            .geographic_range
+            .is_finite()
+            && species.geographic_range > 0.0
+            && species.geographic_range <= 1.0));
 
         std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
     fn invalid_legacy_file_snapshot_is_rejected_at_load() {
-        let dir = std::env::temp_dir().join(format!(
-            "mk_snapshot_legacy_invalid_{}",
-            std::process::id()
-        ));
+        let dir = std::env::temp_dir().join(format!("mk_snapshot_legacy_invalid_{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("state.bin");
         write_legacy_snapshot(&path, true);
