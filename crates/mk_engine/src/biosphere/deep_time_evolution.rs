@@ -663,6 +663,11 @@ impl DeepTimeEvolution {
         let mut times_by_species: std::collections::HashMap<u64, Vec<f64>> =
             std::collections::HashMap::new();
         for &(species_id, speciation_time) in &self.last_speciation_times {
+            if !speciation_time.is_finite() || speciation_time < 0.0 {
+                return Err(format!(
+                    "Species {species_id} has an invalid speciation time"
+                ));
+            }
             times_by_species
                 .entry(species_id)
                 .or_default()
@@ -714,6 +719,16 @@ mod geographic_range_tests {
             100_000,
             range,
         )
+    }
+
+    #[test]
+    fn validation_rejects_nonfinite_and_negative_speciation_times_without_panicking() {
+        for invalid_time in [f64::NAN, f64::INFINITY, -1.0] {
+            let mut evolution = DeepTimeEvolution::new();
+            evolution.last_speciation_times.push((7, invalid_time));
+            let error = evolution.validate(&[]).expect_err("invalid speciation time");
+            assert!(error.contains("Species 7 has an invalid speciation time"));
+        }
     }
 
     #[test]
