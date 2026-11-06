@@ -50,6 +50,6 @@ A further exact-arithmetic review found that `min + (max - min) * 0.5` can still
 - Otherwise it uses `min * 0.5 + max * 0.5`. Halving the large finite endpoints is exact and the final addition performs the rounding once, without an overflowing intermediate sum.
 - Added positive and negative regressions for `min = 3 × 2^969` and `max = 2^1023`. The positive expected result is bit pattern `0x7fd0000000000001`; the prior difference-based formula returned `0x7fd0000000000000`.
 - Commits: `2471472c` (midpoint algorithm), `f07a3d29` (regressions).
-- Exact-head workflow `#42205227479` was pending for `f07a3d29` when this handoff was written. The earlier run's passed dashboard/scripts/audit jobs do not verify the new code. Rust format, Clippy, fast tests, desktop, backend and week/year acceptance must pass on the new head.
+- Exact-head workflow `#42205227479` on code/test head `f07a3d29` was cancelled after subsequent documentation-only pushes superseded the in-progress run. Dashboard, computer service, dependency audit and repository scripts passed; the fast Rust tests, week reference acceptance, desktop and installed backend were cancelled. No Rust test or week/year pass is claimed for the new algorithm. The current PR head is documentation-only after the code/test commit; a fresh exact-head run is still required.
 
 No source-pack values, citations, physical parameters, deviations, simulation state, snapshot/replay format, hash baseline, budget or offline limit changed.
