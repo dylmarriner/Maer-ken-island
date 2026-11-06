@@ -167,3 +167,8 @@ Regression coverage:
 - Existing digest/tamper checks remain before schema validation.
 
 This is an explicit compatibility boundary, not a data migration. No saved files or append-only logs were rewritten, no RNG keys/order changed, and `snapshot_schema_version` is persistence metadata excluded from the subsystem replay hash chain. Exact-head CI must verify the new loader tests before merge.
+
+
+Follow-up implementation commits: `e857b030` (schema metadata/replay loader), `ac8a72aa` (geographic validation), `a3d91eaa` (file loader), `d6f01314` (replay snapshot tests), `73a2cf00` (file snapshot tests), `964275b8` (world validation), `50e0a442`/`c9431c99` (canon validation order), and `2001fc8b` (finite/non-negative speciation-time preflight before sorting). Rust formatting and checklist/handoff follow-ups are recorded in the PR description.
+
+Latest code/test head: `2001fc8b819cc2dff68e12b7b12a0bda5a341141`. Exact-head workflow [#42166054878](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42166054878) is pending. The prior all-green workflow #42156312276 predates these compatibility changes and does not verify them. Custom OpenCommander remains HTTP 429; no local Cargo result is claimed. Keep PR #106 unmerged until the new exact-head formatting, Clippy, fast Rust tests, both snapshot restore paths, desktop/backend and week/year reference acceptance all pass.
