@@ -2487,14 +2487,26 @@ impl WorldState {
         match self.snapshot_schema_version {
             0 => {
                 let species = &self.biosphere_state.species;
-                let evolved =
-                    self.deep_time.step_index > 0 || self.deep_time.current_time_years > 0.0;
-                if evolved
-                    && !species.is_empty()
+                let has_speciation_history = !self.deep_time.last_speciation_times.is_empty();
+                let evolved = self.deep_time.step_index > 0
+                    || self.deep_time.current_time_years > 0.0
+                    || has_speciation_history;
+                let all_ranges_lost = !species.is_empty()
                     && species.iter().all(|entry| {
                         entry.geographic_range.is_finite() && entry.geographic_range >= 1.0
-                    })
-                {
+                    });
+                // The old drift floor ran before speciation. A newly-created child
+                // could therefore retain a fractional range while its evolved
+                // parents had already been floored to 1.0. Schema 0 has no
+                // parent-child provenance, so this mixed state cannot be migrated
+                // losslessly when speciation history is present.
+                let ambiguous_post_speciation_ranges = has_speciation_history
+                    && species.iter().any(|entry| {
+                        entry.geographic_range.is_finite()
+                            && entry.geographic_range > 0.0
+                            && entry.geographic_range < 1.0
+                    });
+                if evolved && (all_ranges_lost || ambiguous_post_speciation_ranges) {
                     return Err(concat!(
                         "legacy snapshot schema 0 is incompatible: the previous geographic-range ",
                         "drift floor erased fractional ranges; lossless migration is impossible"
@@ -2951,6 +2963,62 @@ mod snapshot_tests {
         original.step_world(1).expect("original step");
         restored.step_world(1).expect("restored step");
         assert_eq!(restored.hash_chain.current, original.hash_chain.current);
+    }
+
+    fn legacy_mixed_speciation_snapshot(world: &WorldState) -> WorldSnapshot {
+        let current = world.create_snapshot().expect("current snapshot");
+        let mut value: serde_json::Value =
+            serde_json::from_slice(&current.data).expect("snapshot JSON");
+        value
+            .as_object_mut()
+            .expect("world state object")
+            .remove("snapshot_schema_version");
+        let species = value["biosphere_state"]["species"]
+            .as_array_mut()
+            .expect("persisted founding species");
+        for entry in species.iter_mut() {
+            entry["geographic_range"] = serde_json::json!(1.0);
+        }
+        let parent = species
+            .iter()
+            .find(|entry| entry["species_id"].as_u64() == Some(43))
+            .expect("speciation parent")
+            .clone();
+        let child_id = species
+            .iter()
+            .filter_map(|entry| entry["species_id"].as_u64())
+            .max()
+            .expect("founding species id")
+            + 1;
+        let mut child = parent;
+        child["species_id"] = serde_json::json!(child_id);
+        child["species_name"] = serde_json::json!("Legacy speciation child");
+        child["geographic_range"] = serde_json::json!(0.5);
+        species.push(child);
+        value["deep_time"]["step_index"] = serde_json::json!(1);
+        value["deep_time"]["current_time_years"] = serde_json::json!(1.0);
+        value["deep_time"]["last_speciation_times"] = serde_json::json!([[43, 0.0]]);
+        let data = serde_json::to_vec(&value).expect("mixed legacy snapshot JSON");
+        let digest = blake3::hash(&data).into();
+        WorldSnapshot {
+            tick: current.tick,
+            data,
+            digest,
+        }
+    }
+
+    #[test]
+    fn evolved_legacy_snapshot_with_mixed_speciation_ranges_is_rejected() {
+        let world = WorldState::new(Arc::new(CanonLocked::default()), [19u8; 32]);
+        let snapshot = legacy_mixed_speciation_snapshot(&world);
+        let error = WorldState::from_snapshot(&snapshot).expect_err("ambiguous mixed legacy ranges");
+        assert!(
+            error
+                .to_string()
+                .contains("legacy snapshot schema 0 is incompatible"),
+            "unexpected error: {error}"
+        );
+        assert!(error.to_string().contains("lossless migration is impossible"));
     }
 
     #[test]

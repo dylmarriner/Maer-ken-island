@@ -196,6 +196,47 @@ mod tests {
         std::fs::write(path, bytes).expect("legacy snapshot file");
     }
 
+    fn write_legacy_mixed_speciation_snapshot(path: &Path) {
+        let world = test_world();
+        let mut value = serde_json::to_value(&world).expect("world state JSON");
+        value
+            .as_object_mut()
+            .expect("world state object")
+            .remove("snapshot_schema_version");
+        let species = value["biosphere_state"]["species"]
+            .as_array_mut()
+            .expect("persisted founding species");
+        for entry in species.iter_mut() {
+            entry["geographic_range"] = serde_json::json!(1.0);
+        }
+        let parent = species
+            .iter()
+            .find(|entry| entry["species_id"].as_u64() == Some(43))
+            .expect("speciation parent")
+            .clone();
+        let child_id = species
+            .iter()
+            .filter_map(|entry| entry["species_id"].as_u64())
+            .max()
+            .expect("founding species id")
+            + 1;
+        let mut child = parent;
+        child["species_id"] = serde_json::json!(child_id);
+        child["species_name"] = serde_json::json!("Legacy speciation child");
+        child["geographic_range"] = serde_json::json!(0.5);
+        species.push(child);
+        value["deep_time"]["step_index"] = serde_json::json!(1);
+        value["deep_time"]["current_time_years"] = serde_json::json!(1.0);
+        value["deep_time"]["last_speciation_times"] = serde_json::json!([[43, 0.0]]);
+
+        let state_bytes = serde_json::to_vec(&value).expect("legacy state JSON");
+        let digest = blake3::hash(&state_bytes);
+        let mut bytes = Vec::with_capacity(DIGEST_LEN + state_bytes.len());
+        bytes.extend_from_slice(digest.as_bytes());
+        bytes.extend_from_slice(&state_bytes);
+        std::fs::write(path, bytes).expect("mixed legacy snapshot file");
+    }
+
     #[test]
     fn valid_legacy_file_snapshot_upgrades_schema_without_state_rewrite() {
         let dir =
@@ -240,6 +281,24 @@ mod tests {
             load_snapshot(&path),
             Err(SnapshotError::CanonMismatch)
         ));
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn mixed_speciation_legacy_file_snapshot_is_rejected_at_load() {
+        let dir = std::env::temp_dir().join(format!("mk_snapshot_legacy_mixed_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("state.bin");
+        write_legacy_mixed_speciation_snapshot(&path);
+
+        let error = load_snapshot(&path).expect_err("ambiguous mixed legacy ranges");
+        assert!(
+            matches!(error, SnapshotError::SerializeError(ref message)
+                if message.contains("legacy snapshot schema 0 is incompatible")
+                    && message.contains("lossless migration is impossible")),
+            "unexpected error: {error}"
+        );
 
         std::fs::remove_dir_all(&dir).ok();
     }

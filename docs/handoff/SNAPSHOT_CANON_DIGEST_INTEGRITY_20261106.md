@@ -44,3 +44,8 @@ Workflow [#42168311597](https://github.com/dylmarriner/Maer-ken-island/actions/r
 ## Replay envelope tick integrity
 
 The replay snapshot envelope carries a public `tick` beside the digested state payload. That tick was not compared with the deserialized world's tick, so a valid payload digest could accompany contradictory envelope metadata. `WorldState::from_snapshot` now rejects that mismatch before schema validation or state exposure. A regression changes only the envelope tick and proves rejection while leaving the payload digest valid.
+
+
+## Mixed legacy ranges after speciation
+
+Codex identified a legacy ordering edge case: the old drift floor ran before speciation, so parents could be floored to `1.0` while a newly created child retained half the parent's range. The previous all-species-at-least-one detector missed this mixed state. Schema-0 validation now treats a non-empty speciation history plus any fractional species range as ambiguous and rejects it rather than silently upgrading. Regression tests exercise both file-based and replay snapshot loaders. Because schema 0 has no persisted parent-child provenance, a lossless reconstruction cannot be proven.
