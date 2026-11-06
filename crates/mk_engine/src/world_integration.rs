@@ -2560,6 +2560,9 @@ impl WorldState {
         self.biosphere_state
             .validate()
             .map_err(ValidationError::BiosphereError)?;
+        self.deep_time
+            .validate(&self.biosphere_state.species)
+            .map_err(ValidationError::DeepTimeError)?;
 
         Ok(())
     }
@@ -2636,6 +2639,8 @@ pub enum ValidationError {
     HashChainBreak,
     #[error("biosphere error: {0}")]
     BiosphereError(String),
+    #[error("deep-time error: {0}")]
+    DeepTimeError(String),
     #[error("NaN value in field: {0}")]
     NaNValue(String),
     #[error("infinite value in field: {0}")]
