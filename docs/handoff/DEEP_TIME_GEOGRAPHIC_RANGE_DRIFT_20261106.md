@@ -180,3 +180,13 @@ A further review of the old `apply_drift` implementation showed that its `max(1.
 
 
 Formatting follow-up: commit `e0bab91b` wraps the legacy drift-floor incompatibility message without changing behavior. Latest code/test head is `e0bab91b6ad9fdca68f58bd0ffba6f81a474c4a2`; workflow #42166375249 covers the preceding head `015b0aaf` and is not exact-head evidence for this formatting commit. A fresh workflow is required before merge.
+
+
+## Exact-head formatting correction (6 November 2026)
+
+Workflow [#42166477308](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42166477308) checked the snapshot-compatibility head and failed only at `cargo fmt --all -- --check`. Clippy and fast tests were skipped after formatting failed. The log's exact rustfmt output is applied:
+- `11251495` — deep-time speciation-time regression formatting;
+- `16915826` — file-loader test formatting;
+- `2a3c7591` — snapshot compatibility branch and assertions.
+
+Latest code/test head: `2a3c7591f37bfe46a67586d168fd605298d47b0e`. A fresh exact-head workflow is required; #42166477308 does not verify this corrected head. Keep PR #106 unmerged until formatting, Clippy, fast tests, both snapshot loaders, desktop/backend and week/year reference acceptance pass.
