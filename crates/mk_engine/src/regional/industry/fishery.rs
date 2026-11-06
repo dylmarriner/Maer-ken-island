@@ -453,8 +453,10 @@ impl FishStock {
         if !landed_t.is_finite() {
             return Err(FisheryError::LandedTotalOverflow);
         }
-        // Never report a positive catch that the persisted cumulative total cannot record.
-        if catch > 0.0 && landed_t == self.landed_t {
+        // The persisted cumulative delta must equal the catch exactly. Checking only
+        // whether the total changed misses rounding up/down (for example, 2^53 + 3
+        // rounds to 2^53 + 4), which would corrupt the material ledger.
+        if catch > 0.0 && landed_t - self.landed_t != catch {
             return Err(FisheryError::LandedTotalUnrepresentable);
         }
 
@@ -1230,6 +1232,38 @@ mod tests {
         assert_eq!(
             stock, before,
             "a catch that cannot be represented in the cumulative total must not commit biomass"
+        );
+    }
+
+    #[test]
+    fn landed_increment_rounded_to_a_different_amount_is_rejected_without_mutation() {
+        let mut model = FisheryModel::load_default().expect("the pack loads");
+        model.r_per_year[Resilience::Medium as usize] = 0.5;
+        model.depensation_below = 0.25;
+
+        let mut stock = FishStock::unexploited(Resilience::Medium, 1_000.0)
+            .expect("positive carrying capacity");
+        stock.biomass_t = 500.0;
+        stock.landed_t = 9_007_199_254_740_992.0; // 2^53
+        let before = stock.clone();
+        let requested = 3.0;
+
+        // At 2^53, adding three rounds up to four tonnes in binary64.
+        assert_eq!(stock.landed_t + requested - stock.landed_t, 4.0);
+        assert!(
+            stock
+                .sustainable_catch_limit_t(&model, YEAR_S)
+                .expect("valid one-year growth")
+                > requested
+        );
+
+        assert_eq!(
+            stock.fish(&model, requested, YEAR_S),
+            Err(FisheryError::LandedTotalUnrepresentable)
+        );
+        assert_eq!(
+            stock, before,
+            "a rounded cumulative increment must not commit biomass or landed mass"
         );
     }
 
