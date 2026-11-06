@@ -56,3 +56,9 @@ The fishery remains standalone until sourced species-specific stock and effort d
 1. Verify PR #105 exact-head Rust and acceptance checks.
 2. Keep the fishery standalone until species-specific carrying capacity, resilience and effort data are sourced.
 3. Design the IslandLife integration around deterministic single-writer state, append-only commands/logs, snapshot compatibility and replay-hash equality.
+
+## Exact-head formatting correction
+
+Workflow [#42146493685](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42146493685) checked the first PR head. Repository scripts, web dashboard, dependency audit and computer service passed; the week/year reference acceptance, installed backend and desktop build were still running. The fast Rust job stopped at `cargo fmt --all -- --check` on exactly two formatting differences in `fishery.rs` (the helper signature and one multiline assertion). Clippy and fast tests were skipped after formatting failed.
+
+Commit `535ec4d5` applies the formatter's exact output. A fresh workflow on that exact head must pass formatting, Clippy, fast tests, both reference-pack acceptance tests, desktop/backend and the other required jobs before merge. Results from the pre-format head do not verify the new head.
