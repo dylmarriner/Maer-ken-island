@@ -3,11 +3,58 @@
 //! agree with the formulas they quote.
 
 use mk_engine::validation::{
-    default_reference_dir, Confidence, ReferenceDomain, ReferenceLibrary, ReferencePack,
+    default_reference_dir, Confidence, ReferenceDomain, ReferenceItem, ReferenceLibrary,
+    ReferencePack, ReferenceValue,
 };
 
 fn library() -> ReferenceLibrary {
     ReferenceLibrary::load(&default_reference_dir()).expect("reference packs load")
+}
+
+fn range_item(key: &str, min: f64, max: f64, typical: Option<f64>) -> ReferenceItem {
+    ReferenceItem {
+        key: key.into(),
+        description: "Synthetic range used to test midpoint arithmetic".into(),
+        unit: "unit".into(),
+        source: "test".into(),
+        confidence: Confidence::High,
+        value: ReferenceValue::Range { min, max, typical },
+        note: None,
+    }
+}
+
+#[test]
+fn range_midpoint_stays_finite_for_valid_extreme_bounds() {
+    let positive_min = f64::MAX * 0.75;
+    let positive = range_item("positive", positive_min, f64::MAX, None);
+    let positive_midpoint = positive.central().expect("range has a central value");
+    assert!(positive_midpoint.is_finite());
+    assert!(positive_midpoint >= positive_min && positive_midpoint <= f64::MAX);
+    assert_eq!(
+        positive_midpoint,
+        positive_min + (f64::MAX - positive_min) * 0.5,
+    );
+
+    let negative_max = -f64::MAX * 0.75;
+    let negative = range_item("negative", -f64::MAX, negative_max, None);
+    let negative_midpoint = negative.central().expect("range has a central value");
+    assert!(negative_midpoint.is_finite());
+    assert!(negative_midpoint >= -f64::MAX && negative_midpoint <= negative_max);
+
+    let spanning_zero = range_item("spanning_zero", -f64::MAX, f64::MAX, None);
+    assert_eq!(spanning_zero.central(), Some(0.0));
+
+    let smallest_subnormal = f64::from_bits(1);
+    let subnormal = range_item("subnormal", smallest_subnormal, smallest_subnormal, None);
+    assert_eq!(subnormal.central(), Some(smallest_subnormal));
+
+    let explicit = range_item(
+        "explicit",
+        positive_min,
+        f64::MAX,
+        Some(f64::MAX * 0.9),
+    );
+    assert_eq!(explicit.central(), Some(f64::MAX * 0.9));
 }
 
 /// Items each domain must provide (`docs/superpowers/plans/2026-10-02-island-phase0c-canon-and-realism.md`, Task 3).

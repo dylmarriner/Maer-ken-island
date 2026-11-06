@@ -128,6 +128,19 @@ pub enum ReferenceValue {
     Table(ReferenceTable),
 }
 
+/// Compute a range midpoint without overflowing for finite ordered endpoints.
+///
+/// Subtraction is safe when both endpoints have the same sign. When they
+/// straddle zero, halve each endpoint before adding so max - min cannot
+/// overflow. This preserves subnormal equal endpoints as well.
+fn range_midpoint(min: f64, max: f64) -> f64 {
+    if min.is_sign_negative() == max.is_sign_negative() {
+        min + (max - min) * 0.5
+    } else {
+        min * 0.5 + max * 0.5
+    }
+}
+
 /// One reference value.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ReferenceItem {
@@ -165,7 +178,7 @@ impl ReferenceItem {
         match self.value {
             ReferenceValue::Point(v) => Some(v),
             ReferenceValue::Range { min, max, typical } => {
-                Some(typical.unwrap_or(0.5 * (min + max)))
+                Some(typical.unwrap_or_else(|| range_midpoint(min, max)))
             }
             ReferenceValue::Table(_) => None,
         }
