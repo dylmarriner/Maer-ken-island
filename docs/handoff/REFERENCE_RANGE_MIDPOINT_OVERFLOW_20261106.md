@@ -53,3 +53,14 @@ A further exact-arithmetic review found that `min + (max - min) * 0.5` can still
 - Exact-head workflow `#42205227479` on code/test head `f07a3d29` was cancelled after subsequent documentation-only pushes superseded the in-progress run. Dashboard, computer service, dependency audit and repository scripts passed; the fast Rust tests, week reference acceptance, desktop and installed backend were cancelled. No Rust test or week/year pass is claimed for the new algorithm. The current PR head is documentation-only after the code/test commit; a fresh exact-head run is still required.
 
 No source-pack values, citations, physical parameters, deviations, simulation state, snapshot/replay format, hash baseline, budget or offline limit changed.
+
+
+## Fishery growth-rate prior midpoint follow-up — 7 November 2026
+
+The same difference-first midpoint pattern remained in `regional/industry/fishery.rs` when loading FishBase resilience-class growth-rate priors. It could lose a subnormal half-unit and could round a wide-exponent-gap midpoint one ULP low, even though the source bounds were finite and ordered.
+
+- `checked_rate_midpoint` now sums before halving when both non-negative endpoints are at most `f64::MAX / 2`; otherwise it halves both endpoints before addition.
+- Added a positive adjacent-subnormal tie regression (expected bit pattern `2`) and the wide-gap regression `3 × 2^969` to `2^1023` (expected `0x7fd0000000000001`).
+- Code and tests: commit `${mkCode.commit_sha}`.
+- Previous exact-head workflow [#42206064482](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42206064482) passed formatting, Clippy, fast Rust tests, desktop build/tests/rendering, installed backend, week/year reference acceptance, dashboard, computer service, repository scripts and dependency audit on the prior head `44e200692e8d964fe9d176505255e314d4e3f9e9`. This follow-up invalidates that exact-head result; a fresh workflow on the new head is required.
+- No reference-pack values, physical parameters, stock calibration, simulation state, snapshot/replay format, hash baseline, budget or offline limit changed.
