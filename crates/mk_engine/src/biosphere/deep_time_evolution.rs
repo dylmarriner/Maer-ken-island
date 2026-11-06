@@ -718,6 +718,26 @@ mod geographic_range_tests {
     }
 
     #[test]
+    fn geographic_range_drift_is_bit_repeatable_for_the_same_seed() {
+        fn run(seed: [u8; 32]) -> (u64, u64, u64, u64) {
+            let mut rng = RngRegistry::new(seed);
+            let mut species = vec![test_species(0.4, &rng)];
+            let mut evolution = DeepTimeEvolution::new();
+            evolution
+                .step_evolution_processes(&mut species, 1.0, 0.0, &mut rng)
+                .expect("valid deterministic step");
+            (
+                species[0].population_size,
+                species[0].geographic_range.to_bits(),
+                evolution.step_index,
+                evolution.current_time_years.to_bits(),
+            )
+        }
+
+        assert_eq!(run([10; 32]), run([10; 32]));
+    }
+
+    #[test]
     fn invalid_geographic_range_fails_before_evolution_state_changes() {
         let mut rng = RngRegistry::new([8; 32]);
         let mut species = vec![test_species(f64::NAN, &rng)];
