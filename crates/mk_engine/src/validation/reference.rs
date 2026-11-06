@@ -130,14 +130,18 @@ pub enum ReferenceValue {
 
 /// Compute a range midpoint without overflowing for finite ordered endpoints.
 ///
-/// Subtraction is safe when both endpoints have the same sign. When they
-/// straddle zero, halve each endpoint before adding so max - min cannot
-/// overflow. This preserves subnormal equal endpoints as well.
+/// Opposite-sign endpoints can be summed safely, and summing before halving
+/// preserves correct rounding for subnormal values. Small same-sign endpoints
+/// use the same path; large same-sign endpoints use a bounded difference so
+/// their sum cannot overflow.
 fn range_midpoint(min: f64, max: f64) -> f64 {
-    if min.is_sign_negative() == max.is_sign_negative() {
-        min + (max - min) * 0.5
+    let opposite_signs = min.is_sign_negative() != max.is_sign_negative();
+    let small_same_sign = min.abs() <= f64::MAX * 0.5 && max.abs() <= f64::MAX * 0.5;
+
+    if opposite_signs || small_same_sign {
+        (min + max) * 0.5
     } else {
-        min * 0.5 + max * 0.5
+        min + (max - min) * 0.5
     }
 }
 
