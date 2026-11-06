@@ -178,7 +178,7 @@ impl ReferenceItem {
         match self.value {
             ReferenceValue::Point(v) => Some(v),
             ReferenceValue::Range { min, max, typical } => {
-                Some(typical.unwrap_or_else(|| range_midpoint(min, max)))
+                Some(typical.unwrap_or(range_midpoint(min, max)))
             }
             ReferenceValue::Table(_) => None,
         }
