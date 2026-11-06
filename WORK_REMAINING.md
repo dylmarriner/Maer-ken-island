@@ -164,7 +164,7 @@ animal and fish resource nodes (done 2026-10-23, §2b).
   - Browser inspector DOM regression (2026-11-06): `scripts/tests/marine_cell_inspector.test.mjs`
     drives the same exported `handleMapCellClick` helper used by the island page and verifies
     visible species, individual and biomass values, the uncalibrated/not-harvestable disclaimer,
-    omission of invalid projections, and no request before the view is ready.
+    omission of negative, non-finite or unsafe projections, and no request before the view is ready.
   - Salt (2026-10-23): `industry/salt_works.rs` makes solar salt at Dominion Salt's Lake
     Grassmere yield per hectare of production area (pack, 42.4-49.4 t/ha/yr); it ignores the
     rain that swings Grassmere's harvest from nil to 130,000 t, and no works is sited yet (a
