@@ -8,7 +8,7 @@ how to build and check it, and where everything else is written down.
 
 ## Latest engineering handoff — 6 November 2026
 
-- [Fishery interval sustainable-catch limit](docs/handoff/FISHERY_SUSTAINABLE_CATCH_LIMIT_20261106.md) — PR #105. Adds a read-only per-interval growth cap shared with `FishStock::fish`, so a future decision layer can inspect the exact catch bound without advancing biomass or landed totals. Adds normal, coarse-interval, invalid-input and no-mutation regressions; no sourced stock values or snapshot changes.
+- [Fishery interval sustainable-catch limit](docs/handoff/FISHERY_SUSTAINABLE_CATCH_LIMIT_20261106.md) — PR #105. Adds a read-only per-interval growth cap shared with `FishStock::fish`, so a future decision layer can inspect the exact catch bound without advancing biomass or landed totals. Adds normal, coarse-interval, invalid-input and no-mutation regressions; no sourced stock values or snapshot changes. Exact-head workflow #42146493685 caught two rustfmt-only differences; commit `535ec4d5` applies the exact formatter output, and a fresh exact-head run is required.
 
 
 - [Deep-time geographic-range drift correction](docs/handoff/DEEP_TIME_GEOGRAPHIC_RANGE_DRIFT_20261106.md) — PR #103, rebased onto the PR #102 merge. Preserves fractional planetary ranges rather than forcing all species to 1.0; validates range and duration before state changes. Exact-head workflow #42141050362 is pending.
