@@ -1,4 +1,4 @@
-use crate::world_integration::WorldState;
+use crate::world_integration::{WorldState, WORLD_STATE_SNAPSHOT_SCHEMA_VERSION};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
@@ -57,6 +57,12 @@ const DIGEST_LEN: usize = 32;
 /// values represented by `serde_json::Value`, which bincode cannot restore
 /// because it does not implement `deserialize_any`.
 pub fn save_snapshot(state: &WorldState, path: &Path) -> Result<(), SnapshotError> {
+    if state.snapshot_schema_version != WORLD_STATE_SNAPSHOT_SCHEMA_VERSION {
+        return Err(SnapshotError::SerializeError(format!(
+            "world state schema version {} is not current; expected {}",
+            state.snapshot_schema_version, WORLD_STATE_SNAPSHOT_SCHEMA_VERSION
+        )));
+    }
     let state_bytes =
         serde_json::to_vec(state).map_err(|e| SnapshotError::SerializeError(e.to_string()))?;
 
@@ -100,6 +106,9 @@ pub fn load_snapshot(path: &Path) -> Result<(SnapshotHeader, WorldState), Snapsh
 
     let mut state: WorldState = serde_json::from_slice(state_bytes)
         .map_err(|e| SnapshotError::SerializeError(e.to_string()))?;
+    state
+        .validate_snapshot_schema()
+        .map_err(SnapshotError::SerializeError)?;
     let stored_canon_digest = state.canon_derived.canon_digest;
     mk_core::canon::validator::validate_canon(&state.canon).map_err(SnapshotError::InvalidCanon)?;
 
