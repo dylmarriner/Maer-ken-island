@@ -40,3 +40,14 @@ This closes the gap where the new serializer could match the old byte layout whi
 The preceding exact-head workflow [#42230618280](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42230618280) passed fast Rust tests, formatting, Clippy, desktop build/render/input/frame-cost acceptance, installed backend, week/year reference acceptance, web dashboard, computer service, repository scripts and dependency audit. This new legacy-read assertion is a follow-up after that green head; it requires a fresh exact-head workflow. No local Cargo pass is claimed.
 
 No snapshot format, schema version, simulation state, replay hash, reference value, stock parameter, offline limit or budget limit changed.
+
+
+## Subnormal MSY preservation — 7 November 2026
+
+A further review found that `msy_t` avoided overflow by multiplying carrying capacity by the peak fraction before applying the resilience rate. For subnormal carrying capacities this intermediate product can round down (or to zero), even when the final MSY is representable.
+
+- `msy_t` now detects a subnormal scaled capacity and applies the resilience rate to the small carrying capacity before applying the bounded peak fraction.
+- The branch is safe from intermediate overflow because the piecewise MSY surplus fraction is bounded below by `4/27`; if the fraction-scaled capacity is subnormal, the unscaled `rate * K` remains far below `f64::MAX`.
+- Regression covers 1, 3 and 7 units of the smallest subnormal value with `r = 4` and peak fraction `0.25`, where the exact result is the original carrying capacity.
+- No reference values, stock calibration, snapshot format, replay hash, simulation state, offline limit or budget limit changed.
+- The preceding exact-head workflow [#42237465516](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42237465516) passed all required jobs on the legacy-snapshot-read head. This new source/test change requires its own exact-head CI run.

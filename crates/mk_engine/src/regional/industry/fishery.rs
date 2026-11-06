@@ -316,7 +316,16 @@ impl FishStock {
         self.validate_state()?;
 
         let (_, peak_surplus_fraction) = msy_peak_fractions(model.depensation_below);
-        let msy = model.r(self.resilience) * (self.k_t * peak_surplus_fraction);
+        let rate = model.r(self.resilience);
+        let scaled_capacity = self.k_t * peak_surplus_fraction;
+        let msy = if scaled_capacity < f64::MIN_POSITIVE && rate > 0.0 {
+            // Scaling a subnormal K by the peak fraction first can discard
+            // representable MSY. The piecewise peak fraction is bounded below
+            // by 4/27, so K is small enough here that rate * K cannot overflow.
+            (rate * self.k_t) * peak_surplus_fraction
+        } else {
+            rate * scaled_capacity
+        };
         if !msy.is_finite() || msy < 0.0 {
             return Err(FisheryError::NonFiniteGrowth);
         }
@@ -771,6 +780,30 @@ mod tests {
             .expect("the fishery can land a positive request from representable growth");
         assert_eq!(landed, 1.0e-200);
         assert_eq!(stock.landed_t, 1.0e-200);
+    }
+
+    #[test]
+    fn msy_preserves_representable_subnormal_results_when_peak_scaling_would_underflow() {
+        let model = FisheryModel {
+            r_per_year: [0.0, 4.0, 0.0, 0.0],
+            depensation_below: 0.25,
+        };
+
+        // The exact result is K because r * peak_fraction is 4 * 0.25.
+        // Multiplying K by 0.25 first rounds these values down in the
+        // subnormal range, then incorrectly amplifies that rounded result.
+        for units in [1_u64, 3, 7] {
+            let carrying_capacity = f64::from_bits(units);
+            assert!(carrying_capacity * 0.25 < f64::MIN_POSITIVE);
+            let stock = FishStock::unexploited(Resilience::Medium, carrying_capacity)
+                .expect("positive subnormal carrying capacity");
+
+            assert_eq!(
+                stock.msy_t(&model).expect("representable subnormal MSY").to_bits(),
+                units,
+                "MSY must preserve {units} units of subnormal carrying capacity"
+            );
+        }
     }
 
     #[test]

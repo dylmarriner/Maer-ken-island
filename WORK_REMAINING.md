@@ -3,7 +3,7 @@
 
 Latest reference-range follow-up (PR #109): midpoint arithmetic now avoids overflow, subnormal tie loss and one-ULP double rounding for wide exponent gaps. Regression and exact-head CI evidence are recorded in `docs/handoff/REFERENCE_RANGE_MIDPOINT_OVERFLOW_20261106.md`; do not mark this item complete until the latest exact-head Rust, desktop, backend and week/year jobs pass.
 
-Updated 2026-11-06 against `main` at `0ddbd878eca26e11c114e0c434653316f4d7da96` (fishery PRs #104–#105, marine inspector PR #93, deep-time PR #106 and atomicity PR #107 are merged).
+Updated 2026-11-07 against `main` at `42bf9cc43c8024644a452a00127ed39b676d19ff` (fishery PRs #104–#105, marine inspector PR #93, deep-time PRs #106–#107 and desktop marine inspector PR #108 are merged; PR #109 remains open for fishery numerical and snapshot work).
 what is not done, and for each item, **what it takes to do it**: the sources or data it needs,
 the decisions only the owner can make, the files it touches, the tests that prove it and when it
 counts as finished. Read [`HANDOFF.md`](HANDOFF.md) first for what exists.
@@ -52,7 +52,7 @@ this list holds the current state. The evidence for what is *done* is in
 | Industry | Phase 4b Task 5: refinery, gas plant, fuel depot (D16) | Topping refinery done 2026-10-14; diesel depot 2026-10-22 (D58); gas plant 2026-10-23; reformer open | Reformate yield |
 | Industry | Phase 4b Task 6: jobs, trades, maintenance (D39) | Open | Upstream human-runtime change first |
 | Industry | Phase 4b Task 7: money, enterprises, payroll | Money, payroll and metered bills done 2026-10-18 (`regional/economy/`, D61, D62; `tests/island_economy.rs`). In `IslandLife` 2026-10-22 (`economy/island.rs`: deposits, Gem Petroleum selling the depot's diesel, monthly loans, closes, dividends, money audit); the petroleum business's staff and payslips, household bills, buying and selling homes open | Task 6 staff; upstream buying |
-| Industry | Phase 4b Task 7b: food and timber chains (forestry, sawmill, house framing, farm, livestock, food processing and fishery models 2026-10-23) | Models done; fishery preserves representable low-biomass surplus, computes the true piecewise MSY peak and exposes its biomass target plus a read-only interval sustainable-catch limit shared with the enforced catch cap; still not yet on the map or wired into island life | Task 8 workforce: who works a farm, mill or salt works, chosen by the people themselves (R14), never assigned |
+| Industry | Phase 4b Task 7b: food and timber chains (forestry, sawmill, house framing, farm, livestock, food processing and fishery models 2026-10-23) | Models done; fishery preserves low-biomass surplus, computes the piecewise MSY peak, exposes its biomass target and read-only interval catch limit, and now preserves representable subnormal MSY when peak scaling would otherwise underflow; still not on the map or wired into IslandLife | Task 8 workforce: who works a farm, mill or salt works, chosen by the people themselves (R14), never assigned |
 | Industry | Phase 4b Task 8: town and workforce | Founding households, the smallest practice and a staffed school done 2026-10-23 (`regional/town.rs`, D67); other enterprises' minimum staff, the town in `IslandLife`, homes and growth open | A sourced minimum staff for the oil, gas, power, bank and store businesses |
 | Industry | Phase 4b Task 9: dashboard pages, year acceptance | Industry (with payroll), Power, Timber and Food panels done 2026-10-23; Town dashboard added 2026-11-02 (living residents, location, practice and school staffing and accrued hours from live projection); year acceptance remains | Tasks 4-8 |
 | Climate | D3 rest: sea/land breezes, katabatic winds | Open | A diurnal wind solver |
@@ -169,14 +169,19 @@ serving the species to the map and the cell inspector; animal and fish resource 
     upstream head counts into tonnes per medium cell, with a conservation test against
     `animal_nodes` and whole-island species populations. The browser map and desktop cell inspectors now
     report the habitat's species count, individual count and live biomass, explicitly labelled
-    as an uncalibrated upstream-derived estimate; land and river cells are not assigned marine
-    stock. It is a read-only view, not a second population. Fishery harvest remains open: no
+    as an uncalibrated upstream-derived estimate and explicitly not harvestable stock or catch;
+    land and river cells are not assigned marine stock. The desktop inspector rejects negative
+    and non-finite projections before rendering. It is a read-only view, not a second population. Fishery harvest remains open: no
     species-specific resilience class, unexploited carrying capacity or catch-per-unit-effort
     source is attached to these upstream species.
   - Browser inspector DOM regression (2026-11-06): `scripts/tests/marine_cell_inspector.test.mjs`
     drives the same exported `handleMapCellClick` helper used by the island page and verifies
     visible species, individual and biomass values, the uncalibrated/not-harvestable disclaimer,
     omission of negative, non-finite or unsafe projections, and no request before the view is ready.
+  - Desktop inspector regression (2026-11-06): `apps/island_ui/src/inspectors.rs` rejects
+    negative and non-finite individual/biomass projections and shows the same not-harvestable
+    warning. Exact-head workflow #42226945535 passed the desktop build/render/input acceptance
+    and fast Rust suite; the merge into main is recorded at `42bf9cc`.
   - Salt (2026-10-23): `industry/salt_works.rs` makes solar salt at Dominion Salt's Lake
     Grassmere yield per hectare of production area (pack, 42.4-49.4 t/ha/yr); it ignores the
     rain that swings Grassmere's harvest from nil to 130,000 t, and no works is sited yet (a
