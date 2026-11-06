@@ -203,11 +203,22 @@ impl DeepTimeEvolution {
             return Err("deep-time step duration must be finite and non-negative".to_string());
         }
         validate_geographic_ranges(species)?;
+        if !self.current_time_years.is_finite() || self.current_time_years < 0.0 {
+            return Err("deep-time clock must be finite and non-negative".to_string());
+        }
+        let next_time_years = self.current_time_years + dt_years;
+        if !next_time_years.is_finite() {
+            return Err("deep-time clock overflowed".to_string());
+        }
+        let next_step_index = self
+            .step_index
+            .checked_add(1)
+            .ok_or_else(|| "deep-time step index overflowed".to_string())?;
 
         let mut events = Vec::new();
 
-        self.step_index += 1;
-        self.current_time_years += dt_years;
+        self.step_index = next_step_index;
+        self.current_time_years = next_time_years;
 
         // Apply population growth toward each species' carrying capacity.
         // This is the only counterbalance to mortality (selection pressure,
@@ -640,6 +651,10 @@ impl DeepTimeEvolution {
     }
 
     pub fn validate(&self, species: &[Species]) -> Result<(), String> {
+        if !self.current_time_years.is_finite() || self.current_time_years < 0.0 {
+            return Err("deep-time clock must be finite and non-negative".to_string());
+        }
+
         // Invariant: no species should have two recorded speciation events
         // closer together than MINIMUM_SPECIATION_TIMESCALE_YEARS. (A species
         // that speciated within the last cooldown window is normal and
@@ -773,6 +788,46 @@ mod geographic_range_tests {
             assert_eq!(evolution.step_index, 0);
             assert_eq!(evolution.current_time_years, 0.0);
         }
+    }
+
+    #[test]
+    fn clock_overflow_is_rejected_before_clock_or_species_mutation() {
+        let mut rng = RngRegistry::new([11; 32]);
+        let mut species = vec![test_species(0.4, &rng)];
+        let population_before = species[0].population_size;
+        let range_before = species[0].geographic_range.to_bits();
+        let mut evolution = DeepTimeEvolution::new();
+        evolution.current_time_years = f64::MAX;
+
+        let error = evolution
+            .step_evolution_processes(&mut species, f64::MAX, 0.0, &mut rng)
+            .expect_err("finite inputs whose sum overflows must fail closed");
+
+        assert_eq!(error, "deep-time clock overflowed");
+        assert_eq!(evolution.step_index, 0);
+        assert_eq!(evolution.current_time_years, f64::MAX);
+        assert_eq!(species[0].population_size, population_before);
+        assert_eq!(species[0].geographic_range.to_bits(), range_before);
+    }
+
+    #[test]
+    fn step_index_overflow_is_rejected_before_clock_or_species_mutation() {
+        let mut rng = RngRegistry::new([12; 32]);
+        let mut species = vec![test_species(0.4, &rng)];
+        let population_before = species[0].population_size;
+        let range_before = species[0].geographic_range.to_bits();
+        let mut evolution = DeepTimeEvolution::new();
+        evolution.step_index = u64::MAX;
+
+        let error = evolution
+            .step_evolution_processes(&mut species, 1.0, 0.0, &mut rng)
+            .expect_err("the RNG step counter must not wrap");
+
+        assert_eq!(error, "deep-time step index overflowed");
+        assert_eq!(evolution.step_index, u64::MAX);
+        assert_eq!(evolution.current_time_years, 0.0);
+        assert_eq!(species[0].population_size, population_before);
+        assert_eq!(species[0].geographic_range.to_bits(), range_before);
     }
 }
 
