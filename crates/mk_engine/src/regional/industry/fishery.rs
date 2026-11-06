@@ -1206,6 +1206,34 @@ mod tests {
     }
 
     #[test]
+    fn landed_increment_below_cumulative_total_precision_is_rejected_without_mutation() {
+        let model = FisheryModel::load_default().expect("the pack loads");
+        let mut stock = FishStock::unexploited(Resilience::Medium, 1_000.0)
+            .expect("positive carrying capacity");
+        stock.biomass_t = 500.0;
+        stock.landed_t = 9_007_199_254_740_992.0; // 2^53
+        let before = stock.clone();
+
+        // At 2^53, adding one tonne rounds back to the same binary64 value.
+        assert_eq!(stock.landed_t + 1.0, stock.landed_t);
+        assert!(
+            stock
+                .sustainable_catch_limit_t(&model, YEAR_S)
+                .expect("valid one-year growth")
+                > 1.0
+        );
+
+        assert_eq!(
+            stock.fish(&model, 1.0, YEAR_S),
+            Err(FisheryError::LandedTotalUnrepresentable)
+        );
+        assert_eq!(
+            stock, before,
+            "a catch that cannot be represented in the cumulative total must not commit biomass"
+        );
+    }
+
+    #[test]
     fn landed_total_overflow_returns_an_error_without_mutating_the_stock() {
         let m = FisheryModel::load_default().expect("the pack loads");
         let mut stock = FishStock::unexploited(Resilience::Medium, 1.0e308)
