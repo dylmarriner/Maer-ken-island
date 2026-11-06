@@ -546,6 +546,83 @@ fn replacing_species_catalogue_rejects_duplicate_ids_without_mutating_caches() {
 }
 
 #[test]
+fn replacing_species_catalogue_rejects_invalid_marine_density_without_mutating_caches() {
+    let b = base();
+    let mut biota = b.biota.clone();
+    let species_index = biota
+        .species()
+        .iter()
+        .position(|species| {
+            species.category == SpeciesCategory::Aquatic && is_marine(&species.affinity)
+        })
+        .expect("the island has a marine aquatic species");
+    let species_id = biota.species()[species_index].species_id;
+    let original_density = biota.species()[species_index].upstream_density_per_m2;
+    let affinity = biota.species()[species_index].affinity.clone();
+    let cell = biota
+        .habitat_cells(&affinity)
+        .next()
+        .expect("marine habitat");
+    let before_nodes = biota
+        .try_marine_aquatic_nodes(cell)
+        .expect("valid original projection");
+
+    let mut replacement = biota.species().to_vec();
+    replacement[species_index].upstream_density_per_m2 = f64::NAN;
+
+    assert_eq!(
+        biota.replace_species_catalogue(replacement),
+        Err(MarineProjectionError::InvalidDensity { species_id })
+    );
+    assert_eq!(
+        biota.species()[species_index].upstream_density_per_m2,
+        original_density
+    );
+    assert_eq!(
+        biota.try_marine_aquatic_nodes(cell).unwrap(),
+        before_nodes,
+        "a rejected density replacement must leave the original marine projection intact"
+    );
+}
+
+#[test]
+fn replacing_species_catalogue_rejects_invalid_marine_body_mass_without_mutating_caches() {
+    let b = base();
+    let mut biota = b.biota.clone();
+    let species_index = biota
+        .species()
+        .iter()
+        .position(|species| {
+            species.category == SpeciesCategory::Aquatic && is_marine(&species.affinity)
+        })
+        .expect("the island has a marine aquatic species");
+    let species_id = biota.species()[species_index].species_id;
+    let original_mass = biota.species()[species_index].body_mass_kg;
+    let affinity = biota.species()[species_index].affinity.clone();
+    let cell = biota
+        .habitat_cells(&affinity)
+        .next()
+        .expect("marine habitat");
+    let before_nodes = biota
+        .try_marine_aquatic_nodes(cell)
+        .expect("valid original projection");
+
+    let mut replacement = biota.species().to_vec();
+    replacement[species_index].body_mass_kg = 0.0;
+
+    assert_eq!(
+        biota.replace_species_catalogue(replacement),
+        Err(MarineProjectionError::InvalidBodyMass { species_id })
+    );
+    assert_eq!(biota.species()[species_index].body_mass_kg, original_mass);
+    assert_eq!(
+        biota.try_marine_aquatic_nodes(cell).unwrap(),
+        before_nodes,
+        "a rejected body-mass replacement must leave the original marine projection intact"
+    );
+}
+
+#[test]
 fn replacing_species_catalogue_rebuilds_grazer_weights() {
     let b = base();
     let mut biota = b.biota.clone();
