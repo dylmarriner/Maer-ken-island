@@ -3,7 +3,8 @@
 **Repository:** `dylmarriner/Maer-ken-island`  
 **Branch:** `fix/reference-range-midpoint-overflow-20261106`  
 **PR:** [#109](https://github.com/dylmarriner/Maer-ken-island/pull/109)  
-**Code/test commit:** `0c1538a968a291674678033645e7b221aa1bb177`
+**Code/test commit:** `0c1538a968a291674678033645e7b221aa1bb177`  
+**Exact rustfmt correction:** `cf77459dd355d3564bce6228889374398e47699b`
 
 ## Finding
 
@@ -27,7 +28,7 @@
 
 ## Verification
 
-Exact-head `cargo fmt --all -- --check`, workspace Clippy and `cargo test --workspace --exclude island_ui` are required. Custom OpenCommander access is not available in this run, so no local Cargo result is claimed. The PR is draft pending exact-head CI and review.
+Initial exact-head workflow [#42198602010](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42198602010) failed only at `cargo fmt --all -- --check` on the explicit-typical test's line wrap; the exact formatter output is committed as `cf77459d`. Desktop, installed backend and week/year acceptance were still running when the format gate failed, so their results are not claimed. A fresh exact-head run is required. Custom OpenCommander returned HTTP 429; no local Cargo result is claimed. The PR remains draft pending exact-head CI and review.
 
 ## Safety
 

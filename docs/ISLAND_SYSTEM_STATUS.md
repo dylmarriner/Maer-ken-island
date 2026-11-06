@@ -393,6 +393,6 @@ cost the resting baseline (D22).
 
 `ReferenceItem::central()` now computes an implicit midpoint for finite ordered ranges without overflowing when large same-sign endpoints are added or opposite-sign endpoints are subtracted. Explicit published `typical` values remain authoritative, and equal subnormal endpoints remain unchanged.
 
-Evidence: `crates/mk_engine/tests/reference_packs.rs::range_midpoint_stays_finite_for_valid_extreme_bounds` (PR #109; exact-head CI pending).
+Evidence: `crates/mk_engine/tests/reference_packs.rs::range_midpoint_stays_finite_for_valid_extreme_bounds` (PR #109). Initial exact-head workflow #42198602010 caught one rustfmt wrap in the explicit-typical case; corrected verbatim in `cf77459d`, with fresh exact-head CI pending.
 
 This is a numerical utility correction only. No reference-pack value, citation, physical parameter, deviation, simulation state, snapshot schema or replay hash changed.
