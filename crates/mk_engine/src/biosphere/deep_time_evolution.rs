@@ -204,6 +204,10 @@ impl DeepTimeEvolution {
     /// Everything except extinction: population growth, mutation,
     /// selection, drift, speciation, intelligence regression and recovery
     /// dynamics, advancing the model's clock by `dt_years`.
+    ///
+    /// The per-step preflight deliberately excludes append-only histories to
+    /// avoid rescanning them every tick. Call `validate` first when stepping
+    /// restored or externally-mutated state; snapshot restore paths do this.
     pub fn step_evolution_processes(
         &mut self,
         species: &mut Vec<Species>,
