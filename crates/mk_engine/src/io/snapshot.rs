@@ -287,7 +287,8 @@ mod tests {
 
     #[test]
     fn mixed_speciation_legacy_file_snapshot_is_rejected_at_load() {
-        let dir = std::env::temp_dir().join(format!("mk_snapshot_legacy_mixed_{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("mk_snapshot_legacy_mixed_{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("state.bin");
         write_legacy_mixed_speciation_snapshot(&path);

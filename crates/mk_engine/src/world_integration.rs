@@ -3011,14 +3011,17 @@ mod snapshot_tests {
     fn evolved_legacy_snapshot_with_mixed_speciation_ranges_is_rejected() {
         let world = WorldState::new(Arc::new(CanonLocked::default()), [19u8; 32]);
         let snapshot = legacy_mixed_speciation_snapshot(&world);
-        let error = WorldState::from_snapshot(&snapshot).expect_err("ambiguous mixed legacy ranges");
+        let error =
+            WorldState::from_snapshot(&snapshot).expect_err("ambiguous mixed legacy ranges");
         assert!(
             error
                 .to_string()
                 .contains("legacy snapshot schema 0 is incompatible"),
             "unexpected error: {error}"
         );
-        assert!(error.to_string().contains("lossless migration is impossible"));
+        assert!(error
+            .to_string()
+            .contains("lossless migration is impossible"));
     }
 
     #[test]

@@ -49,3 +49,8 @@ The replay snapshot envelope carries a public `tick` beside the digested state p
 ## Mixed legacy ranges after speciation
 
 Codex identified a legacy ordering edge case: the old drift floor ran before speciation, so parents could be floored to `1.0` while a newly created child retained half the parent's range. The previous all-species-at-least-one detector missed this mixed state. Schema-0 validation now treats a non-empty speciation history plus any fractional species range as ambiguous and rejects it rather than silently upgrading. Regression tests exercise both file-based and replay snapshot loaders. Because schema 0 has no persisted parent-child provenance, a lossless reconstruction cannot be proven.
+
+
+## Exact-head formatting correction — mixed legacy regression
+
+Workflow [#42169111579](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42169111579) reached the latest mixed-range code and failed only at `cargo fmt --all -- --check`. Rustfmt requested three line wraps in the new file/replay regression tests. Clippy and fast tests were skipped in that run. The formatter output is applied in the next commit; fresh exact-head CI is required.
