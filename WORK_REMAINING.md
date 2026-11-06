@@ -153,7 +153,7 @@ animal and fish resource nodes (done 2026-10-23, §2b).
     any other animal at upstream's density over the cell), adding up to the species on the
     island; hunting and fishing them, and the fishery model on the sea's fish, are still to
     come, and the densities stay upstream's (D55).
-  - Marine biomass bridge (2026-11-06): `IslandBiota::marine_aquatic_nodes` projects the same The browser click path is now exercised by a Node DOM regression that checks the visible species, individuals, biomass and disclaimer.
+  - Marine biomass bridge (2026-11-06): `IslandBiota::marine_aquatic_nodes` projects the same
     upstream head counts into tonnes per medium cell, with a conservation test against
     `animal_nodes` and whole-island species populations. The browser map and desktop cell inspectors now
     report the habitat's species count, individual count and live biomass, explicitly labelled
@@ -161,6 +161,10 @@ animal and fish resource nodes (done 2026-10-23, §2b).
     stock. It is a read-only view, not a second population. Fishery harvest remains open: no
     species-specific resilience class, unexploited carrying capacity or catch-per-unit-effort
     source is attached to these upstream species.
+  - Browser inspector DOM regression (2026-11-06): `scripts/tests/marine_cell_inspector.test.mjs`
+    drives the same exported `handleMapCellClick` helper used by the island page and verifies
+    visible species, individual and biomass values, the uncalibrated/not-harvestable disclaimer,
+    omission of invalid projections, and no request before the view is ready.
   - Salt (2026-10-23): `industry/salt_works.rs` makes solar salt at Dominion Salt's Lake
     Grassmere yield per hectare of production area (pack, 42.4-49.4 t/ha/yr); it ignores the
     rain that swings Grassmere's harvest from nil to 130,000 t, and no works is sited yet (a
