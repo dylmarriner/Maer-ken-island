@@ -192,11 +192,20 @@ pub(crate) fn spin_up_climate(
 pub static PLANETARY_WORLD_CONSTRUCTIONS: std::sync::atomic::AtomicUsize =
     std::sync::atomic::AtomicUsize::new(0);
 
+/// Current persisted schema for the inherited planetary `WorldState`.
+/// This metadata is deliberately outside the subsystem hash chain.
+pub const WORLD_STATE_SNAPSHOT_SCHEMA_VERSION: u32 = 1;
+
 /// Complete world state for Phase 5
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorldState {
     /// Current tick
     pub tick: Tick,
+
+    /// Persisted state schema version; older snapshots deserialize as version 0.
+    /// This is persistence metadata, not simulation state or a replay-hash input.
+    #[serde(default)]
+    pub snapshot_schema_version: u32,
 
     /// Canon locked parameters
     pub canon: Arc<CanonLocked>,
@@ -618,6 +627,7 @@ impl WorldState {
         );
         let mut world = Self {
             tick,
+            snapshot_schema_version: WORLD_STATE_SNAPSHOT_SCHEMA_VERSION,
             canon: Arc::clone(&canon),
             canon_derived: Arc::clone(&canon_derived),
             hash_chain,
@@ -2467,7 +2477,37 @@ impl WorldState {
     /// The payload is JSON, the same encoding `io::snapshot` persists:
     /// `WorldState` carries `serde_json::Value` fields (human profiles),
     /// which bincode can serialize but not deserialize.
+    /// Validate persisted-state compatibility before a snapshot is exposed to replay.
+    ///
+    /// Schema 0 predates the geographic-range invariant. It may be upgraded only
+    /// when the saved physical state already satisfies current invariants; invalid
+    /// legacy ranges cannot be reconstructed losslessly and are rejected rather
+    /// than silently clamped.
+    pub(crate) fn validate_snapshot_schema(&mut self) -> Result<(), String> {
+        match self.snapshot_schema_version {
+            0 => {
+                self.deep_time
+                    .validate(&self.biosphere_state.species)
+                    .map_err(|error| format!("legacy snapshot schema 0 is incompatible: {error}"))?;
+                self.snapshot_schema_version = WORLD_STATE_SNAPSHOT_SCHEMA_VERSION;
+                Ok(())
+            }
+            WORLD_STATE_SNAPSHOT_SCHEMA_VERSION => self
+                .deep_time
+                .validate(&self.biosphere_state.species),
+            version => Err(format!(
+                "snapshot schema version {version} is not supported; current version is {WORLD_STATE_SNAPSHOT_SCHEMA_VERSION}"
+            )),
+        }
+    }
+
     pub fn create_snapshot(&self) -> Result<WorldSnapshot, SnapshotError> {
+        if self.snapshot_schema_version != WORLD_STATE_SNAPSHOT_SCHEMA_VERSION {
+            return Err(SnapshotError::SerializationError(format!(
+                "world state schema version {} is not current; expected {}",
+                self.snapshot_schema_version, WORLD_STATE_SNAPSHOT_SCHEMA_VERSION
+            )));
+        }
         let serialized = serde_json::to_vec(self)
             .map_err(|e| SnapshotError::SerializationError(e.to_string()))?;
 
@@ -2490,6 +2530,9 @@ impl WorldState {
         }
         let mut loaded: WorldState = serde_json::from_slice(&snapshot.data)
             .map_err(|e| SnapshotError::DeserializationError(e.to_string()))?;
+        loaded
+            .validate_snapshot_schema()
+            .map_err(SnapshotError::DeserializationError)?;
         mk_core::canon::validator::validate_canon(&loaded.canon)
             .map_err(|e| SnapshotError::DeserializationError(format!("invalid canon: {e}")))?;
         loaded.canon_derived = Arc::new(mk_core::canon::CanonDerived::from(&loaded.canon));
