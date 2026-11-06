@@ -117,6 +117,6 @@ Workflow [#42147228604](https://github.com/dylmarriner/Maer-ken-island/actions/r
 
 The divergence is explained by the intentional founding-species correction in this PR: species 43 previously began with geographic range 1.0175, greater than the entire planetary surface. Capping the generated fraction at 1.0 changes the default biosphere state and therefore the ten-step deterministic world hash. The validation was not weakened. The baseline test now records the measured hash and this reason.
 
-- The deterministic hash test and this handoff were carried onto current main during the PR #106 rebase; the current exact head is `b5e6893d1c83e62d61db52c5387d6eac5e3f3d3a`.
+- The deterministic hash test and this handoff were carried onto current main during the PR #106 rebase. The code-bearing rebase head was `b5e6893d1c83e62d61db52c5387d6eac5e3f3d3a`; the later commit in this handoff is documentation-only.
 - Fresh exact-head workflow [#42154339053](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42154339053) is running. Dashboard, computer service and repository scripts have passed; formatting/Clippy/fast tests, desktop, installed backend, week/year acceptance and dependency audit are still running at latest inspection.
 - No pass is inferred from workflow #42147228604, which predates the hash correction and rebase. Keep PR #106 draft until #42154339053 completes green.
