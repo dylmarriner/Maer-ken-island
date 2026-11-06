@@ -260,7 +260,7 @@ cost the resting baseline (D22).
 
 ### Deep-time persisted state invariants
 
-`DeepTimeEvolution::validate` is used by both current-schema and legacy snapshot restore validation. It now rejects non-finite or negative recovery clocks/multipliers, invalid adaptive-radiation values, carrying capacities outside the finite population domain, and malformed append-only extinction-event timestamps. Evolution steps validate their starting persisted state and preflight recovery-clock overflow before staging or mutating any state. Regression coverage asserts rejected states leave evolution, species and keyed RNG byte-identical.
+`DeepTimeEvolution::validate` is used by both current-schema and legacy snapshot restore validation. It rejects non-finite or negative recovery clocks/multipliers, invalid adaptive-radiation values, carrying capacities outside the finite population domain, and malformed append-only extinction/speciation history, including invalid, future or out-of-order timestamps. The per-step preflight validates mutable live state and recovery-clock overflow but deliberately does not rescan or reject append-only history. Direct callers that restore or externally mutate `DeepTimeEvolution` must call full `validate` before stepping; the hot-path preflight alone does not validate history. Regression coverage asserts rejected boundary states leave evolution, species and keyed RNG byte-identical.
 
 ## Not done
 
