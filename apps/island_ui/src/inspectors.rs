@@ -303,7 +303,7 @@ mod tests {
             cell.marine_aquatic_biomass_t = Some(biomass_t);
             let lines = cell_lines(&cell);
             assert!(!lines.iter().any(|line| line.starts_with("Marine life:")));
-            assert!(!lines.iter().any(|line| line == disclaimer));
+            assert!(!lines.iter().any(|line| line.as_str() == disclaimer));
         }
 
         let mut partial = sample_cell();
