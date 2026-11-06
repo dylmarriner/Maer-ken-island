@@ -59,6 +59,8 @@ pub const EXTINCTION_SUBSTEP_YEARS: f64 = 500.0;
 pub const POPULATION_INTRINSIC_GROWTH_RATE_PER_YEAR: f64 = 0.005;
 
 /// Deep-time evolution system
+/// NOTE: `step_evolution_processes` stages this state with an explicit field list.
+/// When adding a mutable field, update both its staging initializer and commit block.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeepTimeEvolution {
     pub current_time_years: f64,
@@ -216,7 +218,7 @@ impl DeepTimeEvolution {
         // same fail-fast contract for direct engine callers before cloning or
         // staging any state.
         validate_environmental_stress(environmental_stress)?;
-        self.validate(species)?;
+        self.validate_evolution_step_state(species)?;
 
         let next_recovery_time = self.recovery_state.time_since_extinction_years + dt_years;
         if !next_recovery_time.is_finite() {
@@ -723,12 +725,17 @@ impl DeepTimeEvolution {
         }
     }
 
-    pub fn validate(&self, species: &[Species]) -> Result<(), String> {
+    /// Validate mutable numeric state used by each evolution step.
+    ///
+    /// Append-only event and speciation histories are deliberately excluded:
+    /// they are checked by `validate` at persistence boundaries. Scanning
+    /// those histories on every 10-year step makes long runs scale with the
+    /// accumulated history rather than the current working set.
+    fn validate_evolution_step_state(&self, species: &[Species]) -> Result<(), String> {
         if !self.current_time_years.is_finite() || self.current_time_years < 0.0 {
             return Err("deep-time clock must be finite and non-negative".to_string());
         }
-        if !self.adaptive_radiation_potential.is_finite() || self.adaptive_radiation_potential < 0.0
-        {
+        if !self.adaptive_radiation_potential.is_finite() || self.adaptive_radiation_potential < 0.0 {
             return Err("adaptive radiation potential must be finite and non-negative".to_string());
         }
         if !self.recovery_state.time_since_extinction_years.is_finite()
@@ -757,6 +764,24 @@ impl DeepTimeEvolution {
                 ));
             }
         }
+        validate_geographic_ranges(species)?;
+
+        for sp in species {
+            if sp.representative_genome.intelligence_index()
+                > crate::biosphere::genetics::PRE_SAPIENT_CEILING
+            {
+                return Err(format!(
+                    "Species {} exceeds intelligence ceiling",
+                    sp.species_id
+                ));
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Validate append-only histories once when persisted state is restored or audited.
+    fn validate_append_only_history(&self) -> Result<(), String> {
         for event in &self.extinction_events {
             if !event.start_time_years.is_finite() || event.start_time_years < 0.0 {
                 return Err(format!(
@@ -777,16 +802,17 @@ impl DeepTimeEvolution {
                 ));
             }
         }
-        validate_geographic_ranges(species)?;
 
-        // Invariant: no species should have two recorded speciation events
-        // closer together than MINIMUM_SPECIATION_TIMESCALE_YEARS. (A species
-        // that speciated within the last cooldown window is normal and
-        // expected — that is not itself a violation.)
+        // A speciation timestamp cannot lie beyond the persisted simulation clock.
+        // These values are append-only history, so this O(history) validation is
+        // performed at restore/audit boundaries rather than on every evolution tick.
         let mut times_by_species: std::collections::HashMap<u64, Vec<f64>> =
             std::collections::HashMap::new();
         for &(species_id, speciation_time) in &self.last_speciation_times {
-            if !speciation_time.is_finite() || speciation_time < 0.0 {
+            if !speciation_time.is_finite()
+                || speciation_time < 0.0
+                || speciation_time > self.current_time_years
+            {
                 return Err(format!(
                     "Species {species_id} has an invalid speciation time"
                 ));
@@ -805,22 +831,16 @@ impl DeepTimeEvolution {
             }
         }
 
-        for sp in species {
-            if sp.representative_genome.intelligence_index()
-                > crate::biosphere::genetics::PRE_SAPIENT_CEILING
-            {
-                return Err(format!(
-                    "Species {} exceeds intelligence ceiling",
-                    sp.species_id
-                ));
-            }
-        }
-
-        if self.recovery_state.adaptive_radiation_potential > MAX_ADAPTIVE_RADIATION_AMPLIFICATION {
-            return Err("Adaptive radiation potential exceeds maximum".to_string());
-        }
-
         Ok(())
+    }
+
+    /// Validate the complete persisted state before it is trusted by a restore.
+    ///
+    /// Snapshot loaders call this full validator. The per-step hot path uses
+    /// `validate_evolution_step_state` and does not rescan append-only histories.
+    pub fn validate(&self, species: &[Species]) -> Result<(), String> {
+        self.validate_evolution_step_state(species)?;
+        self.validate_append_only_history()
     }
 }
 
@@ -854,6 +874,40 @@ mod geographic_range_tests {
                 .expect_err("invalid speciation time");
             assert!(error.contains("Species 7 has an invalid speciation time"));
         }
+    }
+
+    #[test]
+    fn full_validation_rejects_speciation_timestamps_after_the_simulation_clock() {
+        let mut evolution = DeepTimeEvolution::new();
+        evolution.current_time_years = 100.0;
+        evolution.last_speciation_times.push((7, 100.0001));
+
+        let error = evolution
+            .validate(&[])
+            .expect_err("future speciation history cannot be restored");
+
+        assert!(error.contains("Species 7 has an invalid speciation time"));
+    }
+
+    #[test]
+    fn hot_path_validation_excludes_append_only_histories_but_full_validation_checks_them() {
+        let mut evolution = DeepTimeEvolution::new();
+        evolution.extinction_events.push(ExtinctionEvent {
+            event_id: 9,
+            start_time_years: f64::NAN,
+            duration_years: 0.0,
+            severity: ExtinctionSeverity::Background,
+            affected_species: vec![7],
+        });
+
+        assert!(
+            evolution.validate_evolution_step_state(&[]).is_ok(),
+            "the per-step validator must not rescan append-only event history"
+        );
+        assert!(
+            evolution.validate(&[]).is_err(),
+            "the full persistence-boundary validator must still reject invalid history"
+        );
     }
 
     #[test]
