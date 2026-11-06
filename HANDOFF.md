@@ -8,7 +8,7 @@ how to build and check it, and where everything else is written down.
 
 ## Latest engineering handoff — 6 November 2026
 
-- [Deep-time geographic-range drift correction](docs/handoff/DEEP_TIME_GEOGRAPHIC_RANGE_DRIFT_20261106.md) — PR #103. Preserves fractional planetary ranges instead of forcing every species to 1.0 on the first evolution step; rejects invalid ranges/durations before evolution state changes. The branch is being rebased onto the PR #102 merge; exact-head CI is pending.
+- [Deep-time geographic-range drift correction](docs/handoff/DEEP_TIME_GEOGRAPHIC_RANGE_DRIFT_20261106.md) — PR #103. Preserves fractional planetary ranges instead of forcing every species to 1.0 on the first evolution step; rejects invalid ranges/durations before evolution state changes. Rebased onto the PR #102 merge at `2f11b5e9`; pre-rebase workflow #42140215387 is not exact-head evidence, and a fresh exact-head CI run is required.
 
 - [Marine species stack reconciliation](docs/handoff/MARINE_SPECIES_STACK_RECONCILIATION_20261106.md) — PR #102 merged into main as `2f11b5e9a3cd84a35f6cb69e1966cd3cd72391ed`. Exact-head workflow [#42133095121](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42133095121) passed formatting, Clippy, fast tests, desktop/backend, week/year reference acceptance, dashboard, computer service, scripts and dependency audit; nightly slow tests were skipped by design. Catalogue-wide upstream density/body-mass validation remains a separate follow-up branch.
 
