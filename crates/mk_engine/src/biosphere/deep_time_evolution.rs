@@ -333,8 +333,14 @@ impl DeepTimeEvolution {
                 .carrying_capacities
                 .entry(sp.species_id)
                 .or_insert_with(|| n0.max(1.0));
-            let exp_rt = (POPULATION_INTRINSIC_GROWTH_RATE_PER_YEAR * dt_years).exp();
-            let n_t = capacity * n0 * exp_rt / (capacity + n0 * (exp_rt - 1.0));
+
+            // Use the decaying-exponential form of the logistic solution.
+            // exp(+r·dt) overflows for long but finite horizons, turning
+            // inf/inf into NaN and collapsing the population to one.
+            let decay = (-POPULATION_INTRINSIC_GROWTH_RATE_PER_YEAR * dt_years).exp();
+            let capacity_to_initial_ratio = capacity / n0;
+            let denominator = 1.0 + (capacity_to_initial_ratio - 1.0) * decay;
+            let n_t = capacity / denominator;
             sp.population_size = n_t.max(1.0).round() as u64;
         }
     }
@@ -769,3 +775,61 @@ mod geographic_range_tests {
         }
     }
 }
+
+#[cfg(test)]
+mod population_growth_tests {
+    use super::*;
+    use mk_core::ids::KenzIeSubclass;
+
+    fn test_species(population: u64, rng: &RngRegistry) -> Species {
+        Species::new(
+            7,
+            Genome::new(7, rng, KenzIeSubclass::Alpha),
+            population,
+            0.4,
+        )
+    }
+
+    #[test]
+    fn logistic_growth_saturates_at_capacity_for_long_finite_horizons() {
+        for initial_population in [100_000, 400_000] {
+            let mut rng = RngRegistry::new([11; 32]);
+            let mut species = vec![test_species(initial_population, &rng)];
+            let mut evolution = DeepTimeEvolution::new();
+            evolution.carrying_capacities.insert(7, 200_000.0);
+
+            evolution.apply_population_growth(&mut species, 1_000_000.0);
+
+            assert_eq!(
+                species[0].population_size,
+                200_000,
+                "population {initial_population} should converge to its capacity"
+            );
+        }
+    }
+
+    #[test]
+    fn logistic_growth_preserves_the_closed_form_at_ordinary_horizons() {
+        let mut rng = RngRegistry::new([12; 32]);
+        let mut species = vec![test_species(100_000, &rng)];
+        let mut evolution = DeepTimeEvolution::new();
+        evolution.carrying_capacities.insert(7, 200_000.0);
+
+        evolution.apply_population_growth(&mut species, 100.0);
+
+        assert_eq!(species[0].population_size, 124_492);
+    }
+
+    #[test]
+    fn zero_duration_does_not_change_population() {
+        let mut rng = RngRegistry::new([13; 32]);
+        let mut species = vec![test_species(100_000, &rng)];
+        let mut evolution = DeepTimeEvolution::new();
+        evolution.carrying_capacities.insert(7, 200_000.0);
+
+        evolution.apply_population_growth(&mut species, 0.0);
+
+        assert_eq!(species[0].population_size, 100_000);
+    }
+}
+
