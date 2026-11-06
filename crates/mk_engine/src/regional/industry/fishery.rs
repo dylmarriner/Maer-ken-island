@@ -299,8 +299,7 @@ impl FishStock {
                 // underflow even when the final r * B² / (K * d) surplus is
                 // representable. Re-evaluate every positive-input zero result
                 // in log space instead of silently reporting no recruitment.
-                let log_surplus = rate.log2()
-                    + 2.0 * self.biomass_t.log2()
+                let log_surplus = rate.log2() + 2.0 * self.biomass_t.log2()
                     - self.k_t.log2()
                     - model.depensation_below.log2()
                     + (1.0 - p).log2();
@@ -1248,15 +1247,17 @@ mod tests {
         let p = stock.biomass_t / stock.k_t;
         let biomass_factor = (1.0 - p) * (p / model.depensation_below);
         assert!(p > 0.0, "the ratio itself remains representable");
-        assert!(biomass_factor > 0.0, "the depensation factor remains representable");
+        assert!(
+            biomass_factor > 0.0,
+            "the depensation factor remains representable"
+        );
         assert_eq!(
             stock.biomass_t * biomass_factor,
             0.0,
             "the biomass-times-factor intermediate underflows"
         );
 
-        let log_expected = model.r(Resilience::Medium).log2()
-            + 2.0 * stock.biomass_t.log2()
+        let log_expected = model.r(Resilience::Medium).log2() + 2.0 * stock.biomass_t.log2()
             - stock.k_t.log2()
             - model.depensation_below.log2()
             + (1.0 - p).log2();
