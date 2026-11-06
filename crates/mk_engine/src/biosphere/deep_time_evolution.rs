@@ -726,7 +726,9 @@ mod geographic_range_tests {
         for invalid_time in [f64::NAN, f64::INFINITY, -1.0] {
             let mut evolution = DeepTimeEvolution::new();
             evolution.last_speciation_times.push((7, invalid_time));
-            let error = evolution.validate(&[]).expect_err("invalid speciation time");
+            let error = evolution
+                .validate(&[])
+                .expect_err("invalid speciation time");
             assert!(error.contains("Species 7 has an invalid speciation time"));
         }
     }
