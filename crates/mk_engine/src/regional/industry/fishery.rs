@@ -14,6 +14,7 @@
 //! them is only as good as those densities, and resilience is a class the
 //! caller supplies, since no species carries FishBase's.
 
+use serde::ser::SerializeStruct;
 use serde::{Deserialize, Serialize};
 
 use super::petroleum::MissingReference;
@@ -167,13 +168,31 @@ impl FisheryModel {
 }
 
 /// One stock and what has been landed from it.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct FishStock {
     pub resilience: Resilience,
     /// Unexploited biomass (t).
     pub k_t: f64,
     pub biomass_t: f64,
     pub landed_t: f64,
+}
+
+/// Persist only physically valid stock states. Keep field order identical to the
+/// previous derived serializer so valid JSON and bincode snapshots retain their layout.
+impl Serialize for FishStock {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.validate_state().map_err(serde::ser::Error::custom)?;
+
+        let mut state = serializer.serialize_struct("FishStock", 4)?;
+        state.serialize_field("resilience", &self.resilience)?;
+        state.serialize_field("k_t", &self.k_t)?;
+        state.serialize_field("biomass_t", &self.biomass_t)?;
+        state.serialize_field("landed_t", &self.landed_t)?;
+        state.end()
+    }
 }
 
 #[derive(Deserialize)]
@@ -450,6 +469,52 @@ mod tests {
         let restored: FishStock =
             bincode::deserialize(&binary).expect("valid binary stock restores");
         assert_eq!(restored, stock);
+    }
+
+    #[test]
+    fn fish_stock_serialization_rejects_invalid_physical_state() {
+        let valid = FishStock::unexploited(Resilience::Medium, 1_000.0)
+            .expect("positive carrying capacity");
+        let mut invalid_stocks = Vec::new();
+
+        let mut invalid = valid.clone();
+        invalid.k_t = 0.0;
+        invalid_stocks.push(invalid);
+
+        let mut invalid = valid.clone();
+        invalid.k_t = -1.0;
+        invalid_stocks.push(invalid);
+
+        let mut invalid = valid.clone();
+        invalid.biomass_t = invalid.k_t + 1.0;
+        invalid_stocks.push(invalid);
+
+        let mut invalid = valid.clone();
+        invalid.biomass_t = -1.0;
+        invalid_stocks.push(invalid);
+
+        let mut invalid = valid.clone();
+        invalid.landed_t = -1.0;
+        invalid_stocks.push(invalid);
+
+        let mut invalid = valid.clone();
+        invalid.biomass_t = f64::NAN;
+        invalid_stocks.push(invalid);
+
+        let mut invalid = valid;
+        invalid.landed_t = f64::INFINITY;
+        invalid_stocks.push(invalid);
+
+        for stock in invalid_stocks {
+            assert!(
+                serde_json::to_vec(&stock).is_err(),
+                "invalid physical state must not be written to a JSON snapshot"
+            );
+            assert!(
+                bincode::serialize(&stock).is_err(),
+                "invalid physical state must not be written to a binary snapshot"
+            );
+        }
     }
 
     #[test]
