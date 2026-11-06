@@ -53,12 +53,18 @@ impl std::fmt::Display for FisheryError {
 impl std::error::Error for FisheryError {}
 
 /// Midpoint of a published growth-rate prior after validating both source bounds.
-/// Subtracting first avoids overflowing an otherwise representable midpoint.
+/// Sum before halving when bounded; otherwise halve each endpoint to avoid overflow
+/// and the double-rounding error from first rounding a wide endpoint difference.
 fn checked_rate_midpoint(min: f64, max: f64) -> Option<f64> {
     if !min.is_finite() || !max.is_finite() || min < 0.0 || max < min {
         return None;
     }
-    let midpoint = min + (max - min) * 0.5;
+    let half_max = f64::MAX * 0.5;
+    let midpoint = if min <= half_max && max <= half_max {
+        (min + max) * 0.5
+    } else {
+        min * 0.5 + max * 0.5
+    };
     if midpoint.is_finite() {
         Some(midpoint)
     } else {
@@ -526,6 +532,21 @@ mod tests {
         assert!(midpoint >= f64::MAX * 0.5);
         assert!(midpoint <= f64::MAX);
         assert!((checked_rate_midpoint(0.6, 1.5).unwrap() - 1.05).abs() < 1e-12);
+    }
+
+    #[test]
+    fn growth_rate_prior_midpoint_preserves_subnormal_ties_and_wide_exponent_gaps() {
+        // Half of the exact sum is 1.5 subnormal units and rounds to the even
+        // second unit. Halving the difference first underflows that half-unit.
+        let adjacent = checked_rate_midpoint(f64::from_bits(1), f64::from_bits(2))
+            .expect("finite non-negative bounds");
+        assert_eq!(adjacent.to_bits(), 2);
+
+        // A wide exponent gap makes min + (max - min) / 2 round one ULP low.
+        let min = 3.0 * 2.0_f64.powi(969);
+        let max = 2.0_f64.powi(1023);
+        let midpoint = checked_rate_midpoint(min, max).expect("finite midpoint");
+        assert_eq!(midpoint.to_bits(), 0x7fd0_0000_0000_0001);
     }
 
     #[test]
