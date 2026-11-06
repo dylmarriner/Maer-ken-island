@@ -127,3 +127,14 @@ The new persisted-state preflight initially reused the full snapshot validator o
 - The explicit staging initializer/commit block is documented as a paired maintenance point for future mutable fields.
 - Commit: `fe5c22efed7ca370e3363ba8d46eebfd6943b5a5`.
 - Previous exact head `ab106d75` passed workflow [#42183725408](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42183725408), including formatting, Clippy, fast Rust tests, desktop, installed backend, dashboard, computer service, scripts, dependency audit and week/year reference acceptance. Nightly slow tests were skipped by design. The new head requires its own exact-head run; no new pass is claimed yet.
+
+
+## Follow-up: enforce the latest parent speciation cooldown (6 November 2026)
+
+A second inspection of the append-only speciation history found that the evolution pipeline used `iter().find`, which selected the **first** event for a parent. After a parent's second speciation, the old timestamp could let it speciate again only ten years later even though the latest event was still inside the 18,000-year cooldown.
+
+- The hot path now searches the append-chronological history from the end and uses the most recent timestamp for that parent.
+- Full persistence-boundary validation now rejects globally out-of-order speciation history, making the reverse lookup assumption explicit and fail-closed.
+- A deterministic regression seeds two parent events at 18,000 and 36,000 years, advances the clock to 36,010 years, and proves the parent remains in cooldown: no child, event or RNG draw is consumed.
+- Commit: `c312a74ed28f27badae69f15a85f57886a71e9ef`.
+- Exact-head CI for this follow-up is required; no pass is claimed yet.
