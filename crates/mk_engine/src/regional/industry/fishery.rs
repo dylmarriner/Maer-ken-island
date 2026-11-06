@@ -557,14 +557,22 @@ mod tests {
             );
         }
 
-        // Binary snapshots can encode non-finite floats even though JSON cannot.
-        let invalid = FishStock {
+        // Build the invalid wire payload separately: FishStock's public serializer
+        // now correctly refuses to emit an invalid physical state.
+        #[derive(Serialize)]
+        struct InvalidFishStockSnapshotFixture {
+            resilience: Resilience,
+            k_t: f64,
+            biomass_t: f64,
+            landed_t: f64,
+        }
+        let invalid = InvalidFishStockSnapshotFixture {
             resilience: Resilience::Medium,
             k_t: f64::INFINITY,
             biomass_t: 0.0,
             landed_t: 0.0,
         };
-        let binary = bincode::serialize(&invalid).expect("invalid fixture serializes");
+        let binary = bincode::serialize(&invalid).expect("invalid wire fixture serializes");
         assert!(
             bincode::deserialize::<FishStock>(&binary).is_err(),
             "non-finite binary stock snapshot must fail to deserialize"
