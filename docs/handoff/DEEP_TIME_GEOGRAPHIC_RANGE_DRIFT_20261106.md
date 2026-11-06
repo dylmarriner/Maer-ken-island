@@ -98,3 +98,14 @@ No deployment, live simulation, external LLM call, production data change or inf
 - Repository scripts, computer service, web dashboard and dependency audit have passed. The nightly slow tier is skipped by design on this PR workflow.
 - The later `2ed66705` commit updates only the canonical `WORK_REMAINING.md` biosphere row; no application code or tests changed after the code-bearing head.
 - No local Cargo result is claimed because the authorised custom OpenCommander connector still returns HTTP 429. Keep PR #103 draft until the remaining exact-head jobs complete successfully.
+
+## Exact-head fast-test finding and correction
+
+Workflow [#42144167785](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42144167785) passed formatting and Clippy but failed the fast Rust tests: 800 passed and 17 failed. The failures shared one root cause: the imported founding-species generator computed `base_range + spread` without capping at one planetary surface. Species 43 (Pelagic) was generated with range `1.0175`, so the new fail-fast deep-time validation correctly rejected it before evolution.
+
+Correction:
+- Cap the generated founding range at `1.0` in `BiosphereSystem::generate_founding_species`.
+- Add a regression over all 4,096 founding species, including an explicit assertion that species 43 is exactly `1.0`.
+- Record the imported-code correction as `UPSTREAM.md` item 9.
+
+This is not a reason to weaken the new validation. A geographic range cannot exceed the entire planetary surface; the invalid value must be corrected at its source. The new exact-head workflow is required to verify all previously failing callers and the week/year reference packs. Do not re-pin any digest without reviewing the measured output.
