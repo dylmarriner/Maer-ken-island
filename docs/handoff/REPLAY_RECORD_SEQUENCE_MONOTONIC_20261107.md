@@ -58,3 +58,14 @@ The prior exact-head workflow [#42358501995](https://github.com/dylmarriner/Maer
 ## Exact-head formatting correction
 
 Workflow [#42366006668](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42366006668) on the new refused-command regression reached `cargo fmt --all -- --check` and found only the multiline layout for the final sequence assertion in `island_replay.rs`. Commit `b12718f419c0bc9c483f52242141712076265047` applies the exact formatter output. The format failure is a real source-level CI failure; a fresh exact-head run must pass formatting, Clippy, fast tests and all remaining acceptance jobs before merge.
+
+
+## Preserve source sequence identifiers during replay
+
+A further replay audit found that `replay_island` sorted imported entries by `(tick, sequence)` but then called the live `apply_command` allocator, which renumbered sparse imported sequences contiguously. State replay remained deterministic, but the returned IslandLife replay log no longer preserved the source audit identifiers.
+
+The replay path now calls a private `apply_command_with_sequence` helper. It accepts strictly non-decreasing per-tick identifiers (gaps are valid), rejects backwards identifiers before command mutation with `CommandError::ReplaySequenceOutOfOrder`, and records the original sequence. The public live path still allocates the next contiguous sequence from the runtime-only BTreeMap. No snapshot, digest, RNG, command payload or log format changed.
+
+Regression: `replay_preserves_sparse_recorded_sequence_numbers` supplies shuffled tick-0 entries at sequences 12 and 7 and asserts the returned log is ordered as 7, 12 with the original identifiers intact.
+
+Commits: `60e592120fb2980bc1b2117b6c0e77bdab90aad2` (error contract), `23120a75af4c6b48a3ec1dff5d9f5549cd3cdab4` (replay path), `6803a75b2068c63792fdd384e13c6023eed4a885` (regression). Fresh exact-head CI is required.
