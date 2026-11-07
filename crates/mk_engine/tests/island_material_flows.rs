@@ -606,6 +606,25 @@ fn the_material_ledger_round_trips_through_a_snapshot() {
 }
 
 #[test]
+fn empty_cross_cut_reservations_preserve_the_legacy_material_debug_representation() {
+    let materials = MaterialLedger::new();
+    assert_eq!(
+        format!("{materials:?}"),
+        "MaterialLedger { stock: {}, structures: {}, bodies: {}, next_structure: 0, logs: {}, next_log: 0 }"
+    );
+}
+
+#[test]
+fn pending_cross_cut_reservations_are_included_in_material_debug_state() {
+    let mut materials = MaterialLedger::new();
+    assert_eq!(materials.reserve_log_ids(2), 1);
+    assert!(
+        format!("{materials:?}").ends_with("reserved_log_ids: {1, 2} }"),
+        "pending ids affect which future cross-cuts are valid and must affect the digest"
+    );
+}
+
+#[test]
 fn plant_food_is_only_the_forests_fruit_and_seed_and_grassland_feeds_nobody() {
     use mk_engine::regional::edible::ReproductiveShares;
     use mk_engine::validation::{default_reference_dir, ReferenceLibrary};
