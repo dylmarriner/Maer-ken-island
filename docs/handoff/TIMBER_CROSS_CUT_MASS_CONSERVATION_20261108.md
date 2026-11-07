@@ -257,3 +257,32 @@ This keeps the existing IslandLife snapshot version readable while preserving fa
 ### Exact-head formatting correction — 8 November 2026
 
 Workflow [#42391475499](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42391475499) on predecessor head `083814b77bdf28bec22d52e49473b8166a66207d` reached the code and failed only the `cargo fmt --all -- --check` job on one line wrap in `restore_pending_cross_cut_ids`. The exact rustfmt output is applied in commit `5fe70a82ccd08348a3acd611760b9c554d702da4`. The same workflow's backend, desktop and week/year jobs were still running at inspection; their results do not verify the new head. Fresh exact-head CI is required.
+
+
+## Bound cross-cut materialisation — 8 November 2026
+
+A persisted haul task or direct caller could request an extreme u32 piece count.
+The pure Log::cross_cut API would allocate one Log per piece, and the ledger
+reservation path would expand the same range into a BTreeSet. A malformed
+snapshot could therefore turn a small input into an unbounded allocation.
+
+- Added MAX_CROSS_CUT_PIECES = 10,000 as a generous fail-fast bound.
+- Log::cross_cut rejects larger direct requests before constructing the vector.
+- MaterialLedger::reserve_log_ids refuses larger ranges before extending the set.
+- Legacy reservation restoration and the public cross_cut_log boundary return
+  false for oversized ranges before iterating or mutating.
+- Haul planning returns the explicit LabourError::CrossCutLimitExceeded
+  rather than attempting an oversized split.
+- Added regressions for direct pure-API rejection, reservation rejection, and
+  no-mutation ledger refusal.
+
+Commits:
+- 46b5c581fcacd1f587e9d63604e0f13a5fc97c82 — typed labour error.
+- b6233988d31d11dad2ae6772000607dd89b54f69 — pure cut and planner bound.
+- 1be3fae2b3e01067b2bd99522c2590b9c20d353d — ledger reservation/materialisation guards.
+- ce87b0e0621ce668e5a5c30a44adad878af7ae07 — regression tests.
+
+Exact-head CI is required for formatting, Clippy, fast Rust tests, desktop,
+installed backend and week/year reference acceptance. No local Cargo pass is
+claimed while custom OpenCommander is rate-limited. No snapshot schema,
+replay log, RNG, live island state or production infrastructure was changed.
