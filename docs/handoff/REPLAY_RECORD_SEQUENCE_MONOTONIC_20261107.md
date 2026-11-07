@@ -3,7 +3,7 @@
 Date: 2026-11-07
 Repository: `dylmarriner/Maer-ken-island`
 Branch: `fix/replay-record-sequence-monotonic-20261107`
-Base: `main` after PR #122 merge `1bc91d7a09778891a4f2b4d25b9b3cb400cbfcdf`
+Base: `main` after PR #121 merge `522aba3d860435c92a4938cf5ffba2b427941cd7`
 
 ## Defect
 
@@ -32,3 +32,20 @@ Exact-head CI is required for formatting, Clippy, fast tests, desktop, installed
 
 - Verify this exact branch head.
 - Keep the PR separate from the paused replay merge-completion work and from existing PR #73–76.
+
+
+## Review follow-up: fail closed on sequence exhaustion and remove the live history scan
+
+The public in-memory log still derives its next sequence from the maximum sequence already present for that tick. This is deliberate: callers can construct and reorder its public `entries` vector, so the standalone `IslandReplayLog::record` path must inspect the actual entries. It uses `checked_add` and returns `ReplaySequenceExhausted` rather than reusing `u64::MAX`.
+
+The live `IslandLife` path is different. Its replay log is now restricted to the regional module and exposed externally only through an immutable accessor. `IslandLife` maintains a runtime-only `BTreeMap<tick, last_sequence>`; `apply_command` reads the next sequence from that index and updates it only after the command succeeds. This removes the O(history) scan from every live command (O(log distinct command ticks) lookup/update), while preserving public-log out-of-order semantics. The index is not snapshotted, serialized or included in the canonical state digest; bootstrap and restore both start with a fresh log and empty index.
+
+Regression coverage:
+- Public out-of-order log recording allocates tick 5 sequences 0 and 1 even with a tick 6 entry between them.
+- Public sequence exhaustion at `u64::MAX` returns a typed error without appending.
+- 4,096 live same-tick control commands receive the contiguous sequence range 0–4,095.
+- Existing live replay test proves a tick change restarts the sequence at zero.
+
+## Verification
+
+The prior exact-head workflow [#42358501995](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42358501995) failed only at `cargo fmt --all -- --check`; Clippy and fast tests were skipped. The formatter output was applied before this follow-up. The new exact-head workflow must pass formatting, Clippy, fast Rust tests, desktop, installed backend, dashboard, computer service, dependency audit and week/year reference-pack acceptance before merge. No local Cargo result is claimed.
