@@ -307,3 +307,33 @@ Commits:
 The previous exact-head workflow 42394121853 failed its week reference-pack acceptance because of the digest drift; the year pack passed. Formatting and Clippy passed, the installed backend, dashboard, computer service and repository scripts passed, fast Rust tests were still running, and desktop acceptance was still in progress. The new current head needs a fresh exact-head CI run. Do not repin WEEK_DIGEST unless the canonical week test still fails after this representation correction and the remaining state difference is independently audited.
 
 No simulation behaviour, RNG, replay hash, snapshot schema, physical parameter, production state or infrastructure was changed by this digest-compatibility correction.
+
+
+## Exact-head fast-test repair — 8 November 2026
+
+The exact-head fast-test workflow `#42395540972` reached the Rust suite and
+reported **880 passed / 1 failed**. The failure was in
+`haul_planning_reserves_ids_for_a_conserved_ute_recut_before_another_log_arrives`:
+the fixture used a 10 kg log, so carrying fourteen very light pieces on foot
+was correctly faster than using the Ute. The test's expected transport method
+was wrong; the production planner was not shown to be wrong.
+
+The fixture now derives the source mass from the founder's reference-pack
+sustainable load (ten sustainable loads total). The length boundary still
+forces fourteen pieces while each piece remains carryable and the complete
+load fits the Ute payload, so the test exercises the intended selected-Ute
+reservation path rather than relying on an unrealistic 10 kg log.
+
+Codex also identified a separate P1 test expectation error: `MaterialLedger::new()`
+sets `next_structure = 1`, but the exact Debug string expected zero. The
+regression now pins the actual initialized value, preserving the intended
+legacy empty-reservation representation.
+
+Commits:
+- The Ute fixture correction and Debug expectation correction are recorded
+  in the current PR branch; exact SHAs are in the PR commit list.
+
+The failed workflow is evidence for the predecessor head only. Fresh exact-head
+formatting, Clippy, fast Rust tests, desktop/backend and week/year reference-pack
+acceptance are required. No local Cargo pass is claimed. No reference digest,
+snapshot schema, replay log, RNG or simulation parameter was changed.
