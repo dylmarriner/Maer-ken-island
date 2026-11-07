@@ -401,7 +401,9 @@ impl FishStock {
                 direct
             }
         } else {
-            let remaining_fraction = 1.0 - p;
+            // Subtract before dividing: 1 - (B / K) can lose substantial
+            // relative precision when B is within a few ULPs of K.
+            let remaining_fraction = (self.k_t - self.biomass_t) / self.k_t;
             let growth_factor = rate * remaining_fraction;
             let direct = growth_factor * self.biomass_t;
             if rate > 0.0
@@ -2062,4 +2064,36 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn near_capacity_surplus_uses_headroom_ratio_without_cancellation() {
+        // These adjacent binary64 values make 1 - (B / K) overstate the
+        // exact headroom fraction by about 16.4% due to division rounding.
+        let k_t = f64::from_bits(0x38d2_a197_4237_2a92);
+        let biomass_t = f64::from_bits(0x38d2_a197_4237_2a91);
+        let model = FisheryModel {
+            r_per_year: [0.0, 1.0, 0.0, 0.0],
+            depensation_below: 0.25,
+        };
+        let stock = FishStock {
+            resilience: Resilience::Medium,
+            k_t,
+            biomass_t,
+            landed_t: 0.0,
+        };
+
+        let rounded_fraction = 1.0 - (biomass_t / k_t);
+        let exact_headroom_fraction = (k_t - biomass_t) / k_t;
+        assert!(rounded_fraction > exact_headroom_fraction * 1.1);
+
+        let expected = exact_headroom_fraction * biomass_t;
+        let actual = stock
+            .surplus_t_per_year(&model)
+            .expect("near-capacity surplus remains representable");
+        assert!(
+            (actual / expected - 1.0).abs() <= MATERIAL_INCREMENT_RELATIVE_TOLERANCE,
+            "near-capacity surplus must use the representable headroom, not cancellation in 1 - B/K"
+        );
+    }
+
 }
