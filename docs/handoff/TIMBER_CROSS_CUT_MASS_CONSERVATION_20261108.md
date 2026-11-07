@@ -472,3 +472,10 @@ Commit `485159c7e852f6f9b780da7f345dd2b30fbd4e12` corrects the regression:
 This is a test-fixture correction only; no production selection or material logic was weakened.
 
 The corrected exact-head Rust test suite is pending. The prior week/year pass belongs to the predecessor head and must be rerun on the corrected head before merge.
+
+
+## Ute regression formatting correction — 8 November 2026
+
+The first rerun after the candidate-selection fixture correction stopped at rustfmt only. It requested the single `litres_per_km` call to remain on one line.
+
+Commit `f6ff198bb6d67645affd13a972a1537013196fe4` applies that exact formatting. No behavior changed. The next exact-head workflow must reach fast tests before the regression can be considered verified.
