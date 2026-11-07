@@ -63,7 +63,7 @@ this list holds the current state. The evidence for what is *done* is in
 
 | Area | Item | State | Blocked on |
 |---|---|---|---|
-| Timber | Routes, sawing logs for the ute (D40); drying and seasoning done 2026-10-14, splitting, two-person crosscut felling and excavator rigging 2026-10-23 (D63) | Open | — |
+| Timber | Routes, sawing logs for the ute (D40); drying and seasoning done 2026-10-14, splitting, two-person crosscut felling and excavator rigging 2026-10-23 (D63); cross-cut conservation, exact piece-ID reservation and reserved-range enforcement in draft PR #124 | Open | — |
 | Living world | Phase 3 Task 1b: species at island scale | Done (D55 open: upstream densities) | — |
 | Living world | Phase 3 Task 2: every resource and material, placers, recipes | Catalogue, mineral sites, gold placers, ironsand done (2026-10-14); diamond and platinum placers, animal, fish and plant nodes, salt works (2026-10-23); other gem and tin placers, tools, recipes open | Cited gem/tin placer models, shaft depth and rate |
 | Living world | D9: actions take one tick | In part: felling, hauling, splitting, shed, panning, foraging and water trips timed, learned by practice (R11); Craft, Explore and social actions one tick | Cited durations per task |
