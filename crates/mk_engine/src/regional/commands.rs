@@ -70,7 +70,9 @@ impl std::fmt::Display for CommandError {
         match self {
             Self::Create(e) => write!(f, "{e}"),
             Self::Intervention(e) => write!(f, "{e}"),
-            Self::ReplaySequenceExhausted { tick } => write!(f, "replay command sequence exhausted at tick {tick}"),
+            Self::ReplaySequenceExhausted { tick } => {
+                write!(f, "replay command sequence exhausted at tick {tick}")
+            }
         }
     }
 }

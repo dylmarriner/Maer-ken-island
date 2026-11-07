@@ -70,7 +70,13 @@ impl IslandReplayLog {
     }
 
     fn next_sequence(&self, tick: u64) -> Result<u64, ReplaySequenceExhausted> {
-        match self.entries.iter().filter(|entry| entry.tick == tick).map(|entry| entry.sequence).max() {
+        match self
+            .entries
+            .iter()
+            .filter(|entry| entry.tick == tick)
+            .map(|entry| entry.sequence)
+            .max()
+        {
             None => Ok(0),
             Some(last) => last.checked_add(1).ok_or(ReplaySequenceExhausted { tick }),
         }
@@ -84,7 +90,11 @@ impl IslandReplayLog {
     ///
     /// Refuse sequence exhaustion rather than reusing `u64::MAX` and making
     /// same-tick replay order ambiguous.
-    pub fn record(&mut self, tick: u64, command: IslandCommand) -> Result<(), ReplaySequenceExhausted> {
+    pub fn record(
+        &mut self,
+        tick: u64,
+        command: IslandCommand,
+    ) -> Result<(), ReplaySequenceExhausted> {
         let sequence = self.next_sequence(tick)?;
         self.record_with_sequence(tick, sequence, command);
         Ok(())
@@ -240,12 +250,16 @@ impl IslandLife {
         // Preflight the log slot before any command can mutate the island.
         // The single-writer owns this value through the whole call, so the
         // reserved sequence cannot be consumed by another command in between.
-        let sequence = self.replay_log.next_sequence(self.tick)
+        let sequence = self
+            .replay_log
+            .next_sequence(self.tick)
             .map_err(|error| CommandError::ReplaySequenceExhausted { tick: error.tick })?;
 
         match &command {
             IslandCommand::CreateHuman(request) => {
-                let made = self.create_human((**request).clone()).map_err(CommandError::Create)?;
+                let made = self
+                    .create_human((**request).clone())
+                    .map_err(CommandError::Create)?;
                 self.replay_log.record_with_sequence(self.tick, sequence, command);
                 Ok(Applied::Created(made))
             }
