@@ -292,7 +292,7 @@ fn deserialised_log_rebuilds_the_per_tick_sequence_index_before_recording() {
 /// A log at the maximum sequence must fail rather than append an ambiguous duplicate.
 #[test]
 fn recording_after_sequence_exhaustion_fails_without_appending() {
-    let log = IslandReplayLog::from_entries(
+    let mut log = IslandReplayLog::from_entries(
         REPLAY_LOG_VERSION,
         "scenario".to_string(),
         vec![IslandReplayEntry {
