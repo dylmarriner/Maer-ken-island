@@ -680,7 +680,10 @@ mod tests {
         let sum = |field: fn(&Log) -> f64| pieces.iter().map(field).sum::<f64>();
 
         assert_eq!(sum(|piece| piece.dry_kg).to_bits(), l.dry_kg.to_bits());
-        assert_eq!(sum(|piece| piece.carbon_kgc).to_bits(), l.carbon_kgc.to_bits());
+        assert_eq!(
+            sum(|piece| piece.carbon_kgc).to_bits(),
+            l.carbon_kgc.to_bits()
+        );
         assert_eq!(sum(|piece| piece.water_kg).to_bits(), l.water_kg.to_bits());
         assert_eq!(sum(|piece| piece.length_m).to_bits(), l.length_m.to_bits());
         assert_ne!(pieces[2].dry_kg.to_bits(), pieces[0].dry_kg.to_bits());
