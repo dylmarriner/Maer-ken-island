@@ -397,6 +397,36 @@ pub fn haul_plans_over(
     // Cross-cut pieces: none heavier than the body's sustainable load.
     let sustainable = labour.sustainable_load_kg(body)?;
     let by_mass = (log.green_kg() / sustainable.max(1e-6)).ceil().max(1.0) as u32;
+
+    // Cross-cutting assigns the final piece the conserved binary64 remainder.
+    // Check the actual pieces, not the average: a remainder can exceed a load
+    // limit after many individually rounded shares have been accumulated.
+    let split_within_limits = |minimum_pieces: u32,
+                               max_piece_kg: f64,
+                               max_piece_length_m: Option<f64>|
+     -> Result<(u32, Vec<Log>), LabourError> {
+        let tolerance = |limit: f64| limit.abs().max(1.0) * f64::EPSILON * 4.0;
+        let mut pieces = minimum_pieces.max(1);
+        loop {
+            let split = log.cross_cut(pieces, first_piece_id);
+            let largest_mass = split.iter().map(Log::green_kg).fold(0.0, f64::max);
+            let largest_length = split.iter().map(|piece| piece.length_m).fold(0.0, f64::max);
+            let mass_fits = largest_mass <= max_piece_kg + tolerance(max_piece_kg);
+            let length_fits = max_piece_length_m.map_or(true, |limit| {
+                largest_length <= limit + tolerance(limit)
+            });
+            if mass_fits && length_fits {
+                return Ok((pieces, split));
+            }
+            let Some(next_pieces) = pieces.checked_add(1) else {
+                return Err(LabourError::OverLoad {
+                    carried_kg: largest_mass,
+                    max_kg: max_piece_kg,
+                });
+            };
+            pieces = next_pieces;
+        }
+    };
     let cut = labour.fell_tree(LabourTool::SteelAxe, log.diameter_m * 100.0)?;
     let cross_cut = |pieces: u32| HaulTask {
         action: HaulAction::CrossCut {
@@ -410,16 +440,18 @@ pub fn haul_plans_over(
         met: if pieces > 1 { cut.met } else { WALKING_MET },
         ends_at_m: butt,
     };
-    let piece_at =
-        |pieces: u32, i: u32| log.cross_cut(pieces, first_piece_id)[i as usize].position_m;
 
     // The ute.
     if let Some(ute) = fleet.ute {
         let bed = labour.ute_bed_length_m()?;
         let payload = labour.ute_payload_kg()?;
-        let pieces = by_mass.max((log.length_m / bed).ceil() as u32).max(1);
-        let piece_kg = log.green_kg() / f64::from(pieces);
-        let per_trip = ((payload / piece_kg).floor() as u32).max(1);
+        let (pieces, ute_pieces) = split_within_limits(
+            by_mass.max((log.length_m / bed).ceil() as u32),
+            sustainable.min(payload),
+            Some(bed),
+        )?;
+        let largest_piece_kg = ute_pieces.iter().map(Log::green_kg).fold(0.0, f64::max);
+        let per_trip = ((payload / largest_piece_kg.max(f64::MIN_POSITIVE)).floor() as u32).max(1);
         let speed = labour.vehicle_speed_m_s("farm_track")?;
         let drive_met = labour.met("driving_light_truck")?;
         let mut tasks = VecDeque::new();
@@ -446,9 +478,9 @@ pub fn haul_plans_over(
         for (t, trip) in ids.chunks(per_trip as usize).enumerate() {
             let (mut carry_s, mut back_s) = (0.0, 0.0);
             for &id in trip {
-                let p = piece_at(pieces, (id - first_piece_id) as u32);
-                carry_s += leg(p, butt, piece_kg)?;
-                back_s += leg(butt, p, 0.0)?;
+                let piece = &ute_pieces[(id - first_piece_id) as usize];
+                carry_s += leg(piece.position_m, butt, piece.green_kg())?;
+                back_s += leg(butt, piece.position_m, 0.0)?;
             }
             tasks.push_back(HaulTask {
                 action: HaulAction::Load {
@@ -461,7 +493,11 @@ pub fn haul_plans_over(
             });
             tasks.push_back(drive(butt, site.store_m, trip.to_vec()));
             let n = trip.len() as f64;
-            let carry_s = n * labour.walking_time_s(body, site.store_carry_m, 0.0, piece_kg)?;
+            let mut carry_s = 0.0;
+            for &id in trip {
+                let piece_kg = ute_pieces[(id - first_piece_id) as usize].green_kg();
+                carry_s += labour.walking_time_s(body, site.store_carry_m, 0.0, piece_kg)?;
+            }
             let back_s = n * walk(site.store_carry_m)?;
             tasks.push_back(HaulTask {
                 action: HaulAction::Unload {
@@ -491,14 +527,15 @@ pub fn haul_plans_over(
 
     // On foot: every piece carried to the store.
     {
-        let pieces = by_mass;
-        let piece_kg = log.green_kg() / f64::from(pieces);
+        let (pieces, foot_pieces) = split_within_limits(by_mass, sustainable, None)?;
         let mut tasks = VecDeque::new();
         tasks.push_back(cross_cut(pieces));
         let mut at = butt;
         for i in 0..pieces {
             let id = first_piece_id + u64::from(i);
-            let p = piece_at(pieces, i);
+            let piece = &foot_pieces[i as usize];
+            let p = piece.position_m;
+            let piece_kg = piece.green_kg();
             let to_piece = leg(at, p, 0.0)?;
             let carry_s = leg(p, site.store_m, piece_kg)?
                 + labour.walking_time_s(body, site.store_carry_m, 0.0, piece_kg)?;
@@ -781,6 +818,113 @@ mod tests {
         // With no fuel in the excavator, the quickest is a hand method.
         let best = quickest(plans).unwrap();
         assert_ne!(best.method, HaulMethod::Excavator);
+    }
+
+    #[test]
+    fn haul_plans_recut_a_conserved_remainder_above_the_sustainable_load() {
+        let (labour, body) = (labour(), body());
+        let sustainable = labour.sustainable_load_kg(&body).unwrap();
+        // At this count, repeated equal shares accumulate low enough that the
+        // final conserved remainder exceeds the sustainable limit materially.
+        let minimum_pieces = 9_928u32;
+        let total_kg = sustainable * f64::from(minimum_pieces);
+        let log = Log {
+            id: 77,
+            position_m: (0.0, 0.0),
+            heading_rad: 0.0,
+            length_m: 1.0,
+            diameter_m: 0.30,
+            dry_kg: total_kg,
+            carbon_kgc: total_kg * 0.5,
+            water_kg: 0.0,
+            place: LogPlace::Ground,
+        };
+        assert_eq!((log.green_kg() / sustainable).ceil() as u32, minimum_pieces);
+
+        let tolerance = sustainable.abs().max(1.0) * f64::EPSILON * 4.0;
+        let initial = log.cross_cut(minimum_pieces, 100);
+        let initial_largest = initial.iter().map(Log::green_kg).fold(0.0, f64::max);
+        assert!(
+            initial_largest > sustainable + tolerance,
+            "fixture must expose the rounded residual: {initial_largest} > {sustainable}"
+        );
+
+        let site = site();
+        let plans = haul_plans(
+            &log,
+            (0.0, 0.0),
+            &body,
+            &labour,
+            &site,
+            &fleet(1_000.0, 0.0),
+            100,
+        )
+        .unwrap();
+        let ute = plans
+            .iter()
+            .find(|plan| plan.method == HaulMethod::Ute)
+            .expect("a ute plan");
+        let planned_pieces = match &ute.tasks[0].action {
+            HaulAction::CrossCut { pieces, .. } => *pieces,
+            other => panic!("starts with {other:?}"),
+        };
+        assert_eq!(planned_pieces, minimum_pieces + 1);
+
+        let pieces = log.cross_cut(planned_pieces, 100);
+        let largest_piece_kg = pieces.iter().map(Log::green_kg).fold(0.0, f64::max);
+        assert!(largest_piece_kg <= sustainable + tolerance);
+
+        let payload = labour.ute_payload_kg().unwrap();
+        let payload_tolerance = payload.abs().max(1.0) * f64::EPSILON * 4.0;
+        let max_pieces_per_trip = (payload / largest_piece_kg).floor() as usize;
+        let mut loaded = 0usize;
+        for task in &ute.tasks {
+            if let HaulAction::Load { logs, .. } = &task.action {
+                let trip_kg = logs
+                    .iter()
+                    .map(|id| pieces[(*id - 100) as usize].green_kg())
+                    .sum::<f64>();
+                assert!(trip_kg <= payload + payload_tolerance, "ute payload exceeded: {trip_kg}");
+                assert!(logs.len() <= max_pieces_per_trip);
+                loaded += logs.len();
+            }
+        }
+        assert_eq!(loaded, planned_pieces as usize);
+
+        let foot = plans
+            .iter()
+            .find(|plan| plan.method == HaulMethod::OnFoot)
+            .expect("an on-foot plan");
+        let foot_piece_count = match &foot.tasks[0].action {
+            HaulAction::CrossCut { pieces, .. } => *pieces,
+            other => panic!("starts with {other:?}"),
+        };
+        assert_eq!(foot_piece_count, planned_pieces);
+
+        // The final CarryToStore task must price the actual residual piece,
+        // not the log's average mass.
+        let last_index = (planned_pieces - 1) as usize;
+        let last_piece = &pieces[last_index];
+        let last_id = 100 + u64::from(planned_pieces - 1);
+        let last_task = foot
+            .tasks
+            .iter()
+            .find(|task| matches!(&task.action, HaulAction::CarryToStore { log_id } if *log_id == last_id))
+            .expect("last piece carry task");
+        let to_piece = labour
+            .walking_time_s(&body, distance_m(site.store_m, last_piece.position_m), 0.0, 0.0)
+            .unwrap();
+        let back_empty = labour
+            .walking_time_s(&body, site.store_carry_m, 0.0, 0.0)
+            .unwrap();
+        let carry_loaded = labour
+            .walking_time_s(&body, distance_m(last_piece.position_m, site.store_m), 0.0, last_piece.green_kg())
+            .unwrap();
+        let stack_loaded = labour
+            .walking_time_s(&body, site.store_carry_m, 0.0, last_piece.green_kg())
+            .unwrap();
+        let expected_duration = (to_piece + back_empty) + (carry_loaded + stack_loaded);
+        assert_eq!(last_task.duration_s, expected_duration);
     }
 
     #[test]
