@@ -91,16 +91,52 @@ impl Log {
         )
     }
 
-    /// Cross-cut into `n` equal pieces along the log, numbered from the
-    /// butt, with ids `first_id..first_id + n`.
+    /// Cross-cut into `n` as-equal-as-binary64-allows pieces along the log,
+    /// numbered from the butt with ids `first_id..first_id + n`. The final
+    /// piece receives each floating-point remainder so totals are conserved.
     pub fn cross_cut(&self, n: u32, first_id: u64) -> Vec<Log> {
         let n = n.max(1);
         let k = f64::from(n);
-        let piece_len = self.length_m / k;
+        let equal_piece_len = self.length_m / k;
+        let equal_dry_kg = self.dry_kg / k;
+        let equal_carbon_kgc = self.carbon_kgc / k;
+        let equal_water_kg = self.water_kg / k;
         let butt = self.butt_m();
+        let mut allocated_length = 0.0;
+        let mut allocated_dry_kg = 0.0;
+        let mut allocated_carbon_kgc = 0.0;
+        let mut allocated_water_kg = 0.0;
         (0..n)
             .map(|i| {
-                let along = (f64::from(i) + 0.5) * piece_len;
+                // Equal division can make n rounded shares sum to one ULP
+                // above or below the source. Give the final piece the exact
+                // remainder so timber, carbon, water and length stay closed.
+                let last_piece = i == n - 1;
+                let length_m = if last_piece {
+                    self.length_m - allocated_length
+                } else {
+                    equal_piece_len
+                };
+                let dry_kg = if last_piece {
+                    self.dry_kg - allocated_dry_kg
+                } else {
+                    equal_dry_kg
+                };
+                let carbon_kgc = if last_piece {
+                    self.carbon_kgc - allocated_carbon_kgc
+                } else {
+                    equal_carbon_kgc
+                };
+                let water_kg = if last_piece {
+                    self.water_kg - allocated_water_kg
+                } else {
+                    equal_water_kg
+                };
+                let along = allocated_length + 0.5 * length_m;
+                allocated_length += length_m;
+                allocated_dry_kg += dry_kg;
+                allocated_carbon_kgc += carbon_kgc;
+                allocated_water_kg += water_kg;
                 Log {
                     id: first_id + u64::from(i),
                     position_m: (
@@ -108,11 +144,11 @@ impl Log {
                         butt.1 + along * self.heading_rad.sin(),
                     ),
                     heading_rad: self.heading_rad,
-                    length_m: piece_len,
+                    length_m,
                     diameter_m: self.diameter_m,
-                    dry_kg: self.dry_kg / k,
-                    carbon_kgc: self.carbon_kgc / k,
-                    water_kg: self.water_kg / k,
+                    dry_kg,
+                    carbon_kgc,
+                    water_kg,
                     place: self.place,
                 }
             })
