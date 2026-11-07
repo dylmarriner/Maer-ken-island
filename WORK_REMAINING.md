@@ -1,3 +1,8 @@
+## Exact-head formatting follow-up — 8 November 2026
+
+- [x] Apply rustfmt's required wrap to the zero-piece legacy restore regression (`a7b0ddd04655222e75d39a32af85c78e108e817a`).
+- [ ] Re-run exact-head formatting, Clippy, fast Rust tests, desktop/backend and week/year acceptance.
+
 ## Current timber boundary hardening — 8 November 2026
 
 - [x] Reject zero-piece pure `Log::cross_cut` requests before allocation.
