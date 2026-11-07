@@ -656,7 +656,6 @@ fn plant_food_is_only_the_forests_fruit_and_seed_and_grassland_feeds_nobody() {
     }
 }
 
-
 #[test]
 fn cross_cut_refuses_colliding_or_overflowing_piece_ids_without_mutating_the_ledger() {
     let b = base();
