@@ -15,7 +15,7 @@ use mk_core::human::BiologicalSex;
 use mk_engine::regional::commands::{ControlCommand, IslandCommand};
 use mk_engine::regional::create_human::{CreateLocation, IslandCreateHuman};
 use mk_engine::regional::life::IslandLife;
-use mk_engine::regional::replay::{replay_island, IslandReplayError, IslandReplayLog};
+use mk_engine::regional::replay::{replay_island, IslandReplayError, IslandReplayLog, REPLAY_LOG_VERSION};
 use mk_island::IslandScenario;
 
 const STEP: u64 = 60;
@@ -212,6 +212,19 @@ fn a_replay_that_stops_halfway_and_carries_on_lands_in_the_same_place() {
 
     let whole = replay_island(canon(), scenario(), &log, live.tick).expect("a full replay");
     assert_eq!(hex(whole.state_digest()), hex(live.state_digest()));
+}
+
+/// In-memory logs bypass the file loader, so replay must enforce the same format gate.
+#[test]
+fn an_in_memory_log_with_an_unsupported_version_is_refused_before_replay() {
+    let mut log = IslandReplayLog::new("not-a-current-scenario".to_string());
+    log.version = REPLAY_LOG_VERSION + 1;
+
+    let result = replay_island(canon(), scenario(), &log, 0);
+    assert!(matches!(
+        result,
+        Err(IslandReplayError::Version(version)) if version == REPLAY_LOG_VERSION + 1
+    ));
 }
 
 /// A log written against another scenario is refused, not reproduced
