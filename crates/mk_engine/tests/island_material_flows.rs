@@ -581,6 +581,9 @@ fn the_material_ledger_round_trips_through_a_snapshot() {
     // silently reset them would show.
     materials.respire("gem-d", 500.0, &mut ledger).unwrap();
     let _ = materials.drink("gem-k", 1.5);
+    // Pending cross-cut ids must survive a save/load so a planned haul can
+    // still materialise its pieces after the island is restored.
+    assert_eq!(materials.reserve_log_ids(2), 1);
 
     let text = serde_json::to_string(&materials).expect("the ledger serializes");
     let back: MaterialLedger = serde_json::from_str(&text).expect("and comes back");
@@ -657,7 +660,7 @@ fn plant_food_is_only_the_forests_fruit_and_seed_and_grassland_feeds_nobody() {
 }
 
 #[test]
-fn cross_cut_refuses_colliding_or_overflowing_piece_ids_without_mutating_the_ledger() {
+fn cross_cut_refuses_colliding_overflowing_unreserved_and_consumed_piece_ids_without_mutating_the_ledger() {
     let b = base();
     let cell = b.forest_cell;
     let area = b.domain.cell_area_m2(M);
@@ -677,8 +680,13 @@ fn cross_cut_refuses_colliding_or_overflowing_piece_ids_without_mutating_the_led
         place: LogPlace::Ground,
     };
 
+    // A dry stored source lets the test remove its cut pieces through the
+    // real seasoning path, leaving the old ids unoccupied but already used.
+    let mut first_source = make_log((0.0, 0.0), 10.0);
+    first_source.place = LogPlace::Stored;
+    first_source.water_kg = 0.0;
     let source_id = materials.receive_felled_log(
-        make_log((0.0, 0.0), 10.0),
+        first_source,
         &mut hydrology,
         cell,
         area,
@@ -725,12 +733,35 @@ fn cross_cut_refuses_colliding_or_overflowing_piece_ids_without_mutating_the_led
     assert_eq!(materials.stock_of(R::MaterialWater), water_before);
     assert_eq!(materials.next_log_id(), 3);
 
-    // The same cut succeeds only after the single writer reserves its range.
+    // The single writer reserves the range. Snapshot restoration must retain
+    // that pending reservation before the planned cut materialises it.
     let first_piece_id = materials.reserve_log_ids(2);
     assert_eq!(first_piece_id, 3);
+    let snapshot = serde_json::to_string(&materials).expect("reserved ledger serializes");
+    materials = serde_json::from_str(&snapshot).expect("reserved ledger restores");
+
     assert!(materials.cross_cut_log(source_id, 2, first_piece_id));
     assert_eq!(materials.log(source_id), None);
     assert!(materials.log(first_piece_id).is_some());
     assert!(materials.log(first_piece_id + 1).is_some());
+    assert_eq!(materials.next_log_id(), 5);
+
+    // Seasoning removes the two stored pieces while retaining their carbon
+    // in the wood stock. The old ids are now empty but must stay consumed.
+    assert!(materials.season_stored_logs(&mut ledger) > 0.0);
+    assert_eq!(materials.log(first_piece_id), None);
+    assert_eq!(materials.log(first_piece_id + 1), None);
+    let occupied_after_season = materials.log(occupied_id).unwrap().clone();
+    let carbon_after_season = materials.stock_of(R::MaterialCarbon);
+    let water_after_season = materials.stock_of(R::MaterialWater);
+
+    // The watermark and occupancy checks alone would accept this old range.
+    // The pending-reservation check must reject it without changing anything.
+    assert!(!materials.cross_cut_log(occupied_id, 2, first_piece_id));
+    assert_eq!(materials.log(occupied_id), Some(&occupied_after_season));
+    assert_eq!(materials.log(first_piece_id), None);
+    assert_eq!(materials.log(first_piece_id + 1), None);
+    assert_eq!(materials.stock_of(R::MaterialCarbon), carbon_after_season);
+    assert_eq!(materials.stock_of(R::MaterialWater), water_after_season);
     assert_eq!(materials.next_log_id(), 5);
 }
