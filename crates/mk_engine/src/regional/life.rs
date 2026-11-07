@@ -1889,21 +1889,35 @@ impl IslandLife {
         let plans =
             timber::haul_plans_over(&log, at, body, &self.labour, &site, &fleet, first, &climb)
                 .map_err(IslandLifeError::Labour)?;
-        let piece_count = plans
+        let selected = timber::quickest(plans);
+        let piece_count = selected
+            .tasks
             .iter()
-            .flat_map(|plan| plan.tasks.iter())
             .filter_map(|task| match &task.action {
-                timber::HaulAction::CrossCut { pieces, .. } => Some(u64::from(*pieces)),
+                timber::HaulAction::CrossCut {
+                    pieces, first_id, ..
+                } => {
+                    assert_eq!(
+                        *first_id, first,
+                        "selected haul must use the previewed piece-id range"
+                    );
+                    Some(u64::from(*pieces))
+                }
                 _ => None,
             })
             .max()
             .unwrap_or(0);
-        let reserved_first = self.materials.reserve_log_ids(piece_count);
-        assert_eq!(
-            reserved_first, first,
-            "single-writer haul planning must reserve the id range it previewed"
-        );
-        Ok(timber::quickest(plans))
+        // Only the selected plan owns a reservation. Reserving the largest
+        // range among every alternative would leave unused candidate ids
+        // pending after the quickest plan is chosen.
+        if piece_count > 0 {
+            let reserved_first = self.materials.reserve_log_ids(piece_count);
+            assert_eq!(
+                reserved_first, first,
+                "single-writer haul planning must reserve the id range it previewed"
+            );
+        }
+        Ok(selected)
     }
 
     /// What a finished haul task does to the world.
