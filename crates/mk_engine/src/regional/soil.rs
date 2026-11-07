@@ -58,6 +58,60 @@ pub struct RothC {
 }
 
 impl RothC {
+    /// Reject invalid reference parameters before they can create or mutate soil state.
+    fn assert_valid(&self) {
+        assert!(
+            self.k.iter().all(|k| k.is_finite() && *k > 0.0),
+            "RothC rate constants must be finite and positive"
+        );
+        assert!(
+            self.temp_num.is_finite() && self.temp_num > 0.0,
+            "RothC temperature numerator must be finite and positive"
+        );
+        assert!(
+            self.temp_exp.is_finite(),
+            "RothC temperature exponent must be finite"
+        );
+        assert!(
+            self.temp_offset_c.is_finite() && self.temp_offset_c > 0.0,
+            "RothC temperature offset must be finite and positive"
+        );
+        assert!(
+            self.cover_vegetated.is_finite() && self.cover_vegetated > 0.0,
+            "RothC vegetated cover factor must be finite and positive"
+        );
+        assert!(
+            self.cover_bare.is_finite() && self.cover_bare > 0.0,
+            "RothC bare cover factor must be finite and positive"
+        );
+        assert!(
+            (0.0..=1.0).contains(&self.dpm_woodland)
+                && self.dpm_woodland.is_finite()
+                && (0.0..=1.0).contains(&self.dpm_scrub)
+                && self.dpm_scrub.is_finite(),
+            "RothC plant DPM fractions must be finite and within [0, 1]"
+        );
+        assert!(
+            self.manure
+                .iter()
+                .all(|fraction| fraction.is_finite() && *fraction >= 0.0),
+            "RothC manure fractions must be finite and non-negative"
+        );
+        let manure_total: f64 = self.manure.iter().sum();
+        assert!(
+            manure_total.is_finite() && (manure_total - 1.0).abs() <= 1e-12,
+            "RothC manure fractions must conserve incoming carbon"
+        );
+        assert!(
+            self.to_biohum.is_finite() && (0.0..1.0).contains(&self.to_biohum),
+            "RothC decomposed-carbon partition must be finite and within [0, 1)"
+        );
+        assert!(
+            self.bio_share.is_finite() && (0.0..=1.0).contains(&self.bio_share),
+            "RothC BIO share must be finite and within [0, 1]"
+        );
+    }
+
     pub fn from_reference(library: &ReferenceLibrary) -> Result<Self, String> {
         let get = |key: &str, row: &str, col: &str| {
             library
@@ -73,7 +127,7 @@ impl RothC {
         let clay = part("rothamsted_clay_percent")?;
         let x = part("s_scaling")?
             * (part("p")? + part("q")? * (-part("r_per_percent_clay")? * clay).exp());
-        Ok(Self {
+        let params = Self {
             k: [k("dpm")?, k("rpm")?, k("bio")?, k("hum")?],
             temp_num: temp("a_numerator")?,
             temp_exp: temp("b_exponent")?,
@@ -89,12 +143,15 @@ impl RothC {
             ],
             to_biohum: 1.0 / (x + 1.0),
             bio_share: part("bio_share_of_biohum")?,
-        })
+        };
+        params.assert_valid();
+        Ok(params)
     }
 
     /// RothC's temperature modifier at a mean air temperature (°C). It is
     /// zero at and below -18.27 °C, where the formula's denominator turns.
     pub fn temperature_factor(&self, t_c: f64) -> f64 {
+        assert!(t_c.is_finite(), "RothC temperature must be finite");
         let d = t_c + self.temp_offset_c;
         if d <= 0.0 {
             return 0.0;
@@ -124,6 +181,36 @@ pub struct SoilInputs {
     pub carcasses: f64,
 }
 
+fn assert_soil_input(input: SoilInputs) {
+    assert!(
+        input.litter.is_finite() && input.litter >= 0.0,
+        "soil litter input must be finite and non-negative"
+    );
+    assert!(
+        input.faeces.is_finite() && input.faeces >= 0.0,
+        "soil faeces input must be finite and non-negative"
+    );
+    assert!(
+        input.carcasses.is_finite() && input.carcasses >= 0.0,
+        "soil carcass input must be finite and non-negative"
+    );
+    assert!(
+        (input.litter + input.faeces + input.carcasses).is_finite(),
+        "total soil carbon input must be finite"
+    );
+}
+
+fn assert_soil_pools(pools: &[f64; 4]) {
+    assert!(
+        pools.iter().all(|pool| pool.is_finite() && *pool >= 0.0),
+        "RothC soil pools must be finite and non-negative"
+    );
+    assert!(
+        pools.iter().sum::<f64>().is_finite(),
+        "total RothC soil carbon must be finite"
+    );
+}
+
 /// The soil's four active compartments under every medium cell (kg C m⁻²).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SoilCarbon {
@@ -150,6 +237,34 @@ impl SoilCarbon {
         temperature_factor: Vec<f64>,
         vegetated: &[bool],
     ) -> Self {
+        params.assert_valid();
+        assert_eq!(
+            biomes.len(),
+            input_kgc_m2_yr.len(),
+            "RothC biome and annual-input vectors must have equal lengths"
+        );
+        assert_eq!(
+            biomes.len(),
+            temperature_factor.len(),
+            "RothC biome and temperature-factor vectors must have equal lengths"
+        );
+        assert_eq!(
+            biomes.len(),
+            vegetated.len(),
+            "RothC biome and vegetation vectors must have equal lengths"
+        );
+        assert!(
+            input_kgc_m2_yr
+                .iter()
+                .all(|input| input.is_finite() && *input >= 0.0),
+            "RothC annual inputs must be finite and non-negative"
+        );
+        assert!(
+            temperature_factor
+                .iter()
+                .all(|factor| factor.is_finite() && *factor >= 0.0),
+            "RothC temperature factors must be finite and non-negative"
+        );
         let pools = biomes
             .iter()
             .zip(input_kgc_m2_yr)
@@ -164,18 +279,24 @@ impl SoilCarbon {
                 } else {
                     params.cover_bare
                 };
-                let input = input.max(0.0);
+                assert!(
+                    m.is_finite(),
+                    "RothC steady-state decay modifier must be finite"
+                );
+                let input = *input;
                 if m <= 0.0 || input <= 0.0 {
                     return [0.0; 4];
                 }
                 let e = params.to_biohum;
                 let through = input / (1.0 - e);
-                [
+                let pools = [
                     dpm_share * input / (m * params.k[DPM]),
                     (1.0 - dpm_share) * input / (m * params.k[RPM]),
                     params.bio_share * e * through / (m * params.k[BIO]),
                     (1.0 - params.bio_share) * e * through / (m * params.k[HUM]),
-                ]
+                ];
+                assert_soil_pools(&pools);
+                pools
             })
             .collect();
         Self {
@@ -202,9 +323,76 @@ impl SoilCarbon {
         vegetated: &[bool],
     ) -> f64 {
         let p = self.params;
+        p.assert_valid();
+        assert!(
+            dt_years.is_finite() && dt_years >= 0.0,
+            "RothC step duration must be finite and non-negative"
+        );
+        assert_eq!(
+            self.pools.len(),
+            biomes.len(),
+            "RothC pool and biome vectors must have equal lengths"
+        );
+        assert_eq!(
+            self.pools.len(),
+            inputs.len(),
+            "RothC pool and input vectors must have equal lengths"
+        );
+        assert_eq!(
+            self.pools.len(),
+            self.temperature_factor.len(),
+            "RothC pool and temperature-factor vectors must have equal lengths"
+        );
+        assert_eq!(
+            self.pools.len(),
+            vegetated.len(),
+            "RothC pool and vegetation vectors must have equal lengths"
+        );
+        assert!(
+            self.respired_kgc_m2.is_finite() && self.respired_kgc_m2 >= 0.0,
+            "cumulative soil respiration must be finite and non-negative"
+        );
+        // Preflight caller data and derived arithmetic for every cell before
+        // mutating the first one. A late-cell overflow must not leave earlier
+        // soil cells advanced while cumulative respiration remains unchanged.
+        for input in inputs {
+            assert_soil_input(*input);
+        }
+        for factor in &self.temperature_factor {
+            assert!(
+                factor.is_finite() && *factor >= 0.0,
+                "RothC temperature factors must be finite and non-negative"
+            );
+        }
+        let mut available_carbon = self.respired_kgc_m2;
+        for (i, pools) in self.pools.iter().enumerate() {
+            assert_soil_pools(pools);
+            let input = inputs[i];
+            let incoming = input.litter + input.faeces + input.carcasses;
+            let cell_available = pools.iter().sum::<f64>() + incoming;
+            assert!(
+                cell_available.is_finite(),
+                "RothC cell carbon plus incoming material must remain finite"
+            );
+            available_carbon += cell_available;
+            assert!(
+                available_carbon.is_finite(),
+                "RothC grid carbon budget must remain finite before mutation"
+            );
+            let cover = if vegetated[i] {
+                p.cover_vegetated
+            } else {
+                p.cover_bare
+            };
+            assert!(
+                (self.temperature_factor[i] * cover).is_finite(),
+                "RothC decay modifier must remain finite before mutation"
+            );
+        }
         let mut respired = 0.0;
         for (i, pools) in self.pools.iter_mut().enumerate() {
-            respired += p.step_cell(
+            assert_soil_pools(pools);
+            respired += p.step_cell_unchecked(
                 pools,
                 biomes[i],
                 inputs[i],
@@ -212,8 +400,17 @@ impl SoilCarbon {
                 vegetated[i],
                 dt_years,
             );
+            assert!(
+                respired.is_finite(),
+                "RothC cumulative step respiration must remain finite"
+            );
         }
-        self.respired_kgc_m2 += respired;
+        let cumulative_respired = self.respired_kgc_m2 + respired;
+        assert!(
+            cumulative_respired.is_finite(),
+            "cumulative soil respiration must remain finite"
+        );
+        self.respired_kgc_m2 = cumulative_respired;
         respired
     }
 }
@@ -231,19 +428,48 @@ impl RothC {
         vegetated: bool,
         dt_years: f64,
     ) -> f64 {
+        self.assert_valid();
+        assert!(
+            dt_years.is_finite() && dt_years >= 0.0,
+            "RothC step duration must be finite and non-negative"
+        );
+        assert_soil_input(input);
+        assert!(
+            a.is_finite() && a >= 0.0,
+            "RothC temperature factor must be finite and non-negative"
+        );
+        assert_soil_pools(pools);
+        let incoming = input.litter + input.faeces + input.carcasses;
+        assert!(
+            (pools.iter().sum::<f64>() + incoming).is_finite(),
+            "RothC soil carbon plus incoming material must remain finite"
+        );
+        self.step_cell_unchecked(pools, biome, input, a, vegetated, dt_years)
+    }
+
+    fn step_cell_unchecked(
+        &self,
+        pools: &mut [f64; 4],
+        biome: BiomeType,
+        input: SoilInputs,
+        a: f64,
+        vegetated: bool,
+        dt_years: f64,
+    ) -> f64 {
         let p = self;
         let Some(dpm_share) = p.plant_dpm_share(biome) else {
             return 0.0;
         };
-        pools[DPM] += dpm_share * input.litter + p.manure[0] * input.faeces + input.carcasses;
-        pools[RPM] += (1.0 - dpm_share) * input.litter + p.manure[1] * input.faeces;
-        pools[HUM] += p.manure[2] * input.faeces;
         let cover = if vegetated {
             p.cover_vegetated
         } else {
             p.cover_bare
         };
         let m = a * cover;
+        assert!(m.is_finite(), "RothC decay modifier must remain finite");
+        pools[DPM] += dpm_share * input.litter + p.manure[0] * input.faeces + input.carcasses;
+        pools[RPM] += (1.0 - dpm_share) * input.litter + p.manure[1] * input.faeces;
+        pools[HUM] += p.manure[2] * input.faeces;
         let mut decomposed = 0.0;
         for (pool, k) in pools.iter_mut().zip(p.k) {
             let lost = *pool * (1.0 - (-m * k * dt_years).exp());
@@ -305,6 +531,127 @@ mod tests {
         let respired = soil.step(0.25, &biomes, &inputs, &[true, false]);
         let after: f64 = (0..2).map(|i| soil.total(i)).sum();
         assert!(((before + 0.013) - (after + respired)).abs() < 1e-12);
+    }
+
+    #[test]
+    fn steady_state_rejects_mismatched_cell_vectors() {
+        let p = params();
+        let biomes = [BiomeType::TemperateForest];
+        let result = std::panic::catch_unwind(|| {
+            SoilCarbon::steady_state(p, &biomes, &[], vec![1.0], &[true]);
+        });
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn step_preflights_all_inputs_before_mutating_any_cell() {
+        use std::panic::AssertUnwindSafe;
+
+        let p = params();
+        let biomes = [BiomeType::TemperateForest, BiomeType::Grassland];
+        let mut soil =
+            SoilCarbon::steady_state(p, &biomes, &[0.5, 0.3], vec![1.0, 1.4], &[true, false]);
+        let before = soil.clone();
+        let inputs = [
+            SoilInputs {
+                litter: 0.01,
+                ..SoilInputs::default()
+            },
+            SoilInputs {
+                litter: f64::NAN,
+                ..SoilInputs::default()
+            },
+        ];
+
+        let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
+            soil.step(0.25, &biomes, &inputs, &[true, false]);
+        }));
+
+        assert!(result.is_err());
+        assert_eq!(
+            soil, before,
+            "invalid input must not partially advance soil"
+        );
+    }
+
+    #[test]
+    fn step_preflights_late_derived_decay_overflow_before_mutating_any_cell() {
+        use std::panic::AssertUnwindSafe;
+
+        let p = params();
+        let biomes = [BiomeType::TemperateForest, BiomeType::Grassland];
+        let mut soil =
+            SoilCarbon::steady_state(p, &biomes, &[0.5, 0.3], vec![1.0, 1.4], &[true, false]);
+        // The second cell is non-vegetated, so this is the cover factor
+        // used by the grid-wide decay-modifier preflight.
+        soil.params.cover_bare = 2.0;
+        soil.temperature_factor[1] = f64::MAX;
+        let before = soil.clone();
+
+        let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
+            soil.step(
+                0.25,
+                &biomes,
+                &[SoilInputs::default(), SoilInputs::default()],
+                &[true, false],
+            );
+        }));
+
+        assert!(result.is_err());
+        assert_eq!(
+            soil, before,
+            "a late-cell derived overflow must not partially advance earlier cells"
+        );
+    }
+
+    #[test]
+    fn step_preflights_grid_carbon_budget_overflow_before_mutating_any_cell() {
+        use std::panic::AssertUnwindSafe;
+
+        let p = params();
+        let biomes = [BiomeType::TemperateForest, BiomeType::Grassland];
+        let mut soil =
+            SoilCarbon::steady_state(p, &biomes, &[0.5, 0.3], vec![1.0, 1.4], &[true, false]);
+        soil.pools[0] = [f64::MAX * 0.6, 0.0, 0.0, 0.0];
+        soil.pools[1] = [f64::MAX * 0.6, 0.0, 0.0, 0.0];
+        let before = soil.clone();
+
+        let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
+            soil.step(
+                1.0,
+                &biomes,
+                &[SoilInputs::default(), SoilInputs::default()],
+                &[true, false],
+            );
+        }));
+
+        assert!(result.is_err());
+        assert_eq!(
+            soil, before,
+            "an unrepresentable grid carbon budget must be rejected before mutation"
+        );
+    }
+
+    #[test]
+    fn step_cell_rejects_negative_duration_without_mutating_pools() {
+        use std::panic::AssertUnwindSafe;
+
+        let p = params();
+        let mut pools = [1.0, 0.5, 0.2, 0.1];
+        let before = pools;
+        let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
+            p.step_cell(
+                &mut pools,
+                BiomeType::TemperateForest,
+                SoilInputs::default(),
+                1.0,
+                true,
+                -0.25,
+            );
+        }));
+
+        assert!(result.is_err());
+        assert_eq!(pools, before);
     }
 
     /// The steady state is one: fed its own input, it stays put.
