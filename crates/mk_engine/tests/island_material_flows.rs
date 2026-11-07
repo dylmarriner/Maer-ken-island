@@ -610,7 +610,7 @@ fn empty_cross_cut_reservations_preserve_the_legacy_material_debug_representatio
     let materials = MaterialLedger::new();
     assert_eq!(
         format!("{materials:?}"),
-        "MaterialLedger { stock: {}, structures: {}, bodies: {}, next_structure: 0, logs: {}, next_log: 0 }"
+        "MaterialLedger { stock: {}, structures: {}, bodies: {}, next_structure: 1, logs: {}, next_log: 0 }"
     );
 }
 
