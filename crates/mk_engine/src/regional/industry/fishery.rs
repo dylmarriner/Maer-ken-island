@@ -22,10 +22,9 @@ use crate::validation::{ReferenceDomain, ReferenceLibrary};
 
 const YEAR_S: f64 = 365.25 * 86_400.0;
 
-// Repeated binary64 additions can move a cumulative total by a few ULPs.
-// Bound the recorded-delta error relative to the catch, rather than demanding
-// bit equality (which rejects ordinary repeated catches), while still refusing
-// materially distorted increments such as 2^53 + 3 rounding to 4.
+// Stored landed mass and stock biomass are binary64 accumulators. Accept
+// ordinary relative rounding, but reject materially distorted increments such
+// as 2^53 + 3 rounding to 2^53 + 4.
 const MATERIAL_INCREMENT_RELATIVE_TOLERANCE: f64 = 1.0e-12;
 
 /// Invalid fishery inputs are explicit errors; a failed step never mutates its stock.
