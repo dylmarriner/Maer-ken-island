@@ -968,6 +968,72 @@ mod tests {
     }
 
     #[test]
+    fn msy_peak_is_stable_at_adjacent_binary64_depensation_boundaries() {
+        let mut model = FisheryModel::load_default().expect("the pack loads");
+        model.r_per_year[Resilience::Medium as usize] = 1.0;
+
+        let half = 0.5_f64;
+        let two_thirds = 2.0_f64 / 3.0;
+        let thresholds = [
+            half,
+            f64::from_bits(half.to_bits() + 1),
+            f64::from_bits(two_thirds.to_bits() - 1),
+            two_thirds,
+            f64::from_bits(two_thirds.to_bits() + 1),
+        ];
+        let carrying_capacity = 1_200.0;
+
+        for threshold in thresholds {
+            model.depensation_below = threshold;
+            let stock = FishStock::unexploited(Resilience::Medium, carrying_capacity)
+                .expect("positive carrying capacity");
+            let peak_biomass_fraction = if threshold <= half {
+                0.5
+            } else if threshold <= two_thirds {
+                threshold
+            } else {
+                two_thirds
+            };
+            let peak_surplus_fraction = if threshold <= half {
+                0.25
+            } else if threshold <= two_thirds {
+                threshold * (1.0 - threshold)
+            } else {
+                4.0 / (27.0 * threshold)
+            };
+
+            let target = stock
+                .msy_biomass_t(&model)
+                .expect("valid threshold has a finite peak target");
+            let msy = stock
+                .msy_t(&model)
+                .expect("valid threshold has finite maximum surplus");
+            let mut at_target = stock.clone();
+            at_target.biomass_t = target;
+            let surplus_at_target = at_target
+                .surplus_t_per_year(&model)
+                .expect("analytic target has finite surplus");
+
+            let expected_target = carrying_capacity * peak_biomass_fraction;
+            let expected_msy = carrying_capacity * peak_surplus_fraction;
+            let tolerance = expected_msy.max(1.0) * 1.0e-12;
+
+            assert!(
+                (target - expected_target).abs() <= tolerance,
+                "threshold {threshold}: target {target} vs {expected_target}"
+            );
+            assert!(
+                (msy - expected_msy).abs() <= tolerance,
+                "threshold {threshold}: MSY {msy} vs {expected_msy}"
+            );
+            assert!(
+                (surplus_at_target - msy).abs() <= tolerance,
+                "threshold {threshold}: target surplus {surplus_at_target} vs MSY {msy}"
+            );
+        }
+    }
+
+    #[test]
     fn harvesting_all_interval_growth_does_not_reduce_biomass_from_rounding() {
         let model = FisheryModel {
             r_per_year: [0.0, 0.0012, 0.0, 0.0],
