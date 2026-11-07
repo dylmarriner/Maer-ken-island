@@ -486,3 +486,8 @@ Commit `f6ff198bb6d67645affd13a972a1537013196fe4` applies that exact formatting.
 The next exact-head Rust check compiled the new fixture and found one path-resolution error: inside `life::tests`, `super::energy` refers to the `life` module's parent, which does not contain the sibling `energy` module.
 
 Commit `65bf36c3dbf29e91c595371208e98db886e06b16` uses the compiler-suggested canonical path `crate::regional::energy::Surface::OffRoadTrack` for the test fixture. No production logic changed. A fresh exact-head test run is required.
+
+
+## Canonical Surface path formatting correction — 8 November 2026
+
+The next workflow stopped at rustfmt again because the longer compiler-correct `crate::regional::energy::Surface` path must be split across lines. Commit `1654ea03723567c02a7945f1d9ca4014ff5463eb` applies the exact requested layout. The corrected module path remains unchanged. Another exact-head run is required.
