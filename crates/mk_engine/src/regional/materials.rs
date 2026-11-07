@@ -689,6 +689,46 @@ impl MaterialLedger {
         first
     }
 
+    /// Reconstruct a pending range from an active persisted haul task.
+    ///
+    /// IslandLife snapshots written before reservation tracking have the
+    /// monotonic allocator watermark and the active CrossCut task, but not
+    /// this ledger's pending-id set. Only the owning haul-task path calls
+    /// this crate-private migration helper; direct ledger callers still need
+    /// an explicitly pending reservation.
+    pub(crate) fn restore_pending_cross_cut_ids(
+        &mut self,
+        source_id: u64,
+        pieces: u32,
+        first_id: u64,
+    ) -> bool {
+        let pieces = pieces.max(1);
+        let Some(end_exclusive) = first_id.checked_add(u64::from(pieces)) else {
+            return false;
+        };
+        if first_id == 0
+            || !self.logs.contains_key(&source_id)
+            || end_exclusive > self.next_log
+            || self.logs.range(first_id..end_exclusive).next().is_some()
+        {
+            return false;
+        }
+
+        let already_pending = self
+            .reserved_log_ids
+            .range(first_id..end_exclusive)
+            .count();
+        if already_pending == pieces as usize {
+            return true;
+        }
+        if already_pending != 0 {
+            return false;
+        }
+
+        self.reserved_log_ids.extend(first_id..end_exclusive);
+        true
+    }
+
     /// Every log and piece, by id.
     pub fn logs(&self) -> impl Iterator<Item = &Log> {
         self.logs.values()
