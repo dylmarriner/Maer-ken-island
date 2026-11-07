@@ -47,3 +47,12 @@ No reference values, species parameters, snapshot fields/layout, append-only log
 ## Status-document reconciliation — 7 November 2026
 
 Commit `77ae69dbc311d13583aa335a15b00239e09512f1` updates `docs/ISLAND_SYSTEM_STATUS.md` to record the merged and verified fishery PRs #110, #111, #114, #115 and #117, and the pending PR #118 interval-underflow guard. Fishery remains standalone pending sourced species/effort data and person-owned workforce integration.
+
+
+## Formatting correction — 7 November 2026
+
+Exact-head workflow [#42331233817](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42331233817) reached checkout and failed only at `cargo fmt --all -- --check`. The formatter identified one assertion-wrapping difference in the new interval-underflow regression; Clippy and fast tests were skipped by the job dependency.
+
+- Corrected the assertion to the formatter's exact output.
+- Commit: `80912f0f1c59e140a62e40810bf32e6b086ea86b`.
+- A fresh exact-head workflow is required for this corrected head. No Rust test pass is claimed yet.
