@@ -413,7 +413,7 @@ pub fn haul_plans_over(
             let largest_length = split.iter().map(|piece| piece.length_m).fold(0.0, f64::max);
             let mass_fits = largest_mass <= max_piece_kg + tolerance(max_piece_kg);
             let length_fits =
-                max_piece_length_m.map_or(true, |limit| largest_length <= limit + tolerance(limit));
+                max_piece_length_m.is_none_or(|limit| largest_length <= limit + tolerance(limit));
             if mass_fits && length_fits {
                 return Ok((pieces, split));
             }
