@@ -383,3 +383,8 @@ head. Fresh exact-head formatting, Clippy, fast Rust tests, desktop/backend and
 week/year reference acceptance are required. No local Cargo pass is claimed.
 No digest pin, simulation parameter, RNG, replay hash or snapshot schema was
 changed by the zero-piece guard.
+
+
+### Rust formatting correction — 8 November 2026
+
+Exact-head workflow [#42398863262](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42398863262) reached `cargo fmt --all -- --check` and failed on one line wrap in the new zero-piece legacy-restore assertion. Applied the exact rustfmt output in `a7b0ddd04655222e75d39a32af85c78e108e817a`. This was a formatting-only failure; fast tests were not run in that job. Other application/reference jobs were still in progress at inspection. Fresh exact-head CI is required; no format or test pass is claimed for the corrected head.
