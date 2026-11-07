@@ -582,7 +582,9 @@ mod tests {
         let biomes = [BiomeType::TemperateForest, BiomeType::Grassland];
         let mut soil =
             SoilCarbon::steady_state(p, &biomes, &[0.5, 0.3], vec![1.0, 1.4], &[true, false]);
-        soil.params.cover_vegetated = 2.0;
+        // The second cell is non-vegetated, so this is the cover factor
+        // used by the grid-wide decay-modifier preflight.
+        soil.params.cover_bare = 2.0;
         soil.temperature_factor[1] = f64::MAX;
         let before = soil.clone();
 
