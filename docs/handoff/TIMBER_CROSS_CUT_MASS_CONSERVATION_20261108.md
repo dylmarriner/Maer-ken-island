@@ -388,3 +388,19 @@ changed by the zero-piece guard.
 ### Rust formatting correction — 8 November 2026
 
 Exact-head workflow [#42398863262](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42398863262) reached `cargo fmt --all -- --check` and failed on one line wrap in the new zero-piece legacy-restore assertion. Applied the exact rustfmt output in `a7b0ddd04655222e75d39a32af85c78e108e817a`. This was a formatting-only failure; fast tests were not run in that job. Other application/reference jobs were still in progress at inspection. Fresh exact-head CI is required; no format or test pass is claimed for the corrected head.
+
+
+## Follow-up: reserve haul IDs only after founder acceptance — 8 November 2026
+
+Codex review found that `plan_haul` reserved the selected CrossCut range before `work` asked the founder whether to haul or fell. A founder who declined the haul therefore leaked a pending ID range, even though no haul job owned it.
+
+Correction:
+- `plan_haul` now previews the allocator's next ID and builds candidate plans without mutating the ledger.
+- The work loop calls `reserve_haul_plan` only after `chooses_to_haul` returns true.
+- `reserve_haul_plan` verifies the accepted job still owns the previewed next ID and reserves the largest actual CrossCut range, preserving the 14-piece conserved-remainder case.
+- The accepted-plan regression now proves preview leaves the allocator unchanged and explicit acceptance reserves the exact range.
+- New work-loop regression forces Gem-D to prefer felling, proves a valid haul candidate exists, runs the real work decision, and verifies no ID reservation leaks when the haul is declined.
+
+Implementation commit: `5281c014610cb338923efc50e7da640b55897bf4`.
+
+Fresh exact-head rustfmt, Clippy, fast tests, desktop/backend and week/year reference acceptance are required. No local Cargo result is claimed. The single-writer allocator and deterministic choice model are unchanged; only the point at which the reservation is committed has moved after acceptance.
