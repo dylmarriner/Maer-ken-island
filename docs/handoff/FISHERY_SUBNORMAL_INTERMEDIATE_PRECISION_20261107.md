@@ -44,21 +44,20 @@ hashes, RNG, material ledger or IslandLife state changed.
 ## Commits
 
 - `008887938cbb7998cb65aa56b0e42c620cfc0b89` — source correction and regression.
+- `b5ab0ce7e68d9c08fbfb7a039fda097240fb2781` — exact rustfmt correction after workflow #42321774856.
 
 ## Verification
 
-- Regression is committed; no local Cargo pass is claimed because custom
-  OpenCommander device discovery returned transient HTTP 429.
-- Exact-head CI must run formatting, Clippy, fast Rust tests, desktop,
-  installed backend, dashboard, computer service, repository scripts,
-  dependency audit and week/year reference-pack acceptance.
-- The new PR must remain unmerged until every required check passes on its
-  exact head.
+- Initial exact-head workflow [#42321774856](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42321774856) reached checkout and failed only at `cargo fmt --all -- --check`; Clippy and fast tests were skipped by the workflow dependency.
+- The formatter identified two line-wrapping differences in the new source/test. Both were corrected in `b5ab0ce7`.
+- No local Cargo pass is claimed because custom OpenCommander device discovery returned transient HTTP 429.
+- PR #117 exact-head CI must pass formatting, Clippy, fast Rust tests, desktop, installed backend, dashboard, computer service, repository scripts, dependency audit and week/year reference-pack acceptance.
+- PR #117 must remain unmerged until every required check passes on its exact head.
 
 ## Next
 
-1. Open the PR and record its exact head.
-2. Verify exact-head CI and address only evidence-backed failures.
+1. Verify the new exact head after the rustfmt correction.
+2. Address only evidence-backed failures.
 3. Merge only after all required checks pass.
 4. Keep the fishery standalone until sourced species-specific stock/effort
    data and person-owned workforce decisions permit IslandLife integration.
