@@ -587,9 +587,10 @@ impl FishStock {
         // rounding K - B upward can make B + headroom overflow even though the
         // physically stored result is exactly the finite carrying capacity.
         let catch = wanted_t.min(grown);
-        // Subtract the catch from growth before adding the remainder to biomass.
-        // (biomass + grown) - catch can lose low bits to cancellation and make a
-        // fully harvested stock appear to shrink even though catch == growth.
+        // Subtract the catch from growth before updating the stored stock.
+        // For non-saturating growth, add the remainder to B. At the carrying-
+        // capacity boundary, compute K - catch directly: B + (headroom - catch)
+        // can overflow or lose low bits even though the capped result is finite.
         let remaining_growth = grown - catch;
         let headroom = self.k_t - self.biomass_t;
         let biomass_t = if remaining_growth == 0.0 {
