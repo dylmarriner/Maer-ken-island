@@ -4609,8 +4609,8 @@ mod tests {
             .is_some());
         let legacy_snapshot: IslandLifeSnapshot =
             serde_json::from_value(legacy_value).expect("legacy snapshot deserializes");
-        let mut restored =
-            IslandLife::restore(life.canon.clone(), legacy_snapshot).expect("legacy snapshot restores");
+        let mut restored = IslandLife::restore(life.canon.clone(), legacy_snapshot)
+            .expect("legacy snapshot restores");
         let cross_cut_task = restored
             .hauling
             .values()
@@ -4618,7 +4618,8 @@ mod tests {
             .find(|task| matches!(&task.action, timber::HaulAction::CrossCut { .. }))
             .expect("the active Ute job retains its CrossCut task")
             .clone();
-        restored.finish_haul_task(&cross_cut_task, &mut Ledger::new());
+        let mut restored_ledger = Ledger::new();
+        restored.finish_haul_task(&cross_cut_task, &mut restored_ledger);
 
         assert_eq!(
             restored.materials.log(other_id).map(|log| log.dry_kg),
