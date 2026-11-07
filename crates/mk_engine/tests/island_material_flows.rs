@@ -703,10 +703,50 @@ fn direct_log_cross_cut_rejects_oversized_piece_count_before_allocation() {
 }
 
 #[test]
+#[should_panic(expected = "cross-cut reservation must contain at least one id")]
+fn material_ledger_rejects_empty_cross_cut_reservations_before_allocation() {
+    MaterialLedger::new().reserve_log_ids(0);
+}
+
+#[test]
 #[should_panic(expected = "cross-cut reservation exceeds safety bound")]
 fn material_ledger_rejects_oversized_cross_cut_reservations_before_allocation() {
     let mut materials = MaterialLedger::new();
     materials.reserve_log_ids(u64::from(MAX_CROSS_CUT_PIECES) + 1);
+}
+
+#[test]
+fn cross_cut_refuses_zero_piece_count_without_consuming_its_reservation() {
+    let b = base();
+    let cell = b.forest_cell;
+    let area = b.domain.cell_area_m2(M);
+    let mut hydrology = HydrologyState::new(&b.domain.storage_spec(M), 0.5);
+    let mut materials = MaterialLedger::new();
+    let mut ledger = Ledger::new();
+    let source = Log {
+        id: 0,
+        position_m: (0.0, 0.0),
+        heading_rad: 0.0,
+        length_m: 2.0,
+        diameter_m: 0.2,
+        dry_kg: 10.0,
+        carbon_kgc: 5.0,
+        water_kg: 8.2,
+        place: LogPlace::Ground,
+    };
+    let source_id = materials.receive_felled_log(source, &mut hydrology, cell, area, &mut ledger);
+    let first_piece_id = materials.reserve_log_ids(1);
+    let source_before = materials.log(source_id).unwrap().clone();
+
+    assert!(!materials.cross_cut_log(source_id, 0, first_piece_id));
+    assert_eq!(materials.log(source_id), Some(&source_before));
+    assert_eq!(materials.log(first_piece_id), None);
+    assert_eq!(materials.next_log_id(), first_piece_id + 1);
+
+    // The invalid zero-piece request must not consume the pending range.
+    assert!(materials.cross_cut_log(source_id, 1, first_piece_id));
+    assert_eq!(materials.log(source_id), None);
+    assert!(materials.log(first_piece_id).is_some());
 }
 
 #[test]
