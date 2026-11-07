@@ -41,7 +41,9 @@ pub enum FisheryError {
     LandedTotalOverflow,
     LandedTotalUnrepresentable,
     BiomassRemainderUnrepresentable,
+    /// Positive mathematical maximum sustainable yield rounded below binary64 range.
     UnrepresentableMsy,
+    /// Positive analytic peak-biomass target rounded below binary64 range.
     UnrepresentableMsyBiomassTarget,
 }
 
@@ -371,12 +373,12 @@ impl FishStock {
         let (_, peak_surplus_fraction) = msy_peak_fractions(model.depensation_below);
         let rate = model.r(self.resilience);
         let scaled_capacity = self.k_t * peak_surplus_fraction;
-        let msy = if scaled_capacity < f64::MIN_POSITIVE && rate > 0.0 {
+        let mut msy = if scaled_capacity < f64::MIN_POSITIVE && rate > 0.0 {
             // A quarter is an exact binary scale. Apply it to the rate before
             // the subnormal capacity so the final multiplication performs the
             // only rounding; scaling K first can discard a representable result.
-            // Other peak fractions retain rate * K first: neither multiplication
-            // order is universally exact for their non-power-of-two significands.
+            // Other peak fractions retain rate * K first because neither order
+            // is universally exact for their non-power-of-two significands.
             if peak_surplus_fraction == 0.25 {
                 (rate * peak_surplus_fraction) * self.k_t
             } else {
@@ -386,7 +388,15 @@ impl FishStock {
             rate * scaled_capacity
         };
         if msy == 0.0 && rate > 0.0 {
-            return Err(FisheryError::UnrepresentableMsy);
+            // A non-quarter fraction can make the first product order round to
+            // zero even when the exact three-factor result rounds to one
+            // subnormal unit. Reorder the factors before declaring it
+            // unrepresentable; the zero result is valid only if both orders
+            // round to zero.
+            msy = (rate * peak_surplus_fraction) * self.k_t;
+            if msy == 0.0 {
+                return Err(FisheryError::UnrepresentableMsy);
+            }
         }
         if !msy.is_finite() || msy < 0.0 {
             return Err(FisheryError::NonFiniteGrowth);
@@ -942,6 +952,30 @@ mod tests {
             1
         );
     }
+    #[test]
+    fn msy_retries_non_quarter_scaling_when_first_order_rounds_to_zero() {
+        let smallest = f64::from_bits(1);
+
+        let model = FisheryModel {
+            r_per_year: [0.0, 1.25, 0.0, 0.0],
+            depensation_below: 0.51,
+        };
+        let stock = FishStock::unexploited(Resilience::Medium, f64::from_bits(2))
+            .expect("two positive subnormal capacity units");
+        // (r * K) rounds to two units, then multiplying by 0.2499 rounds
+        // to zero. Scaling r by the peak fraction first yields one unit.
+        assert_eq!(stock.msy_t(&model).unwrap().to_bits(), 1);
+
+        let model = FisheryModel {
+            r_per_year: [0.0, 2.5, 0.0, 0.0],
+            depensation_below: 0.6,
+        };
+        let stock = FishStock::unexploited(Resilience::Medium, smallest)
+            .expect("smallest positive subnormal capacity");
+        // The alternate order preserves the exact 0.6-subnormal result.
+        assert_eq!(stock.msy_t(&model).unwrap().to_bits(), 1);
+    }
+
     #[test]
     fn msy_preserves_representable_subnormal_results_when_peak_scaling_would_underflow() {
         let model = FisheryModel {
