@@ -249,7 +249,7 @@ pub fn replay_island(
         while life.tick < entry.tick {
             life.advance(step).map_err(IslandReplayError::Island)?;
         }
-        life.apply_command(entry.command.clone())
+        life.apply_command_with_sequence(entry.command.clone(), entry.sequence)
             .map_err(|e| IslandReplayError::Refused {
                 tick: entry.tick,
                 sequence: entry.sequence,
@@ -270,22 +270,33 @@ impl IslandLife {
         self.replay_sequence_by_tick.insert(self.tick, sequence);
     }
 
-    /// Do what was asked, and remember that it was asked.
-    ///
-    /// The log is appended before the command's effect is returned, so a
-    /// command that applied is always in the record — a run whose log were
-    /// missing its last entry would replay to a different island and give
-    /// no sign of it.
-    pub fn apply_command(&mut self, command: IslandCommand) -> Result<Applied, CommandError> {
-        // Preflight the log slot before any command can mutate the island.
-        // The single-writer owns this value through the whole call, so the
-        // per-tick index cannot be advanced by another command in between.
-        let sequence = match self.replay_sequence_by_tick.get(&self.tick).copied() {
+    /// The next sequence a live command can use at the current tick.
+    fn next_command_sequence(&self) -> Result<u64, CommandError> {
+        match self.replay_sequence_by_tick.get(&self.tick).copied() {
             Some(last) => last
                 .checked_add(1)
-                .ok_or(CommandError::ReplaySequenceExhausted { tick: self.tick })?,
-            None => 0,
-        };
+                .ok_or(CommandError::ReplaySequenceExhausted { tick: self.tick }),
+            None => Ok(0),
+        }
+    }
+
+    /// Apply a command while preserving the sequence recorded by a replay log.
+    ///
+    /// Gaps are valid in an imported log, but moving backwards is not. The
+    /// check happens before the command can mutate the island.
+    fn apply_command_with_sequence(
+        &mut self,
+        command: IslandCommand,
+        sequence: u64,
+    ) -> Result<Applied, CommandError> {
+        let expected_at_least = self.next_command_sequence()?;
+        if sequence < expected_at_least {
+            return Err(CommandError::ReplaySequenceOutOfOrder {
+                tick: self.tick,
+                expected_at_least,
+                received: sequence,
+            });
+        }
 
         match &command {
             IslandCommand::CreateHuman(request) => {
@@ -311,6 +322,12 @@ impl IslandLife {
                 Ok(Applied::Noted)
             }
         }
+    }
+
+    /// Apply a live command using the next contiguous sequence for this tick.
+    pub fn apply_command(&mut self, command: IslandCommand) -> Result<Applied, CommandError> {
+        let sequence = self.next_command_sequence()?;
+        self.apply_command_with_sequence(command, sequence)
     }
 
     /// Everything that has reached this island from outside.
