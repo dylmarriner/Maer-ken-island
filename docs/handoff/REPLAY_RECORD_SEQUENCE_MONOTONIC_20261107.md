@@ -123,3 +123,13 @@ Commit:
 - `95ca4245d2323378896ac22c5db7ed57f0ad3fc8` — update the Phase 4 cost test to the immutable accessor.
 
 The CLI, timeline projection, replay tests, intervention tests and Phase 4 cost test now use the read-only API. Fresh exact-head CI remains required.
+
+
+## Exact-head compile correction — 8 November 2026
+
+Workflow [#42413723591](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42413723591) passed formatting and reached Clippy compilation. The sequence-exhaustion regression now constructs its log through `from_entries` and then calls the mutable `record` API, but the fixture binding had been left immutable.
+
+- Corrected `let log` to `let mut log` in `recording_after_sequence_exhaustion_fails_without_appending`.
+- Commit: `69abf55ce26aead34b1d34575ceb1553fbca989a`.
+
+The compiler error was confined to the test fixture. No production code change was required. Fresh exact-head Clippy and fast Rust tests are required; the previous job stopped during compilation.
