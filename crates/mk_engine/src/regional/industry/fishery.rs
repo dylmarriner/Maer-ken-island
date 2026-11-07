@@ -26,7 +26,7 @@ const YEAR_S: f64 = 365.25 * 86_400.0;
 // Bound the recorded-delta error relative to the catch, rather than demanding
 // bit equality (which rejects ordinary repeated catches), while still refusing
 // materially distorted increments such as 2^53 + 3 rounding to 4.
-const LANDED_TOTAL_RELATIVE_TOLERANCE: f64 = 1.0e-12;
+const MATERIAL_INCREMENT_RELATIVE_TOLERANCE: f64 = 1.0e-12;
 
 /// Invalid fishery inputs are explicit errors; a failed step never mutates its stock.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -41,6 +41,7 @@ pub enum FisheryError {
     LandedTotalOverflow,
     LandedTotalUnrepresentable,
     BiomassRemainderUnrepresentable,
+    BiomassIncrementUnrepresentable,
     /// Positive mathematical maximum sustainable yield rounded below binary64 range.
     UnrepresentableMsy,
     /// Positive analytic peak-biomass target rounded below binary64 range.
@@ -66,7 +67,10 @@ impl std::fmt::Display for FisheryError {
                 "cumulative landed biomass increment is not representable at stored precision"
             }
             Self::BiomassRemainderUnrepresentable => {
-                "remaining biomass growth is not representable at stored precision"
+                "remaining biomass growth is below the stored stock's representable increment"
+            }
+            Self::BiomassIncrementUnrepresentable => {
+                "remaining biomass growth is materially distorted at stored precision"
             }
             Self::UnrepresentableMsy => {
                 "positive maximum sustainable yield is below binary64 representable range"
@@ -602,7 +606,7 @@ impl FishStock {
         let recorded_delta = landed_t - self.landed_t;
         if catch > 0.0
             && (recorded_delta <= 0.0
-                || (recorded_delta - catch).abs() > catch * LANDED_TOTAL_RELATIVE_TOLERANCE)
+                || (recorded_delta - catch).abs() > catch * MATERIAL_INCREMENT_RELATIVE_TOLERANCE)
         {
             return Err(FisheryError::LandedTotalUnrepresentable);
         }
@@ -612,6 +616,17 @@ impl FishStock {
         // at the current biomass magnitude.
         if remaining_growth > 0.0 && biomass_t == self.biomass_t {
             return Err(FisheryError::BiomassRemainderUnrepresentable);
+        }
+        // A positive increment can also be rounded to the wrong non-zero
+        // amount (for example, 2^53 + 3 rounds to 2^53 + 4). Preserve the
+        // material ledger by accepting only ordinary relative rounding.
+        let recorded_growth = biomass_t - self.biomass_t;
+        if remaining_growth > 0.0
+            && (recorded_growth <= 0.0
+                || (recorded_growth - remaining_growth).abs()
+                    > remaining_growth * MATERIAL_INCREMENT_RELATIVE_TOLERANCE)
+        {
+            return Err(FisheryError::BiomassIncrementUnrepresentable);
         }
 
         self.biomass_t = biomass_t;
@@ -1764,6 +1779,41 @@ mod tests {
             stock, before,
             "a zero-catch step must not silently discard unrepresentable stock growth"
         );
+    }
+
+    #[test]
+    fn biomass_increment_rounded_up_or_down_is_rejected_without_mutation() {
+        let biomass = 2.0_f64.powi(53);
+        let carrying_capacity = 2.0_f64.powi(54);
+
+        for (growth, expected_recorded_delta) in [(3.0, 4.0), (5.0, 4.0)] {
+            let model = FisheryModel {
+                r_per_year: [0.0, 2.0 * growth / biomass, 0.0, 0.0],
+                depensation_below: 0.25,
+            };
+            let mut stock = FishStock::unexploited(Resilience::Medium, carrying_capacity)
+                .expect("positive carrying capacity");
+            stock.biomass_t = biomass;
+            let before = stock.clone();
+
+            let calculated_growth = stock
+                .sustainable_catch_limit_t(&model, YEAR_S)
+                .expect("the requested interval growth is representable");
+            assert_eq!(calculated_growth, growth);
+            assert_eq!(
+                stock.biomass_t + calculated_growth - stock.biomass_t,
+                expected_recorded_delta
+            );
+
+            assert_eq!(
+                stock.fish(&model, 0.0, YEAR_S),
+                Err(FisheryError::BiomassIncrementUnrepresentable)
+            );
+            assert_eq!(
+                stock, before,
+                "a materially rounded stock increment must not mutate the biomass ledger"
+            );
+        }
     }
 
     #[test]
