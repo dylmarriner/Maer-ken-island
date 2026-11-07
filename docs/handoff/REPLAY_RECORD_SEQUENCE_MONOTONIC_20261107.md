@@ -92,3 +92,13 @@ Commits:
 - `317824d2cb24905a34b99674864ac486e197f95f` — update intervention integration tests.
 
 Fresh exact-head formatting, Clippy, fast Rust tests, desktop/backend and week/year reference acceptance are required. The previous green workflow for PR #123 predates this change and is not evidence for this head. No local Cargo result is claimed while custom OpenCommander access returns HTTP 429.
+
+
+## Exact-head formatting correction — 8 November 2026
+
+Workflow [#42413421404](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42413421404) caught a test-placement mistake before Clippy or fast Rust tests ran: the new deserialisation regression had been inserted before the closing brace of the preceding test, nesting it inside that function. Rustfmt reported the required module-level placement.
+
+Commit:
+- `9bbe128be14f3465712091a14febe5682bd723c3` — close the preceding test before declaring the deserialisation regression.
+
+This was a test-source formatting/placement defect, not a production-code failure. The preceding workflow did not run Clippy or fast tests for this head. A fresh exact-head workflow is required; no source-level pass is claimed.
