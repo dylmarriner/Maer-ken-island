@@ -61,3 +61,33 @@ hashes, RNG, material ledger or IslandLife state changed.
 3. Merge only after all required checks pass.
 4. Keep the fishery standalone until sourced species-specific stock/effort
    data and person-owned workforce decisions permit IslandLife integration.
+
+
+## Independent subnormal-ratio regression — 7 November 2026
+
+The first regression covered a normal `B/K` and normal depensation factor whose
+`B × factor` product is subnormal. The fallback also has a separate trigger
+for a subnormal `B/K`; that path now has its own regression rather than relying
+on the product-underflow case.
+
+Inputs:
+- Carrying capacity: `1e308` t.
+- Biomass: `1e-15` t.
+- `B/K`: positive subnormal (`1e-323`).
+- Depensation threshold: `2e-323` (subnormal).
+- Depensation factor and `B × factor`: normal.
+- Growth rate: `1e308` per year.
+- Direct arithmetic is about 1.19% below the log-space reference although the
+  final surplus is normal and representable.
+
+The test asserts that the ratio is subnormal while both later intermediates are
+normal, proves the direct-path precision loss, and checks the production method
+against the log-space result within 1e-12 relative error.
+
+- Regression commit: `144f548c9e5f02ca650a5234085bfc95bd93db08`.
+- Exact-head CI is required after this commit. No local Cargo result is claimed
+  because custom OpenCommander discovery remains HTTP 429.
+- The preceding exact-head workflow #42322018186 had formatting and Clippy
+  passed; fast Rust tests, desktop acceptance and week/year reference-pack
+  acceptance were still running at last inspection. Those results do not verify
+  this new commit.
