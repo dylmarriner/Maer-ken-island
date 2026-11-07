@@ -293,12 +293,17 @@ impl FishStock {
         // when the final depensated surplus was representable.
         let surplus = if p < model.depensation_below {
             let biomass_factor = (1.0 - p) * (p / model.depensation_below);
-            let direct = rate * (self.biomass_t * biomass_factor);
-            if direct == 0.0 && self.biomass_t > 0.0 && rate > 0.0 {
-                // Either B / K or the subsequent B * factor product can
-                // underflow even when the final r * B² / (K * d) surplus is
-                // representable. Re-evaluate every positive-input zero result
-                // in log space instead of silently reporting no recruitment.
+            let biomass_product = self.biomass_t * biomass_factor;
+            let direct = rate * biomass_product;
+            let subnormal_intermediate = p < f64::MIN_POSITIVE
+                || biomass_factor < f64::MIN_POSITIVE
+                || biomass_product < f64::MIN_POSITIVE;
+            if (direct == 0.0 || subnormal_intermediate) && self.biomass_t > 0.0 && rate > 0.0 {
+                // A subnormal ratio, depensation factor or biomass product has
+                // too little precision to multiply safely: rounding that
+                // intermediate can materially distort a still-normal final
+                // surplus. Re-evaluate the original B, K and d inputs in log
+                // space instead of silently losing recruitment or precision.
                 let log_surplus = rate.log2() + 2.0 * self.biomass_t.log2()
                     - self.k_t.log2()
                     - model.depensation_below.log2()
@@ -1337,6 +1342,91 @@ mod tests {
         assert!(
             (surplus / expected - 1.0).abs() <= 1.0e-12,
             "log-space fallback should preserve the representable result"
+        );
+    }
+
+    #[test]
+    fn low_biomass_surplus_uses_log_space_for_subnormal_intermediate_precision() {
+        let model = FisheryModel {
+            r_per_year: [0.0, 1.0e308, 0.0, 0.0],
+            depensation_below: 0.25,
+        };
+        let mut stock = FishStock::unexploited(Resilience::Medium, 4_000.0)
+            .expect("positive carrying capacity");
+        stock.biomass_t = 1.0e-160;
+
+        let p = stock.biomass_t / stock.k_t;
+        let biomass_factor = (1.0 - p) * (p / model.depensation_below);
+        let biomass_product = stock.biomass_t * biomass_factor;
+        let direct = model.r(Resilience::Medium) * biomass_product;
+        let log_expected = model.r(Resilience::Medium).log2() + 2.0 * stock.biomass_t.log2()
+            - stock.k_t.log2()
+            - model.depensation_below.log2()
+            + (1.0 - p).log2();
+        let expected = log_expected.exp2();
+
+        assert!(p >= f64::MIN_POSITIVE);
+        assert!(biomass_factor >= f64::MIN_POSITIVE);
+        assert!(
+            biomass_product > 0.0 && biomass_product < f64::MIN_POSITIVE,
+            "the intermediate remains positive but is subnormal"
+        );
+        assert!(expected.is_normal(), "the final surplus remains normal");
+        assert!(
+            (direct / expected - 1.0).abs() > 1.0e-3,
+            "the rounded subnormal intermediate must demonstrate material precision loss"
+        );
+
+        let surplus = stock
+            .surplus_t_per_year(&model)
+            .expect("the mathematically representable surplus is finite");
+        assert!(
+            (surplus / expected - 1.0).abs() <= 1.0e-12,
+            "log-space evaluation should recover the normal final result"
+        );
+    }
+
+    #[test]
+    fn low_biomass_surplus_uses_log_space_when_ratio_is_subnormal_but_product_is_normal() {
+        let model = FisheryModel {
+            r_per_year: [0.0, 1.0e308, 0.0, 0.0],
+            depensation_below: 2.0e-323,
+        };
+        let mut stock = FishStock::unexploited(Resilience::Medium, 1.0e308)
+            .expect("positive carrying capacity");
+        stock.biomass_t = 1.0e-15;
+
+        let p = stock.biomass_t / stock.k_t;
+        let biomass_factor = (1.0 - p) * (p / model.depensation_below);
+        let biomass_product = stock.biomass_t * biomass_factor;
+        let direct = model.r(Resilience::Medium) * biomass_product;
+        let log_expected = model.r(Resilience::Medium).log2() + 2.0 * stock.biomass_t.log2()
+            - stock.k_t.log2()
+            - model.depensation_below.log2()
+            + (1.0 - p).log2();
+        let expected = log_expected.exp2();
+
+        assert_eq!(p, 1.0e-323, "pin the intended positive subnormal ratio");
+        assert!(
+            biomass_factor.is_normal(),
+            "the depensation factor remains normal"
+        );
+        assert!(
+            biomass_product.is_normal(),
+            "the biomass product remains normal"
+        );
+        assert!(expected.is_normal(), "the final surplus remains normal");
+        assert!(
+            (direct / expected - 1.0).abs() > 1.0e-3,
+            "the subnormal ratio must demonstrate material precision loss"
+        );
+
+        let surplus = stock
+            .surplus_t_per_year(&model)
+            .expect("the mathematically representable surplus is finite");
+        assert!(
+            (surplus / expected - 1.0).abs() <= 1.0e-12,
+            "log-space evaluation should recover the normal final result"
         );
     }
 
