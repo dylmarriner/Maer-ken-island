@@ -22,11 +22,12 @@ Base: `main`
 
 ## Verification
 
-- - Regression commit: `756b556c9c3f8c717af353c63b2b3b71db84b883`.
+- - Production guard commit: `81be08e9d0650bd48ec53f0054ef74c0d6a70e8e`.
+- Regression commit: `756b556c9c3f8c717af353c63b2b3b71db84b883`.
 - Formatting correction: `f0a95dd7ffe53f86721fa2e43fa8354ec6004396`.
 - First exact-head workflow `#42353261552` found one rustfmt-only import layout mismatch. The import was corrected in the formatting commit above; that failed formatting run is retained as evidence.
-- A fresh exact-head workflow is required for formatting, Clippy, fast Rust tests, desktop/backend acceptance and week/year reference-pack checks.
-- No local Cargo result is claimed.
+- Replacement exact-head workflow `#42353406567` on head `7ff8b946a9082c10dc89bd6a1cb73d195233ea7d` is in progress. At last inspection, repository scripts, dashboard, dependency audit and computer service passed; desktop, installed backend, week/year acceptance and the fmt/Clippy/fast-test job were still running. Nightly slow tests were skipped by design.
+- This handoff-only follow-up will trigger a fresh workflow on the final PR head. No local Cargo result is claimed.
 
 ## Remaining
 
