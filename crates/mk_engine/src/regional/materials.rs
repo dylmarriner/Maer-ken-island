@@ -32,6 +32,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt;
 
 use super::timber::{Log, MAX_CROSS_CUT_PIECES};
 use mk_core::flux::{FluxEntry, FluxKind, Ledger, Reservoir};
@@ -311,7 +312,7 @@ struct Structure {
 }
 
 /// Everything the economy holds as physical material.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct MaterialLedger {
     stock: BTreeMap<Material, f64>,
     structures: BTreeMap<u64, Structure>,
@@ -330,6 +331,28 @@ pub struct MaterialLedger {
     /// snapshots without a pending cut retain their prior representation.
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
     reserved_log_ids: BTreeSet<u64>,
+}
+
+impl fmt::Debug for MaterialLedger {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Keep the pre-reservation debug representation byte-for-byte stable
+        // while no cut is pending. IslandLife::state_digest hashes this
+        // representation; a new empty bookkeeping field must not repin the
+        // simulation's canonical week digest. Pending ids remain visible
+        // because they change which future cross-cuts are valid.
+        let mut debug = f.debug_struct("MaterialLedger");
+        debug
+            .field("stock", &self.stock)
+            .field("structures", &self.structures)
+            .field("bodies", &self.bodies)
+            .field("next_structure", &self.next_structure)
+            .field("logs", &self.logs)
+            .field("next_log", &self.next_log);
+        if !self.reserved_log_ids.is_empty() {
+            debug.field("reserved_log_ids", &self.reserved_log_ids);
+        }
+        debug.finish()
+    }
 }
 
 fn flow(ledger: &mut Ledger, kind: FluxKind, from: Reservoir, to: Reservoir, amount: f64) {
