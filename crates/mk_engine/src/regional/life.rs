@@ -1926,7 +1926,10 @@ impl IslandLife {
                 pieces,
                 first_id,
             } => {
-                self.materials.cross_cut_log(*log_id, *pieces, *first_id);
+                assert!(
+                    self.materials.cross_cut_log(*log_id, *pieces, *first_id),
+                    "a planned cross-cut must have its source log and a collision-free reserved piece-id range"
+                );
             }
             HaulAction::Load { vehicle_id, logs } => {
                 put(logs, LogPlace::Vehicle(*vehicle_id), None);
