@@ -5,7 +5,7 @@ Updated 2026-11-07 against `main` after PR #120 merged as `66bf099f36c567ab344fc
 **What is left to do, and what each item needs, is in [`WORK_REMAINING.md`](WORK_REMAINING.md).**
 
 ## Current engineering handoff — 7 November 2026
-- **PR #123** (replay command sequencing) remains draft. Public logs preserve out-of-order max+1 allocation and fail closed on `u64::MAX`; live `IslandLife` now uses a runtime-only per-tick index to avoid scanning retained history on every command. Workflow #42358501995 caught rustfmt-only differences on the prior head; fresh exact-head verification is required.
+- **PR #123** (replay command sequencing) remains draft. Public logs preserve out-of-order max+1 allocation and fail closed on `u64::MAX`; live `IslandLife` uses a runtime-only per-tick index; replay now rejects duplicate `(tick, sequence)` positions before bootstrap while leaving duplicates beyond a partial replay horizon untouched. See [duplicate sequence guard handoff](docs/handoff/REPLAY_DUPLICATE_SEQUENCE_GUARD_20261107.md). Fresh exact-head verification is required after the latest code/test commits.
 
 - **PR #118** is merged as `134082a1c1bbcea837acc58344572476e8b14f74`; its exact-head workflow passed the required Rust, desktop, backend, dashboard, computer-service, dependency and week/year acceptance checks.
 - **PR #119** is merged as `9cc2b15808c57bd5f61d305bca6122e79820c6bc`; exact-head workflow [#42336338097](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42336338097) passed all required checks, including fast Rust tests, desktop and reference-pack acceptance.
