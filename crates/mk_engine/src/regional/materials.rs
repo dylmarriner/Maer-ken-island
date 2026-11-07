@@ -755,10 +755,23 @@ impl MaterialLedger {
     /// Cross-cut log `id` into `pieces` with ids from `first_id`: the log
     /// becomes its pieces, nothing gained or lost.
     pub fn cross_cut_log(&mut self, id: u64, pieces: u32, first_id: u64) -> bool {
-        let Some(log) = self.logs.remove(&id) else {
+        let Some(log) = self.logs.get(&id).cloned() else {
             return false;
         };
-        for piece in log.cross_cut(pieces, first_id) {
+        let pieces = pieces.max(1);
+        // MaterialLedger log ids are one-based. Validate the complete destination
+        // range before removing the source: an invalid or colliding range must
+        // never overwrite another log or leave the source partially consumed.
+        let Some(end_exclusive) = first_id.checked_add(u64::from(pieces)) else {
+            return false;
+        };
+        if first_id == 0 || self.logs.range(first_id..end_exclusive).next().is_some() {
+            return false;
+        }
+
+        let split = log.cross_cut(pieces, first_id);
+        self.logs.remove(&id);
+        for piece in split {
             self.logs.insert(piece.id, piece);
         }
         true
