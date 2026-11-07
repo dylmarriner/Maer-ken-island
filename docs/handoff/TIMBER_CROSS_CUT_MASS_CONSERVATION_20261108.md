@@ -159,8 +159,20 @@ inserted into the destination IDs; a direct caller could overwrite an existing l
   - Production: `a8c0abca755aefc59e09786aceb5f19aff15c4a3`
   - Regression: `0855c4dcb4c534e90a1a416c7da990083498c300`
 
-Exact-head workflow [#42383634990](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42383634990)
-was pending when this handoff was written. No test pass is claimed until the exact-head
-formatting, Clippy, fast tests, desktop/backend and week/year acceptance jobs complete.
+The first exact-head attempt [#42383634990](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42383634990)
+failed only the new test's rustfmt blank-line check; commit `57ba202957f77dc570e7b9f29620eccacadd83f7`
+applies the formatter output. The planned CrossCut caller now asserts that
+`cross_cut_log` succeeds, so a malformed or colliding plan fails fast instead of silently
+completing a haul with the source log still present. Caller commit:
+`74c4c865c1f7c80a342e95604e4203a12dc1c970`.
+
+Exact-head workflow [#42383983549](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42383983549)
+on `74c4c86` has passed formatting, Clippy, installed backend, computer service, web
+dashboard, repository scripts, dependency audit and week/year reference-pack acceptance.
+Fast Rust tests and desktop render/input acceptance were still running at the latest check;
+nightly slow tests are skipped by design. No full exact-head pass is claimed until those
+two jobs finish. Codex reviewed this head without major findings, and both existing PR #124
+review threads are resolved.
+
 No snapshot schema, replay log, canonical digest, RNG, simulation tick, live state or
 production infrastructure was changed.
