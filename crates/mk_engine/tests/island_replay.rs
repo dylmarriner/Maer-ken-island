@@ -15,7 +15,9 @@ use mk_core::human::BiologicalSex;
 use mk_engine::regional::commands::{ControlCommand, IslandCommand};
 use mk_engine::regional::create_human::{CreateLocation, IslandCreateHuman};
 use mk_engine::regional::life::IslandLife;
-use mk_engine::regional::replay::{replay_island, IslandReplayError, IslandReplayLog, REPLAY_LOG_VERSION};
+use mk_engine::regional::replay::{
+    replay_island, IslandReplayError, IslandReplayLog, REPLAY_LOG_VERSION,
+};
 use mk_island::IslandScenario;
 
 const STEP: u64 = 60;
