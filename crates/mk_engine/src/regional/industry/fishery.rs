@@ -81,6 +81,77 @@ impl std::fmt::Display for FisheryError {
 
 impl std::error::Error for FisheryError {}
 
+/// Exact comparison for a three-factor positive binary64 product against half the
+/// least subnormal value (2^-1075). This is used only after a fast MSY product
+/// rounded to zero, where the exact result can only round to zero or one
+/// subnormal unit. A tie at exactly half rounds to even zero.
+fn positive_product_exceeds_half_min_subnormal(a: f64, b: f64, c: f64) -> bool {
+    fn parts(value: f64) -> (u64, i32) {
+        let bits = value.to_bits();
+        let exponent = ((bits >> 52) & 0x7ff) as i32;
+        let fraction = bits & ((1_u64 << 52) - 1);
+        if exponent == 0 {
+            (fraction, -1074)
+        } else {
+            (fraction | (1_u64 << 52), exponent - 1075)
+        }
+    }
+
+    let (a_significand, a_exponent) = parts(a);
+    let (b_significand, b_exponent) = parts(b);
+    let (c_significand, c_exponent) = parts(c);
+
+    // Multiply three at-most-53-bit significands exactly into three u64 limbs.
+    let ab = (a_significand as u128) * (b_significand as u128);
+    let low_c = (ab as u64 as u128) * (c_significand as u128);
+    let high_c = ((ab >> 64) as u64 as u128) * (c_significand as u128);
+    let middle = (low_c >> 64) + (high_c & u64::MAX as u128);
+    let limbs = [
+        low_c as u64,
+        middle as u64,
+        ((high_c >> 64) + (middle >> 64)) as u64,
+    ];
+
+    let bit_len = if limbs[2] != 0 {
+        128 + (64 - limbs[2].leading_zeros()) as i32
+    } else if limbs[1] != 0 {
+        64 + (64 - limbs[1].leading_zeros()) as i32
+    } else {
+        (64 - limbs[0].leading_zeros()) as i32
+    };
+
+    // Exact product = significand_product * 2^exponent. Compare it with
+    // 2^-1075 without converting the 159-bit product back to binary64.
+    let shift = -1075 - (a_exponent + b_exponent + c_exponent);
+    if shift < 0 {
+        return true;
+    }
+    if shift >= 192 {
+        return false;
+    }
+
+    let highest_bit = bit_len - 1;
+    if highest_bit != shift {
+        return highest_bit > shift;
+    }
+
+    // The highest bit equals the threshold. It is strictly greater only if
+    // any lower product bit is set; exact equality is the ties-to-even zero.
+    if shift >= 128 {
+        let bit = (shift - 128) as u32;
+        let lower_mask = if bit == 0 { 0 } else { (1_u64 << bit) - 1 };
+        limbs[0] != 0 || limbs[1] != 0 || (limbs[2] & lower_mask) != 0
+    } else if shift >= 64 {
+        let bit = (shift - 64) as u32;
+        let lower_mask = if bit == 0 { 0 } else { (1_u64 << bit) - 1 };
+        limbs[0] != 0 || (limbs[1] & lower_mask) != 0
+    } else {
+        let bit = shift as u32;
+        let lower_mask = if bit == 0 { 0 } else { (1_u64 << bit) - 1 };
+        (limbs[0] & lower_mask) != 0
+    }
+}
+
 /// Midpoint of a published growth-rate prior after validating both source bounds.
 /// Sum before halving when bounded; otherwise halve each endpoint to avoid overflow
 /// and the double-rounding error from first rounding a wide endpoint difference.
@@ -388,13 +459,14 @@ impl FishStock {
             rate * scaled_capacity
         };
         if msy == 0.0 && rate > 0.0 {
-            // A non-quarter fraction can make the first product order round to
-            // zero even when the exact three-factor result rounds to one
-            // subnormal unit. Reorder the factors before declaring it
-            // unrepresentable; the zero result is valid only if both orders
-            // round to zero.
-            msy = (rate * peak_surplus_fraction) * self.k_t;
-            if msy == 0.0 {
+            // Every allowed peak surplus fraction is <= 1/4. Because the fast
+            // product rounded to zero, the exact result can only round to zero
+            // or one subnormal unit. Compare the three binary64 significands
+            // exactly with half a subnormal; multiplying in either order can
+            // itself double-round a value just above that boundary back to zero.
+            if positive_product_exceeds_half_min_subnormal(rate, peak_surplus_fraction, self.k_t) {
+                msy = f64::from_bits(1);
+            } else {
                 return Err(FisheryError::UnrepresentableMsy);
             }
         }
@@ -953,27 +1025,38 @@ mod tests {
         );
     }
     #[test]
-    fn msy_retries_non_quarter_scaling_when_first_order_rounds_to_zero() {
+    fn msy_recovers_exactly_representable_subnormal_results_after_double_rounding() {
         let smallest = f64::from_bits(1);
 
-        let model = FisheryModel {
-            r_per_year: [0.0, 1.25, 0.0, 0.0],
-            depensation_below: 0.51,
-        };
-        let stock = FishStock::unexploited(Resilience::Medium, f64::from_bits(2))
-            .expect("two positive subnormal capacity units");
-        // (r * K) rounds to two units, then multiplying by 0.2499 rounds
-        // to zero. Scaling r by the peak fraction first yields one unit.
-        assert_eq!(stock.msy_t(&model).unwrap().to_bits(), 1);
+        for (rate, depensation_below, capacity) in [
+            (1.25, 0.51, f64::from_bits(2)),
+            (2.5, 0.6, smallest),
+            (2.0833333333333335, 0.6, smallest),
+        ] {
+            let model = FisheryModel {
+                r_per_year: [0.0, rate, 0.0, 0.0],
+                depensation_below,
+            };
+            let stock = FishStock::unexploited(Resilience::Medium, capacity)
+                .expect("positive subnormal carrying capacity");
+            assert_eq!(
+                stock.msy_t(&model).unwrap().to_bits(),
+                1,
+                "r={rate}, d={depensation_below}, K bits={}",
+                capacity.to_bits()
+            );
+        }
+    }
 
+    #[test]
+    fn msy_exact_half_subnormal_ties_to_even_zero() {
         let model = FisheryModel {
-            r_per_year: [0.0, 2.5, 0.0, 0.0],
-            depensation_below: 0.6,
+            r_per_year: [0.0, 2.0, 0.0, 0.0],
+            depensation_below: 0.25,
         };
-        let stock = FishStock::unexploited(Resilience::Medium, smallest)
-            .expect("smallest positive subnormal capacity");
-        // The alternate order preserves the exact 0.6-subnormal result.
-        assert_eq!(stock.msy_t(&model).unwrap().to_bits(), 1);
+        let stock = FishStock::unexploited(Resilience::Medium, f64::from_bits(1))
+            .expect("smallest positive subnormal carrying capacity");
+        assert_eq!(stock.msy_t(&model), Err(FisheryError::UnrepresentableMsy));
     }
 
     #[test]
