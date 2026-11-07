@@ -14,6 +14,8 @@ Subnormal intermediate precision follow-up (PR #117) merged to `main` as `6da6e2
 
 Updated 2026-11-07 after PR #120 merged as `66bf099f36c567ab344fcc9b268a9a33a656011d` and PR #121 merged as `522aba3d860435c92a4938cf5ffba2b427941cd7`; both exact-head workflows passed their required checks. Fishery remains standalone pending sourced species-specific stock and effort data and owner-approved workforce integration.
 
+Replay file I/O budget (PR #123, 2026-11-08): replay import/export now has a 64 MiB file cap. Load checks regular-file metadata, rejects oversized inputs before parsing, and reads no more than limit + 1 bytes; save streams through a bounded writer and preserves the previous destination when serialization exceeds the limit. Regression coverage checks oversized-file rejection and writer bounds. Exact-head CI is pending after the latest handoff reconciliation. This does not close deterministic replay acceptance or the separate paused PRs #73–76.
+
 
 Reference-range and fishery numerical hardening (PR #109): merged to `main` as `0613dffca65a87e4db147300d9d57805a744ea07`. Exact-head workflow [#42257092937](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42257092937) passed formatting, Clippy, fast Rust tests, desktop build/tests/rendering/input acceptance, installed backend build/serve, web dashboard, computer service, repository scripts, dependency audit and week/year reference-pack acceptance. Nightly slow tests were skipped by design.
 
