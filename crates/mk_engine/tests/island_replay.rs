@@ -17,7 +17,7 @@ use mk_engine::regional::create_human::{CreateLocation, IslandCreateHuman};
 use mk_engine::regional::life::IslandLife;
 use mk_engine::regional::replay::{
     replay_island, IslandReplayEntry, IslandReplayError, IslandReplayLog, ReplaySequenceExhausted,
-    REPLAY_LOG_VERSION,
+    MAX_REPLAY_LOG_BYTES, REPLAY_LOG_VERSION,
 };
 use mk_island::IslandScenario;
 
@@ -418,6 +418,22 @@ fn a_log_from_another_island_is_refused() {
         Err(other) => panic!("the wrong refusal for a foreign log: {other}"),
         Ok(_) => panic!("a foreign log was accepted"),
     }
+}
+
+/// An oversized replay file is refused from its metadata before its contents are read.
+#[test]
+fn a_replay_file_over_the_offline_size_limit_is_refused() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("oversized-replay.json");
+    let file = std::fs::File::create(&path).unwrap();
+    file.set_len(MAX_REPLAY_LOG_BYTES + 1).unwrap();
+    drop(file);
+
+    assert!(matches!(
+        IslandReplayLog::load(&path),
+        Err(IslandReplayError::TooLarge { limit_bytes, .. })
+            if limit_bytes == MAX_REPLAY_LOG_BYTES
+    ));
 }
 
 /// A log survives a trip through a file, order and all.
