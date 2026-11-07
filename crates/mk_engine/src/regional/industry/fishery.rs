@@ -1387,6 +1387,50 @@ mod tests {
     }
 
     #[test]
+    fn low_biomass_surplus_uses_log_space_when_ratio_is_subnormal_but_product_is_normal() {
+        let model = FisheryModel {
+            r_per_year: [0.0, 1.0e308, 0.0, 0.0],
+            depensation_below: 2.0e-323,
+        };
+        let mut stock = FishStock::unexploited(Resilience::Medium, 1.0e308)
+            .expect("positive carrying capacity");
+        stock.biomass_t = 1.0e-15;
+
+        let p = stock.biomass_t / stock.k_t;
+        let biomass_factor = (1.0 - p) * (p / model.depensation_below);
+        let biomass_product = stock.biomass_t * biomass_factor;
+        let direct = model.r(Resilience::Medium) * biomass_product;
+        let log_expected = model.r(Resilience::Medium).log2() + 2.0 * stock.biomass_t.log2()
+            - stock.k_t.log2()
+            - model.depensation_below.log2()
+            + (1.0 - p).log2();
+        let expected = log_expected.exp2();
+
+        assert!(p > 0.0 && p < f64::MIN_POSITIVE, "B/K is positive but subnormal");
+        assert!(
+            biomass_factor >= f64::MIN_POSITIVE,
+            "the depensation factor remains normal"
+        );
+        assert!(
+            biomass_product >= f64::MIN_POSITIVE,
+            "the biomass product remains normal"
+        );
+        assert!(expected.is_normal(), "the final surplus remains normal");
+        assert!(
+            (direct / expected - 1.0).abs() > 1.0e-3,
+            "the subnormal ratio must demonstrate material precision loss"
+        );
+
+        let surplus = stock
+            .surplus_t_per_year(&model)
+            .expect("the mathematically representable surplus is finite");
+        assert!(
+            (surplus / expected - 1.0).abs() <= 1.0e-12,
+            "log-space evaluation should recover the normal final result"
+        );
+    }
+
+    #[test]
     fn landed_increment_below_cumulative_total_precision_is_rejected_without_mutation() {
         let model = FisheryModel::load_default().expect("the pack loads");
         let mut stock = FishStock::unexploited(Resilience::Medium, 1_000.0)
