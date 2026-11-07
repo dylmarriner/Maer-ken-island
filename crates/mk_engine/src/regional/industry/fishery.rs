@@ -510,10 +510,11 @@ impl FishStock {
         {
             return Err(FisheryError::LandedTotalUnrepresentable);
         }
-        // A partial catch must leave its unharvested growth in the stored stock.
-        // If that positive remainder rounds away at the current biomass scale,
-        // accepting the catch would silently discard it and break mass balance.
-        if catch > 0.0 && remaining_growth > 0.0 && biomass_t == self.biomass_t {
+        // Every unharvested increment must be represented in the stored stock,
+        // including a zero-catch step. Otherwise a valid positive growth event
+        // disappears from the material ledger merely because it is below one ULP
+        // at the current biomass magnitude.
+        if remaining_growth > 0.0 && biomass_t == self.biomass_t {
             return Err(FisheryError::BiomassRemainderUnrepresentable);
         }
 
