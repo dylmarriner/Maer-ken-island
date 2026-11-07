@@ -242,6 +242,7 @@ fn recording_after_an_out_of_order_tick_uses_the_next_sequence_for_that_tick() {
         .collect();
     sequences.sort_unstable();
     assert_eq!(sequences, vec![0, 1, 2]);
+}
 
 /// A deserialised append-only log rebuilds its runtime index without changing its JSON shape.
 #[test]
@@ -286,8 +287,6 @@ fn deserialised_log_rebuilds_the_per_tick_sequence_index_before_recording() {
         !json.contains("sequence_max_by_tick"),
         "the runtime index must not change the persisted replay format"
     );
-}
-
 }
 
 /// A log at the maximum sequence must fail rather than append an ambiguous duplicate.
