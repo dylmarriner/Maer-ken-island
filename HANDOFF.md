@@ -1,18 +1,20 @@
 # Handoff
 
-## Latest engineering handoff — timber cross-cut conservation (8 November 2026)
+## Latest engineering handoff — timber cross-cut ID integrity (8 November 2026)
 
-- Branch `fix/timber-cross-cut-exact-conservation-20261108`, PR pending: the final cross-cut piece now receives binary64
-  remainders for dry mass, carbon, water and length, preserving source totals exactly.
-- Regression `cross_cutting_assigns_floating_point_remainders_without_losing_material`
-  asserts bit-identical totals. Production commit: `fa81e5ba92a69b3ef414d8a75faab1f896798881`.
-- Exact-head formatting, Clippy, fast Rust tests, desktop/backend and week/year acceptance
-  are required; no local Cargo result is claimed while OpenCommander returns HTTP 429.
-- Codex review follow-up: PR #124 checks actual maximum piece mass/length, uses the largest piece for ute trip capacity, and prices each carry with actual green mass. Regression `haul_plans_recut_a_conserved_remainder_above_the_sustainable_load` covers the 9,928-to-9,929 cut-count correction and payload/carry accounting. Production commit `45ef1bb`; rustfmt correction `aa1e3f9`; Clippy correction `61a8cd4`. Prior exact-head workflow #42372299956 passed formatting but failed Clippy on `unnecessary_map_or` (desktop hit the same lint); fast tests did not run. Fresh exact-head workflow #42372526154 is in progress; no test pass is claimed yet.
+- **PR #124** remains draft on `fix/timber-cross-cut-exact-conservation-20261108`, current code head `74c4c865c1f7c80a342e95604e4203a12dc1c970`.
+- `MaterialLedger::cross_cut_log` now preflights a one-based, non-overflowing, unoccupied destination ID range with `BTreeMap::range` before removing the source. Invalid/colliding ranges leave the source, destination logs, next ID and carbon/water stocks unchanged.
+- `IslandLife::finish_haul_task` now fails fast if a planned `CrossCut` is refused, rather than silently completing the haul while leaving the source log in place.
+- Regression: `cross_cut_refuses_colliding_or_overflowing_piece_ids_without_mutating_the_ledger`. Existing 13-to-14-piece Ute boundary coverage still protects exact reservation after conserved-remainder recutting.
+- Commits in this slice: `a8c0abca755aefc59e09786aceb5f19aff15c4a3` (ledger guard), `0855c4dcb4c534e90a1a416c7da990083498c300` (regression), `57ba202957f77dc570e7b9f29620eccacadd83f7` (rustfmt), `74c4c865c1f7c80a342e95604e4203a12dc1c970` (fail-fast caller).
+- Exact-head workflow [#42383983549](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42383983549): formatting and Clippy passed; installed backend, computer service, web dashboard, repository scripts and dependency audit passed; week/year reference-pack acceptance passed; fast Rust tests and desktop render/input acceptance were still running at this handoff. Nightly slow tests are skipped by design. Do not claim a full pass until the two remaining jobs finish.
+- Codex reviewed `74c4c86` and found no major issues; both existing PR #124 review threads are resolved.
+- **PR #123** remains a separate replay/sequence branch at `1378a345020601f3cbde85ee9db4f8a44822c16e`; exact-head workflow [#42374551377](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42374551377) passed all required jobs, Codex found no major issues and its review threads are resolved. PR #123 and #124 both touch `HANDOFF.md`, `WORK_REMAINING.md`, `life.rs` and `docs/ISLAND_SYSTEM_STATUS.md`; reconcile those overlapping docs/status hunks before merging either branch.
+- PRs #73–76 remain untouched. This is independent timber-ledger hardening, not a restart of the paused Maer-Ken Merge Completion job.
+- Custom OpenCommander device discovery returned HTTP 429; no local Cargo result is claimed. No snapshot schema, replay log, canonical digest, RNG, simulation tick, LLM behaviour or production infrastructure was changed.
 - Full details: [TIMBER_CROSS_CUT_MASS_CONSERVATION_20261108.md](docs/handoff/TIMBER_CROSS_CUT_MASS_CONSERVATION_20261108.md).
 
-
-Updated 2026-11-08 against `main`: PR #120 merged as `66bf099f36c567ab344fcc9b268a9a33a656011d`, and PR #121 merged as `522aba3d860435c92a4938cf5ffba2b427941cd7`; both exact-head workflows passed all required jobs, with nightly slow tests skipped by design. PR #124 is the current timber haul-limit correction on `fix/timber-cross-cut-exact-conservation-20261108`, currently draft at `61a8cd4c9cb4b70480d3bc07a8ea078db3ea64b8`; exact-head workflow #42372526154 is in progress after the Clippy correction. PR #123 remains the separate replay sequence correction at `03087e319674d8feacbb20608f5540e3cd536ad0`. This is the front door for whoever picks the island up next, human or agent.
+Updated 2026-11-08 against `main`: PR #120 merged as `66bf099f36c567ab344fcc9b268a9a33a656011d` and PR #121 merged as `522aba3d860435c92a4938cf5ffba2b427941cd7`; both exact-head workflows passed their required jobs. PRs #123 and #124 remain separate draft branches pending final integration and reconciliation. This is the front door for whoever picks the island up next, human or agent.
 
 **What is left to do, and what each item needs, is in [`WORK_REMAINING.md`](WORK_REMAINING.md).**
 
