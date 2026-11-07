@@ -286,3 +286,24 @@ Exact-head CI is required for formatting, Clippy, fast Rust tests, desktop,
 installed backend and week/year reference acceptance. No local Cargo pass is
 claimed while custom OpenCommander is rate-limited. No snapshot schema,
 replay log, RNG, live island state or production infrastructure was changed.
+
+
+## Follow-up: preserve the canonical week digest for empty reservations — 8 November 2026
+
+The exact-head week reference-pack gate failed on head 680f757 while the year reference-pack gate passed. The week run retained all recorded physical acceptance values (27,597 audits, zero food/water shortfalls, 112 economy events, 200,000 estate trees, both founders' expected body carbon and NPP 471 g C/m2/yr), but the canonical digest changed from 29ed53bd... to 5c975e00....
+
+The change was traced to the new reserved_log_ids bookkeeping field: serde already omitted an empty set from snapshots, but IslandLife::state_digest hashes MaterialLedger through Debug, whose derived representation included the empty field. This changed the hash despite no pending cross-cut reservation and no physical state change.
+
+Correction:
+- MaterialLedger now implements Debug explicitly.
+- The pre-reservation field order and representation are retained byte-for-byte while reserved_log_ids is empty.
+- Non-empty pending reservations remain part of Debug/digest because they change which future cross-cuts are valid.
+- Added regressions pinning the exact legacy empty-ledger representation and proving pending IDs remain represented.
+
+Commits:
+- cb9d89bb6d5b68e6f33dc3473607558985d60242 — compatibility-preserving Debug.
+- 6962194d2873d733783d6e709d9ef4925e79f199 — regression tests.
+
+The previous exact-head workflow 42394121853 failed its week reference-pack acceptance because of the digest drift; the year pack passed. Formatting and Clippy passed, the installed backend, dashboard, computer service and repository scripts passed, fast Rust tests were still running, and desktop acceptance was still in progress. The new current head needs a fresh exact-head CI run. Do not repin WEEK_DIGEST unless the canonical week test still fails after this representation correction and the remaining state difference is independently audited.
+
+No simulation behaviour, RNG, replay hash, snapshot schema, physical parameter, production state or infrastructure was changed by this digest-compatibility correction.
