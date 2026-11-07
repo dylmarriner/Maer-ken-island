@@ -142,7 +142,10 @@ pub enum IslandReplayError {
     /// A log written by a format this build does not know.
     Version(u32),
     /// Two commands claim the same ordering position within one tick.
-    DuplicateSequence { tick: u64, sequence: u64 },
+    DuplicateSequence {
+        tick: u64,
+        sequence: u64,
+    },
     /// The log belongs to a different scenario. Replaying it here would
     /// reproduce nothing and look like it had.
     WrongScenario {
