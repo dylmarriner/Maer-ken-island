@@ -176,3 +176,28 @@ review threads are resolved.
 
 No snapshot schema, replay log, canonical digest, RNG, simulation tick, live state or
 production infrastructure was changed.
+
+
+## Reserved-range precondition — 8 November 2026
+
+A follow-up API audit found that the collision/overflow guard still accepted a future
+but unreserved destination range. Because cross_cut_log did not advance next_log,
+a later receive_felled_log could eventually allocate one of those piece IDs and
+overwrite it. The normal IslandLife planner already reserves its range first, but
+the public ledger boundary must enforce that invariant itself.
+
+Production change in MaterialLedger::cross_cut_log:
+- Require the complete destination range to be below the exclusive next_log
+  watermark, proving the single writer reserved it before materialisation.
+- Continue rejecting zero, overflow and occupied IDs before removing the source.
+- Preserve the existing no-mutation refusal path.
+
+Regression added to
+cross_cut_refuses_colliding_or_overflowing_piece_ids_without_mutating_the_ledger:
+- An unoccupied future range at IDs 10–11 is refused while next_log_id() == 3.
+- Source log, destination slots and carbon/water stocks remain unchanged.
+- The same cut succeeds after reserving IDs 3–4, and the allocator advances to 5.
+
+This does not change snapshot shape, replay events, hashes, RNG, material stocks,
+or the valid planned single-writer path. Exact-head CI is required; no local Cargo
+test result is claimed while custom OpenCommander remains unavailable.
