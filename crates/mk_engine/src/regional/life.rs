@@ -1890,6 +1890,9 @@ impl IslandLife {
             timber::haul_plans_over(&log, at, body, &self.labour, &site, &fleet, first, &climb)
                 .map_err(IslandLifeError::Labour)?;
         let selected = timber::quickest(plans);
+        let Some(selected) = timber::quickest(plans) else {
+            return Ok(None);
+        };
         let piece_count = selected
             .tasks
             .iter()
@@ -1917,7 +1920,7 @@ impl IslandLife {
                 "single-writer haul planning must reserve the id range it previewed"
             );
         }
-        Ok(selected)
+        Ok(Some(selected))
     }
 
     /// What a finished haul task does to the world.
@@ -1940,6 +1943,10 @@ impl IslandLife {
                 pieces,
                 first_id,
             } => {
+                assert!(
+                    self.materials.restore_pending_cross_cut_ids(*log_id, *pieces, *first_id),
+                    "an active persisted cross-cut must reference a live source and an allocated, unconsumed piece-id range"
+                );
                 assert!(
                     self.materials.cross_cut_log(*log_id, *pieces, *first_id),
                     "a planned cross-cut must have its source log and a collision-free reserved piece-id range"
@@ -4501,6 +4508,18 @@ mod tests {
             "the default estate has the ute used by the length-constrained plan"
         );
 
+        // Keep the excavator occupied so this regression exercises the Ute
+        // plan whose conserved final remainder requires fourteen pieces.
+        life.hauling.insert(
+            "test-busy-excavator".to_string(),
+            timber::HaulJob {
+                log_id: u64::MAX,
+                method: timber::HaulMethod::Excavator,
+                tasks: Default::default(),
+                worked_s: 0.0,
+            },
+        );
+
         // Thirteen nominal shares fit the bed by the average calculation, but
         // the conserved final remainder is materially longer and forces the
         // Ute plan to recut into fourteen pieces.
@@ -4537,7 +4556,7 @@ mod tests {
         let area = life.domain.cell_area_m2(DomainLevel::Medium);
         let mut ledger = Ledger::new();
         let source_id = life.materials.receive_felled_log(
-            source_log.clone(),
+            source_log,
             &mut life.physical.hydrology,
             cell,
             area,
@@ -4545,14 +4564,17 @@ mod tests {
         );
         let first_piece_id = life.materials.next_log_id();
 
-        life.plan_haul(at, &body)
+        let haul = life
+            .plan_haul(at, &body)
             .unwrap()
             .expect("the ground log has a haul plan");
+        assert_eq!(haul.method, timber::HaulMethod::Ute);
         assert_eq!(
             life.materials.next_log_id(),
             first_piece_id + u64::from(minimum_pieces + 1),
-            "all candidate plans' largest actual cut range is reserved"
+            "only the selected Ute plan's actual cut range is reserved"
         );
+        life.hauling.insert("Gem-D".to_string(), haul);
 
         // A second log arriving before the CrossCut task completes must get
         // an id after every planned piece, not the final piece's id.
@@ -4576,20 +4598,40 @@ mod tests {
         );
         assert_eq!(other_id, first_piece_id + u64::from(minimum_pieces + 1));
 
-        assert!(life
-            .materials
-            .cross_cut_log(source_id, minimum_pieces + 1, first_piece_id,));
+        // A pre-reservation-tracking snapshot has the active CrossCut task
+        // and the allocator watermark but no reserved_log_ids field. Restore
+        // that legacy state and prove the task safely reconstructs its range.
+        let mut legacy_value = serde_json::to_value(life.snapshot()).unwrap();
+        assert!(legacy_value["materials"]
+            .as_object_mut()
+            .unwrap()
+            .remove("reserved_log_ids")
+            .is_some());
+        let legacy_snapshot: IslandLifeSnapshot =
+            serde_json::from_value(legacy_value).expect("legacy snapshot deserializes");
+        let mut restored =
+            IslandLife::restore(life.canon.clone(), legacy_snapshot).expect("legacy snapshot restores");
+        let cross_cut_task = restored
+            .hauling
+            .values()
+            .flat_map(|job| job.tasks.iter())
+            .find(|task| matches!(&task.action, timber::HaulAction::CrossCut { .. }))
+            .expect("the active Ute job retains its CrossCut task")
+            .clone();
+        restored.finish_haul_task(&cross_cut_task, &mut Ledger::new());
+
         assert_eq!(
-            life.materials.log(other_id).map(|log| log.dry_kg),
+            restored.materials.log(other_id).map(|log| log.dry_kg),
             Some(123.456),
             "cross-cut insertion must not overwrite the later log"
         );
         for id in first_piece_id..other_id {
             assert!(
-                life.materials.log(id).is_some(),
+                restored.materials.log(id).is_some(),
                 "reserved piece id {id} was not materialised"
             );
         }
+        assert_eq!(restored.materials.log(source_id), None);
     }
 
     /// The oil chain runs inside the island's audits (Task 4, D58): the
