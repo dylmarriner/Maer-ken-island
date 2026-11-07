@@ -42,3 +42,8 @@ No reference values, species parameters, snapshot fields/layout, append-only log
 - Verify the exact final PR #118 head.
 - Merge only after all required exact-head checks pass.
 - Continue sourced fishery integration and remaining IslandLife roadmap work.
+
+
+## Status-document reconciliation — 7 November 2026
+
+Commit `77ae69dbc311d13583aa335a15b00239e09512f1` updates `docs/ISLAND_SYSTEM_STATUS.md` to record the merged and verified fishery PRs #110, #111, #114, #115 and #117, and the pending PR #118 interval-underflow guard. Fishery remains standalone pending sourced species/effort data and person-owned workforce integration.
