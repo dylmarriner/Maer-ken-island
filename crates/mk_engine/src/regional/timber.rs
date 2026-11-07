@@ -102,7 +102,7 @@ impl Log {
     /// The caller must supply a reserved, one-based range whose exclusive end
     /// fits in `u64`; the material ledger enforces the reservation itself.
     pub fn cross_cut(&self, n: u32, first_id: u64) -> Vec<Log> {
-        let n = n.max(1);
+        assert!(n > 0, "cross-cut piece count must be positive");
         assert!(
             n <= MAX_CROSS_CUT_PIECES,
             "cross-cut piece count exceeds safety bound"
@@ -745,6 +745,12 @@ mod tests {
         assert_eq!(sum(|piece| piece.length_m).to_bits(), l.length_m.to_bits());
         assert_ne!(pieces[2].dry_kg.to_bits(), pieces[0].dry_kg.to_bits());
         assert_ne!(pieces[2].length_m.to_bits(), pieces[0].length_m.to_bits());
+    }
+
+    #[test]
+    #[should_panic(expected = "cross-cut piece count must be positive")]
+    fn cross_cut_rejects_zero_piece_count_before_materialising() {
+        let _ = log().cross_cut(0, 1);
     }
 
     #[test]
