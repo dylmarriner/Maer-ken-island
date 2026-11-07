@@ -942,7 +942,7 @@ mod tests {
     #[test]
     fn ute_haul_plan_recuts_when_the_conserved_length_remainder_exceeds_the_bed() {
         let (labour, body) = (labour(), body());
-        let bed = labour.ute_bed_m().unwrap();
+        let bed = labour.ute_bed_length_m().unwrap();
         let minimum_pieces = 13u32;
         // Five representable steps below bed * 13 keeps ceil(length / bed) at
         // 13 while repeated equal shares leave the final conserved remainder
