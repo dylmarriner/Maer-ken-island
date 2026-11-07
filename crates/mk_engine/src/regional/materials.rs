@@ -705,6 +705,7 @@ impl MaterialLedger {
     /// A successful cross-cut consumes the pending ids. Refused cuts leave
     /// them pending so the original planned operation can be retried.
     pub fn reserve_log_ids(&mut self, n: u64) -> u64 {
+        assert!(n > 0, "cross-cut reservation must contain at least one id");
         assert!(
             n <= u64::from(MAX_CROSS_CUT_PIECES),
             "cross-cut reservation exceeds safety bound"
@@ -729,8 +730,7 @@ impl MaterialLedger {
         pieces: u32,
         first_id: u64,
     ) -> bool {
-        let pieces = pieces.max(1);
-        if pieces > MAX_CROSS_CUT_PIECES {
+        if pieces == 0 || pieces > MAX_CROSS_CUT_PIECES {
             return false;
         }
         let Some(end_exclusive) = first_id.checked_add(u64::from(pieces)) else {
@@ -841,8 +841,7 @@ impl MaterialLedger {
         let Some(log) = self.logs.get(&id).cloned() else {
             return false;
         };
-        let pieces = pieces.max(1);
-        if pieces > MAX_CROSS_CUT_PIECES {
+        if pieces == 0 || pieces > MAX_CROSS_CUT_PIECES {
             return false;
         }
         // MaterialLedger log ids are one-based. Validate the complete destination
