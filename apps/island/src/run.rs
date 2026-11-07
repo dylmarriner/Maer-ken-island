@@ -132,7 +132,7 @@ pub fn run(args: RunArgs) -> Result<(), String> {
         println!(
             "  log       {} ({} command(s))",
             path.display(),
-            life.replay_log().entries.len()
+            life.replay_log().entries().len()
         );
     }
     Ok(())
@@ -200,9 +200,9 @@ pub fn replay(scenario_path: &Path, log_path: &Path, until: Option<u64>) -> Resu
     let canon = canon_for(scenario_path, &scenario)?;
     let log = IslandReplayLog::load(log_path).map_err(|e| e.to_string())?;
 
-    let until = until.unwrap_or_else(|| log.entries.iter().map(|e| e.tick).max().unwrap_or(0));
+    let until = until.unwrap_or_else(|| log.entries().iter().map(|e| e.tick).max().unwrap_or(0));
     println!("{}", log_path.display());
-    println!("  commands  {}", log.entries.len());
+    println!("  commands  {}", log.entries().len());
     println!("  to tick   {until}");
 
     let life = replay_island(Arc::new(canon), scenario, &log, until)
