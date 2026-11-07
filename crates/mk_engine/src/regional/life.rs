@@ -1880,25 +1880,29 @@ impl IslandLife {
             ute: road(HAUL_UTE).filter(|_| !in_use(timber::HaulMethod::Ute)),
             excavator: tracked(HAUL_EXCAVATOR).filter(|_| !in_use(timber::HaulMethod::Excavator)),
         };
-        // Pieces cut from this log take ids reserved now, so a plan names
-        // them before they exist: as many as the most pieces any plan cuts.
-        let carry = self
-            .labour
-            .sustainable_load_kg(body)
-            .map_err(IslandLifeError::Labour)?;
-        let bed = self
-            .labour
-            .ute_bed_length_m()
-            .map_err(IslandLifeError::Labour)?;
-        let most = (log.green_kg() / carry.max(1e-6))
-            .ceil()
-            .max((log.length_m / bed.max(1e-6)).ceil())
-            .max(1.0) as u64;
-        let first = self.materials.reserve_log_ids(most);
+        // Preview from the next id without consuming it. The conserved
+        // residual can make a haul plan cut more pieces than the average-based
+        // estimate, so reserve the largest actual CrossCut range only after
+        // every candidate plan has been built.
+        let first = self.materials.next_log_id();
         let climb = |from: (f64, f64), to: (f64, f64)| self.climb_m(from, to);
         let plans =
             timber::haul_plans_over(&log, at, body, &self.labour, &site, &fleet, first, &climb)
                 .map_err(IslandLifeError::Labour)?;
+        let piece_count = plans
+            .iter()
+            .flat_map(|plan| plan.tasks.iter())
+            .filter_map(|task| match &task.action {
+                timber::HaulAction::CrossCut { pieces, .. } => Some(u64::from(*pieces)),
+                _ => None,
+            })
+            .max()
+            .unwrap_or(0);
+        let reserved_first = self.materials.reserve_log_ids(piece_count);
+        assert_eq!(
+            reserved_first, first,
+            "single-writer haul planning must reserve the id range it previewed"
+        );
         Ok(timber::quickest(plans))
     }
 
@@ -4463,6 +4467,115 @@ mod tests {
             sum(|l| l.dry_kg) + water,
             total
         );
+    }
+
+    #[test]
+    fn haul_planning_reserves_ids_for_a_conserved_ute_recut_before_another_log_arrives() {
+        let scenario =
+            IslandScenario::load(&repo("fixtures/island/default_scenario.json")).unwrap();
+        let canon = Arc::new(CanonLocked::load(&repo("fixtures/island/canon.json")).unwrap());
+        let mut life = IslandLife::bootstrap(scenario, canon).expect("the island bootstraps");
+        let at = life.vegetation.centre_m();
+        let body = LabourBody::from_human(life.humans.registry.get_human("Gem-D").unwrap());
+        let bed = life.labour.ute_bed_length_m().unwrap();
+        assert!(
+            life.energy.vehicle_named(HAUL_UTE).is_some(),
+            "the default estate has the ute used by the length-constrained plan"
+        );
+
+        // Thirteen nominal shares fit the bed by the average calculation, but
+        // the conserved final remainder is materially longer and forces the
+        // Ute plan to recut into fourteen pieces.
+        let minimum_pieces = 13u32;
+        let length_m = f64::from_bits(
+            (bed * f64::from(minimum_pieces)).to_bits() - 5,
+        );
+        let source_log = timber::Log {
+            id: 0,
+            position_m: at,
+            heading_rad: 0.0,
+            length_m,
+            diameter_m: 0.30,
+            dry_kg: 10.0,
+            carbon_kgc: 5.0,
+            water_kg: 0.0,
+            place: timber::LogPlace::Ground,
+        };
+        let tolerance = bed.abs().max(1.0) * f64::EPSILON * 4.0;
+        assert!(
+            source_log
+                .cross_cut(minimum_pieces, 100)
+                .iter()
+                .any(|piece| piece.length_m > bed + tolerance),
+            "the fixture exposes the oversized conserved remainder"
+        );
+        assert!(
+            source_log
+                .cross_cut(minimum_pieces + 1, 100)
+                .iter()
+                .all(|piece| piece.length_m <= bed + tolerance),
+            "one additional cut brings every piece within the bed"
+        );
+
+        let cell = life.placed.location;
+        let area = life.domain.cell_area_m2(DomainLevel::Medium);
+        let mut ledger = Ledger::new();
+        let source_id = life.materials.receive_felled_log(
+            source_log.clone(),
+            &mut life.physical.hydrology,
+            cell,
+            area,
+            &mut ledger,
+        );
+        let first_piece_id = life.materials.next_log_id();
+
+        life.plan_haul(at, &body)
+            .unwrap()
+            .expect("the ground log has a haul plan");
+        assert_eq!(
+            life.materials.next_log_id(),
+            first_piece_id + u64::from(minimum_pieces + 1),
+            "all candidate plans' largest actual cut range is reserved"
+        );
+
+        // A second log arriving before the CrossCut task completes must get
+        // an id after every planned piece, not the final piece's id.
+        let other_log = timber::Log {
+            id: 0,
+            position_m: (at.0 + 20.0, at.1),
+            heading_rad: 0.0,
+            length_m: 1.0,
+            diameter_m: 0.20,
+            dry_kg: 123.456,
+            carbon_kgc: 61.728,
+            water_kg: 0.0,
+            place: timber::LogPlace::Ground,
+        };
+        let other_id = life.materials.receive_felled_log(
+            other_log,
+            &mut life.physical.hydrology,
+            cell,
+            area,
+            &mut ledger,
+        );
+        assert_eq!(other_id, first_piece_id + u64::from(minimum_pieces + 1));
+
+        assert!(life.materials.cross_cut_log(
+            source_id,
+            minimum_pieces + 1,
+            first_piece_id,
+        ));
+        assert_eq!(
+            life.materials.log(other_id).map(|log| log.dry_kg),
+            Some(123.456),
+            "cross-cut insertion must not overwrite the later log"
+        );
+        for id in first_piece_id..other_id {
+            assert!(
+                life.materials.log(id).is_some(),
+                "reserved piece id {id} was not materialised"
+            );
+        }
     }
 
     /// The oil chain runs inside the island's audits (Task 4, D58): the
