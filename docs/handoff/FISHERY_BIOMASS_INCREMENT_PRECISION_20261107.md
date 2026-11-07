@@ -50,3 +50,8 @@ No local Cargo result is claimed. Custom OpenCommander returned HTTP 429 in this
 No reference data, species calibration, snapshot field, serialization layout, append-only history, replay hash, RNG, material ledger schema, IslandLife state or workforce assignment changed. The guard is deterministic and single-writer; it rejects an unrepresentable state transition before mutating the stock. No production simulation state was changed.
 
 Fishery remains standalone until sourced species-specific stock/effort inputs and person-owned workforce integration are available.
+
+
+## CI correction
+
+The first PR #121 exact-head run found one remaining test assertion still named `LANDED_TOTAL_RELATIVE_TOLERANCE` after the private constant was generalised. The compile failure was at `fishery.rs:1901`. Commit `9ea6a478` updates that last reference to `MATERIAL_INCREMENT_RELATIVE_TOLERANCE`. The failed run is recorded as a real source-level failure, not a runner issue; the corrected head requires a fresh full exact-head workflow.
