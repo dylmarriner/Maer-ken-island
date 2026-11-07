@@ -1,8 +1,8 @@
 ## Current timber acceptance-boundary follow-up — 8 November 2026
 
-- [x] Make haul planning a non-mutating preview.
+- [x] Make haul planning a type-enforced non-mutating preview (`plan_haul(&self)`).
 - [x] Reserve the exact CrossCut range only after the founder chooses Haul.
-- [x] Test a declined haul through the real work loop and verify the allocator does not advance.
+- [x] Test a declined haul through the real work loop; reject a cross-cut using its unreserved preview range without removing the source, then prove the next real log receives that ID.
 - [x] Keep accepted-plan reservation coverage for the conserved 14-piece Ute recut.
 - [ ] Verify exact-head formatting, Clippy, fast Rust tests, desktop/backend and week/year acceptance.
 
