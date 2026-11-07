@@ -310,6 +310,31 @@ fn recording_after_sequence_exhaustion_fails_without_appending() {
     assert_eq!(log.entries()[0].sequence, u64::MAX);
 }
 
+/// The final representable same-tick sequence is valid exactly once; the next append is refused.
+#[test]
+fn recording_the_last_available_sequence_then_exhaustion_is_fail_closed() {
+    let mut log = IslandReplayLog::from_entries(
+        REPLAY_LOG_VERSION,
+        "scenario".to_string(),
+        vec![IslandReplayEntry {
+            tick: 5,
+            sequence: u64::MAX - 1,
+            command: IslandCommand::Control(ControlCommand::Pause),
+        }],
+    );
+
+    log.record(5, IslandCommand::Control(ControlCommand::Resume))
+        .expect("u64::MAX is the final available sequence");
+    assert_eq!(log.entries().len(), 2);
+    assert_eq!(log.entries()[1].sequence, u64::MAX);
+
+    assert_eq!(
+        log.record(5, IslandCommand::Control(ControlCommand::Pause)),
+        Err(ReplaySequenceExhausted { tick: 5 })
+    );
+    assert_eq!(log.entries().len(), 2, "exhaustion must not append a duplicate");
+}
+
 /// Duplicate ordering positions make same-tick replay ambiguous and must fail closed.
 #[test]
 fn replay_refuses_duplicate_tick_sequence_positions() {
