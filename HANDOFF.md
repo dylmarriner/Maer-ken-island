@@ -4,6 +4,16 @@ Updated 2026-11-07 against `main` after PR #120 merged as `66bf099f36c567ab344fc
 
 **What is left to do, and what each item needs, is in [`WORK_REMAINING.md`](WORK_REMAINING.md).**
 
+## Current engineering handoff — 8 November 2026
+
+- **PR #120** is merged to `main` as `66bf099f36c567ab344fcc9b268a9a33a656011d`; exact-head workflow [#42346006514](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42346006514) passed its required checks.
+- **PR #121** is merged to `main` as `522aba3d860435c92a4938cf5ffba2b427941cd7`; exact-head workflow [#42351378042](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42351378042) passed its required checks.
+- **PR #123** remains draft and now includes bounded replay file I/O in addition to command-sequence integrity. Replay files are capped at 64 MiB: load rejects non-regular/oversized files before parsing and reads at most limit + 1 bytes; save streams through a limited writer and removes an oversized temporary file without replacing the destination. Regression coverage checks metadata rejection and that the writer never exceeds its limit.
+- Replay I/O source commit: `2827e3e06801afb92e41fc0953b1e9c1864d168d`; integration regression: `ab21a9bb2fc3fdb58c09052a9e27ccab1472bdd6`; initial handoff: `5440d087ceb81613ce3d0a8d1ba5a41721bc53da`. The current PR head is receiving a documentation-only reconciliation now and therefore needs a fresh exact-head workflow.
+- Workflow [#42367820942](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42367820942) on the pre-reconciliation head had dashboard, repository scripts and computer-service checks passed; Rust formatting/Clippy/fast tests, desktop acceptance, installed backend, dependency audit and week/year reference-pack acceptance were still running at the latest inspection. Do not merge until the new exact head passes all required checks.
+- Custom OpenCommander returned HTTP 429; no local Cargo result is claimed. The 64 MiB cap does not change replay JSON version, snapshot layout, simulation state, RNG, append-only command history, canonical digests or LLM behaviour.
+- PRs #73–76 remain untouched. This is independent replay I/O hardening, not a restart of the paused Maer-Ken Merge Completion job.
+
 ## Current engineering handoff — 7 November 2026
 - **PR #123** (replay command sequencing) remains draft. Public logs preserve out-of-order max+1 allocation and fail closed on `u64::MAX`; live `IslandLife` uses a runtime-only per-tick index; replay now rejects duplicate `(tick, sequence)` positions before bootstrap while leaving duplicates beyond a partial replay horizon untouched. See [duplicate sequence guard handoff](docs/handoff/REPLAY_DUPLICATE_SEQUENCE_GUARD_20261107.md). Fresh exact-head verification is required after the latest code/test commits. The first run on `64c3b66a` caught only the multiline rustfmt layout; commit `5aea0f30` applies it and workflow [#42362708042](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42362708042) is running.
 
