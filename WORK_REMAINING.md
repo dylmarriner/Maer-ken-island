@@ -1,6 +1,6 @@
-# Work remaining
-
 ## Current engineering update — 8 November 2026
+
+- PR #124 now caps one cross-cut at 10,000 pieces. The pure Log API, ledger reservation/materialisation, legacy reservation restoration and haul planner all fail closed before an oversized allocation. LabourError::CrossCutLimitExceeded reports the planner limit; regressions cover direct API, reservation and no-mutation ledger paths. Commits: 46b5c581, b6233988, 1be3fae2, ce87b0e0. Exact-head CI is pending; no local Cargo result is claimed.
 
 - PR #120 (MSY diagnostic representability) merged to `main` as `66bf099f36c567ab344fcc9b268a9a33a656011d`; exact-head workflow #42346006514 passed all required jobs.
 - PR #121 (biomass increment precision) merged to `main` as `522aba3d860435c92a4938cf5ffba2b427941cd7`; exact-head workflow #42351378042 passed all required jobs.
