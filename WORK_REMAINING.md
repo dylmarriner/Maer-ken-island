@@ -1,3 +1,13 @@
+## Current timber acceptance-boundary follow-up — 8 November 2026
+
+- [x] Make haul planning a non-mutating preview.
+- [x] Reserve the exact CrossCut range only after the founder chooses Haul.
+- [x] Test a declined haul through the real work loop and verify the allocator does not advance.
+- [x] Keep accepted-plan reservation coverage for the conserved 14-piece Ute recut.
+- [ ] Verify exact-head formatting, Clippy, fast Rust tests, desktop/backend and week/year acceptance.
+
+Evidence: `docs/handoff/TIMBER_CROSS_CUT_MASS_CONSERVATION_20261108.md`.
+
 ## Exact-head formatting follow-up — 8 November 2026
 
 - [x] Apply rustfmt's required wrap to the zero-piece legacy restore regression (`a7b0ddd04655222e75d39a32af85c78e108e817a`).
