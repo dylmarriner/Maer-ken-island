@@ -69,3 +69,26 @@ The replay path now calls a private `apply_command_with_sequence` helper. It acc
 Regression: `replay_preserves_sparse_recorded_sequence_numbers` supplies shuffled tick-0 entries at sequences 12 and 7 and asserts the returned log is ordered as 7, 12 with the original identifiers intact.
 
 Commits: `60e592120fb2980bc1b2117b6c0e77bdab90aad2` (error contract), `23120a75af4c6b48a3ec1dff5d9f5549cd3cdab4` (replay path), `6803a75b2068c63792fdd384e13c6023eed4a885` (regression). Fresh exact-head CI is required.
+
+
+## Public replay-log append performance and immutability — 8 November 2026
+
+A current Codex review found that the public `IslandReplayLog::record` convenience API still scanned every retained entry for each append. The live `IslandLife::apply_command` path already used its own runtime per-tick index, but repeated public log construction could still become O(N²).
+
+Correction:
+- Made the replay entry vector private and exposed an immutable `entries()` slice. This makes the documented append-only log boundary enforceable instead of relying on callers not to mutate a public vector.
+- Added `from_entries(version, scenario_digest, entries)` for importing or testing in-memory logs; replay still validates version, duplicate positions and the requested horizon.
+- Added a runtime-only `BTreeMap<tick, max_sequence>` to `IslandReplayLog`. Each append now reads/updates the per-tick maximum rather than scanning the full history.
+- Marked the index as skipped in serde. It does not change JSON, snapshot data, replay hashes or persisted format.
+- Rebuild the index once when loading a file, and lazily on the first append after direct serde deserialisation.
+- Updated the island CLI and integration tests to use the read-only accessor.
+- Added regressions for interleaved ticks, imported out-of-order entries, sequence exhaustion, and appending after serde deserialisation. The JSON regression asserts the runtime index never appears in the persisted log.
+
+Commits:
+- `53cd6ade10ef49ba695043612eb7fa09acd40b99` — per-tick sequence index and immutable log entries.
+- `8ae4a23b5f19ad25f99dcb2bd954977781ab6570` — indexed append and deserialisation regressions.
+- `17f205fcd55664bc5a839c55e3b216f5e4c31862` — update replay tests to the immutable accessor.
+- `269186ec2eff37e72a13772f407a8f0ae84093f4` — update island CLI read paths.
+- `317824d2cb24905a34b99674864ac486e197f95f` — update intervention integration tests.
+
+Fresh exact-head formatting, Clippy, fast Rust tests, desktop/backend and week/year reference acceptance are required. The previous green workflow for PR #123 predates this change and is not evidence for this head. No local Cargo result is claimed while custom OpenCommander access returns HTTP 429.
