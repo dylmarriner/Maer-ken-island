@@ -92,7 +92,9 @@ impl RothC {
             "RothC plant DPM fractions must be finite and within [0, 1]"
         );
         assert!(
-            self.manure.iter().all(|fraction| fraction.is_finite() && *fraction >= 0.0),
+            self.manure
+                .iter()
+                .all(|fraction| fraction.is_finite() && *fraction >= 0.0),
             "RothC manure fractions must be finite and non-negative"
         );
         let manure_total: f64 = self.manure.iter().sum();
@@ -252,11 +254,15 @@ impl SoilCarbon {
             "RothC biome and vegetation vectors must have equal lengths"
         );
         assert!(
-            input_kgc_m2_yr.iter().all(|input| input.is_finite() && *input >= 0.0),
+            input_kgc_m2_yr
+                .iter()
+                .all(|input| input.is_finite() && *input >= 0.0),
             "RothC annual inputs must be finite and non-negative"
         );
         assert!(
-            temperature_factor.iter().all(|factor| factor.is_finite() && *factor >= 0.0),
+            temperature_factor
+                .iter()
+                .all(|factor| factor.is_finite() && *factor >= 0.0),
             "RothC temperature factors must be finite and non-negative"
         );
         let pools = biomes
@@ -273,7 +279,10 @@ impl SoilCarbon {
                 } else {
                     params.cover_bare
                 };
-                assert!(m.is_finite(), "RothC steady-state decay modifier must be finite");
+                assert!(
+                    m.is_finite(),
+                    "RothC steady-state decay modifier must be finite"
+                );
                 let input = *input;
                 if m <= 0.0 || input <= 0.0 {
                     return [0.0; 4];
@@ -319,10 +328,26 @@ impl SoilCarbon {
             dt_years.is_finite() && dt_years >= 0.0,
             "RothC step duration must be finite and non-negative"
         );
-        assert_eq!(self.pools.len(), biomes.len(), "RothC pool and biome vectors must have equal lengths");
-        assert_eq!(self.pools.len(), inputs.len(), "RothC pool and input vectors must have equal lengths");
-        assert_eq!(self.pools.len(), self.temperature_factor.len(), "RothC pool and temperature-factor vectors must have equal lengths");
-        assert_eq!(self.pools.len(), vegetated.len(), "RothC pool and vegetation vectors must have equal lengths");
+        assert_eq!(
+            self.pools.len(),
+            biomes.len(),
+            "RothC pool and biome vectors must have equal lengths"
+        );
+        assert_eq!(
+            self.pools.len(),
+            inputs.len(),
+            "RothC pool and input vectors must have equal lengths"
+        );
+        assert_eq!(
+            self.pools.len(),
+            self.temperature_factor.len(),
+            "RothC pool and temperature-factor vectors must have equal lengths"
+        );
+        assert_eq!(
+            self.pools.len(),
+            vegetated.len(),
+            "RothC pool and vegetation vectors must have equal lengths"
+        );
         assert!(
             self.respired_kgc_m2.is_finite() && self.respired_kgc_m2 >= 0.0,
             "cumulative soil respiration must be finite and non-negative"
@@ -516,7 +541,10 @@ mod tests {
         }));
 
         assert!(result.is_err());
-        assert_eq!(soil, before, "invalid input must not partially advance soil");
+        assert_eq!(
+            soil, before,
+            "invalid input must not partially advance soil"
+        );
     }
 
     #[test]
