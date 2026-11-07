@@ -201,3 +201,22 @@ cross_cut_refuses_colliding_or_overflowing_piece_ids_without_mutating_the_ledger
 This does not change snapshot shape, replay events, hashes, RNG, material stocks,
 or the valid planned single-writer path. Exact-head CI is required; no local Cargo
 test result is claimed while custom OpenCommander remains unavailable.
+
+
+## Direct Log::cross_cut ID-range preflight — 8 November 2026
+
+The material-ledger entry point already rejects zero, overflowing, occupied
+and unreserved destination ranges. A final public-API audit found that the
+lower-level pure `Log::cross_cut` function still formed piece IDs with
+unchecked addition. A direct caller near `u64::MAX` could therefore wrap IDs
+even though the normal ledger path rejects the same range.
+
+The pure function now fails before constructing any pieces unless
+`first_id` is one-based and the exclusive end `first_id + max(n, 1)`
+is representable. The ledger remains responsible for proving that the range
+was actually reserved. Regression coverage checks zero, overflow, and the
+last non-overflowing exclusive range (`u64::MAX - 1` for one piece).
+
+Production and regression are in the same Rust module and are covered by the
+PR #124 exact-head formatting, Clippy and fast-test jobs. No ledger, snapshot,
+replay, RNG, simulation or live state is mutated by this preflight.
