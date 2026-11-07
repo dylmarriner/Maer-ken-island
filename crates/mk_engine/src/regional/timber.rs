@@ -87,6 +87,28 @@ impl Log {
         }
     }
 
+    /// Whether this log can safely participate in geometry and material arithmetic.
+    ///
+    /// Logs are public data and can also arrive from persisted snapshots. Keep
+    /// invalid floating-point state out of the cross-cut path before it can
+    /// contaminate positions, carbon totals or water totals.
+    pub(crate) fn has_valid_physical_state(&self) -> bool {
+        self.position_m.0.is_finite()
+            && self.position_m.1.is_finite()
+            && self.heading_rad.is_finite()
+            && self.length_m.is_finite()
+            && self.length_m > 0.0
+            && self.diameter_m.is_finite()
+            && self.diameter_m > 0.0
+            && self.dry_kg.is_finite()
+            && self.dry_kg >= 0.0
+            && self.carbon_kgc.is_finite()
+            && self.carbon_kgc >= 0.0
+            && self.water_kg.is_finite()
+            && self.water_kg >= 0.0
+            && (self.dry_kg + self.water_kg).is_finite()
+    }
+
     /// The butt end (domain metres).
     pub fn butt_m(&self) -> (f64, f64) {
         let half = 0.5 * self.length_m;
@@ -106,6 +128,10 @@ impl Log {
         assert!(
             n <= MAX_CROSS_CUT_PIECES,
             "cross-cut piece count exceeds safety bound"
+        );
+        assert!(
+            self.has_valid_physical_state(),
+            "cross-cut source log has invalid physical state"
         );
         assert!(first_id > 0, "log ids are one-based");
         let _end_exclusive = first_id
