@@ -766,7 +766,7 @@ impl IslandProjection {
     pub fn timeline_now(life: &IslandLife) -> Arc<Vec<TimelineEntry>> {
         Arc::new(
             life.replay_log()
-                .entries
+                .entries()
                 .iter()
                 .map(|entry| TimelineEntry {
                     tick: entry.tick,
