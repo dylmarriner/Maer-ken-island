@@ -59,12 +59,16 @@ impl IslandReplayLog {
 
     /// Append a command applied at `tick`.
     pub fn record(&mut self, tick: u64, command: IslandCommand) {
+        // Logs can be re-ordered before they are extended. Allocate after the
+        // highest sequence already used at this tick, not merely after a
+        // contiguous suffix of entries at the end of the vector.
         let sequence = self
             .entries
             .iter()
-            .rev()
-            .take_while(|e| e.tick == tick)
-            .count() as u64;
+            .filter(|entry| entry.tick == tick)
+            .map(|entry| entry.sequence)
+            .max()
+            .map_or(0, |last| last.saturating_add(1));
         self.entries.push(IslandReplayEntry {
             tick,
             sequence,
