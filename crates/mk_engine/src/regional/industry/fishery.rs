@@ -56,7 +56,7 @@ impl std::fmt::Display for FisheryError {
             Self::NonFiniteGrowth => "fish stock growth is not finite",
             Self::UnrepresentableGrowth => {
                 "positive fish stock growth is below binary64 representable range"
-            },
+            }
             Self::LandedTotalOverflow => "cumulative landed biomass overflowed",
             Self::LandedTotalUnrepresentable => {
                 "cumulative landed biomass increment is not representable at stored precision"
@@ -327,18 +327,13 @@ impl FishStock {
             {
                 // A subnormal rate/fraction product can round away before a
                 // large biomass makes the final surplus representable.
-                let log_surplus =
-                    rate.log2() + remaining_fraction.log2() + self.biomass_t.log2();
+                let log_surplus = rate.log2() + remaining_fraction.log2() + self.biomass_t.log2();
                 log_surplus.exp2()
             } else {
                 direct
             }
         };
-        if surplus == 0.0
-            && rate > 0.0
-            && self.biomass_t > 0.0
-            && self.biomass_t < self.k_t
-        {
+        if surplus == 0.0 && rate > 0.0 && self.biomass_t > 0.0 && self.biomass_t < self.k_t {
             // Zero is reserved for an actual zero-rate/zero-biomass/at-capacity
             // state. A positive mathematical result below the smallest
             // subnormal cannot be persisted faithfully and must fail closed.
@@ -1663,10 +1658,8 @@ mod tests {
         assert_eq!(p, 0.5);
         assert_eq!(direct_factor, 0.0, "the subnormal rate product rounds away");
 
-        let expected = (model.r(Resilience::Medium).log2()
-            + (1.0 - p).log2()
-            + stock.biomass_t.log2())
-        .exp2();
+        let expected =
+            (model.r(Resilience::Medium).log2() + (1.0 - p).log2() + stock.biomass_t.log2()).exp2();
         assert!(expected.is_normal(), "the final surplus is representable");
 
         let surplus = stock
@@ -1686,10 +1679,9 @@ mod tests {
             depensation_below: 0.25,
         };
 
-        for (carrying_capacity, biomass) in [
-            (1.0, min_subnormal),
-            (2.0 * min_subnormal, min_subnormal),
-        ] {
+        for (carrying_capacity, biomass) in
+            [(1.0, min_subnormal), (2.0 * min_subnormal, min_subnormal)]
+        {
             let mut stock = FishStock::unexploited(Resilience::Medium, carrying_capacity)
                 .expect("positive carrying capacity");
             stock.biomass_t = biomass;
@@ -1703,7 +1695,10 @@ mod tests {
                 stock.fish(&model, 1.0, YEAR_S),
                 Err(FisheryError::UnrepresentableGrowth)
             );
-            assert_eq!(stock, before, "an unrepresentable step must not mutate the stock");
+            assert_eq!(
+                stock, before,
+                "an unrepresentable step must not mutate the stock"
+            );
         }
     }
 
