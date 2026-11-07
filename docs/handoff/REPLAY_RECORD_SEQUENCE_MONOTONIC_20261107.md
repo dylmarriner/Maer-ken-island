@@ -24,6 +24,10 @@ Base: `main` after PR #121 merge `522aba3d860435c92a4938cf5ffba2b427941cd7`
 - Production: `3352d0070a486f360249bcfb6423271ba6560d35`
 - Regression: `0eab8a485d50a917c9a45ade123124fdc8263851`
 
+
+
+Additional regression: `a_refused_command_does_not_consume_the_next_replay_sequence` submits an invalid unnamed-person request, verifies no person or replay entry is created, then proves the next accepted control command still receives sequence zero. This protects the live index from advancing on a command that the island refuses.
+
 ## Verification
 
 Exact-head CI is required for formatting, Clippy, fast tests, desktop, installed backend, dashboard, computer service, dependency audit and week/year reference-pack acceptance. No local Cargo result is claimed.
