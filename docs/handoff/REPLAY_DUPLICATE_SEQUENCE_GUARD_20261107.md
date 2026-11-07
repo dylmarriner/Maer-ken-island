@@ -24,3 +24,7 @@ Code commit: `bb4e1622e731c79fd08ba2bcaac16bfeccacc4d0`.
 Test commit: `06d913fc02fb898209fe6e6f01970a4b385b671a`.
 
 Fresh exact-head CI is required on the latest PR head. No local Cargo pass is claimed.
+
+## Exact-head formatting correction
+
+Workflow [#42362560057](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42362560057) on the prior documentation head `64c3b66a` reached the Rust formatter and found only the expected multiline layout for the new `DuplicateSequence` struct variant. Commit `5aea0f30940cbe2a4663d984f02d75d1650fd1c2` applies that exact rustfmt output. Fresh exact-head workflow [#42362708042](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42362708042) is running; no source-test result is claimed until all required jobs finish.
