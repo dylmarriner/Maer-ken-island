@@ -91,3 +91,17 @@ formatter output was applied in `aa1e3f9`. Fresh exact-head workflow
 is queued. No Clippy, fast-test, desktop, backend or week/year pass is claimed
 for the corrected head yet. OpenCommander remains unavailable (HTTP 429), so
 no local Cargo result is claimed.
+
+
+## Clippy follow-up — 8 November 2026
+
+Exact-head workflow [#42372299956](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42372299956)
+passed `cargo fmt --all -- --check`, then failed Clippy on
+`clippy::unnecessary_map_or` for the optional bed-length predicate. The desktop
+application job reached the same Clippy failure; the fast Rust tests did not
+run because the lint gate failed. The predicate now uses Rust 1.97's
+`Option::is_none_or`, as Clippy requested.
+
+Correction commit: `61a8cd4c9cb4b70480d3bc07a8ea078db3ea64b8`.
+A fresh exact-head workflow for this commit is pending. No Clippy, fast-test,
+desktop, backend or week/year pass is claimed for the corrected head.
