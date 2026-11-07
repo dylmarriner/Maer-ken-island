@@ -71,4 +71,5 @@ No reference values, species parameters, snapshot fields/layout, append-only log
 - `WORK_REMAINING.md` now records PR #118 and PR #119 as merged and verified, with PR #120 as the remaining MSY diagnostic gate (`d3b8d2d1`).
 - `docs/ISLAND_SYSTEM_STATUS.md` now records PR #119's merge evidence and PR #120's rebased pending state (`5a0eb382`).
 - The previous exact-head workflow [#42340666071](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42340666071) on head `23ed51ef` was in progress when the final documentation reconciliation began; it does not certify the final docs-reconciled head.
-- A fresh exact-head CI run is required after these documentation commits reach PR #120's existing branch.
+- Codex and CodeRabbit both identified the same alternate-order subnormal MSY defect and the terminology issue; the production fallback, two regressions, public-variant docs and terminology correction are committed. Their three inline threads are resolved.
+- Workflow [#42345147384](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42345147384) was queued on the review-corrected code head `02c2c40b`; this handoff update creates a newer head, so a fresh exact-head workflow is still required.
