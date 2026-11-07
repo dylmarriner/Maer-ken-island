@@ -664,6 +664,30 @@ mod tests {
     }
 
     #[test]
+    fn cross_cutting_assigns_floating_point_remainders_without_losing_material() {
+        let l = Log {
+            id: 7,
+            position_m: (12.0, -4.0),
+            heading_rad: 0.37,
+            length_m: 7.123456789012345,
+            diameter_m: 0.30,
+            dry_kg: 914.6308346979964,
+            carbon_kgc: 7.123456789012345,
+            water_kg: 54.3210987654321,
+            place: LogPlace::Stored,
+        };
+        let pieces = l.cross_cut(3, 100);
+        let sum = |field: fn(&Log) -> f64| pieces.iter().map(field).sum::<f64>();
+
+        assert_eq!(sum(|piece| piece.dry_kg).to_bits(), l.dry_kg.to_bits());
+        assert_eq!(sum(|piece| piece.carbon_kgc).to_bits(), l.carbon_kgc.to_bits());
+        assert_eq!(sum(|piece| piece.water_kg).to_bits(), l.water_kg.to_bits());
+        assert_eq!(sum(|piece| piece.length_m).to_bits(), l.length_m.to_bits());
+        assert_ne!(pieces[2].dry_kg.to_bits(), pieces[0].dry_kg.to_bits());
+        assert_ne!(pieces[2].length_m.to_bits(), pieces[0].length_m.to_bits());
+    }
+
+    #[test]
     fn a_tree_falls_the_same_way_every_time() {
         let seed = [7u8; 32];
         assert_eq!(fall_heading_rad(5, &seed), fall_heading_rad(5, &seed));
