@@ -404,3 +404,15 @@ Correction:
 Implementation commit: `5281c014610cb338923efc50e7da640b55897bf4`.
 
 Fresh exact-head rustfmt, Clippy, fast tests, desktop/backend and week/year reference acceptance are required. No local Cargo result is claimed. The single-writer allocator and deterministic choice model are unchanged; only the point at which the reservation is committed has moved after acceptance.
+
+
+## Exact-head CI repair — 8 November 2026
+
+The run on the prior merge head failed Clippy while compiling the new haul-decline regression: the test module referred to the sibling module as `super::choice::Work`, but `super` inside `life::tests` is `life`, not `regional`. The two test references now use the compiler-confirmed `crate::regional::choice::Work` path.
+
+- Production/test-path correction: `131332c3db69dbec56b6b7707bb4ebda76d5b84c`.
+- The first exact-head workflow after that correction reached rustfmt and found one line-wrap difference in the second preference assertion.
+- Applied the exact formatter layout in `52ee736225238076807f4c713926bc787d629cad`.
+- New exact-head workflow: [#42400504685](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42400504685). It was pending at handoff time; no format, Clippy or Rust-test pass is claimed for this head.
+
+The fix changes only test-module name resolution and formatting. It does not change timber logic, material IDs, snapshot layout, replay hashes, RNG, simulation state or production infrastructure.
