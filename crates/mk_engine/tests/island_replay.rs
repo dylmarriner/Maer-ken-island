@@ -175,6 +175,33 @@ fn a_refused_command_does_not_consume_the_next_replay_sequence() {
     );
 }
 
+/// Replaying a sparse log preserves its original sequence identifiers.
+#[test]
+fn replay_preserves_sparse_recorded_sequence_numbers() {
+    let mut log = IslandReplayLog::new(island().scenario_digest_hex());
+    log.entries.push(IslandReplayEntry {
+        tick: 0,
+        sequence: 12,
+        command: IslandCommand::Control(ControlCommand::Pause),
+    });
+    log.entries.push(IslandReplayEntry {
+        tick: 0,
+        sequence: 7,
+        command: IslandCommand::Control(ControlCommand::Resume),
+    });
+
+    let replayed = replay_island(canon(), scenario(), &log, 0)
+        .expect("sparse, strictly increasing sequence identifiers replay");
+
+    let positions: Vec<(u64, u64)> = replayed
+        .replay_log()
+        .entries
+        .iter()
+        .map(|entry| (entry.tick, entry.sequence))
+        .collect();
+    assert_eq!(positions, vec![(0, 7), (0, 12)]);
+}
+
 /// Appending to a log after an out-of-order tick must not reuse a sequence.
 #[test]
 fn recording_after_an_out_of_order_tick_uses_the_next_sequence_for_that_tick() {
