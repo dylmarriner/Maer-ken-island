@@ -1501,6 +1501,9 @@ impl IslandLife {
             if !self.hauling.contains_key(&id) && !self.felling.contains_key(&id) {
                 if let Some(job) = self.plan_haul(at, &body)? {
                     if self.chooses_to_haul(&id, &job, at)? {
+                        // Planning is only a preview. Reserve the exact piece-ID
+                        // range after the founder accepts, never for a declined haul.
+                        self.reserve_haul_plan(&job);
                         self.hauling.insert(id.clone(), job);
                     }
                 }
@@ -1892,34 +1895,59 @@ impl IslandLife {
         let Some(selected) = timber::quickest(plans) else {
             return Ok(None);
         };
-        let piece_count = selected
+        // Planning only previews the current allocator range. The range is
+        // reserved later, after the founder chooses this haul over felling.
+        for task in &selected.tasks {
+            if let timber::HaulAction::CrossCut { first_id, .. } = &task.action {
+                assert_eq!(
+                    *first_id, first,
+                    "selected haul must use the previewed piece-id range"
+                );
+            }
+        }
+        Ok(Some(selected))
+    }
+
+    /// Reserve only the exact CrossCut range in a plan the founder accepted.
+    /// Called by the work loop after chooses_to_haul returns true.
+    fn reserve_haul_plan(&mut self, job: &timber::HaulJob) {
+        let mut planned_first_id = None;
+        let piece_count = job
             .tasks
             .iter()
             .filter_map(|task| match &task.action {
                 timber::HaulAction::CrossCut {
                     pieces, first_id, ..
                 } => {
-                    assert_eq!(
-                        *first_id, first,
-                        "selected haul must use the previewed piece-id range"
-                    );
+                    if let Some(expected) = planned_first_id {
+                        assert_eq!(
+                            *first_id, expected,
+                            "one haul must use a single contiguous piece-id range"
+                        );
+                    } else {
+                        planned_first_id = Some(*first_id);
+                    }
                     Some(u64::from(*pieces))
                 }
                 _ => None,
             })
             .max()
             .unwrap_or(0);
-        // Only the selected plan owns a reservation. Reserving the largest
-        // range among every alternative would leave unused candidate ids
-        // pending after the quickest plan is chosen.
-        if piece_count > 0 {
-            let reserved_first = self.materials.reserve_log_ids(piece_count);
-            assert_eq!(
-                reserved_first, first,
-                "single-writer haul planning must reserve the id range it previewed"
-            );
+        if piece_count == 0 {
+            return;
         }
-        Ok(Some(selected))
+
+        let first = planned_first_id.expect("a CrossCut range has a first piece id");
+        assert_eq!(
+            self.materials.next_log_id(),
+            first,
+            "single-writer haul acceptance must still own the previewed id range"
+        );
+        let reserved_first = self.materials.reserve_log_ids(piece_count);
+        assert_eq!(
+            reserved_first, first,
+            "accepted haul must reserve the range it previewed"
+        );
     }
 
     /// What a finished haul task does to the world.
@@ -4573,8 +4601,14 @@ mod tests {
         assert_eq!(haul.method, timber::HaulMethod::Ute);
         assert_eq!(
             life.materials.next_log_id(),
+            first_piece_id,
+            "planning a candidate must not reserve IDs before the founder chooses it"
+        );
+        life.reserve_haul_plan(&haul);
+        assert_eq!(
+            life.materials.next_log_id(),
             first_piece_id + u64::from(minimum_pieces + 1),
-            "only the selected Ute plan's actual cut range is reserved"
+            "accepting the selected Ute plan reserves its actual cut range"
         );
         life.hauling.insert("Gem-D".to_string(), haul);
 
@@ -4641,6 +4675,80 @@ mod tests {
             );
         }
         assert_eq!(restored.materials.log(source_id), None);
+    }
+
+    #[test]
+    fn declining_a_haul_plan_does_not_reserve_piece_ids() {
+        let mut scenario =
+            IslandScenario::load(&repo("fixtures/island/default_scenario.json")).unwrap();
+        scenario.estate_patch.tree_cap = 200;
+        let canon = Arc::new(CanonLocked::load(&repo("fixtures/island/canon.json")).unwrap());
+        let mut life = IslandLife::bootstrap(scenario, canon).expect("the island bootstraps");
+        assert!(life.estate_has_tool(FELLING_TOOL), "the shed has the axe");
+
+        let at = life.vegetation.centre_m();
+        let cell = life.placed.location;
+        let area = life.domain.cell_area_m2(DomainLevel::Medium);
+        let mut ledger = Ledger::new();
+        let log = timber::Log {
+            id: 0,
+            position_m: at,
+            heading_rad: 0.0,
+            length_m: 1.0,
+            diameter_m: 0.2,
+            dry_kg: 10.0,
+            carbon_kgc: 5.0,
+            water_kg: 0.0,
+            place: timber::LogPlace::Ground,
+        };
+        life.materials.receive_felled_log(
+            log,
+            &mut life.physical.hydrology,
+            cell,
+            area,
+            &mut ledger,
+        );
+        let first_piece_id = life.materials.next_log_id();
+        let body = LabourBody::from_human(life.humans.registry.get_human("Gem-D").unwrap());
+        assert!(
+            life.plan_haul(at, &body).unwrap().is_some(),
+            "the ground log has a valid candidate haul"
+        );
+        assert_eq!(
+            life.materials.next_log_id(),
+            first_piece_id,
+            "previewing a haul must not reserve its piece IDs"
+        );
+
+        life.positions.0.insert(
+            "Gem-D".into(),
+            super::super::humans::EstatePosition {
+                space: Space::Outdoors,
+                position_m: at,
+            },
+        );
+        life.humans
+            .registry
+            .get_human_mut("Gem-D")
+            .unwrap()
+            .economy_action
+            .kind = crate::humans::ActionKind::Gather;
+        {
+            let will = life.will_of("Gem-D");
+            will.liking.insert(super::choice::Work::Fell, 1.0);
+            will.liking.insert(super::choice::Work::Haul, -1.0);
+        }
+
+        // The work loop offers the plan, but this founder strongly prefers
+        // felling. A declined plan must leave the allocator untouched.
+        life.work(1.0).unwrap();
+        assert!(!life.hauling.contains_key("Gem-D"));
+        assert!(life.felling.contains_key("Gem-D"));
+        assert_eq!(
+            life.materials.next_log_id(),
+            first_piece_id,
+            "declining the haul must not leak an unused reservation"
+        );
     }
 
     /// The oil chain runs inside the island's audits (Task 4, D58): the
