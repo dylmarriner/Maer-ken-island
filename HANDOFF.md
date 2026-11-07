@@ -8,14 +8,15 @@
   asserts bit-identical totals. Production commit: `fa81e5ba92a69b3ef414d8a75faab1f896798881`.
 - Exact-head formatting, Clippy, fast Rust tests, desktop/backend and week/year acceptance
   are required; no local Cargo result is claimed while OpenCommander returns HTTP 429.
+- Codex review follow-up: PR #124 now checks actual maximum piece mass/length, uses the largest piece for ute trip capacity, and prices each carry with actual green mass. Regression `haul_plans_recut_a_conserved_remainder_above_the_sustainable_load` covers the 9,928-to-9,929 cut-count correction and payload/carry accounting. Production commit `45ef1bb`; rustfmt correction `aa1e3f9`. Exact-head workflow #42372226293 is queued; no test pass is claimed yet.
 - Full details: [TIMBER_CROSS_CUT_MASS_CONSERVATION_20261108.md](docs/handoff/TIMBER_CROSS_CUT_MASS_CONSERVATION_20261108.md).
 
 
-Updated 2026-11-07 against `main` after PR #119 merged as `9cc2b15808c57bd5f61d305bca6122e79820c6bc`. PR #120 is the current MSY-diagnostic change; PR #121 is a separate, intentionally stacked biomass-increment correction. This is the front door for whoever picks the island up next, human or agent.
+Updated 2026-11-08 against `main`: PR #120 merged as `66bf099f36c567ab344fcc9b268a9a33a656011d`, and PR #121 merged as `522aba3d860435c92a4938cf5ffba2b427941cd7`; both exact-head workflows passed all required jobs, with nightly slow tests skipped by design. PR #124 is the current timber haul-limit correction on `fix/timber-cross-cut-exact-conservation-20261108`, currently draft at `aa1e3f991a9f53b0542c39abeb1ef9c0d64211a8`; exact-head CI is queued. PR #123 remains the separate replay sequence correction at `03087e319674d8feacbb20608f5540e3cd536ad0`. This is the front door for whoever picks the island up next, human or agent.
 
 **What is left to do, and what each item needs, is in [`WORK_REMAINING.md`](WORK_REMAINING.md).**
 
-## Current engineering handoff — 7 November 2026
+## Previous engineering handoff — 7 November 2026
 
 - **PR #118** is merged as `134082a1c1bbcea837acc58344572476e8b14f74`; its exact-head workflow passed the required Rust, desktop, backend, dashboard, computer-service, dependency and week/year acceptance checks.
 - **PR #119** is merged as `9cc2b15808c57bd5f61d305bca6122e79820c6bc`; exact-head workflow [#42336338097](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42336338097) passed all required checks, including fast Rust tests, desktop and reference-pack acceptance.
