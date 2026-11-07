@@ -14,7 +14,7 @@ use mk_engine::regional::materials::{
     MaterialLedger, ALL_MATERIALS, QUICKLIME_PER_LIMESTONE,
 };
 use mk_engine::regional::physical::RegionalPhysicalState;
-use mk_engine::regional::timber::{Log, LogPlace};
+use mk_engine::regional::timber::{Log, LogPlace, MAX_CROSS_CUT_PIECES};
 use mk_island::{DomainLevel, IslandDomain, IslandProfile};
 
 const M: DomainLevel = DomainLevel::Medium;
@@ -667,6 +667,30 @@ fn plant_food_is_only_the_forests_fruit_and_seed_and_grassland_feeds_nobody() {
 }
 
 #[test]
+#[should_panic(expected = "cross-cut piece count exceeds safety bound")]
+fn direct_log_cross_cut_rejects_oversized_piece_count_before_allocation() {
+    let log = Log {
+        id: 1,
+        position_m: (0.0, 0.0),
+        heading_rad: 0.0,
+        length_m: 1.0,
+        diameter_m: 0.2,
+        dry_kg: 10.0,
+        carbon_kgc: 5.0,
+        water_kg: 0.0,
+        place: LogPlace::Ground,
+    };
+    let _ = log.cross_cut(MAX_CROSS_CUT_PIECES + 1, 2);
+}
+
+#[test]
+#[should_panic(expected = "cross-cut reservation exceeds safety bound")]
+fn material_ledger_rejects_oversized_cross_cut_reservations_before_allocation() {
+    let mut materials = MaterialLedger::new();
+    materials.reserve_log_ids(u64::from(MAX_CROSS_CUT_PIECES) + 1);
+}
+
+#[test]
 fn cross_cut_refuses_colliding_overflowing_unreserved_and_consumed_piece_ids_without_mutating_the_ledger(
 ) {
     let b = base();
@@ -732,6 +756,15 @@ fn cross_cut_refuses_colliding_overflowing_unreserved_and_consumed_piece_ids_wit
     assert_eq!(materials.log(source_id), Some(&source_before));
     assert_eq!(materials.log(10), None);
     assert_eq!(materials.log(11), None);
+    assert_eq!(materials.stock_of(R::MaterialCarbon), carbon_before);
+    assert_eq!(materials.stock_of(R::MaterialWater), water_before);
+    assert_eq!(materials.next_log_id(), 3);
+
+    // The direct ledger API refuses an excessive piece count before it can
+    // inspect or materialise a caller-supplied destination range.
+    assert!(!materials.cross_cut_log(source_id, MAX_CROSS_CUT_PIECES + 1, 3));
+    assert_eq!(materials.log(source_id), Some(&source_before));
+    assert_eq!(materials.log(occupied_id), Some(&occupied_before));
     assert_eq!(materials.stock_of(R::MaterialCarbon), carbon_before);
     assert_eq!(materials.stock_of(R::MaterialWater), water_before);
     assert_eq!(materials.next_log_id(), 3);
