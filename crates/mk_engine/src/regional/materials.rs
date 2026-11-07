@@ -714,10 +714,7 @@ impl MaterialLedger {
             return false;
         }
 
-        let already_pending = self
-            .reserved_log_ids
-            .range(first_id..end_exclusive)
-            .count();
+        let already_pending = self.reserved_log_ids.range(first_id..end_exclusive).count();
         if already_pending == pieces as usize {
             return true;
         }
