@@ -10,6 +10,8 @@
 //! That is what makes the digest worth printing. A run that could not be
 //! reproduced would be a number about one afternoon on one machine.
 
+use std::fs::{self, OpenOptions};
+use std::io::{self, Read, Write};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -23,6 +25,10 @@ use super::life::{IslandLife, IslandLifeError};
 /// The log's format. A log written by another version is refused rather
 /// than guessed at, for the same reason a snapshot is.
 pub const REPLAY_LOG_VERSION: u32 = 1;
+
+/// Maximum serialized replay-log size accepted from disk (128 MiB). This
+/// bounds memory use when loading corrupt or untrusted replay paths.
+pub const MAX_REPLAY_LOG_BYTES: u64 = 128 * 1024 * 1024;
 
 /// One command, and exactly when it was applied.
 ///
@@ -57,14 +63,31 @@ impl IslandReplayLog {
         }
     }
 
-    /// Append a command applied at `tick`.
-    pub fn record(&mut self, tick: u64, command: IslandCommand) {
-        let sequence = self
-            .entries
+    /// The next zero-based sequence for `tick`, or `None` if it is exhausted.
+    ///
+    /// Logs can be loaded from disk, so a sequence may already be `u64::MAX`.
+    /// Saturating that value would append a duplicate and create a log which
+    /// cannot be replayed. Refuse instead, before the caller mutates the island.
+    fn next_sequence(&self, tick: u64) -> Option<u64> {
+        self.entries
             .iter()
-            .rev()
-            .take_while(|e| e.tick == tick)
-            .count() as u64;
+            .filter(|entry| entry.tick == tick)
+            .map(|entry| entry.sequence)
+            .max()
+            .map_or(Some(0), |sequence| sequence.checked_add(1))
+    }
+
+    /// Append a command applied at `tick`.
+    pub fn record(&mut self, tick: u64, command: IslandCommand) -> Result<(), IslandReplayError> {
+        let sequence = self
+            .next_sequence(tick)
+            .ok_or(IslandReplayError::SequenceExhausted { tick })?;
+        self.record_with_sequence(tick, sequence, command);
+        Ok(())
+    }
+
+    /// Append with a sequence reserved before the command changes world state.
+    fn record_with_sequence(&mut self, tick: u64, sequence: u64, command: IslandCommand) {
         self.entries.push(IslandReplayEntry {
             tick,
             sequence,
@@ -74,31 +97,160 @@ impl IslandReplayLog {
 
     /// Read a log from a file.
     pub fn load(path: &Path) -> Result<Self, IslandReplayError> {
-        let bytes = std::fs::read(path)
-            .map_err(|e| IslandReplayError::Io(path.display().to_string(), e))?;
+        let path_name = path.display().to_string();
+        let path_metadata = fs::symlink_metadata(path)
+            .map_err(|error| IslandReplayError::Io(path_name.clone(), error))?;
+        if !path_metadata.file_type().is_file() {
+            return Err(IslandReplayError::NotALog(
+                path_name.clone(),
+                "replay source must be a regular file, not a symlink or special file".to_string(),
+            ));
+        }
+        if path_metadata.len() > MAX_REPLAY_LOG_BYTES {
+            return Err(IslandReplayError::TooLarge {
+                path: path_name.clone(),
+                bytes: path_metadata.len(),
+                max_bytes: MAX_REPLAY_LOG_BYTES,
+            });
+        }
+
+        let mut options = OpenOptions::new();
+        options.read(true);
+        // O_NOFOLLOW closes the metadata/open symlink race on Unix. O_NONBLOCK
+        // prevents a raced FIFO from hanging the process before file-type validation.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
+        }
+        let file = options
+            .open(path)
+            .map_err(|error| IslandReplayError::Io(path_name.clone(), error))?;
+        let opened_metadata = file
+            .metadata()
+            .map_err(|error| IslandReplayError::Io(path_name.clone(), error))?;
+        if !opened_metadata.is_file() {
+            return Err(IslandReplayError::NotALog(
+                path_name.clone(),
+                "opened replay source is not a regular file".to_string(),
+            ));
+        }
+
+        let size = opened_metadata.len();
+        if size > MAX_REPLAY_LOG_BYTES {
+            return Err(IslandReplayError::TooLarge {
+                path: path_name.clone(),
+                bytes: size,
+                max_bytes: MAX_REPLAY_LOG_BYTES,
+            });
+        }
+
+        // Read at most one byte beyond the limit as well: the file may grow
+        // after metadata was inspected, and that must not bypass the bound.
+        let mut bytes = Vec::with_capacity(size as usize);
+        let read = file
+            .take(MAX_REPLAY_LOG_BYTES + 1)
+            .read_to_end(&mut bytes)
+            .map_err(|error| IslandReplayError::Io(path_name.clone(), error))?;
+        if read as u64 > MAX_REPLAY_LOG_BYTES {
+            return Err(IslandReplayError::TooLarge {
+                path: path_name,
+                bytes: read as u64,
+                max_bytes: MAX_REPLAY_LOG_BYTES,
+            });
+        }
+
         let log: Self = serde_json::from_slice(&bytes)
-            .map_err(|e| IslandReplayError::NotALog(path.display().to_string(), e.to_string()))?;
+            .map_err(|e| IslandReplayError::NotALog(path_name, e.to_string()))?;
         if log.version != REPLAY_LOG_VERSION {
             return Err(IslandReplayError::Version(log.version));
         }
         Ok(log)
     }
 
-    /// Write a log, whole or not at all.
+    /// Write a log atomically, using a unique temporary file for each writer.
+    ///
+    /// Exclusive file creation matters even with a single simulation writer: a
+    /// stale temp file or concurrent save must never be truncated before rename.
     pub fn save(&self, path: &Path) -> Result<(), IslandReplayError> {
         let text = serde_json::to_vec_pretty(self)
             .map_err(|e| IslandReplayError::NotALog(path.display().to_string(), e.to_string()))?;
-        let temp = path.with_extension(format!("tmp-{}", std::process::id()));
-        let write = (|| -> std::io::Result<()> {
-            std::fs::write(&temp, &text)?;
-            std::fs::rename(&temp, path)
-        })();
-        if let Err(e) = write {
-            std::fs::remove_file(&temp).ok();
-            return Err(IslandReplayError::Io(path.display().to_string(), e));
+        if text.len() as u64 > MAX_REPLAY_LOG_BYTES {
+            return Err(IslandReplayError::TooLarge {
+                path: path.display().to_string(),
+                bytes: text.len() as u64,
+                max_bytes: MAX_REPLAY_LOG_BYTES,
+            });
+        }
+
+        let mut candidate = None;
+        for sequence in 0..128 {
+            let temp = path.with_extension(format!("tmp-{}-{sequence}", std::process::id()));
+            let mut options = OpenOptions::new();
+            options.write(true).create_new(true);
+            // Replay logs contain names, birth timestamps and physical details.
+            // Do not expose those records to other local users by default.
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::OpenOptionsExt;
+                options.mode(0o600);
+            }
+            match options.open(&temp) {
+                Ok(file) => {
+                    candidate = Some((temp, file));
+                    break;
+                }
+                Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
+                Err(error) => return Err(IslandReplayError::Io(path.display().to_string(), error)),
+            }
+        }
+
+        let Some((temp, mut file)) = candidate else {
+            return Err(IslandReplayError::Io(
+                path.display().to_string(),
+                io::Error::new(
+                    io::ErrorKind::AlreadyExists,
+                    "could not allocate a unique temporary replay file",
+                ),
+            ));
+        };
+
+        if let Err(error) = file.write_all(&text).and_then(|()| file.sync_all()) {
+            drop(file);
+            let _ = fs::remove_file(&temp);
+            return Err(IslandReplayError::Io(path.display().to_string(), error));
+        }
+        drop(file);
+
+        if let Err(error) = fs::rename(&temp, path) {
+            let _ = fs::remove_file(&temp);
+            return Err(IslandReplayError::Io(path.display().to_string(), error));
+        }
+
+        // The file's contents are synced before rename. On Unix, sync the
+        // containing directory as well so the new name survives a crash or
+        // power loss; atomic rename alone guarantees visibility, not durability.
+        if let Err(error) = sync_parent_directory(path) {
+            return Err(IslandReplayError::Io(path.display().to_string(), error));
         }
         Ok(())
     }
+}
+
+#[cfg(unix)]
+fn sync_parent_directory(path: &Path) -> io::Result<()> {
+    let parent = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    fs::File::open(parent)?.sync_all()
+}
+
+#[cfg(not(unix))]
+fn sync_parent_directory(_path: &Path) -> io::Result<()> {
+    // Portable directory handles are not exposed by std on every platform.
+    // The staged file itself is still synced before the atomic rename.
+    Ok(())
 }
 
 /// Why a replay did not happen, or did not finish.
@@ -106,8 +258,24 @@ impl IslandReplayLog {
 pub enum IslandReplayError {
     Io(String, std::io::Error),
     NotALog(String, String),
+    /// A replay file exceeded the bounded input size accepted by this build.
+    TooLarge {
+        path: String,
+        bytes: u64,
+        max_bytes: u64,
+    },
     /// A log written by a format this build does not know.
     Version(u32),
+    /// A tick's command sequence is duplicated or skips an expected entry.
+    InvalidSequence {
+        tick: u64,
+        expected: u64,
+        actual: u64,
+    },
+    /// No further same-tick command can be recorded without duplicating a sequence.
+    SequenceExhausted {
+        tick: u64,
+    },
     /// The log belongs to a different scenario. Replaying it here would
     /// reproduce nothing and look like it had.
     WrongScenario {
@@ -130,9 +298,29 @@ impl std::fmt::Display for IslandReplayError {
         match self {
             Self::Io(path, e) => write!(f, "{path}: {e}"),
             Self::NotALog(path, why) => write!(f, "{path} is not a replay log: {why}"),
+            Self::TooLarge {
+                path,
+                bytes,
+                max_bytes,
+            } => write!(
+                f,
+                "{path} is {bytes} bytes; replay logs are limited to {max_bytes} bytes"
+            ),
             Self::Version(v) => write!(
                 f,
                 "that log is format {v}; this build reads {REPLAY_LOG_VERSION}"
+            ),
+            Self::InvalidSequence {
+                tick,
+                expected,
+                actual,
+            } => write!(
+                f,
+                "the command at tick {tick} has sequence {actual}; expected {expected}"
+            ),
+            Self::SequenceExhausted { tick } => write!(
+                f,
+                "the command sequence at tick {tick} is exhausted; refusing to record a duplicate"
             ),
             Self::WrongScenario { log, scenario } => write!(
                 f,
@@ -186,6 +374,27 @@ pub fn replay_island(
         .collect();
     entries.sort_by_key(|e| (e.tick, e.sequence));
 
+    // `record` assigns a zero-based, contiguous sequence to commands at a
+    // tick. A duplicate or missing sequence makes same-tick ordering
+    // ambiguous after a log is serialized and reordered, so refuse the log
+    // before applying any of its commands rather than guessing.
+    let mut current_tick = None;
+    let mut expected_sequence = 0_u64;
+    for entry in &entries {
+        if current_tick != Some(entry.tick) {
+            current_tick = Some(entry.tick);
+            expected_sequence = 0;
+        }
+        if entry.sequence != expected_sequence {
+            return Err(IslandReplayError::InvalidSequence {
+                tick: entry.tick,
+                expected: expected_sequence,
+                actual: entry.sequence,
+            });
+        }
+        expected_sequence += 1;
+    }
+
     let step = life.scenario.cadences.human_seconds;
     for entry in entries {
         while life.tick < entry.tick {
@@ -212,12 +421,20 @@ impl IslandLife {
     /// missing its last entry would replay to a different island and give
     /// no sign of it.
     pub fn apply_command(&mut self, command: IslandCommand) -> Result<Applied, CommandError> {
+        // Reserve the sequence before applying anything. A loaded log may
+        // contain u64::MAX for this tick; rejecting here keeps a failed
+        // recording from leaving an unlogged world mutation behind.
+        let sequence = self
+            .replay_log
+            .next_sequence(self.tick)
+            .ok_or(CommandError::ReplaySequenceExhausted { tick: self.tick })?;
         match &command {
             IslandCommand::CreateHuman(request) => {
                 let made = self
                     .create_human((**request).clone())
                     .map_err(CommandError::Create)?;
-                self.replay_log.record(self.tick, command);
+                self.replay_log
+                    .record_with_sequence(self.tick, sequence, command);
                 Ok(Applied::Created(made))
             }
             IslandCommand::Intervention(action) => {
@@ -225,14 +442,16 @@ impl IslandLife {
                 // the island refuses never happened and must not be in a
                 // log that claims to reproduce the run.
                 let outcome = self.intervene(action).map_err(CommandError::Intervention)?;
-                self.replay_log.record(self.tick, command);
+                self.replay_log
+                    .record_with_sequence(self.tick, sequence, command);
                 Ok(Applied::Intervened(outcome))
             }
             IslandCommand::Control(control) => {
                 // Nothing in the world moves. It is recorded because a
                 // replay should be able to say what the operator did.
                 let _: &ControlCommand = control;
-                self.replay_log.record(self.tick, command);
+                self.replay_log
+                    .record_with_sequence(self.tick, sequence, command);
                 Ok(Applied::Noted)
             }
         }

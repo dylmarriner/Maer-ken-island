@@ -15,7 +15,9 @@ use mk_core::human::BiologicalSex;
 use mk_engine::regional::commands::{ControlCommand, IslandCommand};
 use mk_engine::regional::create_human::{CreateLocation, IslandCreateHuman};
 use mk_engine::regional::life::IslandLife;
-use mk_engine::regional::replay::{replay_island, IslandReplayError, IslandReplayLog};
+use mk_engine::regional::replay::{
+    replay_island, IslandReplayEntry, IslandReplayError, IslandReplayLog, MAX_REPLAY_LOG_BYTES,
+};
 use mk_island::IslandScenario;
 
 const STEP: u64 = 60;
@@ -232,6 +234,89 @@ fn a_log_from_another_island_is_refused() {
     }
 }
 
+/// Recording commands for an earlier tick must continue that tick's sequence
+/// even if another tick was appended in between. Replay sorts by tick, so
+/// duplicate sequence IDs here would make the public recorder emit an invalid log.
+#[test]
+fn record_keeps_sequences_contiguous_when_ticks_are_interleaved() {
+    let mut log = IslandReplayLog::new("scenario".to_string());
+    log.record(1, somebody("Rua", 1))
+        .expect("replay sequence remains available");
+    log.record(2, somebody("Toru", 1))
+        .expect("replay sequence remains available");
+    log.record(1, somebody("Hana", 1))
+        .expect("replay sequence remains available");
+
+    let tick_one_sequences: Vec<u64> = log
+        .entries
+        .iter()
+        .filter(|entry| entry.tick == 1)
+        .map(|entry| entry.sequence)
+        .collect();
+
+    assert_eq!(tick_one_sequences, vec![0, 1]);
+    assert_eq!(log.entries[1].sequence, 0);
+}
+
+/// A loaded or transported log may have entries in a different vector order.
+/// Continue after the highest sequence for the tick, not the last matching vector element.
+#[test]
+fn record_uses_max_sequence_when_existing_entries_are_shuffled() {
+    let mut log = IslandReplayLog::new("scenario".to_string());
+    log.record(1, somebody("Rua", 1))
+        .expect("replay sequence remains available");
+    log.record(1, somebody("Hana", 1))
+        .expect("replay sequence remains available");
+    log.entries.reverse();
+
+    log.record(1, somebody("Toru", 1))
+        .expect("replay sequence remains available");
+
+    let mut sequences: Vec<u64> = log
+        .entries
+        .iter()
+        .filter(|entry| entry.tick == 1)
+        .map(|entry| entry.sequence)
+        .collect();
+    sequences.sort_unstable();
+    assert_eq!(sequences, vec![0, 1, 2]);
+}
+
+/// A loaded log with an exhausted same-tick sequence must not wrap or duplicate it.
+#[test]
+fn record_refuses_sequence_overflow_without_appending_a_duplicate() {
+    let mut log = IslandReplayLog::new("scenario".to_string());
+    log.entries.push(IslandReplayEntry {
+        tick: 1,
+        sequence: u64::MAX,
+        command: somebody("Rua", 1),
+    });
+
+    assert!(matches!(
+        log.record(1, somebody("Toru", 1)),
+        Err(IslandReplayError::SequenceExhausted { tick: 1 })
+    ));
+    assert_eq!(log.entries.len(), 1);
+    assert_eq!(log.entries[0].sequence, u64::MAX);
+}
+
+/// Refuse oversized replay files before allocating or parsing their contents.
+/// A sparse file exercises the size guard without consuming equivalent disk space.
+#[test]
+fn oversized_replay_logs_are_rejected_before_reading() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("oversized.log.json");
+    let file = std::fs::File::create(&path).unwrap();
+    file.set_len(MAX_REPLAY_LOG_BYTES + 1).unwrap();
+    drop(file);
+
+    assert!(matches!(
+        IslandReplayLog::load(&path),
+        Err(IslandReplayError::TooLarge { bytes, max_bytes, .. })
+            if bytes == MAX_REPLAY_LOG_BYTES + 1 && max_bytes == MAX_REPLAY_LOG_BYTES
+    ));
+}
+
 /// A log survives a trip through a file, order and all.
 #[test]
 fn a_log_round_trips_through_a_file() {
@@ -251,7 +336,23 @@ fn a_log_round_trips_through_a_file() {
 
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("run.log.json");
+    // A stale temp file from an earlier process must not be truncated or
+    // mistaken for this save's own staging file.
+    let stale_temp = path.with_extension(format!("tmp-{}", std::process::id()));
+    let occupied_candidate = path.with_extension(format!("tmp-{}-0", std::process::id()));
+    std::fs::write(&stale_temp, b"owned by another writer").unwrap();
+    std::fs::write(&occupied_candidate, b"another save owns this candidate").unwrap();
     live.replay_log().save(&path).unwrap();
+    assert_eq!(
+        std::fs::read(&stale_temp).unwrap(),
+        b"owned by another writer",
+        "saving a replay must not reuse the legacy temp path"
+    );
+    assert_eq!(
+        std::fs::read(&occupied_candidate).unwrap(),
+        b"another save owns this candidate",
+        "exclusive temp creation must skip an occupied candidate"
+    );
     let back = IslandReplayLog::load(&path).expect("the log reads back");
 
     assert_eq!(back.entries.len(), live.replay_log().entries.len());
@@ -297,4 +398,109 @@ fn a_shuffled_log_still_reproduces_the_run() {
         hex(live.state_digest()),
         "a reordered log reproduced a different island"
     );
+}
+
+/// A serialized log must not contain two commands claiming the same order
+/// within one tick. Guessing would make the replay depend on file ordering.
+#[test]
+fn replay_refuses_duplicate_command_sequences_at_same_tick() {
+    let mut log = two_command_log();
+    log.entries[1].sequence = 0;
+
+    match replay_island(canon(), scenario(), &log, 0) {
+        Err(IslandReplayError::InvalidSequence {
+            tick,
+            expected,
+            actual,
+        }) => assert_eq!((tick, expected, actual), (0, 1, 0)),
+        Err(other) => panic!("the wrong refusal for a duplicate sequence: {other}"),
+        Ok(_) => panic!("a log with duplicate command sequences was accepted"),
+    }
+}
+
+/// A sequence gap means at least one command record is missing. The replay
+/// must fail closed instead of presenting the remaining commands as a whole log.
+#[test]
+fn replay_refuses_gaps_in_command_sequences_at_same_tick() {
+    let mut log = two_command_log();
+    log.entries[1].sequence = 2;
+
+    match replay_island(canon(), scenario(), &log, 0) {
+        Err(IslandReplayError::InvalidSequence {
+            tick,
+            expected,
+            actual,
+        }) => assert_eq!((tick, expected, actual), (0, 1, 2)),
+        Err(other) => panic!("the wrong refusal for a sequence gap: {other}"),
+        Ok(_) => panic!("a log with a command sequence gap was accepted"),
+    }
+}
+
+fn two_command_log() -> IslandReplayLog {
+    let mut life = island();
+    let space = life
+        .placed
+        .layout
+        .spaces_outside_house()
+        .next()
+        .expect("a space outside the founders' house exists")
+        .id
+        .0;
+    life.apply_command(somebody("Rua", space)).unwrap();
+    life.apply_command(somebody("Toru", space)).unwrap();
+    life.replay_log().clone()
+}
+
+/// A writer must not create a replay file that its bounded reader would reject.
+#[test]
+fn save_refuses_serialized_replay_over_the_size_limit() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("oversized-save.log.json");
+    let log = IslandReplayLog::new("x".repeat(MAX_REPLAY_LOG_BYTES as usize + 1));
+
+    assert!(matches!(
+        log.save(&path),
+        Err(IslandReplayError::TooLarge { max_bytes, .. }) if max_bytes == MAX_REPLAY_LOG_BYTES
+    ));
+    assert!(
+        !path.exists(),
+        "an oversized replay must not leave a partial file"
+    );
+}
+
+/// A replay path must name the private file itself, not a symlink to another file.
+#[cfg(unix)]
+#[test]
+fn load_refuses_symlinked_replay_paths() {
+    let dir = tempfile::tempdir().unwrap();
+    let target = dir.path().join("actual-run.log.json");
+    let link = dir.path().join("linked-run.log.json");
+    let log = IslandReplayLog::new("scenario".to_string());
+    std::fs::write(&target, serde_json::to_vec(&log).unwrap()).unwrap();
+    std::os::unix::fs::symlink(&target, &link).unwrap();
+
+    assert!(matches!(
+        IslandReplayLog::load(&link),
+        Err(IslandReplayError::NotALog(_, reason)) if reason.contains("regular file")
+    ));
+}
+
+/// Replay logs contain personal details and must not be readable by other local users.
+#[cfg(unix)]
+#[test]
+fn saved_replay_files_are_owner_only() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let log = IslandReplayLog::new("scenario".to_string());
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("private-run.log.json");
+    log.save(&path).unwrap();
+
+    let mode = std::fs::metadata(&path).unwrap().permissions().mode();
+    assert_eq!(
+        mode & 0o077,
+        0,
+        "replay files must not grant group/world access"
+    );
+    assert_ne!(mode & 0o400, 0, "the owner must be able to read the replay");
 }
