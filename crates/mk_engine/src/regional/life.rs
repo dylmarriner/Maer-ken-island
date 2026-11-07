@@ -4471,8 +4471,9 @@ mod tests {
 
     #[test]
     fn haul_planning_reserves_ids_for_a_conserved_ute_recut_before_another_log_arrives() {
-        let scenario =
+        let mut scenario =
             IslandScenario::load(&repo("fixtures/island/default_scenario.json")).unwrap();
+        scenario.estate_patch.tree_cap = 200;
         let canon = Arc::new(CanonLocked::load(&repo("fixtures/island/canon.json")).unwrap());
         let mut life = IslandLife::bootstrap(scenario, canon).expect("the island bootstraps");
         let at = life.vegetation.centre_m();
