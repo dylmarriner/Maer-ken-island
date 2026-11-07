@@ -113,3 +113,13 @@ After the formatter placement correction, workflow [#42413548898](https://github
 - Commit: `d6d0d62cd4a86406a858e8ed30f1736762571abb`.
 
 The previous run's compile failure is a missed call-site, not a replay algorithm failure. A fresh exact-head workflow is required; no Clippy or fast-test pass is claimed for that failed head.
+
+
+## Remaining read-only accessor call-site — 8 November 2026
+
+A repository-wide search for `replay_log().entries` found one further test-only reader in `crates/mk_engine/tests/island_phase4_cost.rs`. It now uses `entries().len()` as well.
+
+Commit:
+- `95ca4245d2323378896ac22c5db7ed57f0ad3fc8` — update the Phase 4 cost test to the immutable accessor.
+
+The CLI, timeline projection, replay tests, intervention tests and Phase 4 cost test now use the read-only API. Fresh exact-head CI remains required.
