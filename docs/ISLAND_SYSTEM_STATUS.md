@@ -400,15 +400,12 @@ This is a numerical utility correction only. No reference-pack value, citation, 
 
 ## Fishery zero-catch remainder follow-up — 7 November 2026
 
-PR #118 is merged as `134082a1c1bbcea837acc58344572476e8b14f74`. Its exact-head workflow [#42331600091](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42331600091) passed all required checks, including fast Rust tests, desktop rendering/input/frame-cost acceptance and week/year reference-pack acceptance; nightly slow tests were skipped by design.
+PR #119 merged to `main` as `9cc2b15808c57bd5f61d305bca6122e79820c6bc`. Exact-head workflow [#42336338097](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42336338097) passed formatting, Clippy, fast Rust tests, desktop build/tests/rendering/input/frame-cost acceptance, installed backend, dashboard, computer service, repository scripts, dependency audit and week/year reference-pack acceptance; nightly slow tests were skipped by design.
 
-PR #119 now closes a separate ledger edge: if positive interval growth is representable by itself but too small to change the existing biomass, a zero-catch step must not silently discard it. The guard now rejects every positive unharvested remainder that rounds away, regardless of catch amount. The regression verifies the positive diagnostic, the zero-catch typed error and stock immutability.
-
-PR #119 merged to `main` as `9cc2b15808c57bd5f61d305bca6122e79820c6bc`; exact-head workflow [#42336338097](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42336338097) passed formatting, Clippy, fast Rust tests, desktop build/tests/rendering/input/frame-cost acceptance, installed backend, dashboard, computer service, repository scripts, dependency audit and week/year reference-pack acceptance; nightly slow tests were skipped by design. Fishery remains standalone pending sourced species-specific stock/effort data and owner-approved workforce integration. No reference packs, snapshot layouts, append-only logs, replay hashes, RNG or IslandLife state changed.
-
+The zero-catch ledger guard rejects positive unharvested interval growth that rounds away when added to current biomass. The regression proves the positive diagnostic, typed failure and stock immutability. No reference packs, snapshot layouts, append-only logs, replay hashes, RNG or IslandLife state changed.
 
 ## Fishery MSY diagnostic representability — 7 November 2026
 
-PR #120 adds typed errors when a mathematically positive maximum sustainable yield or its analytic peak-biomass target rounds to zero in binary64. Genuine zero MSY at zero resilience remains valid, and representable subnormal biomass targets remain accepted. The regression covers smallest, two-unit and three-unit subnormal capacities and the upper depensation branch.
+PR #120 is rebased onto `main` after PR #119 merged. It adds typed errors when a mathematically positive maximum sustainable yield or its analytic peak-biomass target rounds to zero in binary64. Genuine zero MSY at zero resilience remains valid, and representable subnormal biomass targets remain accepted.
 
-PR #120 is being rebased onto `main` after PR #119 merged. Exact-head formatting, Clippy, fast Rust tests, desktop/backend acceptance and week/year reference-pack acceptance are required on the rebased head. Do not merge while any required check is pending. No reference values, species parameters, snapshot layouts, append-only logs, replay hashes, RNG or IslandLife state changed.
+The regression covers smallest, two-unit and three-unit subnormal capacities and the upper depensation branch. Exact-head CI is required on the final reconciled PR head; do not merge while fast Rust tests or any acceptance jobs remain pending. No reference values, species parameters, snapshot layouts, append-only logs, replay hashes, RNG or IslandLife state changed.
