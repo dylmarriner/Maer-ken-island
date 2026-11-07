@@ -37,3 +37,8 @@ A fresh exact-head CI run is required for this commit. Earlier green results on 
 ## Safety and architecture
 
 No species parameters, reference data, snapshot fields, serialization layouts, append-only history, replay hashes, RNG, material-ledger schema, IslandLife state or workforce assignments changed. The calculation is deterministic and single-writer; the regression is read-only.
+
+
+## CI formatting correction
+
+The first exact-head run on the near-capacity change found one extra blank line before the fishery test module's closing brace. The source was corrected in the follow-up rustfmt-only commit; the original failed run is retained as evidence and does not certify the corrected head.
