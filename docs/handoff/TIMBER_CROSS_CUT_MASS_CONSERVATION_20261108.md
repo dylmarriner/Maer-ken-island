@@ -252,3 +252,8 @@ The reservation set is an additive optional field, but an older IslandLife snaps
 This keeps the existing IslandLife snapshot version readable while preserving fail-closed validation at the ledger API. Exact-head Rust, desktop/backend and week/year acceptance are required; no snapshot digest or reference pin is changed by hand.
 
 - The snapshot regression also asserts that an empty reservation set is omitted from serialized `MaterialLedger`, preserving the previous empty-state representation; a legacy active-haul snapshot with the field absent is separately restored through the task-scoped migration path.
+
+
+### Exact-head formatting correction — 8 November 2026
+
+Workflow [#42391475499](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42391475499) on predecessor head `083814b77bdf28bec22d52e49473b8166a66207d` reached the code and failed only the `cargo fmt --all -- --check` job on one line wrap in `restore_pending_cross_cut_ids`. The exact rustfmt output is applied in commit `5fe70a82ccd08348a3acd611760b9c554d702da4`. The same workflow's backend, desktop and week/year jobs were still running at inspection; their results do not verify the new head. Fresh exact-head CI is required.
