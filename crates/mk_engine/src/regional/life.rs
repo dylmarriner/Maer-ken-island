@@ -4595,7 +4595,7 @@ mod tests {
                 litres: ute_vehicle.litres,
                 litres_per_km: life
                     .energy
-                    .litres_per_km(ute_vehicle.item_id, super::energy::Surface::OffRoadTrack)
+                    .litres_per_km(ute_vehicle.item_id, crate::regional::energy::Surface::OffRoadTrack)
                     .expect("the Ute has a fuel-consumption reference"),
             }),
             excavator: None,
