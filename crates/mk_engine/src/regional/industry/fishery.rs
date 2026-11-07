@@ -41,6 +41,10 @@ pub enum FisheryError {
     LandedTotalOverflow,
     LandedTotalUnrepresentable,
     BiomassRemainderUnrepresentable,
+    /// Positive mathematical maximum sustainable yield rounded below binary64 range.
+    UnrepresentableMsy,
+    /// Positive analytic peak-biomass target rounded below binary64 range.
+    UnrepresentableMsyBiomassTarget,
 }
 
 impl std::fmt::Display for FisheryError {
@@ -64,12 +68,89 @@ impl std::fmt::Display for FisheryError {
             Self::BiomassRemainderUnrepresentable => {
                 "remaining biomass growth is not representable at stored precision"
             }
+            Self::UnrepresentableMsy => {
+                "positive maximum sustainable yield is below binary64 representable range"
+            }
+            Self::UnrepresentableMsyBiomassTarget => {
+                "positive maximum sustainable yield biomass target is below binary64 representable range"
+            }
         };
         f.write_str(message)
     }
 }
 
 impl std::error::Error for FisheryError {}
+
+/// Exact comparison for a three-factor positive binary64 product against half the
+/// least subnormal value (2^-1075). This is used only after a fast MSY product
+/// rounded to zero, where the exact result can only round to zero or one
+/// subnormal unit. A tie at exactly half rounds to even zero.
+fn positive_product_exceeds_half_min_subnormal(a: f64, b: f64, c: f64) -> bool {
+    fn parts(value: f64) -> (u64, i32) {
+        let bits = value.to_bits();
+        let exponent = ((bits >> 52) & 0x7ff) as i32;
+        let fraction = bits & ((1_u64 << 52) - 1);
+        if exponent == 0 {
+            (fraction, -1074)
+        } else {
+            (fraction | (1_u64 << 52), exponent - 1075)
+        }
+    }
+
+    let (a_significand, a_exponent) = parts(a);
+    let (b_significand, b_exponent) = parts(b);
+    let (c_significand, c_exponent) = parts(c);
+
+    // Multiply three at-most-53-bit significands exactly into three u64 limbs.
+    let ab = (a_significand as u128) * (b_significand as u128);
+    let low_c = (ab as u64 as u128) * (c_significand as u128);
+    let high_c = ((ab >> 64) as u64 as u128) * (c_significand as u128);
+    let middle = (low_c >> 64) + (high_c & u64::MAX as u128);
+    let limbs = [
+        low_c as u64,
+        middle as u64,
+        ((high_c >> 64) + (middle >> 64)) as u64,
+    ];
+
+    let bit_len = if limbs[2] != 0 {
+        128 + (64 - limbs[2].leading_zeros()) as i32
+    } else if limbs[1] != 0 {
+        64 + (64 - limbs[1].leading_zeros()) as i32
+    } else {
+        (64 - limbs[0].leading_zeros()) as i32
+    };
+
+    // Exact product = significand_product * 2^exponent. Compare it with
+    // 2^-1075 without converting the 159-bit product back to binary64.
+    let shift = -1075 - (a_exponent + b_exponent + c_exponent);
+    if shift < 0 {
+        return true;
+    }
+    if shift >= 192 {
+        return false;
+    }
+
+    let highest_bit = bit_len - 1;
+    if highest_bit != shift {
+        return highest_bit > shift;
+    }
+
+    // The highest bit equals the threshold. It is strictly greater only if
+    // any lower product bit is set; exact equality is the ties-to-even zero.
+    if shift >= 128 {
+        let bit = (shift - 128) as u32;
+        let lower_mask = if bit == 0 { 0 } else { (1_u64 << bit) - 1 };
+        limbs[0] != 0 || limbs[1] != 0 || (limbs[2] & lower_mask) != 0
+    } else if shift >= 64 {
+        let bit = (shift - 64) as u32;
+        let lower_mask = if bit == 0 { 0 } else { (1_u64 << bit) - 1 };
+        limbs[0] != 0 || (limbs[1] & lower_mask) != 0
+    } else {
+        let bit = shift as u32;
+        let lower_mask = if bit == 0 { 0 } else { (1_u64 << bit) - 1 };
+        (limbs[0] & lower_mask) != 0
+    }
+}
 
 /// Midpoint of a published growth-rate prior after validating both source bounds.
 /// Sum before halving when bounded; otherwise halve each endpoint to avoid overflow
@@ -363,12 +444,12 @@ impl FishStock {
         let (_, peak_surplus_fraction) = msy_peak_fractions(model.depensation_below);
         let rate = model.r(self.resilience);
         let scaled_capacity = self.k_t * peak_surplus_fraction;
-        let msy = if scaled_capacity < f64::MIN_POSITIVE && rate > 0.0 {
+        let mut msy = if scaled_capacity < f64::MIN_POSITIVE && rate > 0.0 {
             // A quarter is an exact binary scale. Apply it to the rate before
             // the subnormal capacity so the final multiplication performs the
             // only rounding; scaling K first can discard a representable result.
-            // Other peak fractions retain rate * K first: neither multiplication
-            // order is universally exact for their non-power-of-two significands.
+            // Other peak fractions retain rate * K first because neither order
+            // is universally exact for their non-power-of-two significands.
             if peak_surplus_fraction == 0.25 {
                 (rate * peak_surplus_fraction) * self.k_t
             } else {
@@ -377,6 +458,18 @@ impl FishStock {
         } else {
             rate * scaled_capacity
         };
+        if msy == 0.0 && rate > 0.0 {
+            // Every allowed peak surplus fraction is <= 1/4. Because the fast
+            // product rounded to zero, the exact result can only round to zero
+            // or one subnormal unit. Compare the three binary64 significands
+            // exactly with half a subnormal; multiplying in either order can
+            // itself double-round a value just above that boundary back to zero.
+            if positive_product_exceeds_half_min_subnormal(rate, peak_surplus_fraction, self.k_t) {
+                msy = f64::from_bits(1);
+            } else {
+                return Err(FisheryError::UnrepresentableMsy);
+            }
+        }
         if !msy.is_finite() || msy < 0.0 {
             return Err(FisheryError::NonFiniteGrowth);
         }
@@ -395,6 +488,9 @@ impl FishStock {
 
         let (peak_biomass_fraction, _) = msy_peak_fractions(model.depensation_below);
         let biomass = self.k_t * peak_biomass_fraction;
+        if biomass == 0.0 && peak_biomass_fraction > 0.0 {
+            return Err(FisheryError::UnrepresentableMsyBiomassTarget);
+        }
         if !biomass.is_finite() || biomass < 0.0 {
             return Err(FisheryError::NonFiniteGrowth);
         }
@@ -881,6 +977,86 @@ mod tests {
         assert_eq!(landed, surplus);
         assert_eq!(stock.biomass_t, 1.0e-100);
         assert_eq!(stock.landed_t, surplus);
+    }
+
+    #[test]
+    fn positive_but_unrepresentable_msy_diagnostics_fail_closed() {
+        let model = FisheryModel::load_default().expect("the pack loads");
+        let smallest_positive = f64::from_bits(1);
+        let stock = FishStock::unexploited(Resilience::Medium, smallest_positive)
+            .expect("positive subnormal carrying capacity");
+
+        assert_eq!(stock.msy_t(&model), Err(FisheryError::UnrepresentableMsy));
+        assert_eq!(
+            stock.msy_biomass_t(&model),
+            Err(FisheryError::UnrepresentableMsyBiomassTarget)
+        );
+
+        // A zero growth rate is a genuine zero MSY, not an underflow error.
+        let mut no_growth = model.clone();
+        no_growth.r_per_year[Resilience::Medium as usize] = 0.0;
+        assert_eq!(stock.msy_t(&no_growth), Ok(0.0));
+
+        // The MSY can be unrepresentable even when its biomass target is
+        // exactly one subnormal unit and therefore remains representable.
+        let two_units = FishStock::unexploited(Resilience::Medium, f64::from_bits(2))
+            .expect("positive subnormal carrying capacity");
+        assert_eq!(
+            two_units.msy_t(&model),
+            Err(FisheryError::UnrepresentableMsy)
+        );
+        assert_eq!(two_units.msy_biomass_t(&model).unwrap().to_bits(), 1);
+
+        // A positive subnormal target that rounds to the nearest non-zero
+        // binary64 value remains usable; only a target rounded to zero fails.
+        let three_units = FishStock::unexploited(Resilience::Medium, f64::from_bits(3))
+            .expect("positive subnormal carrying capacity");
+        assert_eq!(three_units.msy_biomass_t(&model).unwrap().to_bits(), 2);
+
+        // The upper depensation branch has a different positive peak fraction;
+        // with one subnormal capacity unit, 2/3 rounds to one non-zero unit.
+        let mut upper_branch = model.clone();
+        upper_branch.depensation_below = 1.0;
+        let upper_peak = FishStock::unexploited(Resilience::Medium, smallest_positive)
+            .expect("positive subnormal carrying capacity");
+        assert_eq!(
+            upper_peak.msy_biomass_t(&upper_branch).unwrap().to_bits(),
+            1
+        );
+    }
+    #[test]
+    fn msy_recovers_exactly_representable_subnormal_results_after_double_rounding() {
+        let smallest = f64::from_bits(1);
+
+        for (rate, depensation_below, capacity) in [
+            (1.25, 0.51, f64::from_bits(2)),
+            (2.5, 0.6, smallest),
+            (2.0833333333333335, 0.6, smallest),
+        ] {
+            let model = FisheryModel {
+                r_per_year: [0.0, rate, 0.0, 0.0],
+                depensation_below,
+            };
+            let stock = FishStock::unexploited(Resilience::Medium, capacity)
+                .expect("positive subnormal carrying capacity");
+            assert_eq!(
+                stock.msy_t(&model).unwrap().to_bits(),
+                1,
+                "r={rate}, d={depensation_below}, K bits={}",
+                capacity.to_bits()
+            );
+        }
+    }
+
+    #[test]
+    fn msy_exact_half_subnormal_ties_to_even_zero() {
+        let model = FisheryModel {
+            r_per_year: [0.0, 2.0, 0.0, 0.0],
+            depensation_below: 0.25,
+        };
+        let stock = FishStock::unexploited(Resilience::Medium, f64::from_bits(1))
+            .expect("smallest positive subnormal carrying capacity");
+        assert_eq!(stock.msy_t(&model), Err(FisheryError::UnrepresentableMsy));
     }
 
     #[test]
