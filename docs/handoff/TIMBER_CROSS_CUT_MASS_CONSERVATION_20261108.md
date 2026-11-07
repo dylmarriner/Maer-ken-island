@@ -117,3 +117,20 @@ Fresh exact-head workflow
 [#42372526154](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42372526154)
 is in progress. The previous run's only reported source-level blocker was
 `clippy::unnecessary_map_or`; no test result is inferred from that correction.
+
+
+## Reserve the exact final haul-piece id range — 8 November 2026
+
+PR #124 review found that `plan_haul` reserved ids from the average mass/length estimate before `haul_plans_over` applied its conserved-remainder re-cut. When a 13-piece estimate required 14 actual pieces, the next felled log could receive the id of the 14th planned piece and be overwritten when the CrossCut task materialised that piece.
+
+- Added `MaterialLedger::next_log_id()` as a read-only single-writer preview of the next unreserved id.
+- Build every candidate haul plan from that preview, inspect the actual `CrossCut.pieces` counts, then reserve the maximum candidate range before returning the selected plan.
+- `reserve_log_ids` now uses checked addition and fails fast rather than wrapping the id space.
+- Added an integration regression using the 13-to-14-piece Ute bed-length remainder. It inserts a second felled log before CrossCut executes, then verifies the second log and all fourteen piece ids survive without collision.
+
+Commits:
+- Materials id preview and checked reservation: `ff5d61840396684b44f1517703c9692077e18051`
+- Planner correction and collision regression: `bee64c6f08f27595a86b6de99110cb47a05ee65a`
+- Rustfmt correction: `8138ed5ba1c582a2d46bda6fe9a3ed70e5b2fb6e`
+
+The first exact-head workflow [#42379017290](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42379017290) reached checkout and reported only two rustfmt differences in the new test; Clippy and fast tests were skipped behind that format gate. The formatter output was applied in `8138ed5`. A fresh exact-head workflow is required; no Rust test or Clippy pass is claimed for the corrected head yet.
