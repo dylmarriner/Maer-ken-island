@@ -4521,7 +4521,7 @@ mod tests {
     }
 
     #[test]
-    fn haul_planning_reserves_ids_for_a_conserved_ute_recut_before_another_log_arrives() {
+    fn accepting_a_conserved_ute_recut_reserves_ids_before_another_log_arrives() {
         let mut scenario =
             IslandScenario::load(&repo("fixtures/island/default_scenario.json")).unwrap();
         scenario.estate_patch.tree_cap = 200;
@@ -4535,24 +4535,12 @@ mod tests {
             "the default estate has the ute used by the length-constrained plan"
         );
 
-        // Keep the excavator occupied so this regression exercises the Ute
-        // plan whose conserved final remainder requires fourteen pieces.
-        life.hauling.insert(
-            "test-busy-excavator".to_string(),
-            timber::HaulJob {
-                log_id: u64::MAX,
-                method: timber::HaulMethod::Excavator,
-                tasks: Default::default(),
-                worked_s: 0.0,
-            },
-        );
-
         // Thirteen nominal shares fit the bed by the average calculation, but
         // the conserved final remainder is materially longer and forces the
         // Ute plan to recut into fourteen pieces.
         let minimum_pieces = 13u32;
-        // Keep the log heavy enough that a Ute is faster than carrying fourteen
-        // sub-kilogram pieces by hand; length, not mass, must force the 14th cut.
+        // The mass requires thirteen pieces; the conserved final length
+        // requires a fourteenth for the Ute bed.
         let sustainable = life.labour.sustainable_load_kg(&body).unwrap();
         let length_m = f64::from_bits((bed * f64::from(minimum_pieces)).to_bits() - 5);
         let source_log = timber::Log {
@@ -4594,11 +4582,61 @@ mod tests {
         );
         let first_piece_id = life.materials.next_log_id();
 
-        let haul = life
-            .plan_haul(at, &body)
+        // Build the Ute candidate directly. The default estate geometry can
+        // make carrying faster than driving, and that choice is unrelated to
+        // whether the Ute candidate reserves the exact conserved piece range.
+        let ute_vehicle = life
+            .energy
+            .vehicle_named(HAUL_UTE)
+            .expect("the default estate has the haul ute");
+        let fleet = timber::Fleet {
+            ute: Some(timber::RoadVehicle {
+                item_id: ute_vehicle.item_id,
+                litres: ute_vehicle.litres,
+                litres_per_km: life
+                    .energy
+                    .litres_per_km(
+                        ute_vehicle.item_id,
+                        super::energy::Surface::OffRoadTrack,
+                    )
+                    .expect("the Ute has a fuel-consumption reference"),
+            }),
+            excavator: None,
+        };
+        let site = life.haul_site().expect("the estate has a garage and store");
+        let log = life
+            .materials
+            .logs()
+            .find(|log| log.id == source_id)
+            .expect("the source log is in the ledger")
+            .clone();
+        let plans = {
+            let climb = |from, to| life.climb_m(from, to);
+            timber::haul_plans_over(
+                &log,
+                at,
+                &body,
+                &life.labour,
+                &site,
+                &fleet,
+                first_piece_id,
+                &climb,
+            )
             .unwrap()
-            .expect("the ground log has a haul plan");
-        assert_eq!(haul.method, timber::HaulMethod::Ute);
+        };
+        let haul = plans
+            .into_iter()
+            .find(|plan| plan.method == timber::HaulMethod::Ute)
+            .expect("the length-constrained Ute candidate exists");
+        let planned_pieces = haul
+            .tasks
+            .iter()
+            .find_map(|task| match &task.action {
+                timber::HaulAction::CrossCut { pieces, .. } => Some(*pieces),
+                _ => None,
+            })
+            .expect("the Ute candidate starts by cross-cutting");
+        assert_eq!(planned_pieces, minimum_pieces + 1);
         assert_eq!(
             life.materials.next_log_id(),
             first_piece_id,
@@ -4607,8 +4645,8 @@ mod tests {
         life.reserve_haul_plan(&haul);
         assert_eq!(
             life.materials.next_log_id(),
-            first_piece_id + u64::from(minimum_pieces + 1),
-            "accepting the selected Ute plan reserves its actual cut range"
+            first_piece_id + u64::from(planned_pieces),
+            "accepting the Ute plan reserves its actual cut range"
         );
         life.hauling.insert("Gem-D".to_string(), haul);
 
