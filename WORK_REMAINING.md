@@ -713,3 +713,12 @@ Code commit: `1d7d9789`; checklist reconciliation: `6c786636`; canonical status 
 The next fishery material-ledger gap is a positive unharvested growth increment that rounds to the wrong non-zero biomass delta. The existing #119 guard catches increments that disappear entirely, but at large stored biomass a value such as `2^53 + 3` rounds to `2^53 + 4`; a five-tonne increment can round down to four tonnes. The new `BiomassIncrementUnrepresentable` guard compares the stored biomass delta with the requested unharvested increment using the same 1e-12 relative tolerance already used for cumulative landed mass. Genuine zero growth, full harvest, and ordinary floating-point accumulation remain valid.
 
 Regression `biomass_increment_rounded_up_or_down_is_rejected_without_mutation` pins both upward and downward cases and asserts that failed steps leave the entire stock unchanged. PR #121 is stacked on the review-corrected PR #120 branch so the MSY diagnostic work remains an explicit prerequisite; merge #120 first, then rebase and rerun #121 on current main. Exact-head Rust, Clippy, desktop/backend and reference-pack checks are required before merge. Fishery remains standalone pending sourced species-specific stock/effort data and owner-approved workforce integration.
+
+
+## Replay sequence acceptance follow-up — 7 November 2026
+
+- [x] Preserve sparse imported sequence identifiers in replay output.
+- [x] Reject backwards per-tick identifiers before command mutation.
+- [x] Regression for shuffled sequence identifiers 12 and 7.
+- [ ] Finish exact-head PR #123 CI after the latest code/test commits.
+- [ ] Obtain final review and merge PR #123 only after all required checks are green.
