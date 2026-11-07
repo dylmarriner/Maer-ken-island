@@ -591,7 +591,18 @@ impl FishStock {
         // (biomass + grown) - catch can lose low bits to cancellation and make a
         // fully harvested stock appear to shrink even though catch == growth.
         let remaining_growth = grown - catch;
-        let biomass_t = (self.biomass_t + remaining_growth).min(self.k_t);
+        let headroom = self.k_t - self.biomass_t;
+        let biomass_t = if remaining_growth == 0.0 {
+            self.biomass_t
+        } else if grown == headroom {
+            // When growth saturates headroom, derive the post-harvest stock
+            // from K - catch. B + (headroom - catch) can overflow at the top
+            // of binary64 range even though the capped, post-catch stock is
+            // finite; capping that infinity to K would silently lose the catch.
+            self.k_t - catch
+        } else {
+            (self.biomass_t + remaining_growth).min(self.k_t)
+        };
         let landed_t = self.landed_t + catch;
         if !biomass_t.is_finite() {
             return Err(FisheryError::NonFiniteGrowth);
@@ -1778,6 +1789,36 @@ mod tests {
             stock, before,
             "a zero-catch step must not silently discard unrepresentable stock growth"
         );
+    }
+
+    #[test]
+    fn fish_preserves_a_partial_catch_when_the_uncapped_biomass_sum_overflows() {
+        let carrying_capacity = f64::MAX;
+        let ulp_at_max = 2.0_f64.powi(971);
+        let biomass = 1.5 * ulp_at_max;
+        let headroom = carrying_capacity - biomass;
+        let wanted_catch = 0.5 * ulp_at_max;
+
+        let p = biomass / carrying_capacity;
+        let biomass_factor = (1.0 - p) * (p / 0.25);
+        let biomass_product = biomass * biomass_factor;
+        let rate = headroom / biomass_product;
+        let model = FisheryModel {
+            r_per_year: [0.0, rate, 0.0, 0.0],
+            depensation_below: 0.25,
+        };
+        let mut stock = FishStock::unexploited(Resilience::Medium, carrying_capacity)
+            .expect("finite positive carrying capacity");
+        stock.biomass_t = biomass;
+
+        let remaining_growth = headroom - wanted_catch;
+        assert!((biomass + remaining_growth).is_infinite());
+        assert_eq!(
+            stock.fish(&model, wanted_catch, 2.0 * YEAR_S),
+            Ok(wanted_catch)
+        );
+        assert_eq!(stock.biomass_t, carrying_capacity - wanted_catch);
+        assert_eq!(stock.landed_t, wanted_catch);
     }
 
     #[test]
