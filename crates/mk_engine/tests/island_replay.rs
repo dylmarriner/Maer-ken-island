@@ -483,7 +483,8 @@ fn saving_uses_a_fresh_temporary_path_without_clobbering_existing_files() {
     log.record(0, IslandCommand::Control(ControlCommand::Pause))
         .expect("sequence available");
 
-    log.save(&path).expect("save should choose the next unused temporary path");
+    log.save(&path)
+        .expect("save should choose the next unused temporary path");
 
     assert_eq!(
         std::fs::read(&reserved_temp).unwrap(),

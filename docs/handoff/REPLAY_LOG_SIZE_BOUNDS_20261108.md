@@ -48,3 +48,8 @@ The bounded save path previously used `File::create` on a predictable PID-only s
 - Regression `saving_uses_a_fresh_temporary_path_without_clobbering_existing_files` pre-creates the first candidate with sentinel bytes, saves a replay, verifies the sentinel remains byte-for-byte unchanged, and reloads the saved log.
 
 Verification: no local Cargo result is claimed. The exact-head CI workflow must rerun formatting, Clippy, fast tests, desktop acceptance, installed backend and reference-pack checks after this code/test change. No live island state was loaded or modified.
+
+
+### Exact-head formatting correction — 8 November 2026
+
+Workflow [#42374436339](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42374436339) checked out the new code and found only two rustfmt layout differences in the temporary-file helper and its regression. Commit `8695718b` was not Clippy- or test-verified because the format gate stopped the job. The formatter's exact two-line changes are applied in the follow-up commit; a fresh exact-head run is required for all source and acceptance checks.

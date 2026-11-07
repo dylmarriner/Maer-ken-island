@@ -40,11 +40,7 @@ fn create_replay_temp(path: &Path) -> std::io::Result<(PathBuf, File)> {
 
     for sequence in 0..MAX_ATTEMPTS {
         let temp = path.with_extension(format!("tmp-{process_id}-{sequence}"));
-        match OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&temp)
-        {
+        match OpenOptions::new().write(true).create_new(true).open(&temp) {
             Ok(file) => return Ok((temp, file)),
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
             Err(error) => return Err(error),
