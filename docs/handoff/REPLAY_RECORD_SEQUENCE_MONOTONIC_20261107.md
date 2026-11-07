@@ -53,3 +53,8 @@ Regression coverage:
 ## Verification
 
 The prior exact-head workflow [#42358501995](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42358501995) failed only at `cargo fmt --all -- --check`; Clippy and fast tests were skipped. The formatter output was applied before this follow-up. The new exact-head workflow must pass formatting, Clippy, fast Rust tests, desktop, installed backend, dashboard, computer service, dependency audit and week/year reference-pack acceptance before merge. No local Cargo result is claimed.
+
+
+## Exact-head formatting correction
+
+Workflow [#42366006668](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42366006668) on the new refused-command regression reached `cargo fmt --all -- --check` and found only the multiline layout for the final sequence assertion in `island_replay.rs`. Commit `b12718f419c0bc9c483f52242141712076265047` applies the exact formatter output. The format failure is a real source-level CI failure; a fresh exact-head run must pass formatting, Clippy, fast tests and all remaining acceptance jobs before merge.
