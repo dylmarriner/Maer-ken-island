@@ -67,6 +67,11 @@ pub struct Log {
     pub place: LogPlace,
 }
 
+/// Maximum pieces materialised by one cross-cut operation. This generous
+/// bound prevents malformed persisted tasks or direct API callers from
+/// turning a small snapshot into an unbounded allocation.
+pub const MAX_CROSS_CUT_PIECES: u32 = 10_000;
+
 impl Log {
     /// Mass as it is (kg): wood and water.
     pub fn green_kg(&self) -> f64 {
@@ -98,6 +103,10 @@ impl Log {
     /// fits in `u64`; the material ledger enforces the reservation itself.
     pub fn cross_cut(&self, n: u32, first_id: u64) -> Vec<Log> {
         let n = n.max(1);
+        assert!(
+            n <= MAX_CROSS_CUT_PIECES,
+            "cross-cut piece count exceeds safety bound"
+        );
         assert!(first_id > 0, "log ids are one-based");
         let _end_exclusive = first_id
             .checked_add(u64::from(n))
@@ -414,6 +423,12 @@ pub fn haul_plans_over(
         let tolerance = |limit: f64| limit.abs().max(1.0) * f64::EPSILON * 4.0;
         let mut pieces = minimum_pieces.max(1);
         loop {
+            if pieces > MAX_CROSS_CUT_PIECES {
+                return Err(LabourError::CrossCutLimitExceeded {
+                    requested_pieces: pieces,
+                    maximum_pieces: MAX_CROSS_CUT_PIECES,
+                });
+            }
             let split = log.cross_cut(pieces, first_piece_id);
             let largest_mass = split.iter().map(Log::green_kg).fold(0.0, f64::max);
             let largest_length = split.iter().map(|piece| piece.length_m).fold(0.0, f64::max);
