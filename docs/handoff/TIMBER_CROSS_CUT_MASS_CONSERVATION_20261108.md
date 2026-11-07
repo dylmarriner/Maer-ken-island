@@ -491,3 +491,12 @@ Commit `65bf36c3dbf29e91c595371208e98db886e06b16` uses the compiler-suggested ca
 ## Canonical Surface path formatting correction — 8 November 2026
 
 The next workflow stopped at rustfmt again because the longer compiler-correct `crate::regional::energy::Surface` path must be split across lines. Commit `1654ea03723567c02a7945f1d9ca4014ff5463eb` applies the exact requested layout. The corrected module path remains unchanged. Another exact-head run is required.
+
+
+## Invalid physical log state guard — 8 November 2026
+
+Cross-cutting now rejects non-finite geometry, non-positive length/diameter, negative or non-finite dry mass/carbon/water, and an overflowing green-mass sum before piece arithmetic. The material ledger checks the same invariant at felled-log ingress before allocating an ID or writing carbon/water fluxes; the cross-cut boundary also refuses an invalid persisted source without removing it.
+
+Regression coverage proves direct cross-cut rejects a non-finite heading and that invalid ingress leaves the allocator, log set and conservation books unchanged. No snapshot fields, replay serialization, simulation digest or single-writer ordering changed.
+
+Code/test commits: ae31d80873e81585433fd049ae2d04e7e0b1dc9b, ad08479ef7c5a6f05a196bb85e233ec5c4fb7e19, 951ce6b7d099f1ae433a25a0f6d5f72c0de4344d. Exact-head Rust format, Clippy, fast tests, desktop/backend and week/year acceptance are required; no local Cargo result is claimed because custom OpenCommander returned HTTP 429.
