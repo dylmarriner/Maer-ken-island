@@ -4613,6 +4613,10 @@ mod tests {
             serde_json::from_value(legacy_value).expect("legacy snapshot deserializes");
         let mut restored = IslandLife::restore(life.canon.clone(), legacy_snapshot)
             .expect("legacy snapshot restores");
+        assert!(
+            !restored.materials.restore_pending_cross_cut_ids(source_id, 0, first_piece_id),
+            "a malformed zero-piece persisted task cannot reconstruct a reservation"
+        );
         let cross_cut_task = restored
             .hauling
             .values()
