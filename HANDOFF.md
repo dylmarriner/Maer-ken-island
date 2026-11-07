@@ -8,6 +8,8 @@ how to build and check it, and where everything else is written down.
 
 ## Latest engineering handoff — 7 November 2026
 
+- [Replay command-sequence allocation](docs/handoff/REPLAY_RECORD_SEQUENCE_MONOTONIC_20261107.md) — PR pending. `IslandReplayLog::record` now allocates after the highest sequence for a tick even when earlier entries are not contiguous at the end of the vector; regression covers tick 5, tick 6, then another tick-5 command. Exact-head CI pending.
+
 - [Fishery biomass remainder precision](docs/handoff/FISHERY_BIOMASS_REMAINDER_PRECISION_20261107.md) — PR #111 merged to `main` as `b41bb5cf24bddca5df2bc556612c5edfc8b91bde`. Exact-head workflow [#42292739398](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42292739398) passed formatting, Clippy, fast Rust tests, desktop, installed backend, dashboard, computer service, repository scripts, dependency audit and week/year reference-pack acceptance; nightly slow tests were skipped by design.
 
 - [Fishery landed-increment exactness](docs/handoff/FISHERY_LANDED_INCREMENT_EXACTNESS_20261107.md) — rebased follow-up PR #114. Cumulative landed mass rejects zero or materially distorted recorded deltas, with regressions for both rounded-up (3→4) and rounded-down (5→4) increments at 2^53, while allowing ordinary repeated binary64 rounding; snapshot layout is unchanged. Source/test commits `186766a19108338f0bd75a28dd00ef2bd1cc8b76` and `b6d6e11ccbbae169008c451e955258bc60d835f5`; fresh exact-head CI pending.
