@@ -34,3 +34,8 @@ The new test commit requires a fresh exact-head workflow. Do not attribute prede
 2. Resolve the sequence-exhaustion and replay-index review threads after exact-head CI passes.
 3. Keep PR #123 draft until shared-file overlap with timber PR #124 is reconciled.
 4. Preserve deterministic ordering, append-only history and replay-hash equality.
+
+
+## Exact-head formatting correction — 8 November 2026
+
+Workflow [#42417602683](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42417602683) checked the new regression and stopped at rustfmt only. The formatter requested a multi-line `assert_eq!` layout; no Rust compile or assertion failure was reached. Commit `373f92af5ff79bed5d7b31ec1fe97409b8f12e15` applies that exact layout. A fresh exact-head workflow is required; do not count the prior run as passing.
