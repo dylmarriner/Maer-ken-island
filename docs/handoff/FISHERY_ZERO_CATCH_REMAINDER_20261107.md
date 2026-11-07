@@ -36,3 +36,10 @@ The test uses a 1e308 carrying capacity, 1e-100 biomass, a finite 1e308 annual g
 ## Invariants
 
 No reference values, species parameters, snapshot fields/layout, append-only logs, replay hashes, RNG, material ledger schema, IslandLife state or workforce assignments changed. Fishery remains standalone pending sourced species-specific stock/effort data and owner-approved workforce integration.
+
+## Final repository reconciliation
+
+- Checklist update: `fe12bb42410988cf9ac71742bdaa66e7661c5cc5` (`WORK_REMAINING.md`).
+- Canonical status update: `fbce3d9c379b473558e9c41ea2f6e6d6c341c2e1` (`docs/ISLAND_SYSTEM_STATUS.md`).
+- Parent PR #118 merged as `134082a1c1bbcea837acc58344572476e8b14f74`; exact-head workflow #42331600091 passed all required checks.
+- Current PR #119 branch requires a fresh exact-head workflow after the final documentation commit.
