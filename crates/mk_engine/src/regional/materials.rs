@@ -655,6 +655,10 @@ impl MaterialLedger {
         cell_area_m2: f64,
         ledger: &mut Ledger,
     ) -> u64 {
+        assert!(
+            log.has_valid_physical_state(),
+            "cannot receive a felled log with invalid physical state"
+        );
         log.id = self.allocate_log_id();
         flow(
             ledger,
@@ -841,6 +845,9 @@ impl MaterialLedger {
         let Some(log) = self.logs.get(&id).cloned() else {
             return false;
         };
+        if !log.has_valid_physical_state() {
+            return false;
+        }
         if pieces == 0 || pieces > MAX_CROSS_CUT_PIECES {
             return false;
         }
