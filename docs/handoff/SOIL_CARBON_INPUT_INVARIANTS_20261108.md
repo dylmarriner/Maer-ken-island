@@ -83,3 +83,15 @@ Commit:
 - `ab6aac5ea328e53e32a034ef758610194e3217a4` — correct the late-cell derived-overflow test fixture.
 
 The prior workflow proves the week and year reference packs passed on the previous code head, but it does not verify this corrected test head. Fresh exact-head formatting, Clippy, fast tests, desktop/backend and reference-pack checks are required. No local Cargo result is claimed because custom OpenCommander is returning HTTP 429.
+
+
+## Canonical handoff reconciliation note — 8 November 2026
+
+The root `HANDOFF.md` on `main` is stale: it still presents PRs #120 and #121 as current open work, but GitHub confirms both are merged (#120 merge commit `66bf099f36c567ab344fcc9b268a9a33a656011d`; #121 merge commit/current main `522aba3d860435c92a4938cf5ffba2b427941cd7`).
+
+Current active engineering paths are:
+- PR #123 — replay sequence/index correctness.
+- PR #124 — timber cross-cut conservation and reservation.
+- PR #125 — RothC soil input atomicity.
+
+These branches all touch some combination of `HANDOFF.md`, `WORK_REMAINING.md` and `docs/ISLAND_SYSTEM_STATUS.md`. Do not independently overwrite those shared files from competing branches. Keep each dedicated `docs/handoff/` record current, then reconcile the shared root handoff/status documents once the code branches are integrated.
