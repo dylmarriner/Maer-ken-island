@@ -1889,7 +1889,6 @@ impl IslandLife {
         let plans =
             timber::haul_plans_over(&log, at, body, &self.labour, &site, &fleet, first, &climb)
                 .map_err(IslandLifeError::Labour)?;
-        let selected = timber::quickest(plans);
         let Some(selected) = timber::quickest(plans) else {
             return Ok(None);
         };
