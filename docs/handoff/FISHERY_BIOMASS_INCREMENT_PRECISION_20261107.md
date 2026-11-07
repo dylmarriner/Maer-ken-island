@@ -55,3 +55,16 @@ Fishery remains standalone until sourced species-specific stock/effort inputs an
 ## CI correction
 
 The first PR #121 exact-head run found one remaining test assertion still named `LANDED_TOTAL_RELATIVE_TOLERANCE` after the private constant was generalised. The compile failure was at `fishery.rs:1901`. Commit `9ea6a478` updates that last reference to `MATERIAL_INCREMENT_RELATIVE_TOLERANCE`. The failed run is recorded as a real source-level failure, not a runner issue; the corrected head requires a fresh full exact-head workflow.
+
+
+## Carrying-capacity cap before intermediate overflow check
+
+A further exact-head numerical audit found that `fish()` rejected `biomass + grown` when that intermediate rounded to infinity, before applying the already-computed finite carrying-capacity cap. At the top of binary64 range, a finite stock can have `B + (K - B) == infinity` because the subtraction rounds upward at the overflow midpoint. The physically correct capped result is still exactly finite `K`.
+
+The redundant pre-cap finite check is removed. The final stored biomass remains `min(K, B + remaining_growth)` and is checked before mutation; the finite carrying-capacity cap is applied before deciding whether the stored state is valid.
+
+Regression `fish_caps_an_overflowing_intermediate_at_finite_carrying_capacity` uses `K = f64::MAX`, a biomass of 1.5 ULP at that magnitude, and a finite sourced-by-construction model rate. It proves the uncapped intermediate is infinite, the annual surplus reaches the finite headroom, and a zero-catch step succeeds by capping the stock exactly at K without changing landed mass.
+
+Commit: `e86b9dcc34c7ab52b20abe453d0493b765381956`.
+
+Exact-head CI is required on the new head. No local Cargo test result is claimed while custom OpenCommander returns HTTP 429.
