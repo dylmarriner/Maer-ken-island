@@ -166,6 +166,13 @@ pub fn replay_island(
     log: &IslandReplayLog,
     until_tick: u64,
 ) -> Result<IslandLife, IslandReplayError> {
+    // File loading checks the format version, but public in-memory logs can be
+    // constructed directly. Apply the same fail-fast contract before the
+    // scenario is bootstrapped or any entry is interpreted.
+    if log.version != REPLAY_LOG_VERSION {
+        return Err(IslandReplayError::Version(log.version));
+    }
+
     let mut life = IslandLife::bootstrap(scenario, canon).map_err(IslandReplayError::Island)?;
 
     let here = life.scenario_digest_hex();
