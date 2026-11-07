@@ -692,3 +692,17 @@ invertebrate densities, fire danger indices (see each report's "unsourced" secti
 ### Fishery representable-surplus and interval-underflow follow-up (PR #118)
 
 PR #118 now targets `main` after parent PR #117 merged. The non-depensated Schaefer path re-evaluates a subnormal `r * (1 - B/K)` intermediate in log space when large biomass makes the final surplus representable. Positive mathematical annual surplus below the smallest binary64 subnormal returns `FisheryError::UnrepresentableGrowth`. A further guard now rejects a positive annual surplus over a positive minimum-subnormal time step when the interval increment rounds to zero despite positive stock headroom; both the read-only sustainable-catch diagnostic and `fish()` are covered, and stock remains unchanged on failure. Commits: `daff952a` (annual surplus), `e9856040` (interval underflow), `80912f0f` (rustfmt correction), `4282f43f` (handoff), `77ae69db` (status reconciliation), `cdb7b2b6` (handoff reconciliation), `c9445c73` (WORK_REMAINING reconciliation). Exact-head CI is required on the latest PR head. See `docs/handoff/FISHERY_INTERVAL_UNDERFLOW_20261107.md`. No ecological reference values or persisted state formats changed.
+
+
+## Fishery zero-catch remainder representability (PR #119)
+
+PR #118 is merged to `main` as `134082a1c1bbcea837acc58344572476e8b14f74`. Its exact-head workflow [#42331600091](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42331600091) completed successfully: formatting, Clippy, fast Rust tests, desktop build/tests/render/input/frame-cost acceptance, installed backend, dashboard, computer service, repository scripts, dependency audit and week/year reference-pack acceptance all passed; nightly slow tests were skipped by design.
+
+A further fishery ledger edge is now under PR #119. A positive interval-growth amount can be representable by itself but too small to change the current biomass when added. The old guard rejected this only when a catch was taken; a zero-catch step could silently discard the entire unharvested increment. The production guard now rejects any positive unharvested remainder that rounds away, while full-harvest behaviour remains valid because the remainder is zero.
+
+Regression: `unharvested_growth_below_stock_ulp_is_rejected_without_mutation` checks a positive ~4e-200 interval increment against a 1e-100 stock, confirms the addition rounds to unchanged biomass, and verifies a zero-catch step returns `BiomassRemainderUnrepresentable` without mutation.
+
+Commits: `7f389116` (production guard), `12ccd228` (regression), `3456add1` (handoff). Handoff: `docs/handoff/FISHERY_ZERO_CATCH_REMAINDER_20261107.md`. Exact-head CI is pending; no local Cargo result is claimed. Fishery remains standalone pending sourced species-specific stock/effort data and owner-approved workforce integration.
+
+
+Final reconciliation for PR #119: canonical status row and fishery status section updated in `docs/ISLAND_SYSTEM_STATUS.md` commit `fbce3d9c379b473558e9c41ea2f6e6d6c341c2e1`. Handoff now records that status commit and this checklist's prior commit `fe12bb42410988cf9ac71742bdaa66e7661c5cc5`. A fresh exact-head CI run is required on the final PR head.

@@ -510,10 +510,11 @@ impl FishStock {
         {
             return Err(FisheryError::LandedTotalUnrepresentable);
         }
-        // A partial catch must leave its unharvested growth in the stored stock.
-        // If that positive remainder rounds away at the current biomass scale,
-        // accepting the catch would silently discard it and break mass balance.
-        if catch > 0.0 && remaining_growth > 0.0 && biomass_t == self.biomass_t {
+        // Every unharvested increment must be represented in the stored stock,
+        // including a zero-catch step. Otherwise a valid positive growth event
+        // disappears from the material ledger merely because it is below one ULP
+        // at the current biomass magnitude.
+        if remaining_growth > 0.0 && biomass_t == self.biomass_t {
             return Err(FisheryError::BiomassRemainderUnrepresentable);
         }
 
@@ -1556,6 +1557,36 @@ mod tests {
         assert_eq!(
             stock, before,
             "a partial catch must not discard unrepresentable residual growth"
+        );
+    }
+
+    #[test]
+    fn unharvested_growth_below_stock_ulp_is_rejected_without_mutation() {
+        let mut model = FisheryModel::load_default().expect("the pack loads");
+        model.r_per_year[Resilience::Medium as usize] = 1.0e308;
+        model.depensation_below = 0.25;
+
+        let mut stock = FishStock::unexploited(Resilience::Medium, 1.0e308)
+            .expect("finite positive carrying capacity");
+        stock.biomass_t = 1.0e-100;
+
+        // The interval growth is positive and representable on its own, but is
+        // too small to change the much larger existing biomass. With no catch,
+        // silently accepting this step would discard all growth from the ledger.
+        let before = stock.clone();
+        let growth = stock
+            .sustainable_catch_limit_t(&model, YEAR_S)
+            .expect("the interval growth itself is representable");
+        assert!(growth > 0.0);
+        assert_eq!(stock.biomass_t + growth, stock.biomass_t);
+
+        assert_eq!(
+            stock.fish(&model, 0.0, YEAR_S),
+            Err(FisheryError::BiomassRemainderUnrepresentable)
+        );
+        assert_eq!(
+            stock, before,
+            "a zero-catch step must not silently discard unrepresentable stock growth"
         );
     }
 
