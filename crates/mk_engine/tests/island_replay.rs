@@ -133,6 +133,45 @@ fn a_long_same_tick_command_run_keeps_sequences_monotonic() {
         .all(|(index, entry)| entry.sequence == index as u64));
 }
 
+/// A refused command is not part of the log and must not consume its sequence.
+#[test]
+fn a_refused_command_does_not_consume_the_next_replay_sequence() {
+    let mut life = island();
+    let space = life
+        .placed
+        .layout
+        .spaces_outside_house()
+        .next()
+        .unwrap()
+        .id
+        .0;
+    let population_before = life.humans.registry.iter().count();
+    let mut invalid = match somebody("placeholder", space) {
+        IslandCommand::CreateHuman(request) => *request,
+        _ => unreachable!("somebody creates a person"),
+    };
+    invalid.name = "   ".to_string();
+
+    assert!(
+        life.apply_command(IslandCommand::CreateHuman(Box::new(invalid)))
+            .is_err(),
+        "an unnamed person must be refused"
+    );
+    assert_eq!(
+        life.humans.registry.iter().count(),
+        population_before,
+        "a refused request must not create a person"
+    );
+
+    life.apply_command(IslandCommand::Control(ControlCommand::Pause))
+        .expect("the following control command applies");
+
+    let entries = &life.replay_log().entries;
+    assert_eq!(entries.len(), 1, "the refused request must not be logged");
+    assert_eq!(entries[0].tick, life.tick);
+    assert_eq!(entries[0].sequence, 0, "the first accepted command keeps sequence zero");
+}
+
 /// Appending to a log after an out-of-order tick must not reuse a sequence.
 #[test]
 fn recording_after_an_out_of_order_tick_uses_the_next_sequence_for_that_tick() {
