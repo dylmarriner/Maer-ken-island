@@ -451,3 +451,24 @@ Documentation commits:
 No deviation-register row was added because this change alters no physical
 model or real-world assumption. The timber milestone remains open for D40
 saw-based Ute cross-cutting and the other remaining timber fidelity work.
+
+
+## Exact-head fast-test correction — 8 November 2026
+
+Workflow [#42404558740](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42404558740) completed the week/year reference-pack acceptance successfully, but the fast Rust test job reported 882 passed and one failed:
+
+`regional::life::tests::haul_planning_reserves_ids_for_a_conserved_ute_recut_before_another_log_arrives`
+
+The failure was in the test's assumption, not the material allocator: the default estate geometry correctly made the on-foot candidate quicker than the Ute candidate. The test was asserting a route-selection outcome that was unrelated to the reservation invariant.
+
+Commit `485159c7e852f6f9b780da7f345dd2b30fbd4e12` corrects the regression:
+
+- Build the Ute candidate explicitly from the real estate Ute, fuel reference, haul site and terrain climb.
+- Assert the actual conserved split is fourteen pieces.
+- Verify planning leaves the allocator watermark unchanged.
+- Accept that candidate, reserve the exact fourteen IDs, and continue the existing second-log collision and legacy-restore assertions.
+- Do not force the production quickest-method heuristic to choose Ute.
+
+This is a test-fixture correction only; no production selection or material logic was weakened.
+
+The corrected exact-head Rust test suite is pending. The prior week/year pass belongs to the predecessor head and must be rerun on the corrected head before merge.
