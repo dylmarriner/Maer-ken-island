@@ -416,3 +416,22 @@ The run on the prior merge head failed Clippy while compiling the new haul-decli
 - New exact-head workflow: [#42400504685](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42400504685). It was pending at handoff time; no format, Clippy or Rust-test pass is claimed for this head.
 
 The fix changes only test-module name resolution and formatting. It does not change timber logic, material IDs, snapshot layout, replay hashes, RNG, simulation state or production infrastructure.
+
+
+## Immutable haul preview and declined-plan regression — 8 November 2026
+
+IslandLife::plan_haul now takes &self rather than &mut self. Candidate
+planning is therefore enforced by Rust's type system as a read-only preview;
+the work loop reserves the selected CrossCut range only after the founder
+accepts the haul.
+
+The declined-haul regression now exercises the complete work-loop decision:
+Gem-D is made to prefer felling, the candidate haul is declined, an attempted
+cross-cut using the previewed range is refused without removing the source log,
+and the next real felled log receives the still-unreserved preview ID. This
+proves both the allocator watermark and pending-reservation set remain
+untouched by a declined candidate.
+
+No simulation parameters, physical stocks, snapshot schema, replay format,
+RNG, append-only histories, digest pins or external infrastructure changed.
+Fresh exact-head Rust/desktop/backend/week/year CI is required.
