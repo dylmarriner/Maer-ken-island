@@ -352,7 +352,9 @@ impl SoilCarbon {
             self.respired_kgc_m2.is_finite() && self.respired_kgc_m2 >= 0.0,
             "cumulative soil respiration must be finite and non-negative"
         );
-        // Validate every caller-supplied vector before mutating the first cell.
+        // Preflight caller data and derived arithmetic for every cell before
+        // mutating the first one. A late-cell overflow must not leave earlier
+        // soil cells advanced while cumulative respiration remains unchanged.
         for input in inputs {
             assert_soil_input(*input);
         }
@@ -360,6 +362,31 @@ impl SoilCarbon {
             assert!(
                 factor.is_finite() && *factor >= 0.0,
                 "RothC temperature factors must be finite and non-negative"
+            );
+        }
+        let mut available_carbon = self.respired_kgc_m2;
+        for (i, pools) in self.pools.iter().enumerate() {
+            assert_soil_pools(pools);
+            let input = inputs[i];
+            let incoming = input.litter + input.faeces + input.carcasses;
+            let cell_available = pools.iter().sum::<f64>() + incoming;
+            assert!(
+                cell_available.is_finite(),
+                "RothC cell carbon plus incoming material must remain finite"
+            );
+            available_carbon += cell_available;
+            assert!(
+                available_carbon.is_finite(),
+                "RothC grid carbon budget must remain finite before mutation"
+            );
+            let cover = if vegetated[i] {
+                p.cover_vegetated
+            } else {
+                p.cover_bare
+            };
+            assert!(
+                (self.temperature_factor[i] * cover).is_finite(),
+                "RothC decay modifier must remain finite before mutation"
             );
         }
         let mut respired = 0.0;
@@ -544,6 +571,62 @@ mod tests {
         assert_eq!(
             soil, before,
             "invalid input must not partially advance soil"
+        );
+    }
+
+    #[test]
+    fn step_preflights_late_derived_decay_overflow_before_mutating_any_cell() {
+        use std::panic::AssertUnwindSafe;
+
+        let p = params();
+        let biomes = [BiomeType::TemperateForest, BiomeType::Grassland];
+        let mut soil =
+            SoilCarbon::steady_state(p, &biomes, &[0.5, 0.3], vec![1.0, 1.4], &[true, false]);
+        soil.params.cover_vegetated = 2.0;
+        soil.temperature_factor[1] = f64::MAX;
+        let before = soil.clone();
+
+        let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
+            soil.step(
+                0.25,
+                &biomes,
+                &[SoilInputs::default(), SoilInputs::default()],
+                &[true, false],
+            );
+        }));
+
+        assert!(result.is_err());
+        assert_eq!(
+            soil, before,
+            "a late-cell derived overflow must not partially advance earlier cells"
+        );
+    }
+
+    #[test]
+    fn step_preflights_grid_carbon_budget_overflow_before_mutating_any_cell() {
+        use std::panic::AssertUnwindSafe;
+
+        let p = params();
+        let biomes = [BiomeType::TemperateForest, BiomeType::Grassland];
+        let mut soil =
+            SoilCarbon::steady_state(p, &biomes, &[0.5, 0.3], vec![1.0, 1.4], &[true, false]);
+        soil.pools[0] = [f64::MAX * 0.6, 0.0, 0.0, 0.0];
+        soil.pools[1] = [f64::MAX * 0.6, 0.0, 0.0, 0.0];
+        let before = soil.clone();
+
+        let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
+            soil.step(
+                1.0,
+                &biomes,
+                &[SoilInputs::default(), SoilInputs::default()],
+                &[true, false],
+            );
+        }));
+
+        assert!(result.is_err());
+        assert_eq!(
+            soil, before,
+            "an unrepresentable grid carbon budget must be rejected before mutation"
         );
     }
 
