@@ -1897,7 +1897,7 @@ mod tests {
         assert_eq!(landed, 0.1);
         let recorded_delta = stock.landed_t - 0.3;
         assert!(recorded_delta > 0.0);
-        assert!((recorded_delta - landed).abs() <= landed * LANDED_TOTAL_RELATIVE_TOLERANCE);
+        assert!((recorded_delta - landed).abs() <= landed * MATERIAL_INCREMENT_RELATIVE_TOLERANCE);
     }
 
     #[test]
