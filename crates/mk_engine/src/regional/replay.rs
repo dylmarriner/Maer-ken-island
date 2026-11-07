@@ -10,6 +10,7 @@
 //! That is what makes the digest worth printing. A run that could not be
 //! reproduced would be a number about one afternoon on one machine.
 
+use std::collections::BTreeMap;
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -100,7 +101,16 @@ pub struct IslandReplayLog {
     /// The scenario this log belongs to. Replaying it against a different
     /// island would reproduce nothing, so the log says which one it is.
     pub scenario_digest: String,
-    pub entries: Vec<IslandReplayEntry>,
+    /// Append-only command history. Callers receive a read-only slice so the
+    /// runtime sequence index cannot be invalidated by out-of-band mutation.
+    entries: Vec<IslandReplayEntry>,
+    /// Highest recorded sequence for each tick. Derived runtime state only:
+    /// it is rebuilt from entries and never enters the persisted log format.
+    #[serde(skip)]
+    sequence_max_by_tick: BTreeMap<u64, u64>,
+    /// Serde leaves the skipped index empty; the first append rebuilds it once.
+    #[serde(skip)]
+    sequence_index_ready: bool,
 }
 
 /// A same-tick command sequence cannot advance beyond the largest stored value.
@@ -119,38 +129,76 @@ impl std::error::Error for ReplaySequenceExhausted {}
 impl IslandReplayLog {
     /// An empty log for a scenario.
     pub fn new(scenario_digest: String) -> Self {
-        Self {
-            version: REPLAY_LOG_VERSION,
-            scenario_digest,
-            entries: Vec::new(),
-        }
+        Self::from_entries(REPLAY_LOG_VERSION, scenario_digest, Vec::new())
     }
 
-    fn next_sequence(&self, tick: u64) -> Result<u64, ReplaySequenceExhausted> {
-        match self
-            .entries
-            .iter()
-            .filter(|entry| entry.tick == tick)
-            .map(|entry| entry.sequence)
-            .max()
-        {
+    /// Construct an in-memory log from supplied entries without validating
+    /// replay semantics. Replay performs the same version, scenario and
+    /// duplicate-position checks for loaded and in-memory logs.
+    pub fn from_entries(
+        version: u32,
+        scenario_digest: String,
+        entries: Vec<IslandReplayEntry>,
+    ) -> Self {
+        let mut log = Self {
+            version,
+            scenario_digest,
+            entries,
+            sequence_max_by_tick: BTreeMap::new(),
+            sequence_index_ready: false,
+        };
+        log.rebuild_sequence_index();
+        log
+    }
+
+    /// Read the append-only history without allowing callers to invalidate
+    /// the per-tick sequence index.
+    pub fn entries(&self) -> &[IslandReplayEntry] {
+        &self.entries
+    }
+
+    fn rebuild_sequence_index(&mut self) {
+        let mut index = BTreeMap::<u64, u64>::new();
+        for entry in &self.entries {
+            index
+                .entry(entry.tick)
+                .and_modify(|last| *last = (*last).max(entry.sequence))
+                .or_insert(entry.sequence);
+        }
+        self.sequence_max_by_tick = index;
+        self.sequence_index_ready = true;
+    }
+
+    fn next_sequence(&mut self, tick: u64) -> Result<u64, ReplaySequenceExhausted> {
+        if !self.sequence_index_ready {
+            self.rebuild_sequence_index();
+        }
+        match self.sequence_max_by_tick.get(&tick).copied() {
             None => Ok(0),
             Some(last) => last.checked_add(1).ok_or(ReplaySequenceExhausted { tick }),
         }
     }
 
     fn record_with_sequence(&mut self, tick: u64, sequence: u64, command: IslandCommand) {
+        if !self.sequence_index_ready {
+            self.rebuild_sequence_index();
+        }
         self.entries.push(IslandReplayEntry {
             tick,
             sequence,
             command,
         });
+        self.sequence_max_by_tick
+            .entry(tick)
+            .and_modify(|last| *last = (*last).max(sequence))
+            .or_insert(sequence);
     }
 
     /// Append a command applied at `tick`.
     ///
-    /// Refuse sequence exhaustion rather than reusing `u64::MAX` and making
-    /// same-tick replay order ambiguous.
+    /// The per-tick maximum is maintained incrementally, so appending N
+    /// commands does not rescan the retained history N times. Refuse sequence
+    /// exhaustion rather than reusing `u64::MAX`.
     pub fn record(
         &mut self,
         tick: u64,
@@ -194,11 +242,12 @@ impl IslandReplayLog {
             });
         }
 
-        let log: Self = serde_json::from_slice(&bytes)
+        let mut log: Self = serde_json::from_slice(&bytes)
             .map_err(|e| IslandReplayError::NotALog(path.display().to_string(), e.to_string()))?;
         if log.version != REPLAY_LOG_VERSION {
             return Err(IslandReplayError::Version(log.version));
         }
+        log.rebuild_sequence_index();
         Ok(log)
     }
 
@@ -333,7 +382,7 @@ pub fn replay_island(
     // (tick, sequence) pair has no deterministic command order, even if the
     // caller has reordered the underlying vector.
     let mut entries: Vec<&IslandReplayEntry> = log
-        .entries
+        .entries()
         .iter()
         .filter(|entry| entry.tick <= until_tick)
         .collect();
