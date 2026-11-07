@@ -54,3 +54,15 @@ The active RothC soil-carbon model relied on well-formed caller data without enf
 The first exact-head workflow stopped at `cargo fmt --all -- --check`. It identified only rustfmt line-wrapping differences in the new assertions and one test assertion; no compiler or test job ran on that head.
 
 Commit `35d895d68fce9a341bc9fa57b8956fd0a8f7dc93` applies the formatter's reported layout exactly. A fresh exact-head workflow is required; the failed predecessor is not counted as code verification.
+
+
+## Grid-wide soil-step atomicity follow-up — 8 November 2026
+
+The initial fail-closed pass validated caller vectors before mutation, but derived-value failures could still occur after earlier cells had advanced: a later cell's temperature-factor × cover overflow, or the grid-wide respiration accumulator exceeding finite range.
+
+- Added a full preflight over every cell's current pools, incoming carbon, derived decay modifier and cumulative grid carbon budget before the mutation loop.
+- The grid carbon budget includes prior cumulative respiration and bounds the maximum respiration the step can add; existing post-step assertions remain as invariant checks.
+- Added regressions proving both a late-cell decay-modifier overflow and an unrepresentable multi-cell carbon budget leave the entire SoilCarbon value unchanged.
+- Production change commit: 4228af75ed2bd1bd203d70c6303813f6caa2229b.
+- Exact-head formatting, Clippy, fast Rust tests, desktop/backend and week/year acceptance must be rerun. No local Cargo result is claimed.
+- Valid RothC equations, reference coefficients, snapshots, replay format, RNG and digest pins remain unchanged.
