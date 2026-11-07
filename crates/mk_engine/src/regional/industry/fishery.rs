@@ -41,6 +41,8 @@ pub enum FisheryError {
     LandedTotalOverflow,
     LandedTotalUnrepresentable,
     BiomassRemainderUnrepresentable,
+    UnrepresentableMsy,
+    UnrepresentableMsyBiomassTarget,
 }
 
 impl std::fmt::Display for FisheryError {
@@ -63,6 +65,12 @@ impl std::fmt::Display for FisheryError {
             }
             Self::BiomassRemainderUnrepresentable => {
                 "remaining biomass growth is not representable at stored precision"
+            }
+            Self::UnrepresentableMsy => {
+                "positive maximum sustainable yield is below binary64 representable range"
+            }
+            Self::UnrepresentableMsyBiomassTarget => {
+                "positive maximum sustainable yield biomass target is below binary64 representable range"
             }
         };
         f.write_str(message)
@@ -377,6 +385,9 @@ impl FishStock {
         } else {
             rate * scaled_capacity
         };
+        if msy == 0.0 && rate > 0.0 {
+            return Err(FisheryError::UnrepresentableMsy);
+        }
         if !msy.is_finite() || msy < 0.0 {
             return Err(FisheryError::NonFiniteGrowth);
         }
@@ -395,6 +406,9 @@ impl FishStock {
 
         let (peak_biomass_fraction, _) = msy_peak_fractions(model.depensation_below);
         let biomass = self.k_t * peak_biomass_fraction;
+        if biomass == 0.0 && peak_biomass_fraction > 0.0 {
+            return Err(FisheryError::UnrepresentableMsyBiomassTarget);
+        }
         if !biomass.is_finite() || biomass < 0.0 {
             return Err(FisheryError::NonFiniteGrowth);
         }
@@ -883,6 +897,51 @@ mod tests {
         assert_eq!(stock.landed_t, surplus);
     }
 
+    #[test]
+    fn positive_but_unrepresentable_msy_diagnostics_fail_closed() {
+        let model = FisheryModel::load_default().expect("the pack loads");
+        let smallest_positive = f64::from_bits(1);
+        let stock = FishStock::unexploited(Resilience::Medium, smallest_positive)
+            .expect("positive subnormal carrying capacity");
+
+        assert_eq!(stock.msy_t(&model), Err(FisheryError::UnrepresentableMsy));
+        assert_eq!(
+            stock.msy_biomass_t(&model),
+            Err(FisheryError::UnrepresentableMsyBiomassTarget)
+        );
+
+        // A zero growth rate is a genuine zero MSY, not an underflow error.
+        let mut no_growth = model.clone();
+        no_growth.r_per_year[Resilience::Medium as usize] = 0.0;
+        assert_eq!(stock.msy_t(&no_growth), Ok(0.0));
+
+        // The MSY can be unrepresentable even when its biomass target is
+        // exactly one subnormal unit and therefore remains representable.
+        let two_units = FishStock::unexploited(Resilience::Medium, f64::from_bits(2))
+            .expect("positive subnormal carrying capacity");
+        assert_eq!(
+            two_units.msy_t(&model),
+            Err(FisheryError::UnrepresentableMsy)
+        );
+        assert_eq!(two_units.msy_biomass_t(&model).unwrap().to_bits(), 1);
+
+        // A positive subnormal target that rounds to the nearest non-zero
+        // binary64 value remains usable; only a target rounded to zero fails.
+        let three_units = FishStock::unexploited(Resilience::Medium, f64::from_bits(3))
+            .expect("positive subnormal carrying capacity");
+        assert_eq!(three_units.msy_biomass_t(&model).unwrap().to_bits(), 2);
+
+        // The upper depensation branch has a different positive peak fraction;
+        // with one subnormal capacity unit, 2/3 rounds to one non-zero unit.
+        let mut upper_branch = model.clone();
+        upper_branch.depensation_below = 1.0;
+        let upper_peak = FishStock::unexploited(Resilience::Medium, smallest_positive)
+            .expect("positive subnormal carrying capacity");
+        assert_eq!(
+            upper_peak.msy_biomass_t(&upper_branch).unwrap().to_bits(),
+            1
+        );
+    }
     #[test]
     fn msy_preserves_representable_subnormal_results_when_peak_scaling_would_underflow() {
         let model = FisheryModel {
