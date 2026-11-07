@@ -68,3 +68,21 @@ Regression `fish_caps_an_overflowing_intermediate_at_finite_carrying_capacity` u
 Commit: `e86b9dcc34c7ab52b20abe453d0493b765381956`.
 
 Exact-head CI is required on the new head. No local Cargo test result is claimed while custom OpenCommander returns HTTP 429.
+
+
+## Partial-catch preservation at the capacity ceiling
+
+The first cap-before-overflow correction exposed a second-order case: when growth exactly saturates headroom, `B + (headroom - catch)` can still overflow for a small but representable catch. Applying `min(K, +infinity)` would silently leave biomass at K and lose the catch from the stock balance.
+
+The update now branches on the growth boundary:
+- no remaining growth preserves the original biomass exactly;
+- saturated growth computes the post-catch stock as `K - catch`, avoiding the overflowing `B + remainder` intermediate;
+- non-saturating growth adds the remainder to B and caps at K.
+
+Regression `fish_preserves_a_partial_catch_when_the_uncapped_biomass_sum_overflows` constructs a finite model at `K = f64::MAX`, proves `B + (headroom - catch)` is infinite, then asserts the catch is returned, landed mass increments, and stock becomes the representable `K - catch`. This complements the zero-catch cap regression.
+
+Commits:
+- `3000bcc0a5eb8f1a43530576164650cb8e9d5c69` — post-catch cap arithmetic and regression.
+- `83b5cf85e6b0269533357aa3627d37f09955e62e` — arithmetic comment clarification.
+
+The previous run on the pre-correction head is superseded; exact-head CI must complete on the latest PR head before merge.
