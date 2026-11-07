@@ -1,0 +1,49 @@
+# Soil-carbon fail-closed input invariants
+
+Date: 2026-11-08
+Repository: `dylmarriner/Maer-ken-island`
+Branch: `fix/soil-carbon-input-invariants-20261108`
+
+## Defect
+
+The active RothC soil-carbon model relied on well-formed caller data without enforcing its public boundaries:
+
+- `SoilCarbon::steady_state` used chained `zip` calls, silently truncating mismatched per-cell vectors.
+- Negative annual production input was silently clamped to zero.
+- `SoilCarbon::step` could mutate earlier cells before discovering a malformed input in a later cell.
+- Direct `RothC::step_cell` calls accepted negative/non-finite durations and malformed pools or inputs.
+- Deserialised or manually constructed RothC parameters were not checked before they could mutate soil state.
+
+## Change
+
+- Validate RothC rate constants, cover factors, partition fractions and carbon-conserving manure fractions.
+- Require equal per-cell vector lengths before steady-state construction or stepping.
+- Reject negative/non-finite annual inputs, soil inputs, temperature factors, durations and pool values.
+- Preflight every caller-supplied input and temperature vector before mutating the first cell.
+- Keep the grid-step hot path efficient by validating the parameter set once per grid step and using a private validated single-cell kernel.
+- Preserve the existing RothC equations and all valid-input results.
+
+## Regression coverage
+
+- Mismatched steady-state vectors fail rather than truncate.
+- A NaN input in a later cell is rejected before any earlier cell is mutated.
+- A negative single-cell duration is rejected without changing its pools.
+- Existing carbon-conservation and steady-state equilibrium tests remain in place.
+
+## Commits
+
+- `2acd7c4b745e6d099dc49cdcf2832936e3b1fc6a` — fail-closed RothC and soil input validation.
+- `965666ac8d05d1481bf640889a7df42e85a5de29` — validate parameters once per grid step.
+
+## Verification
+
+- Source and regression changes are committed and pushed.
+- Exact-head Rust formatting, Clippy, fast tests, desktop/backend and week/year reference acceptance are pending.
+- No local Cargo result is claimed; the current environment has no authorized OpenCommander execution path exposed.
+- No NPP value, soil nutrient parameter, snapshot schema, replay entry, RNG stream or digest pin was changed.
+
+## Next
+
+1. Complete exact-head CI for this branch.
+2. Review any formatter/compiler/test findings and correct them on this branch.
+3. Continue D31 with sourced mineral nitrogen and phosphorus pools and a soil-limited NPP response. Do not invent nutrient concentrations or response coefficients.
