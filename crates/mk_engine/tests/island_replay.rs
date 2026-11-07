@@ -172,6 +172,51 @@ fn recording_after_sequence_exhaustion_fails_without_appending() {
     assert_eq!(log.entries[0].sequence, u64::MAX);
 }
 
+/// Duplicate ordering positions make same-tick replay ambiguous and must fail closed.
+#[test]
+fn replay_refuses_duplicate_tick_sequence_positions() {
+    let mut log = IslandReplayLog::new("not-this-scenario".to_string());
+    log.entries.push(IslandReplayEntry {
+        tick: 5,
+        sequence: 0,
+        command: IslandCommand::Control(ControlCommand::Pause),
+    });
+    log.entries.push(IslandReplayEntry {
+        tick: 5,
+        sequence: 0,
+        command: IslandCommand::Control(ControlCommand::Resume),
+    });
+
+    assert!(matches!(
+        replay_island(canon(), scenario(), &log, 5),
+        Err(IslandReplayError::DuplicateSequence {
+            tick: 5,
+            sequence: 0
+        })
+    ));
+}
+
+/// A partial replay validates only commands within its requested horizon.
+#[test]
+fn partial_replay_ignores_duplicate_sequences_after_its_horizon() {
+    let scenario_digest = island().scenario_digest_hex();
+    let mut log = IslandReplayLog::new(scenario_digest);
+    log.entries.push(IslandReplayEntry {
+        tick: 6,
+        sequence: 0,
+        command: IslandCommand::Control(ControlCommand::Pause),
+    });
+    log.entries.push(IslandReplayEntry {
+        tick: 6,
+        sequence: 0,
+        command: IslandCommand::Control(ControlCommand::Resume),
+    });
+
+    let replayed = replay_island(canon(), scenario(), &log, 5)
+        .expect("duplicates beyond the requested replay horizon are left alone");
+    assert_eq!(replayed.tick, 5);
+}
+
 /// A run that was interfered with, reproduced from its log.
 #[test]
 fn replaying_a_log_reaches_the_island_the_run_reached() {
