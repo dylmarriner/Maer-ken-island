@@ -63,6 +63,12 @@ pub enum CommandError {
     Intervention(IslandInterventionError),
     /// The replay log cannot assign another unique sequence for this tick.
     ReplaySequenceExhausted { tick: u64 },
+    /// A replayed command would move the per-tick sequence backwards.
+    ReplaySequenceOutOfOrder {
+        tick: u64,
+        expected_at_least: u64,
+        received: u64,
+    },
 }
 
 impl std::fmt::Display for CommandError {
@@ -73,6 +79,14 @@ impl std::fmt::Display for CommandError {
             Self::ReplaySequenceExhausted { tick } => {
                 write!(f, "replay command sequence exhausted at tick {tick}")
             }
+            Self::ReplaySequenceOutOfOrder {
+                tick,
+                expected_at_least,
+                received,
+            } => write!(
+                f,
+                "replay command sequence {received} at tick {tick} is below the next sequence {expected_at_least}"
+            ),
         }
     }
 }
