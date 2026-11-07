@@ -238,3 +238,15 @@ Commits:
 - Snapshot and consumed-range regressions: `19edbf731a1017781368306916892e74d89648e6`
 
 A fresh exact-head CI run is required. The predecessor workflow #42388369118 was still running on the earlier head; its results do not verify these commits. No local Cargo result is claimed while custom OpenCommander access returns HTTP 429. No replay format, RNG, append-only event log or live island state was modified; the new pending-reservation state is optional in snapshots and must still pass week/year replay acceptance before merge.
+
+
+### Legacy active-haul snapshot compatibility — 8 November 2026
+
+The reservation set is an additive optional field, but an older IslandLife snapshot can contain an active `HaulAction::CrossCut` and the allocator watermark without the new set. To keep those saves resumable without weakening the public ledger boundary:
+
+- Added a crate-private migration helper that reconstructs a range only from an active haul task whose source log still exists, whose full range is below the persisted allocator watermark, and whose destination IDs are unoccupied. Partial or conflicting ranges fail closed.
+- `finish_haul_task` invokes this helper before the normal strict `cross_cut_log` boundary. Direct callers cannot use the migration path.
+- The Ute reservation regression now serializes a live haul, removes the new field to simulate a legacy snapshot, restores the island, executes the persisted CrossCut task, and verifies the later log and all fourteen pieces remain intact.
+- The test occupies the excavator deliberately, so the selected plan is explicitly the Ute plan and only its fourteen-piece range is reserved; unused alternative-plan IDs are not leaked.
+
+This keeps the existing IslandLife snapshot version readable while preserving fail-closed validation at the ledger API. Exact-head Rust, desktop/backend and week/year acceptance are required; no snapshot digest or reference pin is changed by hand.
