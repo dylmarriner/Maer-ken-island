@@ -16,7 +16,8 @@ use mk_engine::regional::commands::{ControlCommand, IslandCommand};
 use mk_engine::regional::create_human::{CreateLocation, IslandCreateHuman};
 use mk_engine::regional::life::IslandLife;
 use mk_engine::regional::replay::{
-    replay_island, IslandReplayError, IslandReplayLog, REPLAY_LOG_VERSION,
+    replay_island, IslandReplayEntry, IslandReplayError, IslandReplayLog, ReplaySequenceExhausted,
+    MAX_REPLAY_LOG_BYTES, REPLAY_LOG_VERSION,
 };
 use mk_island::IslandScenario;
 
@@ -111,6 +112,178 @@ fn a_log_keeps_the_order_commands_arrived_in() {
     let order: Vec<(u64, u64)> = log.entries.iter().map(|e| (e.tick, e.sequence)).collect();
     assert_eq!(order, vec![(5, 0), (5, 1), (5, 2), (6, 0)]);
     assert!(!log.scenario_digest.is_empty(), "the log names no scenario");
+}
+
+/// The live command path keeps same-tick sequencing correct with a long retained log.
+#[test]
+fn a_long_same_tick_command_run_keeps_sequences_monotonic() {
+    let mut life = island();
+    for _ in 0..4_096 {
+        life.apply_command(IslandCommand::Control(ControlCommand::Pause))
+            .expect("control command applies");
+    }
+
+    let entries = &life.replay_log().entries;
+    assert_eq!(entries.len(), 4_096);
+    assert_eq!(entries.first().map(|entry| entry.sequence), Some(0));
+    assert_eq!(entries.last().map(|entry| entry.sequence), Some(4_095));
+    assert!(entries
+        .iter()
+        .enumerate()
+        .all(|(index, entry)| entry.sequence == index as u64));
+}
+
+/// A refused command is not part of the log and must not consume its sequence.
+#[test]
+fn a_refused_command_does_not_consume_the_next_replay_sequence() {
+    let mut life = island();
+    let space = life
+        .placed
+        .layout
+        .spaces_outside_house()
+        .next()
+        .unwrap()
+        .id
+        .0;
+    let population_before = life.humans.registry.iter().count();
+    let mut invalid = match somebody("placeholder", space) {
+        IslandCommand::CreateHuman(request) => *request,
+        _ => unreachable!("somebody creates a person"),
+    };
+    invalid.name = "   ".to_string();
+
+    assert!(
+        life.apply_command(IslandCommand::CreateHuman(Box::new(invalid)))
+            .is_err(),
+        "an unnamed person must be refused"
+    );
+    assert_eq!(
+        life.humans.registry.iter().count(),
+        population_before,
+        "a refused request must not create a person"
+    );
+
+    life.apply_command(IslandCommand::Control(ControlCommand::Pause))
+        .expect("the following control command applies");
+
+    let entries = &life.replay_log().entries;
+    assert_eq!(entries.len(), 1, "the refused request must not be logged");
+    assert_eq!(entries[0].tick, life.tick);
+    assert_eq!(
+        entries[0].sequence, 0,
+        "the first accepted command keeps sequence zero"
+    );
+}
+
+/// Replaying a sparse log preserves its original sequence identifiers.
+#[test]
+fn replay_preserves_sparse_recorded_sequence_numbers() {
+    let mut log = IslandReplayLog::new(island().scenario_digest_hex());
+    log.entries.push(IslandReplayEntry {
+        tick: 0,
+        sequence: 12,
+        command: IslandCommand::Control(ControlCommand::Pause),
+    });
+    log.entries.push(IslandReplayEntry {
+        tick: 0,
+        sequence: 7,
+        command: IslandCommand::Control(ControlCommand::Resume),
+    });
+
+    let replayed = replay_island(canon(), scenario(), &log, 0)
+        .expect("sparse, strictly increasing sequence identifiers replay");
+
+    let positions: Vec<(u64, u64)> = replayed
+        .replay_log()
+        .entries
+        .iter()
+        .map(|entry| (entry.tick, entry.sequence))
+        .collect();
+    assert_eq!(positions, vec![(0, 7), (0, 12)]);
+}
+
+/// Appending to a log after an out-of-order tick must not reuse a sequence.
+#[test]
+fn recording_after_an_out_of_order_tick_uses_the_next_sequence_for_that_tick() {
+    let mut log = IslandReplayLog::new("scenario".to_string());
+    log.record(5, IslandCommand::Control(ControlCommand::Pause))
+        .expect("sequence available");
+    log.record(6, IslandCommand::Control(ControlCommand::Pause))
+        .expect("sequence available");
+    log.record(5, IslandCommand::Control(ControlCommand::Resume))
+        .expect("sequence available");
+
+    let mut sequences: Vec<u64> = log
+        .entries
+        .iter()
+        .filter(|entry| entry.tick == 5)
+        .map(|entry| entry.sequence)
+        .collect();
+    sequences.sort_unstable();
+    assert_eq!(sequences, vec![0, 1]);
+}
+
+/// A log at the maximum sequence must fail rather than append an ambiguous duplicate.
+#[test]
+fn recording_after_sequence_exhaustion_fails_without_appending() {
+    let mut log = IslandReplayLog::new("scenario".to_string());
+    log.entries.push(IslandReplayEntry {
+        tick: 5,
+        sequence: u64::MAX,
+        command: IslandCommand::Control(ControlCommand::Pause),
+    });
+
+    assert_eq!(
+        log.record(5, IslandCommand::Control(ControlCommand::Resume)),
+        Err(ReplaySequenceExhausted { tick: 5 })
+    );
+    assert_eq!(log.entries.len(), 1);
+    assert_eq!(log.entries[0].sequence, u64::MAX);
+}
+
+/// Duplicate ordering positions make same-tick replay ambiguous and must fail closed.
+#[test]
+fn replay_refuses_duplicate_tick_sequence_positions() {
+    let mut log = IslandReplayLog::new("not-this-scenario".to_string());
+    log.entries.push(IslandReplayEntry {
+        tick: 5,
+        sequence: 0,
+        command: IslandCommand::Control(ControlCommand::Pause),
+    });
+    log.entries.push(IslandReplayEntry {
+        tick: 5,
+        sequence: 0,
+        command: IslandCommand::Control(ControlCommand::Resume),
+    });
+
+    assert!(matches!(
+        replay_island(canon(), scenario(), &log, 5),
+        Err(IslandReplayError::DuplicateSequence {
+            tick: 5,
+            sequence: 0
+        })
+    ));
+}
+
+/// A partial replay validates only commands within its requested horizon.
+#[test]
+fn partial_replay_ignores_duplicate_sequences_after_its_horizon() {
+    let scenario_digest = island().scenario_digest_hex();
+    let mut log = IslandReplayLog::new(scenario_digest);
+    log.entries.push(IslandReplayEntry {
+        tick: 6,
+        sequence: 0,
+        command: IslandCommand::Control(ControlCommand::Pause),
+    });
+    log.entries.push(IslandReplayEntry {
+        tick: 6,
+        sequence: 0,
+        command: IslandCommand::Control(ControlCommand::Resume),
+    });
+
+    let replayed = replay_island(canon(), scenario(), &log, 5)
+        .expect("duplicates beyond the requested replay horizon are left alone");
+    assert_eq!(replayed.tick, 5);
 }
 
 /// A run that was interfered with, reproduced from its log.
@@ -247,6 +420,22 @@ fn a_log_from_another_island_is_refused() {
     }
 }
 
+/// An oversized replay file is refused from its metadata before its contents are read.
+#[test]
+fn a_replay_file_over_the_offline_size_limit_is_refused() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("oversized-replay.json");
+    let file = std::fs::File::create(&path).unwrap();
+    file.set_len(MAX_REPLAY_LOG_BYTES + 1).unwrap();
+    drop(file);
+
+    assert!(matches!(
+        IslandReplayLog::load(&path),
+        Err(IslandReplayError::TooLarge { limit_bytes, .. })
+            if limit_bytes == MAX_REPLAY_LOG_BYTES
+    ));
+}
+
 /// A log survives a trip through a file, order and all.
 #[test]
 fn a_log_round_trips_through_a_file() {
@@ -280,6 +469,31 @@ fn a_log_round_trips_through_a_file() {
         IslandReplayLog::load(&path),
         Err(IslandReplayError::NotALog(..))
     ));
+}
+
+/// Saving never overwrites a predictable temporary path reserved by another writer.
+#[test]
+fn saving_uses_a_fresh_temporary_path_without_clobbering_existing_files() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("run.log.json");
+    let reserved_temp = path.with_extension(format!("tmp-{}-0", std::process::id()));
+    std::fs::write(&reserved_temp, b"reserved by another writer").unwrap();
+
+    let mut log = IslandReplayLog::new(island().scenario_digest_hex());
+    log.record(0, IslandCommand::Control(ControlCommand::Pause))
+        .expect("sequence available");
+
+    log.save(&path)
+        .expect("save should choose the next unused temporary path");
+
+    assert_eq!(
+        std::fs::read(&reserved_temp).unwrap(),
+        b"reserved by another writer",
+        "a pre-existing temporary path must never be truncated or followed"
+    );
+    let loaded = IslandReplayLog::load(&path).expect("the saved log reads back");
+    assert_eq!(loaded.entries.len(), 1);
+    assert_eq!(loaded.entries[0].sequence, 0);
 }
 
 /// A log whose entries have been shuffled still reproduces the run.
