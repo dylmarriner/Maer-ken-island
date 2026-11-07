@@ -55,7 +55,13 @@ No reference values, species parameters, snapshot fields/layout, append-only log
 
 ## Next
 
-1. Move the verified rebased commit to PR #120's existing branch with an expected-head lease.
-2. Verify exact-head CI on the updated PR.
+1. PR #120's existing branch has been updated to the rebased tree after PR #119 merged.
+2. Verify the final docs-reconciled PR head in exact-head CI; the earlier workflow on head `23ed51ef` is superseded and does not certify the final head.
 3. Mark ready and merge only after every required check passes.
 4. Continue sourced fishery-to-IslandLife integration only after species stock/effort data and owner-approved workforce decisions exist.
+## Final documentation reconciliation
+
+- `WORK_REMAINING.md` now records PR #118 and PR #119 as merged and verified, with PR #120 as the remaining MSY diagnostic gate (`d3b8d2d1`).
+- `docs/ISLAND_SYSTEM_STATUS.md` now records PR #119's merge evidence and PR #120's rebased pending state (`5a0eb382`).
+- The previous exact-head workflow [#42340666071](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42340666071) on head `23ed51ef` was in progress when the final documentation reconciliation began; it does not certify the final docs-reconciled head.
+- A fresh exact-head CI run is required after these documentation commits reach PR #120's existing branch.
