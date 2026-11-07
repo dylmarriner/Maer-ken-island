@@ -446,6 +446,12 @@ impl FishStock {
         // interval at the finite remaining headroom rather than creating fish
         // beyond carrying capacity. Positive infinity is therefore bounded.
         let headroom = self.k_t - self.biomass_t;
+        if raw_growth == 0.0 && surplus > 0.0 && dt_s > 0.0 && headroom > 0.0 {
+            // Positive annual production over a positive interval is still
+            // mathematically positive. If its interval amount rounds to zero,
+            // do not silently erase it from the material ledger.
+            return Err(FisheryError::UnrepresentableGrowth);
+        }
         let grown = if raw_growth.is_infinite() {
             headroom
         } else {
@@ -1327,6 +1333,30 @@ mod tests {
 
         assert!(landed > 0.0);
         assert!(stock.landed_t > 0.0);
+    }
+
+    #[test]
+    fn positive_interval_growth_below_binary64_range_is_rejected_without_mutation() {
+        let m = FisheryModel::load_default().expect("the pack loads");
+        let mut stock = FishStock::unexploited(Resilience::Medium, 1_000.0)
+            .expect("positive carrying capacity");
+        stock.biomass_t = 500.0;
+        let before = stock.clone();
+        let smallest_positive_step = f64::from_bits(1);
+
+        assert!(stock.surplus_t_per_year(&m).expect("positive annual surplus") > 0.0);
+        assert_eq!(
+            stock.sustainable_catch_limit_t(&m, smallest_positive_step),
+            Err(FisheryError::UnrepresentableGrowth)
+        );
+        assert_eq!(
+            stock.fish(&m, 0.0, smallest_positive_step),
+            Err(FisheryError::UnrepresentableGrowth)
+        );
+        assert_eq!(
+            stock, before,
+            "an unrepresentable interval increment must not mutate the stock"
+        );
     }
 
     #[test]
