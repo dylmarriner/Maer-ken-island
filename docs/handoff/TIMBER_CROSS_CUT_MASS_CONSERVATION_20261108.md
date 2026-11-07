@@ -105,3 +105,15 @@ run because the lint gate failed. The predicate now uses Rust 1.97's
 Correction commit: `61a8cd4c9cb4b70480d3bc07a8ea078db3ea64b8`.
 A fresh exact-head workflow for this commit is pending. No Clippy, fast-test,
 desktop, backend or week/year pass is claimed for the corrected head.
+
+
+## Clippy correction commit and fresh verification — 8 November 2026
+
+The optional bed-length predicate now uses `Option::is_none_or` as required
+by Rust 1.97 Clippy. Correction commit:
+`61a8cd4c9cb4b70480d3bc07a8ea078db3ea64b8`.
+
+Fresh exact-head workflow
+[#42372526154](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42372526154)
+is in progress. The previous run's only reported source-level blocker was
+`clippy::unnecessary_map_or`; no test result is inferred from that correction.
