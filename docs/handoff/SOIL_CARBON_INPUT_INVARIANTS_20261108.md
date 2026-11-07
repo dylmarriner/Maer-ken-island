@@ -47,3 +47,10 @@ The active RothC soil-carbon model relied on well-formed caller data without enf
 1. Complete exact-head CI for this branch.
 2. Review any formatter/compiler/test findings and correct them on this branch.
 3. Continue D31 with sourced mineral nitrogen and phosphorus pools and a soil-limited NPP response. Do not invent nutrient concentrations or response coefficients.
+
+
+## Formatting correction — 8 November 2026
+
+The first exact-head workflow stopped at `cargo fmt --all -- --check`. It identified only rustfmt line-wrapping differences in the new assertions and one test assertion; no compiler or test job ran on that head.
+
+Commit `35d895d68fce9a341bc9fa57b8956fd0a8f7dc93` applies the formatter's reported layout exactly. A fresh exact-head workflow is required; the failed predecessor is not counted as code verification.
