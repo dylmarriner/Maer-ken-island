@@ -1344,7 +1344,12 @@ mod tests {
         let before = stock.clone();
         let smallest_positive_step = f64::from_bits(1);
 
-        assert!(stock.surplus_t_per_year(&m).expect("positive annual surplus") > 0.0);
+        assert!(
+            stock
+                .surplus_t_per_year(&m)
+                .expect("positive annual surplus")
+                > 0.0
+        );
         assert_eq!(
             stock.sustainable_catch_limit_t(&m, smallest_positive_step),
             Err(FisheryError::UnrepresentableGrowth)
