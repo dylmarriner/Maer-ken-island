@@ -33,7 +33,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
-use super::timber::Log;
+use super::timber::{Log, MAX_CROSS_CUT_PIECES};
 use mk_core::flux::{FluxEntry, FluxKind, Ledger, Reservoir};
 
 use super::ecology::RegionalEcologyState;
@@ -682,6 +682,10 @@ impl MaterialLedger {
     /// A successful cross-cut consumes the pending ids. Refused cuts leave
     /// them pending so the original planned operation can be retried.
     pub fn reserve_log_ids(&mut self, n: u64) -> u64 {
+        assert!(
+            n <= u64::from(MAX_CROSS_CUT_PIECES),
+            "cross-cut reservation exceeds safety bound"
+        );
         let first = self.next_log_id();
         let end = first.checked_add(n).expect("log id space exhausted");
         self.next_log = end;
@@ -703,6 +707,9 @@ impl MaterialLedger {
         first_id: u64,
     ) -> bool {
         let pieces = pieces.max(1);
+        if pieces > MAX_CROSS_CUT_PIECES {
+            return false;
+        }
         let Some(end_exclusive) = first_id.checked_add(u64::from(pieces)) else {
             return false;
         };
@@ -812,6 +819,9 @@ impl MaterialLedger {
             return false;
         };
         let pieces = pieces.max(1);
+        if pieces > MAX_CROSS_CUT_PIECES {
+            return false;
+        }
         // MaterialLedger log ids are one-based. Validate the complete destination
         // range before removing the source: an invalid or colliding range must
         // never overwrite another log or leave the source partially consumed.
