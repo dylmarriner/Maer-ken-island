@@ -220,3 +220,21 @@ last non-overflowing exclusive range (`u64::MAX - 1` for one piece).
 Production and regression are in the same Rust module and are covered by the
 PR #124 exact-head formatting, Clippy and fast-test jobs. No ledger, snapshot,
 replay, RNG, simulation or live state is mutated by this preflight.
+
+
+## Reject previously consumed piece-ID ranges — 8 November 2026
+
+A new P2 review found that the exclusive `next_log` watermark plus an occupancy check was insufficient: after a cross-cut piece was seasoned into the wood stock and its log row removed, a different live source could reuse that now-empty old ID range. The watermark proves an ID was once allocated or reserved, not that it is still pending.
+
+- `MaterialLedger` now tracks pending cross-cut IDs in a deterministic `BTreeSet`. The set is serialized only when non-empty and has `serde(default)`, so older snapshots remain readable and snapshots without pending cuts retain their previous representation.
+- Immediate felled-log allocation uses a separate allocator path and is never marked as a pending cross-cut reservation.
+- `cross_cut_log` requires every destination ID to remain pending, then consumes those reservations only after the full preflight succeeds. A refused cut leaves the reservation available for its original planned operation.
+- `plan_haul` now reserves only the selected quickest plan's piece range. Alternative plans no longer leave unused candidate IDs pending.
+- Snapshot regression covers pending reservation round-trip. The integration regression materialises a cut, seasons/removes its pieces, then proves the old empty range cannot be reused by another live log and that source, stocks and allocator remain unchanged.
+
+Commits:
+- Materials reservation tracking and stale-range rejection: `f54fdf6bcb375ca8293b7558cafd14f3906011ec`
+- Selected-plan reservation and no-unused-range correction: `c660e6ca68c1b611950df23ada9246709aaa699f`
+- Snapshot and consumed-range regressions: `19edbf731a1017781368306916892e74d89648e6`
+
+A fresh exact-head CI run is required. The predecessor workflow #42388369118 was still running on the earlier head; its results do not verify these commits. No local Cargo result is claimed while custom OpenCommander access returns HTTP 429. No replay format, RNG, append-only event log or live island state was modified; the new pending-reservation state is optional in snapshots and must still pass week/year replay acceptance before merge.
