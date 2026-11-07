@@ -16,7 +16,8 @@ use mk_engine::regional::commands::{ControlCommand, IslandCommand};
 use mk_engine::regional::create_human::{CreateLocation, IslandCreateHuman};
 use mk_engine::regional::life::IslandLife;
 use mk_engine::regional::replay::{
-    replay_island, IslandReplayError, IslandReplayLog, REPLAY_LOG_VERSION,
+    replay_island, IslandReplayEntry, IslandReplayError, IslandReplayLog, ReplaySequenceExhausted,
+    REPLAY_LOG_VERSION,
 };
 use mk_island::IslandScenario;
 
@@ -111,6 +112,64 @@ fn a_log_keeps_the_order_commands_arrived_in() {
     let order: Vec<(u64, u64)> = log.entries.iter().map(|e| (e.tick, e.sequence)).collect();
     assert_eq!(order, vec![(5, 0), (5, 1), (5, 2), (6, 0)]);
     assert!(!log.scenario_digest.is_empty(), "the log names no scenario");
+}
+
+/// The live command path keeps same-tick sequencing correct with a long retained log.
+#[test]
+fn a_long_same_tick_command_run_keeps_sequences_monotonic() {
+    let mut life = island();
+    for _ in 0..4_096 {
+        life.apply_command(IslandCommand::Control(ControlCommand::Pause))
+            .expect("control command applies");
+    }
+
+    let entries = &life.replay_log().entries;
+    assert_eq!(entries.len(), 4_096);
+    assert_eq!(entries.first().map(|entry| entry.sequence), Some(0));
+    assert_eq!(entries.last().map(|entry| entry.sequence), Some(4_095));
+    assert!(entries
+        .iter()
+        .enumerate()
+        .all(|(index, entry)| entry.sequence == index as u64));
+}
+
+/// Appending to a log after an out-of-order tick must not reuse a sequence.
+#[test]
+fn recording_after_an_out_of_order_tick_uses_the_next_sequence_for_that_tick() {
+    let mut log = IslandReplayLog::new("scenario".to_string());
+    log.record(5, IslandCommand::Control(ControlCommand::Pause))
+        .expect("sequence available");
+    log.record(6, IslandCommand::Control(ControlCommand::Pause))
+        .expect("sequence available");
+    log.record(5, IslandCommand::Control(ControlCommand::Resume))
+        .expect("sequence available");
+
+    let mut sequences: Vec<u64> = log
+        .entries
+        .iter()
+        .filter(|entry| entry.tick == 5)
+        .map(|entry| entry.sequence)
+        .collect();
+    sequences.sort_unstable();
+    assert_eq!(sequences, vec![0, 1]);
+}
+
+/// A log at the maximum sequence must fail rather than append an ambiguous duplicate.
+#[test]
+fn recording_after_sequence_exhaustion_fails_without_appending() {
+    let mut log = IslandReplayLog::new("scenario".to_string());
+    log.entries.push(IslandReplayEntry {
+        tick: 5,
+        sequence: u64::MAX,
+        command: IslandCommand::Control(ControlCommand::Pause),
+    });
+
+    assert_eq!(
+        log.record(5, IslandCommand::Control(ControlCommand::Resume)),
+        Err(ReplaySequenceExhausted { tick: 5 })
+    );
+    assert_eq!(log.entries.len(), 1);
+    assert_eq!(log.entries[0].sequence, u64::MAX);
 }
 
 /// A run that was interfered with, reproduced from its log.

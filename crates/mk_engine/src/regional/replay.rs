@@ -47,6 +47,19 @@ pub struct IslandReplayLog {
     pub entries: Vec<IslandReplayEntry>,
 }
 
+/// A same-tick command sequence cannot advance beyond the largest stored value.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ReplaySequenceExhausted {
+    pub tick: u64,
+}
+
+impl std::fmt::Display for ReplaySequenceExhausted {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "replay command sequence exhausted at tick {}", self.tick)
+    }
+}
+impl std::error::Error for ReplaySequenceExhausted {}
+
 impl IslandReplayLog {
     /// An empty log for a scenario.
     pub fn new(scenario_digest: String) -> Self {
@@ -57,19 +70,39 @@ impl IslandReplayLog {
         }
     }
 
-    /// Append a command applied at `tick`.
-    pub fn record(&mut self, tick: u64, command: IslandCommand) {
-        let sequence = self
+    fn next_sequence(&self, tick: u64) -> Result<u64, ReplaySequenceExhausted> {
+        match self
             .entries
             .iter()
-            .rev()
-            .take_while(|e| e.tick == tick)
-            .count() as u64;
+            .filter(|entry| entry.tick == tick)
+            .map(|entry| entry.sequence)
+            .max()
+        {
+            None => Ok(0),
+            Some(last) => last.checked_add(1).ok_or(ReplaySequenceExhausted { tick }),
+        }
+    }
+
+    fn record_with_sequence(&mut self, tick: u64, sequence: u64, command: IslandCommand) {
         self.entries.push(IslandReplayEntry {
             tick,
             sequence,
             command,
         });
+    }
+
+    /// Append a command applied at `tick`.
+    ///
+    /// Refuse sequence exhaustion rather than reusing `u64::MAX` and making
+    /// same-tick replay order ambiguous.
+    pub fn record(
+        &mut self,
+        tick: u64,
+        command: IslandCommand,
+    ) -> Result<(), ReplaySequenceExhausted> {
+        let sequence = self.next_sequence(tick)?;
+        self.record_with_sequence(tick, sequence, command);
+        Ok(())
     }
 
     /// Read a log from a file.
@@ -212,6 +245,13 @@ pub fn replay_island(
 }
 
 impl IslandLife {
+    /// Append a successfully applied command and advance the live per-tick sequence index.
+    fn record_command(&mut self, sequence: u64, command: IslandCommand) {
+        self.replay_log
+            .record_with_sequence(self.tick, sequence, command);
+        self.replay_sequence_by_tick.insert(self.tick, sequence);
+    }
+
     /// Do what was asked, and remember that it was asked.
     ///
     /// The log is appended before the command's effect is returned, so a
@@ -219,12 +259,22 @@ impl IslandLife {
     /// missing its last entry would replay to a different island and give
     /// no sign of it.
     pub fn apply_command(&mut self, command: IslandCommand) -> Result<Applied, CommandError> {
+        // Preflight the log slot before any command can mutate the island.
+        // The single-writer owns this value through the whole call, so the
+        // per-tick index cannot be advanced by another command in between.
+        let sequence = match self.replay_sequence_by_tick.get(&self.tick).copied() {
+            Some(last) => last
+                .checked_add(1)
+                .ok_or(CommandError::ReplaySequenceExhausted { tick: self.tick })?,
+            None => 0,
+        };
+
         match &command {
             IslandCommand::CreateHuman(request) => {
                 let made = self
                     .create_human((**request).clone())
                     .map_err(CommandError::Create)?;
-                self.replay_log.record(self.tick, command);
+                self.record_command(sequence, command);
                 Ok(Applied::Created(made))
             }
             IslandCommand::Intervention(action) => {
@@ -232,14 +282,14 @@ impl IslandLife {
                 // the island refuses never happened and must not be in a
                 // log that claims to reproduce the run.
                 let outcome = self.intervene(action).map_err(CommandError::Intervention)?;
-                self.replay_log.record(self.tick, command);
+                self.record_command(sequence, command);
                 Ok(Applied::Intervened(outcome))
             }
             IslandCommand::Control(control) => {
-                // Nothing in the world moves. It is recorded because a
-                // replay should be able to say what the operator did.
+                // Nothing in the world moves. It is recorded because a replay
+                // should be able to say what the operator did.
                 let _: &ControlCommand = control;
-                self.replay_log.record(self.tick, command);
+                self.record_command(sequence, command);
                 Ok(Applied::Noted)
             }
         }

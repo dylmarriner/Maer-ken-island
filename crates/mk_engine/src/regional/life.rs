@@ -476,7 +476,11 @@ pub struct IslandLife {
     /// not snapshotted, because it describes how the island got here rather
     /// than where it is. The runner writes it beside a snapshot, and
     /// `replay::replay_island` turns it back into this island.
-    pub(crate) replay_log: super::replay::IslandReplayLog,
+    pub(super) replay_log: super::replay::IslandReplayLog,
+    /// Highest applied replay sequence for each tick. Runtime-only: the log is
+    /// exposed read-only, so this index stays in sync without rescanning history.
+    /// It is deliberately absent from snapshots and the canonical state digest.
+    pub(super) replay_sequence_by_tick: BTreeMap<u64, u64>,
     /// Where the step time goes (runtime-only; not hashed or saved).
     pub timings: SubsystemTimings,
     food_cell: (usize, usize),
@@ -819,6 +823,7 @@ impl IslandLife {
             human_store: None,
             // Filled in below: the digest needs the built island.
             replay_log: super::replay::IslandReplayLog::new(String::new()),
+            replay_sequence_by_tick: BTreeMap::new(),
             timings: SubsystemTimings::default(),
             food_cell,
             water_cell,
@@ -1021,6 +1026,7 @@ impl IslandLife {
             // it here are in the log beside the snapshot, not in the file.
             // Its scenario is filled in below, as at bootstrap.
             replay_log: super::replay::IslandReplayLog::new(String::new()),
+            replay_sequence_by_tick: BTreeMap::new(),
             timings: SubsystemTimings::default(),
             food_cell: snapshot.food_cell,
             water_cell: snapshot.water_cell,
