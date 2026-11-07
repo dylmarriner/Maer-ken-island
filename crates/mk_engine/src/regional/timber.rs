@@ -940,6 +940,63 @@ mod tests {
     }
 
     #[test]
+    fn ute_haul_plan_recuts_when_the_conserved_length_remainder_exceeds_the_bed() {
+        let (labour, body) = (labour(), body());
+        let bed = labour.ute_bed_m().unwrap();
+        let minimum_pieces = 13u32;
+        // Five representable steps below bed * 13 keeps ceil(length / bed) at
+        // 13 while repeated equal shares leave the final conserved remainder
+        // more than four ULPs longer than the ute bed.
+        let length_m = f64::from_bits((bed * f64::from(minimum_pieces)).to_bits() - 5);
+        assert_eq!((length_m / bed).ceil() as u32, minimum_pieces);
+        let log = Log {
+            id: 78,
+            position_m: (0.0, 0.0),
+            heading_rad: 0.0,
+            length_m,
+            diameter_m: 0.30,
+            dry_kg: 10.0,
+            carbon_kgc: 5.0,
+            water_kg: 0.0,
+            place: LogPlace::Ground,
+        };
+        let tolerance = bed.abs().max(1.0) * f64::EPSILON * 4.0;
+        let initial = log.cross_cut(minimum_pieces, 200);
+        let initial_largest = initial
+            .iter()
+            .map(|piece| piece.length_m)
+            .fold(0.0, f64::max);
+        assert!(initial_largest > bed + tolerance);
+
+        let plans = haul_plans(
+            &log,
+            (0.0, 0.0),
+            &body,
+            &labour,
+            &site(),
+            &fleet(1_000.0, 0.0),
+            200,
+        )
+        .unwrap();
+        let ute = plans
+            .iter()
+            .find(|plan| plan.method == HaulMethod::Ute)
+            .expect("a ute plan");
+        let planned_pieces = match &ute.tasks[0].action {
+            HaulAction::CrossCut { pieces, .. } => *pieces,
+            other => panic!("starts with {other:?}"),
+        };
+        assert_eq!(planned_pieces, minimum_pieces + 1);
+
+        let pieces = log.cross_cut(planned_pieces, 200);
+        let largest_piece_m = pieces
+            .iter()
+            .map(|piece| piece.length_m)
+            .fold(0.0, f64::max);
+        assert!(largest_piece_m <= bed + tolerance);
+    }
+
+    #[test]
     fn the_excavator_lifts_only_what_it_is_rated_for_and_only_with_fuel() {
         let (labour, body) = (labour(), body());
         let l = log();
