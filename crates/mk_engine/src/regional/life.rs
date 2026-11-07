@@ -1838,7 +1838,7 @@ impl IslandLife {
     /// The quickest haul of the log on the ground nearest `at` that no
     /// founder is already moving, or `None` if there is none.
     fn plan_haul(
-        &mut self,
+        &self,
         at: (f64, f64),
         body: &LabourBody,
     ) -> Result<Option<timber::HaulJob>, IslandLifeError> {
@@ -4701,7 +4701,7 @@ mod tests {
             water_kg: 0.0,
             place: timber::LogPlace::Ground,
         };
-        life.materials.receive_felled_log(
+        let source_id = life.materials.receive_felled_log(
             log,
             &mut life.physical.hydrology,
             cell,
@@ -4749,6 +4749,39 @@ mod tests {
             life.materials.next_log_id(),
             first_piece_id,
             "declining the haul must not leak an unused reservation"
+        );
+        assert!(
+            !life.materials.cross_cut_log(source_id, 2, first_piece_id),
+            "a declined preview must not leave a pending cross-cut range"
+        );
+        assert!(
+            life.materials.log(source_id).is_some(),
+            "refusing an unreserved preview range must preserve the source log"
+        );
+
+        // The first subsequently felled log must be allowed to use the ID that
+        // the declined preview only inspected; no ghost reservation may burn it.
+        let later_log = timber::Log {
+            id: 0,
+            position_m: (at.0 + 10.0, at.1),
+            heading_rad: 0.0,
+            length_m: 1.0,
+            diameter_m: 0.2,
+            dry_kg: 123.456,
+            carbon_kgc: 61.728,
+            water_kg: 0.0,
+            place: timber::LogPlace::Ground,
+        };
+        let later_id = life.materials.receive_felled_log(
+            later_log,
+            &mut life.physical.hydrology,
+            cell,
+            area,
+            &mut ledger,
+        );
+        assert_eq!(
+            later_id, first_piece_id,
+            "the next real log must receive the previewed but unreserved ID"
         );
     }
 
