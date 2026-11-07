@@ -1,5 +1,16 @@
 # Handoff
 
+## Latest follow-up — canonical week digest compatibility (8 November 2026)
+
+- The current PR #124 workflow on head 680f757 failed the week reference-pack digest comparison: observed 5c975e00... versus pinned 29ed53bd.... The year reference pack passed.
+- The week run retained the documented physical acceptance metrics (27,597 audits, zero food/water shortfalls, 112 economy events, 200,000 estate trees, expected founder body carbon and temperate-forest NPP 471 g C/m2/yr).
+- Root cause: IslandLife::state_digest hashes MaterialLedger with Debug. The new empty reserved_log_ids set was omitted from serde snapshots but included by derived Debug, changing the digest without a pending reservation.
+- MaterialLedger now omits that empty bookkeeping field from Debug, preserving the legacy representation exactly; non-empty pending ids remain included because they affect future valid cuts.
+- Added exact legacy-empty-debug and pending-reservation-debug regressions.
+- Commits: cb9d89bb6d5b68e6f33dc3473607558985d60242 (production); 6962194d2873d733783d6e709d9ef4925e79f199 (tests); 5815c34bc2434c159930babb0c8a6d48b31e95b3 (dedicated handoff).
+- The previous exact-head run #42394121853 is not green. Fresh CI is required for the new head; do not repin WEEK_DIGEST unless the representation correction still leaves a verified state difference.
+- Full detail: docs/handoff/TIMBER_CROSS_CUT_MASS_CONSERVATION_20261108.md.
+
 ## Latest engineering handoff — timber cross-cut reserved-ID integrity (8 November 2026)
 
 - **PR #124** remains draft on `fix/timber-cross-cut-exact-conservation-20261108`. Use [PR #124](https://github.com/dylmarriner/Maer-ken-island/pull/124) for the exact live head SHA; this handoff deliberately avoids hard-coding a SHA that changes when the handoff itself is refreshed.
