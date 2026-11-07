@@ -703,6 +703,59 @@ fn direct_log_cross_cut_rejects_oversized_piece_count_before_allocation() {
 }
 
 #[test]
+#[should_panic(expected = "cross-cut source log has invalid physical state")]
+fn direct_log_cross_cut_rejects_non_finite_geometry_before_piece_allocation() {
+    let mut log = Log {
+        id: 1,
+        position_m: (0.0, 0.0),
+        heading_rad: 0.0,
+        length_m: 1.0,
+        diameter_m: 0.2,
+        dry_kg: 10.0,
+        carbon_kgc: 5.0,
+        water_kg: 0.0,
+        place: LogPlace::Ground,
+    };
+    log.heading_rad = f64::NAN;
+    let _ = log.cross_cut(2, 2);
+}
+
+#[test]
+fn receiving_invalid_felled_log_fails_before_allocating_or_booking_material() {
+    use std::panic::{catch_unwind, AssertUnwindSafe};
+
+    let b = base();
+    let cell = b.forest_cell;
+    let area = b.domain.cell_area_m2(M);
+    let mut hydrology = HydrologyState::new(&b.domain.storage_spec(M), 0.5);
+    let mut materials = MaterialLedger::new();
+    let mut ledger = Ledger::new();
+    let audit = Audit::start(&materials);
+    let mut log = Log {
+        id: 0,
+        position_m: (0.0, 0.0),
+        heading_rad: 0.0,
+        length_m: 2.0,
+        diameter_m: 0.2,
+        dry_kg: 10.0,
+        carbon_kgc: 5.0,
+        water_kg: 8.2,
+        place: LogPlace::Ground,
+    };
+    log.position_m.0 = f64::NAN;
+    let next_id_before = materials.next_log_id();
+
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        materials.receive_felled_log(log, &mut hydrology, cell, area, &mut ledger)
+    }));
+
+    assert!(result.is_err());
+    assert_eq!(materials.next_log_id(), next_id_before);
+    assert_eq!(materials.logs().count(), 0);
+    audit.close(&materials, &ledger);
+}
+
+#[test]
 #[should_panic(expected = "cross-cut reservation must contain at least one id")]
 fn material_ledger_rejects_empty_cross_cut_reservations_before_allocation() {
     MaterialLedger::new().reserve_log_ids(0);
