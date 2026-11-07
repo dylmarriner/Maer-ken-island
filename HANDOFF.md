@@ -1,12 +1,19 @@
 # Handoff
 
-Updated 2026-11-07 against `main` after PR #110 merge `148ac98c95e58aac7b2065dd0cc68884790f4168`. This is the front door for
-whoever picks the island up next, human or agent. It says what the project is, where it stands,
-how to build and check it, and where everything else is written down.
+Updated 2026-11-07 against `main` after PR #119 merged as `9cc2b15808c57bd5f61d305bca6122e79820c6bc`. PR #120 is the current MSY-diagnostic change; PR #121 is a separate, intentionally stacked biomass-increment correction. This is the front door for whoever picks the island up next, human or agent.
 
 **What is left to do, and what each item needs, is in [`WORK_REMAINING.md`](WORK_REMAINING.md).**
 
-## Latest engineering handoff — 7 November 2026
+## Current engineering handoff — 7 November 2026
+
+- **PR #118** is merged as `134082a1c1bbcea837acc58344572476e8b14f74`; its exact-head workflow passed the required Rust, desktop, backend, dashboard, computer-service, dependency and week/year acceptance checks.
+- **PR #119** is merged as `9cc2b15808c57bd5f61d305bca6122e79820c6bc`; exact-head workflow [#42336338097](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42336338097) passed all required checks, including fast Rust tests, desktop and reference-pack acceptance.
+- **PR #120** (`fix/fishery-unrepresentable-msy-diagnostics-20261107`) is open against `main` at head `6aa0d644ceacde3474ab8e37540882f2513900d8`. Its review threads are resolved. Exact-head workflow [#42346006514](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42346006514) has passed formatting, Clippy, installed backend, web dashboard, computer service, repository scripts, dependency audit and week/year reference-pack acceptance; fast Rust tests and desktop rendering were still running at the latest check. Do not merge until every required job is green.
+- **PR #121** (`fix/fishery-biomass-increment-precision-20261107`) is deliberately stacked on PR #120. It adds `BiomassIncrementUnrepresentable` for positive unharvested growth that is stored as a materially different non-zero biomass delta, with 3→4 and 5→4 tonne regressions at `2^53`; the stock must remain unchanged on error. The first exact-head run caught one stale test reference to the renamed shared tolerance; commit `9ea6a478` fixed it. Current head `bd31d34b854eb76c4d75b990626d480c5b0bf55b` is under exact-head workflow [#42346953607](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42346953607). Do not merge until all required Rust, desktop/backend and reference-pack checks pass.
+- Fishery remains standalone pending sourced species-specific stock/resilience and effort/CPUE data, IslandLife integration, and person-owned workforce decisions. No ecological parameters are invented.
+- Replay PRs #73–76 were not modified; do not revive the paused Maer-Ken Merge Completion job. Reconcile that replay stack separately against current `main` and the merged digest correction when the replay work is explicitly resumed.
+
+## Previous engineering handoff — 7 November 2026
 
 - [Fishery biomass remainder precision](docs/handoff/FISHERY_BIOMASS_REMAINDER_PRECISION_20261107.md) — PR #111 merged to `main` as `b41bb5cf24bddca5df2bc556612c5edfc8b91bde`. Exact-head workflow [#42292739398](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42292739398) passed formatting, Clippy, fast Rust tests, desktop, installed backend, dashboard, computer service, repository scripts, dependency audit and week/year reference-pack acceptance; nightly slow tests were skipped by design.
 

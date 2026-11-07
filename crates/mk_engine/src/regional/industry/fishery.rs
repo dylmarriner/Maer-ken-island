@@ -22,11 +22,10 @@ use crate::validation::{ReferenceDomain, ReferenceLibrary};
 
 const YEAR_S: f64 = 365.25 * 86_400.0;
 
-// Repeated binary64 additions can move a cumulative total by a few ULPs.
-// Bound the recorded-delta error relative to the catch, rather than demanding
-// bit equality (which rejects ordinary repeated catches), while still refusing
-// materially distorted increments such as 2^53 + 3 rounding to 4.
-const LANDED_TOTAL_RELATIVE_TOLERANCE: f64 = 1.0e-12;
+// Stored landed mass and stock biomass are binary64 accumulators. Accept
+// ordinary relative rounding, but reject materially distorted increments such
+// as 2^53 + 3 rounding to 2^53 + 4.
+const MATERIAL_INCREMENT_RELATIVE_TOLERANCE: f64 = 1.0e-12;
 
 /// Invalid fishery inputs are explicit errors; a failed step never mutates its stock.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -41,6 +40,7 @@ pub enum FisheryError {
     LandedTotalOverflow,
     LandedTotalUnrepresentable,
     BiomassRemainderUnrepresentable,
+    BiomassIncrementUnrepresentable,
     /// Positive mathematical maximum sustainable yield rounded below binary64 range.
     UnrepresentableMsy,
     /// Positive analytic peak-biomass target rounded below binary64 range.
@@ -66,7 +66,10 @@ impl std::fmt::Display for FisheryError {
                 "cumulative landed biomass increment is not representable at stored precision"
             }
             Self::BiomassRemainderUnrepresentable => {
-                "remaining biomass growth is not representable at stored precision"
+                "remaining biomass growth is below the stored stock's representable increment"
+            }
+            Self::BiomassIncrementUnrepresentable => {
+                "remaining biomass growth is materially distorted at stored precision"
             }
             Self::UnrepresentableMsy => {
                 "positive maximum sustainable yield is below binary64 representable range"
@@ -398,7 +401,9 @@ impl FishStock {
                 direct
             }
         } else {
-            let remaining_fraction = 1.0 - p;
+            // Subtract before dividing: 1 - (B / K) can lose substantial
+            // relative precision when B is within a few ULPs of K.
+            let remaining_fraction = (self.k_t - self.biomass_t) / self.k_t;
             let growth_factor = rate * remaining_fraction;
             let direct = growth_factor * self.biomass_t;
             if rate > 0.0
@@ -578,17 +583,29 @@ impl FishStock {
         }
 
         let grown = self.growth_capacity_t(model, dt_s)?;
-        let post_growth = self.biomass_t + grown;
-        if !post_growth.is_finite() {
-            return Err(FisheryError::NonFiniteGrowth);
-        }
-
+        // growth_capacity_t already caps production to the stock's headroom.
+        // Do not reject an overflowing B + grown intermediate before the
+        // carrying-capacity cap is applied below: at the top of binary64 range,
+        // rounding K - B upward can make B + headroom overflow even though the
+        // physically stored result is exactly the finite carrying capacity.
         let catch = wanted_t.min(grown);
-        // Subtract the catch from growth before adding the remainder to biomass.
-        // (biomass + grown) - catch can lose low bits to cancellation and make a
-        // fully harvested stock appear to shrink even though catch == growth.
+        // Subtract the catch from growth before updating the stored stock.
+        // For non-saturating growth, add the remainder to B. At the carrying-
+        // capacity boundary, compute K - catch directly: B + (headroom - catch)
+        // can overflow or lose low bits even though the capped result is finite.
         let remaining_growth = grown - catch;
-        let biomass_t = (self.biomass_t + remaining_growth).min(self.k_t);
+        let headroom = self.k_t - self.biomass_t;
+        let biomass_t = if remaining_growth == 0.0 {
+            self.biomass_t
+        } else if grown == headroom {
+            // When growth saturates headroom, derive the post-harvest stock
+            // from K - catch. B + (headroom - catch) can overflow at the top
+            // of binary64 range even though the capped, post-catch stock is
+            // finite; capping that infinity to K would silently lose the catch.
+            self.k_t - catch
+        } else {
+            (self.biomass_t + remaining_growth).min(self.k_t)
+        };
         let landed_t = self.landed_t + catch;
         if !biomass_t.is_finite() {
             return Err(FisheryError::NonFiniteGrowth);
@@ -602,7 +619,7 @@ impl FishStock {
         let recorded_delta = landed_t - self.landed_t;
         if catch > 0.0
             && (recorded_delta <= 0.0
-                || (recorded_delta - catch).abs() > catch * LANDED_TOTAL_RELATIVE_TOLERANCE)
+                || (recorded_delta - catch).abs() > catch * MATERIAL_INCREMENT_RELATIVE_TOLERANCE)
         {
             return Err(FisheryError::LandedTotalUnrepresentable);
         }
@@ -612,6 +629,17 @@ impl FishStock {
         // at the current biomass magnitude.
         if remaining_growth > 0.0 && biomass_t == self.biomass_t {
             return Err(FisheryError::BiomassRemainderUnrepresentable);
+        }
+        // A positive increment can also be rounded to the wrong non-zero
+        // amount (for example, 2^53 + 3 rounds to 2^53 + 4). Preserve the
+        // material ledger by accepting only ordinary relative rounding.
+        let recorded_growth = biomass_t - self.biomass_t;
+        if remaining_growth > 0.0
+            && (recorded_growth <= 0.0
+                || (recorded_growth - remaining_growth).abs()
+                    > remaining_growth * MATERIAL_INCREMENT_RELATIVE_TOLERANCE)
+        {
+            return Err(FisheryError::BiomassIncrementUnrepresentable);
         }
 
         self.biomass_t = biomass_t;
@@ -1767,6 +1795,99 @@ mod tests {
     }
 
     #[test]
+    fn fish_preserves_a_partial_catch_when_the_uncapped_biomass_sum_overflows() {
+        let carrying_capacity = f64::MAX;
+        let ulp_at_max = 2.0_f64.powi(971);
+        let biomass = 1.5 * ulp_at_max;
+        let headroom = carrying_capacity - biomass;
+        let wanted_catch = 0.5 * ulp_at_max;
+
+        let p = biomass / carrying_capacity;
+        let biomass_factor = (1.0 - p) * (p / 0.25);
+        let biomass_product = biomass * biomass_factor;
+        let rate = headroom / biomass_product;
+        let model = FisheryModel {
+            r_per_year: [0.0, rate, 0.0, 0.0],
+            depensation_below: 0.25,
+        };
+        let mut stock = FishStock::unexploited(Resilience::Medium, carrying_capacity)
+            .expect("finite positive carrying capacity");
+        stock.biomass_t = biomass;
+
+        let remaining_growth = headroom - wanted_catch;
+        assert!((biomass + remaining_growth).is_infinite());
+        assert_eq!(
+            stock.fish(&model, wanted_catch, 2.0 * YEAR_S),
+            Ok(wanted_catch)
+        );
+        assert_eq!(stock.biomass_t, carrying_capacity - wanted_catch);
+        assert_eq!(stock.landed_t, wanted_catch);
+    }
+
+    #[test]
+    fn fish_caps_an_overflowing_intermediate_at_finite_carrying_capacity() {
+        let carrying_capacity = f64::MAX;
+        let ulp_at_max = 2.0_f64.powi(971);
+        let biomass = 1.5 * ulp_at_max;
+        let headroom = carrying_capacity - biomass;
+        assert!((biomass + headroom).is_infinite());
+
+        let p = biomass / carrying_capacity;
+        let biomass_factor = (1.0 - p) * (p / 0.25);
+        let biomass_product = biomass * biomass_factor;
+        let rate = headroom / biomass_product;
+        assert!(rate.is_finite());
+
+        let model = FisheryModel {
+            r_per_year: [0.0, rate, 0.0, 0.0],
+            depensation_below: 0.25,
+        };
+        let mut stock = FishStock::unexploited(Resilience::Medium, carrying_capacity)
+            .expect("finite positive carrying capacity");
+        stock.biomass_t = biomass;
+
+        assert!(stock.surplus_t_per_year(&model).expect("finite surplus") >= headroom);
+        assert_eq!(stock.fish(&model, 0.0, 2.0 * YEAR_S), Ok(0.0));
+        assert_eq!(stock.biomass_t, carrying_capacity);
+        assert_eq!(stock.landed_t, 0.0);
+    }
+
+    #[test]
+    fn biomass_increment_rounded_up_or_down_is_rejected_without_mutation() {
+        let biomass = 2.0_f64.powi(53);
+        let carrying_capacity = 2.0_f64.powi(54);
+
+        for (growth, expected_recorded_delta) in [(3.0, 4.0), (5.0, 4.0)] {
+            let model = FisheryModel {
+                r_per_year: [0.0, 2.0 * growth / biomass, 0.0, 0.0],
+                depensation_below: 0.25,
+            };
+            let mut stock = FishStock::unexploited(Resilience::Medium, carrying_capacity)
+                .expect("positive carrying capacity");
+            stock.biomass_t = biomass;
+            let before = stock.clone();
+
+            let calculated_growth = stock
+                .sustainable_catch_limit_t(&model, YEAR_S)
+                .expect("the requested interval growth is representable");
+            assert_eq!(calculated_growth, growth);
+            assert_eq!(
+                stock.biomass_t + calculated_growth - stock.biomass_t,
+                expected_recorded_delta
+            );
+
+            assert_eq!(
+                stock.fish(&model, 0.0, YEAR_S),
+                Err(FisheryError::BiomassIncrementUnrepresentable)
+            );
+            assert_eq!(
+                stock, before,
+                "a materially rounded stock increment must not mutate the biomass ledger"
+            );
+        }
+    }
+
+    #[test]
     fn landed_increment_rounded_to_a_different_amount_is_rejected_without_mutation() {
         let mut model = FisheryModel::load_default().expect("the pack loads");
         model.r_per_year[Resilience::Medium as usize] = 0.5;
@@ -1848,7 +1969,7 @@ mod tests {
         assert_eq!(landed, 0.1);
         let recorded_delta = stock.landed_t - 0.3;
         assert!(recorded_delta > 0.0);
-        assert!((recorded_delta - landed).abs() <= landed * LANDED_TOTAL_RELATIVE_TOLERANCE);
+        assert!((recorded_delta - landed).abs() <= landed * MATERIAL_INCREMENT_RELATIVE_TOLERANCE);
     }
 
     #[test]
@@ -1942,5 +2063,36 @@ mod tests {
                 "an unrepresentable step must not mutate the stock"
             );
         }
+    }
+
+    #[test]
+    fn near_capacity_surplus_uses_headroom_ratio_without_cancellation() {
+        // These adjacent binary64 values make 1 - (B / K) overstate the
+        // exact headroom fraction by about 16.4% due to division rounding.
+        let k_t = f64::from_bits(0x38d2_a197_4237_2a92);
+        let biomass_t = f64::from_bits(0x38d2_a197_4237_2a91);
+        let model = FisheryModel {
+            r_per_year: [0.0, 1.0, 0.0, 0.0],
+            depensation_below: 0.25,
+        };
+        let stock = FishStock {
+            resilience: Resilience::Medium,
+            k_t,
+            biomass_t,
+            landed_t: 0.0,
+        };
+
+        let rounded_fraction = 1.0 - (biomass_t / k_t);
+        let exact_headroom_fraction = (k_t - biomass_t) / k_t;
+        assert!(rounded_fraction > exact_headroom_fraction * 1.1);
+
+        let expected = exact_headroom_fraction * biomass_t;
+        let actual = stock
+            .surplus_t_per_year(&model)
+            .expect("near-capacity surplus remains representable");
+        assert!(
+            (actual / expected - 1.0).abs() <= MATERIAL_INCREMENT_RELATIVE_TOLERANCE,
+            "near-capacity surplus must use the representable headroom, not cancellation in 1 - B/K"
+        );
     }
 }
