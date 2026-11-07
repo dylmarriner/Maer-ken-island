@@ -141,6 +141,8 @@ pub enum IslandReplayError {
     NotALog(String, String),
     /// A log written by a format this build does not know.
     Version(u32),
+    /// Two commands claim the same ordering position within one tick.
+    DuplicateSequence { tick: u64, sequence: u64 },
     /// The log belongs to a different scenario. Replaying it here would
     /// reproduce nothing and look like it had.
     WrongScenario {
@@ -166,6 +168,10 @@ impl std::fmt::Display for IslandReplayError {
             Self::Version(v) => write!(
                 f,
                 "that log is format {v}; this build reads {REPLAY_LOG_VERSION}"
+            ),
+            Self::DuplicateSequence { tick, sequence } => write!(
+                f,
+                "replay log contains duplicate command sequence {sequence} at tick {tick}"
             ),
             Self::WrongScenario { log, scenario } => write!(
                 f,
@@ -206,6 +212,24 @@ pub fn replay_island(
         return Err(IslandReplayError::Version(log.version));
     }
 
+    // Validate the requested replay horizon before bootstrapping. A duplicate
+    // (tick, sequence) pair has no deterministic command order, even if the
+    // caller has reordered the underlying vector.
+    let mut entries: Vec<&IslandReplayEntry> = log
+        .entries
+        .iter()
+        .filter(|entry| entry.tick <= until_tick)
+        .collect();
+    entries.sort_by_key(|entry| (entry.tick, entry.sequence));
+    for pair in entries.windows(2) {
+        if pair[0].tick == pair[1].tick && pair[0].sequence == pair[1].sequence {
+            return Err(IslandReplayError::DuplicateSequence {
+                tick: pair[0].tick,
+                sequence: pair[0].sequence,
+            });
+        }
+    }
+
     let mut life = IslandLife::bootstrap(scenario, canon).map_err(IslandReplayError::Island)?;
 
     let here = life.scenario_digest_hex();
@@ -216,16 +240,7 @@ pub fn replay_island(
         });
     }
 
-    // In (tick, sequence) order, whatever order the file happens to be in:
-    // a log is a record, and a record that had been reordered should still
-    // reproduce the run rather than quietly produce a different one.
-    let mut entries: Vec<&IslandReplayEntry> = log
-        .entries
-        .iter()
-        .filter(|e| e.tick <= until_tick)
-        .collect();
-    entries.sort_by_key(|e| (e.tick, e.sequence));
-
+    // The validated entries are now in deterministic (tick, sequence) order.
     let step = life.scenario.cadences.human_seconds;
     for entry in entries {
         while life.tick < entry.tick {
