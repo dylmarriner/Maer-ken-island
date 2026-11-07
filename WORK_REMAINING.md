@@ -1,3 +1,11 @@
+## Current exact-head timber test repair — 8 November 2026
+
+- [x] Correct the Ute reservation regression fixture: use ten reference-pack sustainable loads so the 14-piece length boundary remains the cause of the extra cut and the Ute is genuinely the quickest feasible plan.
+- [x] Correct the empty-reservation Debug expectation to `next_structure: 1`, matching `MaterialLedger::new()`.
+- [ ] Re-run exact-head fast Rust tests and all dependent desktop/backend/week/year acceptance jobs before resolving review threads or merging PR #124.
+
+Evidence and rationale: `docs/handoff/TIMBER_CROSS_CUT_MASS_CONSERVATION_20261108.md`.
+
 ## Latest engineering update — 8 November 2026
 
 - PR #124 now also preserves the canonical week digest when no cross-cut is pending. The previous exact-head run on 680f757 failed the week digest pin (observed 5c975e00..., expected 29ed53bd...) while the year pack passed. Its documented physical metrics remained inside acceptance: 27,597 audits, zero food/water shortfalls, 112 economy events, 200,000 estate trees, founder body carbon at expected values and temperate-forest NPP 471 g C/m2/yr.
