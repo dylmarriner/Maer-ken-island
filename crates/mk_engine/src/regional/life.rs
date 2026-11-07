@@ -4487,9 +4487,7 @@ mod tests {
         // the conserved final remainder is materially longer and forces the
         // Ute plan to recut into fourteen pieces.
         let minimum_pieces = 13u32;
-        let length_m = f64::from_bits(
-            (bed * f64::from(minimum_pieces)).to_bits() - 5,
-        );
+        let length_m = f64::from_bits((bed * f64::from(minimum_pieces)).to_bits() - 5);
         let source_log = timber::Log {
             id: 0,
             position_m: at,
@@ -4560,11 +4558,9 @@ mod tests {
         );
         assert_eq!(other_id, first_piece_id + u64::from(minimum_pieces + 1));
 
-        assert!(life.materials.cross_cut_log(
-            source_id,
-            minimum_pieces + 1,
-            first_piece_id,
-        ));
+        assert!(life
+            .materials
+            .cross_cut_log(source_id, minimum_pieces + 1, first_piece_id,));
         assert_eq!(
             life.materials.log(other_id).map(|log| log.dry_kg),
             Some(123.456),
