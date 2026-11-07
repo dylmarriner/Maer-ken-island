@@ -22,9 +22,10 @@ Base: `main`
 
 ## Verification
 
-- Current branch head: `756b556c9c3f8c717af353c63b2b3b71db84b883`.
-- Regression committed: `756b556c9c3f8c717af353c63b2b3b71db84b883`.
-- Exact-head CI is required for formatting, Clippy, fast Rust tests, desktop/backend acceptance and week/year reference-pack checks.
+- - Regression commit: `756b556c9c3f8c717af353c63b2b3b71db84b883`.
+- Formatting correction: `f0a95dd7ffe53f86721fa2e43fa8354ec6004396`.
+- First exact-head workflow `#42353261552` found one rustfmt-only import layout mismatch. The import was corrected in the formatting commit above; that failed formatting run is retained as evidence.
+- A fresh exact-head workflow is required for formatting, Clippy, fast Rust tests, desktop/backend acceptance and week/year reference-pack checks.
 - No local Cargo result is claimed.
 
 ## Remaining
