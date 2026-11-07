@@ -1,4 +1,23 @@
-# Work remaining
+## Latest engineering update — 8 November 2026
+
+- PR #124 now also preserves the canonical week digest when no cross-cut is pending. The previous exact-head run on 680f757 failed the week digest pin (observed 5c975e00..., expected 29ed53bd...) while the year pack passed. Its documented physical metrics remained inside acceptance: 27,597 audits, zero food/water shortfalls, 112 economy events, 200,000 estate trees, founder body carbon at expected values and temperate-forest NPP 471 g C/m2/yr.
+- Root cause was representation-only: IslandLife::state_digest hashes MaterialLedger through Debug, so the new empty reserved_log_ids field appeared in derived Debug even though serde omits it when empty. MaterialLedger now implements Debug to preserve the exact legacy representation when the set is empty and include it when pending IDs exist.
+- Added regressions for the exact legacy empty-ledger Debug string and pending-ID inclusion. Commits: cb9d89bb (production), 6962194d (tests), 5815c34b (dedicated handoff), d52a20ff (root handoff).
+- Current exact-head CI [#42395446225](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42395446225) is in progress. At last check, repository scripts, dashboard and computer service passed; formatting, fast tests, desktop, installed backend, dependency audit and week/year acceptance were still running. The previous head's digest failure remains open until the current week pack passes.
+- Do not repin WEEK_DIGEST unless the compatibility fix still leaves a separately audited state difference. No simulation parameters, RNG, replay hash or snapshot schema changed.
+- PR #123 remains separate and its exact-head checks passed. PR #123 and #124 still overlap in HANDOFF.md, WORK_REMAINING.md, life.rs and docs/ISLAND_SYSTEM_STATUS.md; reconcile before merging either. The broader timber milestone remains Open; saw-based Ute cross-cutting is still outstanding.
+
+## Current engineering update — 8 November 2026
+
+- PR #124 now caps one cross-cut at 10,000 pieces. The pure Log API, ledger reservation/materialisation, legacy reservation restoration and haul planner all fail closed before an oversized allocation. LabourError::CrossCutLimitExceeded reports the planner limit; regressions cover direct API, reservation and no-mutation ledger paths. Commits: 46b5c581, b6233988, 1be3fae2, ce87b0e0. Exact-head CI is pending; no local Cargo result is claimed.
+
+- PR #120 (MSY diagnostic representability) merged to `main` as `66bf099f36c567ab344fcc9b268a9a33a656011d`; exact-head workflow #42346006514 passed all required jobs.
+- PR #121 (biomass increment precision) merged to `main` as `522aba3d860435c92a4938cf5ffba2b427941cd7`; exact-head workflow #42351378042 passed all required jobs.
+- PR #124 remains draft on `fix/timber-cross-cut-exact-conservation-20261108`, code head `74c4c865c1f7c80a342e95604e4203a12dc1c970`. It now rejects zero, overflowing or occupied cross-cut destination ranges before source removal, and `finish_haul_task` fails fast if a planned CrossCut is refused. Regression `cross_cut_refuses_colliding_or_overflowing_piece_ids_without_mutating_the_ledger` verifies both logs, next ID and carbon/water stocks remain unchanged. Commits: `a8c0abca755aefc59e09786aceb5f19aff15c4a3`, `0855c4dcb4c534e90a1a416c7da990083498c300`, `57ba202957f77dc570e7b9f29620eccacadd83f7`, `74c4c865c1f7c80a342e95604e4203a12dc1c970`.
+- Exact-head workflow [#42383983549](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42383983549): formatting, Clippy, installed backend, computer service, repository scripts, web dashboard, dependency audit and week/year reference-pack acceptance passed; fast Rust tests and desktop render/input acceptance were still running at this update. Nightly slow tests are skipped by design. Do not mark timber complete or merge until those two jobs finish.
+- PR #124 Codex review on `74c4c86` found no major issues; both review threads are resolved.
+- PR #123 remains separate at `1378a345020601f3cbde85ee9db4f8a44822c16e`; exact-head workflow [#42374551377](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42374551377) passed all required jobs, Codex review found no major issues and both review threads are resolved. PR #123 and #124 overlap in `HANDOFF.md`, `WORK_REMAINING.md`, `life.rs` and `docs/ISLAND_SYSTEM_STATUS.md`; reconcile those hunks before merging either.
+- PRs #73–76 remain untouched; do not revive the paused Maer-Ken Merge Completion job.
 
 Fishery landed-total atomicity and precision (PR #110) merged to `main` as `148ac98c95e58aac7b2065dd0cc68884790f4168`. Exact-head workflow [#42275024667](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42275024667) passed formatting, Clippy, fast Rust tests, desktop build/tests/rendering/input acceptance, installed backend, web dashboard, computer service, repository scripts, dependency audit and week/year reference-pack acceptance; nightly slow tests were skipped by design.
 
@@ -53,7 +72,7 @@ this list holds the current state. The evidence for what is *done* is in
 
 | Area | Item | State | Blocked on |
 |---|---|---|---|
-| Timber | Routes, sawing logs for the ute (D40); drying and seasoning done 2026-10-14, splitting, two-person crosscut felling and excavator rigging 2026-10-23 (D63) | Open | — |
+| Timber | Routes, sawing logs for the ute (D40); drying and seasoning done 2026-10-14, splitting, two-person crosscut felling and excavator rigging 2026-10-23 (D63); cross-cut conservation, exact/pending piece-ID reservation, consumed-range protection, 10,000-piece allocation bound and digest-compatible reservation bookkeeping in draft PR #124 | Open | Exact-head CI and PR #123 integration reconciliation |
 | Living world | Phase 3 Task 1b: species at island scale | Done (D55 open: upstream densities) | — |
 | Living world | Phase 3 Task 2: every resource and material, placers, recipes | Catalogue, mineral sites, gold placers, ironsand done (2026-10-14); diamond and platinum placers, animal, fish and plant nodes, salt works (2026-10-23); other gem and tin placers, tools, recipes open | Cited gem/tin placer models, shaft depth and rate |
 | Living world | D9: actions take one tick | In part: felling, hauling, splitting, shed, panning, foraging and water trips timed, learned by practice (R11); Craft, Explore and social actions one tick | Cited durations per task |

@@ -31,9 +31,10 @@
 //! (the island's species are not seeded yet; Task 1b).
 
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
+use std::fmt;
 
-use super::timber::Log;
+use super::timber::{Log, MAX_CROSS_CUT_PIECES};
 use mk_core::flux::{FluxEntry, FluxKind, Ledger, Reservoir};
 
 use super::ecology::RegionalEcologyState;
@@ -311,7 +312,7 @@ struct Structure {
 }
 
 /// Everything the economy holds as physical material.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct MaterialLedger {
     stock: BTreeMap<Material, f64>,
     structures: BTreeMap<u64, Structure>,
@@ -325,6 +326,33 @@ pub struct MaterialLedger {
     logs: BTreeMap<u64, Log>,
     #[serde(default)]
     next_log: u64,
+    /// IDs reserved for pending cross-cut materialisation. Consumed ids are
+    /// removed and never become reservable again. Omit the empty set so
+    /// snapshots without a pending cut retain their prior representation.
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    reserved_log_ids: BTreeSet<u64>,
+}
+
+impl fmt::Debug for MaterialLedger {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Keep the pre-reservation debug representation byte-for-byte stable
+        // while no cut is pending. IslandLife::state_digest hashes this
+        // representation; a new empty bookkeeping field must not repin the
+        // simulation's canonical week digest. Pending ids remain visible
+        // because they change which future cross-cuts are valid.
+        let mut debug = f.debug_struct("MaterialLedger");
+        debug
+            .field("stock", &self.stock)
+            .field("structures", &self.structures)
+            .field("bodies", &self.bodies)
+            .field("next_structure", &self.next_structure)
+            .field("logs", &self.logs)
+            .field("next_log", &self.next_log);
+        if !self.reserved_log_ids.is_empty() {
+            debug.field("reserved_log_ids", &self.reserved_log_ids);
+        }
+        debug.finish()
+    }
 }
 
 fn flow(ledger: &mut Ledger, kind: FluxKind, from: Reservoir, to: Reservoir, amount: f64) {
@@ -627,7 +655,7 @@ impl MaterialLedger {
         cell_area_m2: f64,
         ledger: &mut Ledger,
     ) -> u64 {
-        log.id = self.reserve_log_ids(1);
+        log.id = self.allocate_log_id();
         flow(
             ledger,
             FluxKind::Carbon,
@@ -658,11 +686,74 @@ impl MaterialLedger {
         id
     }
 
-    /// Reserve `n` consecutive log ids; returns the first.
+    /// First log id that has not yet been allocated or reserved.
+    ///
+    /// Planning is single-writer and may inspect this value before reserving
+    /// the exact piece range required by the selected haul plan.
+    pub fn next_log_id(&self) -> u64 {
+        self.next_log.max(1)
+    }
+
+    /// Allocate one id for a log that is materialised immediately.
+    fn allocate_log_id(&mut self) -> u64 {
+        let id = self.next_log_id();
+        self.next_log = id.checked_add(1).expect("log id space exhausted");
+        id
+    }
+
+    /// Reserve `n` consecutive ids for a future cross-cut; returns the first.
+    /// A successful cross-cut consumes the pending ids. Refused cuts leave
+    /// them pending so the original planned operation can be retried.
     pub fn reserve_log_ids(&mut self, n: u64) -> u64 {
-        let first = self.next_log.max(1);
-        self.next_log = first + n;
+        assert!(
+            n <= u64::from(MAX_CROSS_CUT_PIECES),
+            "cross-cut reservation exceeds safety bound"
+        );
+        let first = self.next_log_id();
+        let end = first.checked_add(n).expect("log id space exhausted");
+        self.next_log = end;
+        self.reserved_log_ids.extend(first..end);
         first
+    }
+
+    /// Reconstruct a pending range from an active persisted haul task.
+    ///
+    /// IslandLife snapshots written before reservation tracking have the
+    /// monotonic allocator watermark and the active CrossCut task, but not
+    /// this ledger's pending-id set. Only the owning haul-task path calls
+    /// this crate-private migration helper; direct ledger callers still need
+    /// an explicitly pending reservation.
+    pub(crate) fn restore_pending_cross_cut_ids(
+        &mut self,
+        source_id: u64,
+        pieces: u32,
+        first_id: u64,
+    ) -> bool {
+        let pieces = pieces.max(1);
+        if pieces > MAX_CROSS_CUT_PIECES {
+            return false;
+        }
+        let Some(end_exclusive) = first_id.checked_add(u64::from(pieces)) else {
+            return false;
+        };
+        if first_id == 0
+            || !self.logs.contains_key(&source_id)
+            || end_exclusive > self.next_log
+            || self.logs.range(first_id..end_exclusive).next().is_some()
+        {
+            return false;
+        }
+
+        let already_pending = self.reserved_log_ids.range(first_id..end_exclusive).count();
+        if already_pending == pieces as usize {
+            return true;
+        }
+        if already_pending != 0 {
+            return false;
+        }
+
+        self.reserved_log_ids.extend(first_id..end_exclusive);
+        true
     }
 
     /// Every log and piece, by id.
@@ -747,10 +838,35 @@ impl MaterialLedger {
     /// Cross-cut log `id` into `pieces` with ids from `first_id`: the log
     /// becomes its pieces, nothing gained or lost.
     pub fn cross_cut_log(&mut self, id: u64, pieces: u32, first_id: u64) -> bool {
-        let Some(log) = self.logs.remove(&id) else {
+        let Some(log) = self.logs.get(&id).cloned() else {
             return false;
         };
-        for piece in log.cross_cut(pieces, first_id) {
+        let pieces = pieces.max(1);
+        if pieces > MAX_CROSS_CUT_PIECES {
+            return false;
+        }
+        // MaterialLedger log ids are one-based. Validate the complete destination
+        // range before removing the source: an invalid or colliding range must
+        // never overwrite another log or leave the source partially consumed.
+        let Some(end_exclusive) = first_id.checked_add(u64::from(pieces)) else {
+            return false;
+        };
+        if first_id == 0
+            // next_log is the exclusive end of ids already allocated/reserved.
+            // It cannot distinguish a pending reservation from an old id whose
+            // log was later removed, so require every id to remain pending.
+            || end_exclusive > self.next_log
+            || self.reserved_log_ids.range(first_id..end_exclusive).count() != pieces as usize
+            || self.logs.range(first_id..end_exclusive).next().is_some()
+        {
+            return false;
+        }
+
+        let split = log.cross_cut(pieces, first_id);
+        self.logs.remove(&id);
+        for piece in split {
+            let was_reserved = self.reserved_log_ids.remove(&piece.id);
+            debug_assert!(was_reserved, "cross-cut ids were validated as reserved");
             self.logs.insert(piece.id, piece);
         }
         true

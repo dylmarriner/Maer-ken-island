@@ -67,6 +67,11 @@ pub struct Log {
     pub place: LogPlace,
 }
 
+/// Maximum pieces materialised by one cross-cut operation. This generous
+/// bound prevents malformed persisted tasks or direct API callers from
+/// turning a small snapshot into an unbounded allocation.
+pub const MAX_CROSS_CUT_PIECES: u32 = 10_000;
+
 impl Log {
     /// Mass as it is (kg): wood and water.
     pub fn green_kg(&self) -> f64 {
@@ -91,16 +96,62 @@ impl Log {
         )
     }
 
-    /// Cross-cut into `n` equal pieces along the log, numbered from the
-    /// butt, with ids `first_id..first_id + n`.
+    /// Cross-cut into `n` as-equal-as-binary64-allows pieces along the log,
+    /// numbered from the butt with ids `first_id..first_id + n`. The final
+    /// piece receives each floating-point remainder so totals are conserved.
+    /// The caller must supply a reserved, one-based range whose exclusive end
+    /// fits in `u64`; the material ledger enforces the reservation itself.
     pub fn cross_cut(&self, n: u32, first_id: u64) -> Vec<Log> {
         let n = n.max(1);
+        assert!(
+            n <= MAX_CROSS_CUT_PIECES,
+            "cross-cut piece count exceeds safety bound"
+        );
+        assert!(first_id > 0, "log ids are one-based");
+        let _end_exclusive = first_id
+            .checked_add(u64::from(n))
+            .expect("log id range exhausted");
         let k = f64::from(n);
-        let piece_len = self.length_m / k;
+        let equal_piece_len = self.length_m / k;
+        let equal_dry_kg = self.dry_kg / k;
+        let equal_carbon_kgc = self.carbon_kgc / k;
+        let equal_water_kg = self.water_kg / k;
         let butt = self.butt_m();
+        let mut allocated_length = 0.0;
+        let mut allocated_dry_kg = 0.0;
+        let mut allocated_carbon_kgc = 0.0;
+        let mut allocated_water_kg = 0.0;
         (0..n)
             .map(|i| {
-                let along = (f64::from(i) + 0.5) * piece_len;
+                // Equal division can make n rounded shares sum to one ULP
+                // above or below the source. Give the final piece the exact
+                // remainder so timber, carbon, water and length stay closed.
+                let last_piece = i == n - 1;
+                let length_m = if last_piece {
+                    self.length_m - allocated_length
+                } else {
+                    equal_piece_len
+                };
+                let dry_kg = if last_piece {
+                    self.dry_kg - allocated_dry_kg
+                } else {
+                    equal_dry_kg
+                };
+                let carbon_kgc = if last_piece {
+                    self.carbon_kgc - allocated_carbon_kgc
+                } else {
+                    equal_carbon_kgc
+                };
+                let water_kg = if last_piece {
+                    self.water_kg - allocated_water_kg
+                } else {
+                    equal_water_kg
+                };
+                let along = allocated_length + 0.5 * length_m;
+                allocated_length += length_m;
+                allocated_dry_kg += dry_kg;
+                allocated_carbon_kgc += carbon_kgc;
+                allocated_water_kg += water_kg;
                 Log {
                     id: first_id + u64::from(i),
                     position_m: (
@@ -108,11 +159,11 @@ impl Log {
                         butt.1 + along * self.heading_rad.sin(),
                     ),
                     heading_rad: self.heading_rad,
-                    length_m: piece_len,
+                    length_m,
                     diameter_m: self.diameter_m,
-                    dry_kg: self.dry_kg / k,
-                    carbon_kgc: self.carbon_kgc / k,
-                    water_kg: self.water_kg / k,
+                    dry_kg,
+                    carbon_kgc,
+                    water_kg,
                     place: self.place,
                 }
             })
@@ -361,6 +412,41 @@ pub fn haul_plans_over(
     // Cross-cut pieces: none heavier than the body's sustainable load.
     let sustainable = labour.sustainable_load_kg(body)?;
     let by_mass = (log.green_kg() / sustainable.max(1e-6)).ceil().max(1.0) as u32;
+
+    // Cross-cutting assigns the final piece the conserved binary64 remainder.
+    // Check the actual pieces, not the average: a remainder can exceed a load
+    // limit after many individually rounded shares have been accumulated.
+    let split_within_limits = |minimum_pieces: u32,
+                               max_piece_kg: f64,
+                               max_piece_length_m: Option<f64>|
+     -> Result<(u32, Vec<Log>), LabourError> {
+        let tolerance = |limit: f64| limit.abs().max(1.0) * f64::EPSILON * 4.0;
+        let mut pieces = minimum_pieces.max(1);
+        loop {
+            if pieces > MAX_CROSS_CUT_PIECES {
+                return Err(LabourError::CrossCutLimitExceeded {
+                    requested_pieces: pieces,
+                    maximum_pieces: MAX_CROSS_CUT_PIECES,
+                });
+            }
+            let split = log.cross_cut(pieces, first_piece_id);
+            let largest_mass = split.iter().map(Log::green_kg).fold(0.0, f64::max);
+            let largest_length = split.iter().map(|piece| piece.length_m).fold(0.0, f64::max);
+            let mass_fits = largest_mass <= max_piece_kg + tolerance(max_piece_kg);
+            let length_fits =
+                max_piece_length_m.is_none_or(|limit| largest_length <= limit + tolerance(limit));
+            if mass_fits && length_fits {
+                return Ok((pieces, split));
+            }
+            let Some(next_pieces) = pieces.checked_add(1) else {
+                return Err(LabourError::OverLoad {
+                    carried_kg: largest_mass,
+                    max_kg: max_piece_kg,
+                });
+            };
+            pieces = next_pieces;
+        }
+    };
     let cut = labour.fell_tree(LabourTool::SteelAxe, log.diameter_m * 100.0)?;
     let cross_cut = |pieces: u32| HaulTask {
         action: HaulAction::CrossCut {
@@ -374,16 +460,18 @@ pub fn haul_plans_over(
         met: if pieces > 1 { cut.met } else { WALKING_MET },
         ends_at_m: butt,
     };
-    let piece_at =
-        |pieces: u32, i: u32| log.cross_cut(pieces, first_piece_id)[i as usize].position_m;
 
     // The ute.
     if let Some(ute) = fleet.ute {
         let bed = labour.ute_bed_length_m()?;
         let payload = labour.ute_payload_kg()?;
-        let pieces = by_mass.max((log.length_m / bed).ceil() as u32).max(1);
-        let piece_kg = log.green_kg() / f64::from(pieces);
-        let per_trip = ((payload / piece_kg).floor() as u32).max(1);
+        let (pieces, ute_pieces) = split_within_limits(
+            by_mass.max((log.length_m / bed).ceil() as u32),
+            sustainable.min(payload),
+            Some(bed),
+        )?;
+        let largest_piece_kg = ute_pieces.iter().map(Log::green_kg).fold(0.0, f64::max);
+        let per_trip = ((payload / largest_piece_kg.max(f64::MIN_POSITIVE)).floor() as u32).max(1);
         let speed = labour.vehicle_speed_m_s("farm_track")?;
         let drive_met = labour.met("driving_light_truck")?;
         let mut tasks = VecDeque::new();
@@ -410,9 +498,9 @@ pub fn haul_plans_over(
         for (t, trip) in ids.chunks(per_trip as usize).enumerate() {
             let (mut carry_s, mut back_s) = (0.0, 0.0);
             for &id in trip {
-                let p = piece_at(pieces, (id - first_piece_id) as u32);
-                carry_s += leg(p, butt, piece_kg)?;
-                back_s += leg(butt, p, 0.0)?;
+                let piece = &ute_pieces[(id - first_piece_id) as usize];
+                carry_s += leg(piece.position_m, butt, piece.green_kg())?;
+                back_s += leg(butt, piece.position_m, 0.0)?;
             }
             tasks.push_back(HaulTask {
                 action: HaulAction::Load {
@@ -425,7 +513,11 @@ pub fn haul_plans_over(
             });
             tasks.push_back(drive(butt, site.store_m, trip.to_vec()));
             let n = trip.len() as f64;
-            let carry_s = n * labour.walking_time_s(body, site.store_carry_m, 0.0, piece_kg)?;
+            let mut carry_s = 0.0;
+            for &id in trip {
+                let piece_kg = ute_pieces[(id - first_piece_id) as usize].green_kg();
+                carry_s += labour.walking_time_s(body, site.store_carry_m, 0.0, piece_kg)?;
+            }
             let back_s = n * walk(site.store_carry_m)?;
             tasks.push_back(HaulTask {
                 action: HaulAction::Unload {
@@ -455,14 +547,15 @@ pub fn haul_plans_over(
 
     // On foot: every piece carried to the store.
     {
-        let pieces = by_mass;
-        let piece_kg = log.green_kg() / f64::from(pieces);
+        let (pieces, foot_pieces) = split_within_limits(by_mass, sustainable, None)?;
         let mut tasks = VecDeque::new();
         tasks.push_back(cross_cut(pieces));
         let mut at = butt;
         for i in 0..pieces {
             let id = first_piece_id + u64::from(i);
-            let p = piece_at(pieces, i);
+            let piece = &foot_pieces[i as usize];
+            let p = piece.position_m;
+            let piece_kg = piece.green_kg();
             let to_piece = leg(at, p, 0.0)?;
             let carry_s = leg(p, site.store_m, piece_kg)?
                 + labour.walking_time_s(body, site.store_carry_m, 0.0, piece_kg)?;
@@ -628,6 +721,52 @@ mod tests {
     }
 
     #[test]
+    fn cross_cutting_assigns_floating_point_remainders_without_losing_material() {
+        let l = Log {
+            id: 7,
+            position_m: (12.0, -4.0),
+            heading_rad: 0.37,
+            length_m: 7.123456789012345,
+            diameter_m: 0.30,
+            dry_kg: 914.6308346979964,
+            carbon_kgc: 7.123456789012345,
+            water_kg: 54.3210987654321,
+            place: LogPlace::Stored,
+        };
+        let pieces = l.cross_cut(3, 100);
+        let sum = |field: fn(&Log) -> f64| pieces.iter().map(field).sum::<f64>();
+
+        assert_eq!(sum(|piece| piece.dry_kg).to_bits(), l.dry_kg.to_bits());
+        assert_eq!(
+            sum(|piece| piece.carbon_kgc).to_bits(),
+            l.carbon_kgc.to_bits()
+        );
+        assert_eq!(sum(|piece| piece.water_kg).to_bits(), l.water_kg.to_bits());
+        assert_eq!(sum(|piece| piece.length_m).to_bits(), l.length_m.to_bits());
+        assert_ne!(pieces[2].dry_kg.to_bits(), pieces[0].dry_kg.to_bits());
+        assert_ne!(pieces[2].length_m.to_bits(), pieces[0].length_m.to_bits());
+    }
+
+    #[test]
+    #[should_panic(expected = "log ids are one-based")]
+    fn cross_cut_rejects_zero_piece_id_before_materialising() {
+        let _ = log().cross_cut(1, 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "log id range exhausted")]
+    fn cross_cut_rejects_overflowing_piece_id_range_before_materialising() {
+        let _ = log().cross_cut(2, u64::MAX);
+    }
+
+    #[test]
+    fn cross_cut_accepts_the_last_non_overflowing_piece_id_range() {
+        let pieces = log().cross_cut(1, u64::MAX - 1);
+        assert_eq!(pieces.len(), 1);
+        assert_eq!(pieces[0].id, u64::MAX - 1);
+    }
+
+    #[test]
     fn a_tree_falls_the_same_way_every_time() {
         let seed = [7u8; 32];
         assert_eq!(fall_heading_rad(5, &seed), fall_heading_rad(5, &seed));
@@ -718,6 +857,183 @@ mod tests {
         // With no fuel in the excavator, the quickest is a hand method.
         let best = quickest(plans).unwrap();
         assert_ne!(best.method, HaulMethod::Excavator);
+    }
+
+    #[test]
+    fn haul_plans_recut_a_conserved_remainder_above_the_sustainable_load() {
+        let (labour, body) = (labour(), body());
+        let sustainable = labour.sustainable_load_kg(&body).unwrap();
+        // At this count, repeated equal shares accumulate low enough that the
+        // final conserved remainder exceeds the sustainable limit materially.
+        let minimum_pieces = 9_928u32;
+        let total_kg = sustainable * f64::from(minimum_pieces);
+        let log = Log {
+            id: 77,
+            position_m: (0.0, 0.0),
+            heading_rad: 0.0,
+            length_m: 1.0,
+            diameter_m: 0.30,
+            dry_kg: total_kg,
+            carbon_kgc: total_kg * 0.5,
+            water_kg: 0.0,
+            place: LogPlace::Ground,
+        };
+        assert_eq!((log.green_kg() / sustainable).ceil() as u32, minimum_pieces);
+
+        let tolerance = sustainable.abs().max(1.0) * f64::EPSILON * 4.0;
+        let initial = log.cross_cut(minimum_pieces, 100);
+        let initial_largest = initial.iter().map(Log::green_kg).fold(0.0, f64::max);
+        assert!(
+            initial_largest > sustainable + tolerance,
+            "fixture must expose the rounded residual: {initial_largest} > {sustainable}"
+        );
+
+        let site = site();
+        let plans = haul_plans(
+            &log,
+            (0.0, 0.0),
+            &body,
+            &labour,
+            &site,
+            &fleet(1_000.0, 0.0),
+            100,
+        )
+        .unwrap();
+        let ute = plans
+            .iter()
+            .find(|plan| plan.method == HaulMethod::Ute)
+            .expect("a ute plan");
+        let planned_pieces = match &ute.tasks[0].action {
+            HaulAction::CrossCut { pieces, .. } => *pieces,
+            other => panic!("starts with {other:?}"),
+        };
+        assert_eq!(planned_pieces, minimum_pieces + 1);
+
+        let pieces = log.cross_cut(planned_pieces, 100);
+        let largest_piece_kg = pieces.iter().map(Log::green_kg).fold(0.0, f64::max);
+        assert!(largest_piece_kg <= sustainable + tolerance);
+
+        let payload = labour.ute_payload_kg().unwrap();
+        let payload_tolerance = payload.abs().max(1.0) * f64::EPSILON * 4.0;
+        let max_pieces_per_trip = (payload / largest_piece_kg).floor() as usize;
+        let mut loaded = 0usize;
+        for task in &ute.tasks {
+            if let HaulAction::Load { logs, .. } = &task.action {
+                let trip_kg = logs
+                    .iter()
+                    .map(|id| pieces[(*id - 100) as usize].green_kg())
+                    .sum::<f64>();
+                assert!(
+                    trip_kg <= payload + payload_tolerance,
+                    "ute payload exceeded: {trip_kg}"
+                );
+                assert!(logs.len() <= max_pieces_per_trip);
+                loaded += logs.len();
+            }
+        }
+        assert_eq!(loaded, planned_pieces as usize);
+
+        let foot = plans
+            .iter()
+            .find(|plan| plan.method == HaulMethod::OnFoot)
+            .expect("an on-foot plan");
+        let foot_piece_count = match &foot.tasks[0].action {
+            HaulAction::CrossCut { pieces, .. } => *pieces,
+            other => panic!("starts with {other:?}"),
+        };
+        assert_eq!(foot_piece_count, planned_pieces);
+
+        // The final CarryToStore task must price the actual residual piece,
+        // not the log's average mass.
+        let last_index = (planned_pieces - 1) as usize;
+        let last_piece = &pieces[last_index];
+        let last_id = 100 + u64::from(planned_pieces - 1);
+        let last_task = foot
+            .tasks
+            .iter()
+            .find(|task| matches!(&task.action, HaulAction::CarryToStore { log_id } if *log_id == last_id))
+            .expect("last piece carry task");
+        let to_piece = labour
+            .walking_time_s(
+                &body,
+                distance_m(site.store_m, last_piece.position_m),
+                0.0,
+                0.0,
+            )
+            .unwrap();
+        let back_empty = labour
+            .walking_time_s(&body, site.store_carry_m, 0.0, 0.0)
+            .unwrap();
+        let carry_loaded = labour
+            .walking_time_s(
+                &body,
+                distance_m(last_piece.position_m, site.store_m),
+                0.0,
+                last_piece.green_kg(),
+            )
+            .unwrap();
+        let stack_loaded = labour
+            .walking_time_s(&body, site.store_carry_m, 0.0, last_piece.green_kg())
+            .unwrap();
+        let expected_duration = (to_piece + back_empty) + (carry_loaded + stack_loaded);
+        assert_eq!(last_task.duration_s, expected_duration);
+    }
+
+    #[test]
+    fn ute_haul_plan_recuts_when_the_conserved_length_remainder_exceeds_the_bed() {
+        let (labour, body) = (labour(), body());
+        let bed = labour.ute_bed_length_m().unwrap();
+        let minimum_pieces = 13u32;
+        // Five representable steps below bed * 13 keeps ceil(length / bed) at
+        // 13 while repeated equal shares leave the final conserved remainder
+        // more than four ULPs longer than the ute bed.
+        let length_m = f64::from_bits((bed * f64::from(minimum_pieces)).to_bits() - 5);
+        assert_eq!((length_m / bed).ceil() as u32, minimum_pieces);
+        let log = Log {
+            id: 78,
+            position_m: (0.0, 0.0),
+            heading_rad: 0.0,
+            length_m,
+            diameter_m: 0.30,
+            dry_kg: 10.0,
+            carbon_kgc: 5.0,
+            water_kg: 0.0,
+            place: LogPlace::Ground,
+        };
+        let tolerance = bed.abs().max(1.0) * f64::EPSILON * 4.0;
+        let initial = log.cross_cut(minimum_pieces, 200);
+        let initial_largest = initial
+            .iter()
+            .map(|piece| piece.length_m)
+            .fold(0.0, f64::max);
+        assert!(initial_largest > bed + tolerance);
+
+        let plans = haul_plans(
+            &log,
+            (0.0, 0.0),
+            &body,
+            &labour,
+            &site(),
+            &fleet(1_000.0, 0.0),
+            200,
+        )
+        .unwrap();
+        let ute = plans
+            .iter()
+            .find(|plan| plan.method == HaulMethod::Ute)
+            .expect("a ute plan");
+        let planned_pieces = match &ute.tasks[0].action {
+            HaulAction::CrossCut { pieces, .. } => *pieces,
+            other => panic!("starts with {other:?}"),
+        };
+        assert_eq!(planned_pieces, minimum_pieces + 1);
+
+        let pieces = log.cross_cut(planned_pieces, 200);
+        let largest_piece_m = pieces
+            .iter()
+            .map(|piece| piece.length_m)
+            .fold(0.0, f64::max);
+        assert!(largest_piece_m <= bed + tolerance);
     }
 
     #[test]

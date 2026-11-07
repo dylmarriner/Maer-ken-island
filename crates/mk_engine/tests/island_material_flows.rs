@@ -14,6 +14,7 @@ use mk_engine::regional::materials::{
     MaterialLedger, ALL_MATERIALS, QUICKLIME_PER_LIMESTONE,
 };
 use mk_engine::regional::physical::RegionalPhysicalState;
+use mk_engine::regional::timber::{Log, LogPlace, MAX_CROSS_CUT_PIECES};
 use mk_island::{DomainLevel, IslandDomain, IslandProfile};
 
 const M: DomainLevel = DomainLevel::Medium;
@@ -580,6 +581,16 @@ fn the_material_ledger_round_trips_through_a_snapshot() {
     // silently reset them would show.
     materials.respire("gem-d", 500.0, &mut ledger).unwrap();
     let _ = materials.drink("gem-k", 1.5);
+    // Pending cross-cut ids must survive a save/load so a planned haul can
+    // still materialise its pieces after the island is restored.
+    assert_eq!(materials.reserve_log_ids(2), 1);
+
+    let empty_snapshot =
+        serde_json::to_string(&MaterialLedger::new()).expect("an empty ledger serializes");
+    assert!(
+        !empty_snapshot.contains("reserved_log_ids"),
+        "empty reservation state must not change legacy snapshot bytes"
+    );
 
     let text = serde_json::to_string(&materials).expect("the ledger serializes");
     let back: MaterialLedger = serde_json::from_str(&text).expect("and comes back");
@@ -592,6 +603,25 @@ fn the_material_ledger_round_trips_through_a_snapshot() {
             "{id}'s body carbon changed across a round trip"
         );
     }
+}
+
+#[test]
+fn empty_cross_cut_reservations_preserve_the_legacy_material_debug_representation() {
+    let materials = MaterialLedger::new();
+    assert_eq!(
+        format!("{materials:?}"),
+        "MaterialLedger { stock: {}, structures: {}, bodies: {}, next_structure: 0, logs: {}, next_log: 0 }"
+    );
+}
+
+#[test]
+fn pending_cross_cut_reservations_are_included_in_material_debug_state() {
+    let mut materials = MaterialLedger::new();
+    assert_eq!(materials.reserve_log_ids(2), 1);
+    assert!(
+        format!("{materials:?}").ends_with("reserved_log_ids: {1, 2} }"),
+        "pending ids affect which future cross-cuts are valid and must affect the digest"
+    );
 }
 
 #[test]
@@ -653,4 +683,140 @@ fn plant_food_is_only_the_forests_fruit_and_seed_and_grassland_feeds_nobody() {
             Err(MaterialError::NothingToHarvest)
         );
     }
+}
+
+#[test]
+#[should_panic(expected = "cross-cut piece count exceeds safety bound")]
+fn direct_log_cross_cut_rejects_oversized_piece_count_before_allocation() {
+    let log = Log {
+        id: 1,
+        position_m: (0.0, 0.0),
+        heading_rad: 0.0,
+        length_m: 1.0,
+        diameter_m: 0.2,
+        dry_kg: 10.0,
+        carbon_kgc: 5.0,
+        water_kg: 0.0,
+        place: LogPlace::Ground,
+    };
+    let _ = log.cross_cut(MAX_CROSS_CUT_PIECES + 1, 2);
+}
+
+#[test]
+#[should_panic(expected = "cross-cut reservation exceeds safety bound")]
+fn material_ledger_rejects_oversized_cross_cut_reservations_before_allocation() {
+    let mut materials = MaterialLedger::new();
+    materials.reserve_log_ids(u64::from(MAX_CROSS_CUT_PIECES) + 1);
+}
+
+#[test]
+fn cross_cut_refuses_colliding_overflowing_unreserved_and_consumed_piece_ids_without_mutating_the_ledger(
+) {
+    let b = base();
+    let cell = b.forest_cell;
+    let area = b.domain.cell_area_m2(M);
+    let mut hydrology = HydrologyState::new(&b.domain.storage_spec(M), 0.5);
+    let mut materials = MaterialLedger::new();
+    let mut ledger = Ledger::new();
+
+    let make_log = |position_m, dry_kg| Log {
+        id: 0,
+        position_m,
+        heading_rad: 0.0,
+        length_m: 2.0,
+        diameter_m: 0.2,
+        dry_kg,
+        carbon_kgc: dry_kg * 0.5,
+        water_kg: dry_kg * 0.82,
+        place: LogPlace::Ground,
+    };
+
+    // A dry stored source lets the test remove its cut pieces through the
+    // real seasoning path, leaving the old ids unoccupied but already used.
+    let mut first_source = make_log((0.0, 0.0), 10.0);
+    first_source.place = LogPlace::Stored;
+    first_source.water_kg = 0.0;
+    let source_id =
+        materials.receive_felled_log(first_source, &mut hydrology, cell, area, &mut ledger);
+    let occupied_id = materials.receive_felled_log(
+        make_log((10.0, 0.0), 20.0),
+        &mut hydrology,
+        cell,
+        area,
+        &mut ledger,
+    );
+    assert_eq!((source_id, occupied_id), (1, 2));
+
+    let source_before = materials.log(source_id).unwrap().clone();
+    let occupied_before = materials.log(occupied_id).unwrap().clone();
+    let carbon_before = materials.stock_of(R::MaterialCarbon);
+    let water_before = materials.stock_of(R::MaterialWater);
+
+    // The first destination id is already owned by the second log. Refusal
+    // must leave both source and destination intact, including audited stocks.
+    assert!(!materials.cross_cut_log(source_id, 2, occupied_id));
+    assert_eq!(materials.log(source_id), Some(&source_before));
+    assert_eq!(materials.log(occupied_id), Some(&occupied_before));
+    assert_eq!(materials.stock_of(R::MaterialCarbon), carbon_before);
+    assert_eq!(materials.stock_of(R::MaterialWater), water_before);
+    assert_eq!(materials.next_log_id(), 3);
+
+    // An overflowing destination range is rejected before any mutation too.
+    assert!(!materials.cross_cut_log(source_id, 2, u64::MAX));
+    assert_eq!(materials.log(source_id), Some(&source_before));
+    assert_eq!(materials.log(occupied_id), Some(&occupied_before));
+    assert_eq!(materials.stock_of(R::MaterialCarbon), carbon_before);
+    assert_eq!(materials.stock_of(R::MaterialWater), water_before);
+    assert_eq!(materials.next_log_id(), 3);
+
+    // An unreserved future range is unoccupied, but it is still unsafe:
+    // the allocator would remain at id 3 and eventually reuse id 10.
+    assert!(!materials.cross_cut_log(source_id, 2, 10));
+    assert_eq!(materials.log(source_id), Some(&source_before));
+    assert_eq!(materials.log(10), None);
+    assert_eq!(materials.log(11), None);
+    assert_eq!(materials.stock_of(R::MaterialCarbon), carbon_before);
+    assert_eq!(materials.stock_of(R::MaterialWater), water_before);
+    assert_eq!(materials.next_log_id(), 3);
+
+    // The direct ledger API refuses an excessive piece count before it can
+    // inspect or materialise a caller-supplied destination range.
+    assert!(!materials.cross_cut_log(source_id, MAX_CROSS_CUT_PIECES + 1, 3));
+    assert_eq!(materials.log(source_id), Some(&source_before));
+    assert_eq!(materials.log(occupied_id), Some(&occupied_before));
+    assert_eq!(materials.stock_of(R::MaterialCarbon), carbon_before);
+    assert_eq!(materials.stock_of(R::MaterialWater), water_before);
+    assert_eq!(materials.next_log_id(), 3);
+
+    // The single writer reserves the range. Snapshot restoration must retain
+    // that pending reservation before the planned cut materialises it.
+    let first_piece_id = materials.reserve_log_ids(2);
+    assert_eq!(first_piece_id, 3);
+    let snapshot = serde_json::to_string(&materials).expect("reserved ledger serializes");
+    materials = serde_json::from_str(&snapshot).expect("reserved ledger restores");
+
+    assert!(materials.cross_cut_log(source_id, 2, first_piece_id));
+    assert_eq!(materials.log(source_id), None);
+    assert!(materials.log(first_piece_id).is_some());
+    assert!(materials.log(first_piece_id + 1).is_some());
+    assert_eq!(materials.next_log_id(), 5);
+
+    // Seasoning removes the two stored pieces while retaining their carbon
+    // in the wood stock. The old ids are now empty but must stay consumed.
+    assert!(materials.season_stored_logs(&mut ledger) > 0.0);
+    assert_eq!(materials.log(first_piece_id), None);
+    assert_eq!(materials.log(first_piece_id + 1), None);
+    let occupied_after_season = materials.log(occupied_id).unwrap().clone();
+    let carbon_after_season = materials.stock_of(R::MaterialCarbon);
+    let water_after_season = materials.stock_of(R::MaterialWater);
+
+    // The watermark and occupancy checks alone would accept this old range.
+    // The pending-reservation check must reject it without changing anything.
+    assert!(!materials.cross_cut_log(occupied_id, 2, first_piece_id));
+    assert_eq!(materials.log(occupied_id), Some(&occupied_after_season));
+    assert_eq!(materials.log(first_piece_id), None);
+    assert_eq!(materials.log(first_piece_id + 1), None);
+    assert_eq!(materials.stock_of(R::MaterialCarbon), carbon_after_season);
+    assert_eq!(materials.stock_of(R::MaterialWater), water_after_season);
+    assert_eq!(materials.next_log_id(), 5);
 }

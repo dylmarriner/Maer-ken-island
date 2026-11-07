@@ -40,6 +40,11 @@ pub enum LabourError {
     MissingReference(String),
     /// A load above what a body of this mass can carry.
     OverLoad { carried_kg: f64, max_kg: f64 },
+    /// A persisted or planned cross-cut exceeds the bounded materialisation size.
+    CrossCutLimitExceeded {
+        requested_pieces: u32,
+        maximum_pieces: u32,
+    },
 }
 
 impl std::fmt::Display for LabourError {
@@ -52,6 +57,13 @@ impl std::fmt::Display for LabourError {
                     "a load of {carried_kg:.1} kg exceeds the {max_kg:.1} kg limit"
                 )
             }
+            Self::CrossCutLimitExceeded {
+                requested_pieces,
+                maximum_pieces,
+            } => write!(
+                f,
+                "cross-cut requires {requested_pieces} pieces; safe maximum is {maximum_pieces}"
+            ),
         }
     }
 }

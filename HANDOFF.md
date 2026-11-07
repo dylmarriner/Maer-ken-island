@@ -1,10 +1,35 @@
 # Handoff
 
-Updated 2026-11-07 against `main` after PR #119 merged as `9cc2b15808c57bd5f61d305bca6122e79820c6bc`. PR #120 is the current MSY-diagnostic change; PR #121 is a separate, intentionally stacked biomass-increment correction. This is the front door for whoever picks the island up next, human or agent.
+## Latest follow-up — canonical week digest compatibility (8 November 2026)
+
+- The current PR #124 workflow on head 680f757 failed the week reference-pack digest comparison: observed 5c975e00... versus pinned 29ed53bd.... The year reference pack passed.
+- The week run retained the documented physical acceptance metrics (27,597 audits, zero food/water shortfalls, 112 economy events, 200,000 estate trees, expected founder body carbon and temperate-forest NPP 471 g C/m2/yr).
+- Root cause: IslandLife::state_digest hashes MaterialLedger with Debug. The new empty reserved_log_ids set was omitted from serde snapshots but included by derived Debug, changing the digest without a pending reservation.
+- MaterialLedger now omits that empty bookkeeping field from Debug, preserving the legacy representation exactly; non-empty pending ids remain included because they affect future valid cuts.
+- Added exact legacy-empty-debug and pending-reservation-debug regressions.
+- Commits: cb9d89bb6d5b68e6f33dc3473607558985d60242 (production); 6962194d2873d733783d6e709d9ef4925e79f199 (tests); 5815c34bc2434c159930babb0c8a6d48b31e95b3 (dedicated handoff).
+- The previous exact-head run #42394121853 is not green. Fresh CI is required for the new head; do not repin WEEK_DIGEST unless the representation correction still leaves a verified state difference.
+- Full detail: docs/handoff/TIMBER_CROSS_CUT_MASS_CONSERVATION_20261108.md.
+
+## Latest engineering handoff — timber cross-cut reserved-ID integrity (8 November 2026)
+
+- **PR #124** remains draft on `fix/timber-cross-cut-exact-conservation-20261108`. Use [PR #124](https://github.com/dylmarriner/Maer-ken-island/pull/124) for the exact live head SHA; this handoff deliberately avoids hard-coding a SHA that changes when the handoff itself is refreshed.
+- `MaterialLedger::cross_cut_log` now requires the complete one-based destination range to have been reserved already: its exclusive end must be at or below the ledger's `next_log` watermark. It still rejects overflow and occupied IDs before removing the source.
+- This closes a public-boundary hole: an unoccupied future range could previously be materialised without advancing the allocator, allowing a later felled log to reuse and overwrite one of those piece IDs.
+- Regression `cross_cut_refuses_colliding_or_overflowing_piece_ids_without_mutating_the_ledger` proves an unreserved range 10–11 is rejected without changing the source, occupied log, carbon/water stocks or allocator; the same cut succeeds after IDs 3–4 are reserved.
+- The existing IslandLife planner remains the single writer: it previews the next ID, calculates the exact final conserved piece count, reserves the range, and the finisher fails fast if materialisation is refused.
+- Code/test commits in this run: `b75a25d9131872ea16a8af09c48dd76b2d18a832` (reserved-range guard) and `a0ca75f567fef99dfc051c94ed80273d43b1dbb8` (regression). Checklist and handoff commits are recorded in the PR history.
+- The predecessor exact-head workflow [#42386637414](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42386637414) was still running when the branch handoff was refreshed. A fresh exact-head workflow is required for the current PR head; do not treat predecessor-head results as current verification. Dependency audit, dashboard, computer service and repository scripts had passed; desktop, formatting/Clippy/fast Rust tests and week/year acceptance were still in progress at the last observation. Nightly slow tests are skipped by design.
+- **PR #123** remains a separate replay/sequence branch at `1378a345020601f3cbde85ee9db4f8a44822c16e`; exact-head workflow [#42374551377](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42374551377) passed its required checks. PRs #123 and #124 both touch `HANDOFF.md`, `WORK_REMAINING.md`, `life.rs` and `docs/ISLAND_SYSTEM_STATUS.md`; reconcile the overlapping status/documentation hunks before merging either branch.
+- PRs #73–76 remain untouched. This is independent timber-ledger hardening, not a restart of the paused Maer-Ken Merge Completion job.
+- Custom OpenCommander device discovery still returns HTTP 429; no local Cargo result is claimed. No snapshot schema, append-only log format, replay hash, RNG, simulation tick, LLM behaviour or production infrastructure changed.
+- Full technical detail: [TIMBER_CROSS_CUT_MASS_CONSERVATION_20261108.md](docs/handoff/TIMBER_CROSS_CUT_MASS_CONSERVATION_20261108.md).
+
+Updated 2026-11-08 against `main`: PR #120 merged as `66bf099f36c567ab344fcc9b268a9a33a656011d` and PR #121 merged as `522aba3d860435c92a4938cf5ffba2b427941cd7`; both exact-head workflows passed their required jobs. PRs #123 and #124 remain separate draft branches pending final integration and reconciliation. This is the front door for whoever picks the island up next, human or agent.
 
 **What is left to do, and what each item needs, is in [`WORK_REMAINING.md`](WORK_REMAINING.md).**
 
-## Current engineering handoff — 7 November 2026
+## Previous engineering handoff — 7 November 2026
 
 - **PR #118** is merged as `134082a1c1bbcea837acc58344572476e8b14f74`; its exact-head workflow passed the required Rust, desktop, backend, dashboard, computer-service, dependency and week/year acceptance checks.
 - **PR #119** is merged as `9cc2b15808c57bd5f61d305bca6122e79820c6bc`; exact-head workflow [#42336338097](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42336338097) passed all required checks, including fast Rust tests, desktop and reference-pack acceptance.
