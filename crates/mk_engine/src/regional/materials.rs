@@ -765,7 +765,13 @@ impl MaterialLedger {
         let Some(end_exclusive) = first_id.checked_add(u64::from(pieces)) else {
             return false;
         };
-        if first_id == 0 || self.logs.range(first_id..end_exclusive).next().is_some() {
+        if first_id == 0
+            // next_log is the exclusive end of the ids already reserved by
+            // the single writer. Accepting an arbitrary future range would
+            // leave the allocator behind it and let a later felled log collide.
+            || end_exclusive > self.next_log
+            || self.logs.range(first_id..end_exclusive).next().is_some()
+        {
             return false;
         }
 
