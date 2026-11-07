@@ -412,9 +412,8 @@ pub fn haul_plans_over(
             let largest_mass = split.iter().map(Log::green_kg).fold(0.0, f64::max);
             let largest_length = split.iter().map(|piece| piece.length_m).fold(0.0, f64::max);
             let mass_fits = largest_mass <= max_piece_kg + tolerance(max_piece_kg);
-            let length_fits = max_piece_length_m.map_or(true, |limit| {
-                largest_length <= limit + tolerance(limit)
-            });
+            let length_fits =
+                max_piece_length_m.map_or(true, |limit| largest_length <= limit + tolerance(limit));
             if mass_fits && length_fits {
                 return Ok((pieces, split));
             }
@@ -884,7 +883,10 @@ mod tests {
                     .iter()
                     .map(|id| pieces[(*id - 100) as usize].green_kg())
                     .sum::<f64>();
-                assert!(trip_kg <= payload + payload_tolerance, "ute payload exceeded: {trip_kg}");
+                assert!(
+                    trip_kg <= payload + payload_tolerance,
+                    "ute payload exceeded: {trip_kg}"
+                );
                 assert!(logs.len() <= max_pieces_per_trip);
                 loaded += logs.len();
             }
@@ -912,13 +914,23 @@ mod tests {
             .find(|task| matches!(&task.action, HaulAction::CarryToStore { log_id } if *log_id == last_id))
             .expect("last piece carry task");
         let to_piece = labour
-            .walking_time_s(&body, distance_m(site.store_m, last_piece.position_m), 0.0, 0.0)
+            .walking_time_s(
+                &body,
+                distance_m(site.store_m, last_piece.position_m),
+                0.0,
+                0.0,
+            )
             .unwrap();
         let back_empty = labour
             .walking_time_s(&body, site.store_carry_m, 0.0, 0.0)
             .unwrap();
         let carry_loaded = labour
-            .walking_time_s(&body, distance_m(last_piece.position_m, site.store_m), 0.0, last_piece.green_kg())
+            .walking_time_s(
+                &body,
+                distance_m(last_piece.position_m, site.store_m),
+                0.0,
+                last_piece.green_kg(),
+            )
             .unwrap();
         let stack_loaded = labour
             .walking_time_s(&body, site.store_carry_m, 0.0, last_piece.green_kg())
