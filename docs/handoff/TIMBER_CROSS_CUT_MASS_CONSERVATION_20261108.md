@@ -435,3 +435,19 @@ untouched by a declined candidate.
 No simulation parameters, physical stocks, snapshot schema, replay format,
 RNG, append-only histories, digest pins or external infrastructure changed.
 Fresh exact-head Rust/desktop/backend/week/year CI is required.
+
+
+## Canonical checklist and system-status follow-up — 8 November 2026
+
+Updated WORK_REMAINING.md and docs/ISLAND_SYSTEM_STATUS.md to record the
+type-enforced read-only haul preview and the end-to-end declined-plan evidence:
+the unreserved preview range is refused without consuming the source, and the
+next real felled log receives the previewed ID.
+
+Documentation commits:
+- f83347dfc63579375464a5270a8855791570f9a9 — WORK_REMAINING acceptance checklist.
+- 83abdb0e2c109c8b43511414ed0ab1a45fa10c36 — ISLAND_SYSTEM_STATUS evidence.
+
+No deviation-register row was added because this change alters no physical
+model or real-world assumption. The timber milestone remains open for D40
+saw-based Ute cross-cutting and the other remaining timber fidelity work.
