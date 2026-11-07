@@ -158,8 +158,8 @@ impl IslandReplayLog {
             });
         }
 
-        let file = File::open(path)
-            .map_err(|e| IslandReplayError::Io(path.display().to_string(), e))?;
+        let file =
+            File::open(path).map_err(|e| IslandReplayError::Io(path.display().to_string(), e))?;
         let mut bytes = Vec::new();
         file.take(MAX_REPLAY_LOG_BYTES + 1)
             .read_to_end(&mut bytes)
@@ -261,10 +261,9 @@ impl std::fmt::Display for IslandReplayError {
                 f,
                 "that log is format {v}; this build reads {REPLAY_LOG_VERSION}"
             ),
-            Self::TooLarge { path, limit_bytes } => write!(
-                f,
-                "{path} exceeds the {limit_bytes}-byte replay log limit"
-            ),
+            Self::TooLarge { path, limit_bytes } => {
+                write!(f, "{path} exceeds the {limit_bytes}-byte replay log limit")
+            }
             Self::DuplicateSequence { tick, sequence } => write!(
                 f,
                 "replay log contains duplicate command sequence {sequence} at tick {tick}"
@@ -436,7 +435,6 @@ impl IslandLife {
             .collect()
     }
 }
-
 
 #[cfg(test)]
 mod bounded_writer_tests {
