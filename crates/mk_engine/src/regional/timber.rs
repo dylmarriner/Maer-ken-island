@@ -94,8 +94,14 @@ impl Log {
     /// Cross-cut into `n` as-equal-as-binary64-allows pieces along the log,
     /// numbered from the butt with ids `first_id..first_id + n`. The final
     /// piece receives each floating-point remainder so totals are conserved.
+    /// The caller must supply a reserved, one-based range whose exclusive end
+    /// fits in `u64`; the material ledger enforces the reservation itself.
     pub fn cross_cut(&self, n: u32, first_id: u64) -> Vec<Log> {
         let n = n.max(1);
+        assert!(first_id > 0, "log ids are one-based");
+        let _end_exclusive = first_id
+            .checked_add(u64::from(n))
+            .expect("log id range exhausted");
         let k = f64::from(n);
         let equal_piece_len = self.length_m / k;
         let equal_dry_kg = self.dry_kg / k;
@@ -724,6 +730,25 @@ mod tests {
         assert_eq!(sum(|piece| piece.length_m).to_bits(), l.length_m.to_bits());
         assert_ne!(pieces[2].dry_kg.to_bits(), pieces[0].dry_kg.to_bits());
         assert_ne!(pieces[2].length_m.to_bits(), pieces[0].length_m.to_bits());
+    }
+
+    #[test]
+    #[should_panic(expected = "log ids are one-based")]
+    fn cross_cut_rejects_zero_piece_id_before_materialising() {
+        let _ = log().cross_cut(1, 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "log id range exhausted")]
+    fn cross_cut_rejects_overflowing_piece_id_range_before_materialising() {
+        let _ = log().cross_cut(2, u64::MAX);
+    }
+
+    #[test]
+    fn cross_cut_accepts_the_last_non_overflowing_piece_id_range() {
+        let pieces = log().cross_cut(1, u64::MAX - 1);
+        assert_eq!(pieces.len(), 1);
+        assert_eq!(pieces[0].id, u64::MAX - 1);
     }
 
     #[test]
