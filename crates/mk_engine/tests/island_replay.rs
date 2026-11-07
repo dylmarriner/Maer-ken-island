@@ -169,7 +169,10 @@ fn a_refused_command_does_not_consume_the_next_replay_sequence() {
     let entries = &life.replay_log().entries;
     assert_eq!(entries.len(), 1, "the refused request must not be logged");
     assert_eq!(entries[0].tick, life.tick);
-    assert_eq!(entries[0].sequence, 0, "the first accepted command keeps sequence zero");
+    assert_eq!(
+        entries[0].sequence, 0,
+        "the first accepted command keeps sequence zero"
+    );
 }
 
 /// Appending to a log after an out-of-order tick must not reuse a sequence.
