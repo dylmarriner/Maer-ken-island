@@ -194,3 +194,8 @@ cargo run -p island -- serve --scenario fixtures/island/default_scenario.json   
 - Fresh exact-head workflow [#42292221961](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42292221961) was still running at the latest inspection.
 
 Remaining: complete all required jobs, review the exact-head test result, then merge PR #111 only if green. Reconcile this fishery file with PR #112 after one of the two is merged; do not merge stale overlapping branches.
+
+
+## Latest replay work — 7 November 2026
+
+PR #123 now preserves imported replay sequence identifiers as well as allocating live per-tick sequences in O(log distinct ticks). Replay accepts sparse strictly increasing identifiers, rejects backwards identifiers before mutation, and returns a replay log with the original identifiers intact. Regression: `replay_preserves_sparse_recorded_sequence_numbers`. See `docs/handoff/REPLAY_RECORD_SEQUENCE_MONOTONIC_20261107.md`. The latest source/test commits require fresh exact-head CI; do not merge until all required jobs pass.
