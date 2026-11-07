@@ -47,3 +47,11 @@ before a deliberate re-pin.
 
 No live island state, production infrastructure, deployment or irreversible
 data operation was changed.
+
+
+## Exact-head formatting correction
+
+The first exact-head workflow `#42370311309` reached `cargo fmt --all -- --check` and
+reported one line-wrap difference in the new carbon-total assertion. Commit
+`3607dc9a27e9733c729b7f886508b8a536b992ef` applies the formatter's exact output. Clippy and fast tests
+were skipped after formatting failed; the new head requires a fresh full exact-head run.
