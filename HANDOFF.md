@@ -1,5 +1,16 @@
 # Handoff
 
+## Latest engineering handoff — timber cross-cut conservation (8 November 2026)
+
+- Branch `fix/timber-cross-cut-exact-conservation-20261108`, PR pending: the final cross-cut piece now receives binary64
+  remainders for dry mass, carbon, water and length, preserving source totals exactly.
+- Regression `cross_cutting_assigns_floating_point_remainders_without_losing_material`
+  asserts bit-identical totals. Production commit: `fa81e5ba92a69b3ef414d8a75faab1f896798881`.
+- Exact-head formatting, Clippy, fast Rust tests, desktop/backend and week/year acceptance
+  are required; no local Cargo result is claimed while OpenCommander returns HTTP 429.
+- Full details: [TIMBER_CROSS_CUT_MASS_CONSERVATION_20261108.md](docs/handoff/TIMBER_CROSS_CUT_MASS_CONSERVATION_20261108.md).
+
+
 Updated 2026-11-07 against `main` after PR #119 merged as `9cc2b15808c57bd5f61d305bca6122e79820c6bc`. PR #120 is the current MSY-diagnostic change; PR #121 is a separate, intentionally stacked biomass-increment correction. This is the front door for whoever picks the island up next, human or agent.
 
 **What is left to do, and what each item needs, is in [`WORK_REMAINING.md`](WORK_REMAINING.md).**
