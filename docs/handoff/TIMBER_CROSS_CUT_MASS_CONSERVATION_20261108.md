@@ -250,3 +250,5 @@ The reservation set is an additive optional field, but an older IslandLife snaps
 - The test occupies the excavator deliberately, so the selected plan is explicitly the Ute plan and only its fourteen-piece range is reserved; unused alternative-plan IDs are not leaked.
 
 This keeps the existing IslandLife snapshot version readable while preserving fail-closed validation at the ledger API. Exact-head Rust, desktop/backend and week/year acceptance are required; no snapshot digest or reference pin is changed by hand.
+
+- The snapshot regression also asserts that an empty reservation set is omitted from serialized `MaterialLedger`, preserving the previous empty-state representation; a legacy active-haul snapshot with the field absent is separately restored through the task-scoped migration path.
