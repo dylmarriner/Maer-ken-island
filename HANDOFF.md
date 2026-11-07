@@ -1,14 +1,20 @@
 # Handoff
 
-Updated 2026-11-07 against `main` after PR #110 merge `148ac98c95e58aac7b2065dd0cc68884790f4168`. This is the front door for
-whoever picks the island up next, human or agent. It says what the project is, where it stands,
-how to build and check it, and where everything else is written down.
+Updated 2026-11-07 against `main` after PR #120 merged as `66bf099f36c567ab344fcc9b268a9a33a656011d` and PR #121 merged as `522aba3d860435c92a4938cf5ffba2b427941cd7`. This is the front door for whoever picks the island up next, human or agent.
 
 **What is left to do, and what each item needs, is in [`WORK_REMAINING.md`](WORK_REMAINING.md).**
 
-## Latest engineering handoff — 7 November 2026
+## Current engineering handoff — 7 November 2026
+- **PR #123** (replay command sequencing) remains draft. Public logs preserve out-of-order max+1 allocation and fail closed on `u64::MAX`; live `IslandLife` now uses a runtime-only per-tick index to avoid scanning retained history on every command. Workflow #42358501995 caught rustfmt-only differences on the prior head; fresh exact-head verification is required.
 
-- [Replay command-sequence allocation](docs/handoff/REPLAY_RECORD_SEQUENCE_MONOTONIC_20261107.md) — PR #123 (draft). `IslandReplayLog::record` allocates after the highest sequence for a tick even when earlier entries are not contiguous, rejects `u64::MAX` exhaustion, and preflights before command mutation. Exact-head CI and review pending.
+- **PR #118** is merged as `134082a1c1bbcea837acc58344572476e8b14f74`; its exact-head workflow passed the required Rust, desktop, backend, dashboard, computer-service, dependency and week/year acceptance checks.
+- **PR #119** is merged as `9cc2b15808c57bd5f61d305bca6122e79820c6bc`; exact-head workflow [#42336338097](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42336338097) passed all required checks, including fast Rust tests, desktop and reference-pack acceptance.
+- **PR #120** (fishery MSY diagnostic representability) is merged to `main` as `66bf099f36c567ab344fcc9b268a9a33a656011d`; exact-head workflow [#42346006514](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42346006514) passed all required checks.
+- **PR #121** (fishery biomass-increment precision) is merged to `main` as `522aba3d860435c92a4938cf5ffba2b427941cd7`; exact-head workflow [#42351378042](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42351378042) passed all required checks.
+- Fishery remains standalone pending sourced species-specific stock/resilience and effort/CPUE data, IslandLife integration, and person-owned workforce decisions. No ecological parameters are invented.
+- Replay PRs #73–76 were not modified; do not revive the paused Maer-Ken Merge Completion job. Reconcile that replay stack separately against current `main` and the merged digest correction when the replay work is explicitly resumed.
+
+## Previous engineering handoff — 7 November 2026
 
 - [Fishery biomass remainder precision](docs/handoff/FISHERY_BIOMASS_REMAINDER_PRECISION_20261107.md) — PR #111 merged to `main` as `b41bb5cf24bddca5df2bc556612c5edfc8b91bde`. Exact-head workflow [#42292739398](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42292739398) passed formatting, Clippy, fast Rust tests, desktop, installed backend, dashboard, computer service, repository scripts, dependency audit and week/year reference-pack acceptance; nightly slow tests were skipped by design.
 
