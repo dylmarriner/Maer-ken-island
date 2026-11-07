@@ -1,3 +1,15 @@
+## Current timber boundary hardening — 8 November 2026
+
+- [x] Reject zero-piece pure `Log::cross_cut` requests before allocation.
+- [x] Reject empty ID reservations before allocator advancement.
+- [x] Reject zero-piece ledger materialisation without consuming the source or pending reservation.
+- [x] Reject zero-piece legacy active-task reservation restoration.
+- [x] Correct the Ute regression fixture so the length boundary, not an unrealistic 10 kg load, selects the Ute path.
+- [x] Correct the `MaterialLedger::new()` Debug expectation to `next_structure: 1`.
+- [ ] Verify the new exact-head CI for formatting, Clippy, fast Rust tests, desktop/backend and week/year acceptance.
+
+Evidence: `docs/handoff/TIMBER_CROSS_CUT_MASS_CONSERVATION_20261108.md`.
+
 ## Current exact-head timber test repair — 8 November 2026
 
 - [x] Correct the Ute reservation regression fixture: use ten reference-pack sustainable loads so the 14-piece length boundary remains the cause of the extra cut and the Ute is genuinely the quickest feasible plan.
