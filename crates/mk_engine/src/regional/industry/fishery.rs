@@ -1406,13 +1406,13 @@ mod tests {
             + (1.0 - p).log2();
         let expected = log_expected.exp2();
 
-        assert!(p > 0.0 && p < f64::MIN_POSITIVE, "B/K is positive but subnormal");
+        assert_eq!(p, 1.0e-323, "pin the intended positive subnormal ratio");
         assert!(
-            biomass_factor >= f64::MIN_POSITIVE,
+            biomass_factor.is_normal(),
             "the depensation factor remains normal"
         );
         assert!(
-            biomass_product >= f64::MIN_POSITIVE,
+            biomass_product.is_normal(),
             "the biomass product remains normal"
         );
         assert!(expected.is_normal(), "the final surplus remains normal");
