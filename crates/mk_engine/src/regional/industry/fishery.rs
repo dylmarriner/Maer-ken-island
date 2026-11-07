@@ -581,11 +581,11 @@ impl FishStock {
         }
 
         let grown = self.growth_capacity_t(model, dt_s)?;
-        let post_growth = self.biomass_t + grown;
-        if !post_growth.is_finite() {
-            return Err(FisheryError::NonFiniteGrowth);
-        }
-
+        // growth_capacity_t already caps production to the stock's headroom.
+        // Do not reject an overflowing B + grown intermediate before the
+        // carrying-capacity cap is applied below: at the top of binary64 range,
+        // rounding K - B upward can make B + headroom overflow even though the
+        // physically stored result is exactly the finite carrying capacity.
         let catch = wanted_t.min(grown);
         // Subtract the catch from growth before adding the remainder to biomass.
         // (biomass + grown) - catch can lose low bits to cancellation and make a
@@ -1778,6 +1778,34 @@ mod tests {
             stock, before,
             "a zero-catch step must not silently discard unrepresentable stock growth"
         );
+    }
+
+    #[test]
+    fn fish_caps_an_overflowing_intermediate_at_finite_carrying_capacity() {
+        let carrying_capacity = f64::MAX;
+        let ulp_at_max = 2.0_f64.powi(971);
+        let biomass = 1.5 * ulp_at_max;
+        let headroom = carrying_capacity - biomass;
+        assert!((biomass + headroom).is_infinite());
+
+        let p = biomass / carrying_capacity;
+        let biomass_factor = (1.0 - p) * (p / 0.25);
+        let biomass_product = biomass * biomass_factor;
+        let rate = headroom / biomass_product;
+        assert!(rate.is_finite());
+
+        let model = FisheryModel {
+            r_per_year: [0.0, rate, 0.0, 0.0],
+            depensation_below: 0.25,
+        };
+        let mut stock = FishStock::unexploited(Resilience::Medium, carrying_capacity)
+            .expect("finite positive carrying capacity");
+        stock.biomass_t = biomass;
+
+        assert!(stock.surplus_t_per_year(&model).expect("finite surplus") >= headroom);
+        assert_eq!(stock.fish(&model, 0.0, 2.0 * YEAR_S), Ok(0.0));
+        assert_eq!(stock.biomass_t, carrying_capacity);
+        assert_eq!(stock.landed_t, 0.0);
     }
 
     #[test]
