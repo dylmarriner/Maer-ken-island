@@ -658,10 +658,18 @@ impl MaterialLedger {
         id
     }
 
+    /// First log id that has not yet been reserved.
+    ///
+    /// Planning is single-writer and may inspect this value before it reserves
+    /// the exact piece range required by the selected haul plans.
+    pub fn next_log_id(&self) -> u64 {
+        self.next_log.max(1)
+    }
+
     /// Reserve `n` consecutive log ids; returns the first.
     pub fn reserve_log_ids(&mut self, n: u64) -> u64 {
-        let first = self.next_log.max(1);
-        self.next_log = first + n;
+        let first = self.next_log_id();
+        self.next_log = first.checked_add(n).expect("log id space exhausted");
         first
     }
 
