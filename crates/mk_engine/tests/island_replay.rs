@@ -114,13 +114,35 @@ fn a_log_keeps_the_order_commands_arrived_in() {
     assert!(!log.scenario_digest.is_empty(), "the log names no scenario");
 }
 
+/// The live command path keeps same-tick sequencing correct with a long retained log.
+#[test]
+fn a_long_same_tick_command_run_keeps_sequences_monotonic() {
+    let mut life = island();
+    for _ in 0..4_096 {
+        life.apply_command(IslandCommand::Control(ControlCommand::Pause))
+            .expect("control command applies");
+    }
+
+    let entries = &life.replay_log().entries;
+    assert_eq!(entries.len(), 4_096);
+    assert_eq!(entries.first().map(|entry| entry.sequence), Some(0));
+    assert_eq!(entries.last().map(|entry| entry.sequence), Some(4_095));
+    assert!(entries
+        .iter()
+        .enumerate()
+        .all(|(index, entry)| entry.sequence == index as u64));
+}
+
 /// Appending to a log after an out-of-order tick must not reuse a sequence.
 #[test]
 fn recording_after_an_out_of_order_tick_uses_the_next_sequence_for_that_tick() {
     let mut log = IslandReplayLog::new("scenario".to_string());
-    log.record(5, IslandCommand::Control(ControlCommand::Pause)).expect("sequence available");
-    log.record(6, IslandCommand::Control(ControlCommand::Pause)).expect("sequence available");
-    log.record(5, IslandCommand::Control(ControlCommand::Resume)).expect("sequence available");
+    log.record(5, IslandCommand::Control(ControlCommand::Pause))
+        .expect("sequence available");
+    log.record(6, IslandCommand::Control(ControlCommand::Pause))
+        .expect("sequence available");
+    log.record(5, IslandCommand::Control(ControlCommand::Resume))
+        .expect("sequence available");
 
     let mut sequences: Vec<u64> = log
         .entries
