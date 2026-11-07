@@ -2095,5 +2095,4 @@ mod tests {
             "near-capacity surplus must use the representable headroom, not cancellation in 1 - B/K"
         );
     }
-
 }
