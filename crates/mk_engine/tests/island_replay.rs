@@ -113,6 +113,24 @@ fn a_log_keeps_the_order_commands_arrived_in() {
     assert!(!log.scenario_digest.is_empty(), "the log names no scenario");
 }
 
+/// Appending to a log after an out-of-order tick must not reuse a sequence.
+#[test]
+fn recording_after_an_out_of_order_tick_uses_the_next_sequence_for_that_tick() {
+    let mut log = IslandReplayLog::new("scenario".to_string());
+    log.record(5, IslandCommand::Control(ControlCommand::Pause));
+    log.record(6, IslandCommand::Control(ControlCommand::Pause));
+    log.record(5, IslandCommand::Control(ControlCommand::Resume));
+
+    let mut sequences: Vec<u64> = log
+        .entries
+        .iter()
+        .filter(|entry| entry.tick == 5)
+        .map(|entry| entry.sequence)
+        .collect();
+    sequences.sort_unstable();
+    assert_eq!(sequences, vec![0, 1]);
+}
+
 /// A run that was interfered with, reproduced from its log.
 #[test]
 fn replaying_a_log_reaches_the_island_the_run_reached() {
