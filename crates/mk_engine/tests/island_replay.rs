@@ -200,7 +200,7 @@ fn replay_preserves_sparse_recorded_sequence_numbers() {
 
     let positions: Vec<(u64, u64)> = replayed
         .replay_log()
-        .entries
+        .entries()
         .iter()
         .map(|entry| (entry.tick, entry.sequence))
         .collect();
