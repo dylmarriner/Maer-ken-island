@@ -10,9 +10,9 @@
 //! That is what makes the digest worth printing. A run that could not be
 //! reproduced would be a number about one afternoon on one machine.
 
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use mk_core::canon::CanonLocked;
@@ -29,6 +29,33 @@ pub const REPLAY_LOG_VERSION: u32 = 1;
 /// Replay files are bounded so an imported or corrupted log cannot consume
 /// unbounded memory or disk while it is loaded or saved.
 pub const MAX_REPLAY_LOG_BYTES: u64 = 64 * 1024 * 1024;
+
+/// Reserve a fresh sibling temporary file without following or replacing an existing path.
+///
+/// The bounded suffix search handles concurrent saves in one process and fails
+/// closed if stale files occupy every candidate.
+fn create_replay_temp(path: &Path) -> std::io::Result<(PathBuf, File)> {
+    const MAX_ATTEMPTS: u32 = 32;
+    let process_id = std::process::id();
+
+    for sequence in 0..MAX_ATTEMPTS {
+        let temp = path.with_extension(format!("tmp-{process_id}-{sequence}"));
+        match OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temp)
+        {
+            Ok(file) => return Ok((temp, file)),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(error),
+        }
+    }
+
+    Err(std::io::Error::new(
+        std::io::ErrorKind::AlreadyExists,
+        "could not allocate a unique replay temporary file",
+    ))
+}
 
 struct LimitedWriter<'a, W> {
     inner: W,
@@ -181,8 +208,7 @@ impl IslandReplayLog {
 
     /// Write a log atomically, refusing output larger than the offline budget.
     pub fn save(&self, path: &Path) -> Result<(), IslandReplayError> {
-        let temp = path.with_extension(format!("tmp-{}", std::process::id()));
-        let mut file = File::create(&temp)
+        let (temp, mut file) = create_replay_temp(path)
             .map_err(|e| IslandReplayError::Io(path.display().to_string(), e))?;
         let mut exceeded = false;
         let serialized = {

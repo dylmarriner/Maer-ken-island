@@ -471,6 +471,30 @@ fn a_log_round_trips_through_a_file() {
     ));
 }
 
+/// Saving never overwrites a predictable temporary path reserved by another writer.
+#[test]
+fn saving_uses_a_fresh_temporary_path_without_clobbering_existing_files() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("run.log.json");
+    let reserved_temp = path.with_extension(format!("tmp-{}-0", std::process::id()));
+    std::fs::write(&reserved_temp, b"reserved by another writer").unwrap();
+
+    let mut log = IslandReplayLog::new(island().scenario_digest_hex());
+    log.record(0, IslandCommand::Control(ControlCommand::Pause))
+        .expect("sequence available");
+
+    log.save(&path).expect("save should choose the next unused temporary path");
+
+    assert_eq!(
+        std::fs::read(&reserved_temp).unwrap(),
+        b"reserved by another writer",
+        "a pre-existing temporary path must never be truncated or followed"
+    );
+    let loaded = IslandReplayLog::load(&path).expect("the saved log reads back");
+    assert_eq!(loaded.entries.len(), 1);
+    assert_eq!(loaded.entries[0].sequence, 0);
+}
+
 /// A log whose entries have been shuffled still reproduces the run.
 ///
 /// A record that had been reordered in transit should reproduce the island
