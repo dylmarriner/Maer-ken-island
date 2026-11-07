@@ -337,3 +337,49 @@ The failed workflow is evidence for the predecessor head only. Fresh exact-head
 formatting, Clippy, fast Rust tests, desktop/backend and week/year reference-pack
 acceptance are required. No local Cargo pass is claimed. No reference digest,
 snapshot schema, replay log, RNG or simulation parameter was changed.
+
+
+## Follow-up: reject zero-piece cross-cut operations — 8 November 2026
+
+A final boundary audit found that three paths silently normalised a persisted or
+direct `pieces = 0` request to one piece: the pure `Log::cross_cut` API,
+`MaterialLedger::cross_cut_log`, and legacy active-task reservation restore.
+That made malformed input look like a valid one-piece operation. The allocator
+also accepted an empty `reserve_log_ids(0)` request.
+
+The boundary now fails closed:
+- `Log::cross_cut(0, ...)` asserts before allocation.
+- `reserve_log_ids(0)` asserts before advancing the allocator.
+- `cross_cut_log(..., 0, ...)` returns false without removing the source or
+  consuming a pending reservation.
+- `restore_pending_cross_cut_ids(..., 0, ...)` returns false, so the
+  `finish_haul_task` fail-fast assertion rejects a malformed persisted task.
+
+Regression coverage includes direct zero-piece rejection, empty reservation
+rejection, no-mutation ledger refusal followed by successful use of the same
+reserved ID, and rejection of zero-piece legacy reservation restoration.
+
+The current PR also corrects two predecessor test defects:
+- The Ute reservation fixture now derives source mass from ten sustainable
+  loads, leaving length as the reason fourteen pieces are required while the
+  Ute is actually quicker than hand carrying.
+- The empty-reservation Debug expectation now correctly pins
+  `next_structure: 1` for `MaterialLedger::new()`.
+
+Commits:
+- `31df86c68c1f15567e1893e7a1ea69582188cdc3` — representative Ute fixture.
+- `90d70b852aee56d1b22f4b08e82d4728f35d0afd` — initialized Debug counter.
+- `6c6f3fc98b2115fc331feca3e6ecab5c6931e714` — pure cross-cut zero guard.
+- `fed236478e53e444d3cdca99246026b37207e72d` — ledger and restore guards.
+- `595e8be430d5c290d6924410ae933e1a4d628e7b` — ledger regressions.
+- `3159dc0c5776de4b04ad2d7efccbe989d7a164e6` — legacy-task regression.
+- `e51834818b426ecbe8200a1a74ec341a26def2cb` and
+  `b06d511c729ecba4e247d876e8b9ce5b339d2b24` — prior handoff/checklist
+  corrections.
+
+The earlier workflow `#42398472485` was superseded while its fast-test job
+was running and was cancelled after the new commits. It does not verify this
+head. Fresh exact-head formatting, Clippy, fast Rust tests, desktop/backend and
+week/year reference acceptance are required. No local Cargo pass is claimed.
+No digest pin, simulation parameter, RNG, replay hash or snapshot schema was
+changed by the zero-piece guard.
