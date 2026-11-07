@@ -14,6 +14,7 @@ use mk_engine::regional::materials::{
     MaterialLedger, ALL_MATERIALS, QUICKLIME_PER_LIMESTONE,
 };
 use mk_engine::regional::physical::RegionalPhysicalState;
+use mk_engine::regional::timber::{Log, LogPlace};
 use mk_island::{DomainLevel, IslandDomain, IslandProfile};
 
 const M: DomainLevel = DomainLevel::Medium;
@@ -653,4 +654,65 @@ fn plant_food_is_only_the_forests_fruit_and_seed_and_grassland_feeds_nobody() {
             Err(MaterialError::NothingToHarvest)
         );
     }
+}
+
+
+#[test]
+fn cross_cut_refuses_colliding_or_overflowing_piece_ids_without_mutating_the_ledger() {
+    let b = base();
+    let cell = b.forest_cell;
+    let area = b.domain.cell_area_m2(M);
+    let mut hydrology = HydrologyState::new(&b.domain.storage_spec(M), 0.5);
+    let mut materials = MaterialLedger::new();
+    let mut ledger = Ledger::new();
+
+    let make_log = |position_m, dry_kg| Log {
+        id: 0,
+        position_m,
+        heading_rad: 0.0,
+        length_m: 2.0,
+        diameter_m: 0.2,
+        dry_kg,
+        carbon_kgc: dry_kg * 0.5,
+        water_kg: dry_kg * 0.82,
+        place: LogPlace::Ground,
+    };
+
+    let source_id = materials.receive_felled_log(
+        make_log((0.0, 0.0), 10.0),
+        &mut hydrology,
+        cell,
+        area,
+        &mut ledger,
+    );
+    let occupied_id = materials.receive_felled_log(
+        make_log((10.0, 0.0), 20.0),
+        &mut hydrology,
+        cell,
+        area,
+        &mut ledger,
+    );
+    assert_eq!((source_id, occupied_id), (1, 2));
+
+    let source_before = materials.log(source_id).unwrap().clone();
+    let occupied_before = materials.log(occupied_id).unwrap().clone();
+    let carbon_before = materials.stock_of(R::MaterialCarbon);
+    let water_before = materials.stock_of(R::MaterialWater);
+
+    // The first destination id is already owned by the second log. Refusal
+    // must leave both source and destination intact, including audited stocks.
+    assert!(!materials.cross_cut_log(source_id, 2, occupied_id));
+    assert_eq!(materials.log(source_id), Some(&source_before));
+    assert_eq!(materials.log(occupied_id), Some(&occupied_before));
+    assert_eq!(materials.stock_of(R::MaterialCarbon), carbon_before);
+    assert_eq!(materials.stock_of(R::MaterialWater), water_before);
+    assert_eq!(materials.next_log_id(), 3);
+
+    // An overflowing destination range is rejected before any mutation too.
+    assert!(!materials.cross_cut_log(source_id, 2, u64::MAX));
+    assert_eq!(materials.log(source_id), Some(&source_before));
+    assert_eq!(materials.log(occupied_id), Some(&occupied_before));
+    assert_eq!(materials.stock_of(R::MaterialCarbon), carbon_before);
+    assert_eq!(materials.stock_of(R::MaterialWater), water_before);
+    assert_eq!(materials.next_log_id(), 3);
 }
