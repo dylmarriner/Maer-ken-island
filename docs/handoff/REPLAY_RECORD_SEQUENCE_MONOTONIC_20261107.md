@@ -102,3 +102,14 @@ Commit:
 - `9bbe128be14f3465712091a14febe5682bd723c3` — close the preceding test before declaring the deserialisation regression.
 
 This was a test-source formatting/placement defect, not a production-code failure. The preceding workflow did not run Clippy or fast tests for this head. A fresh exact-head workflow is required; no source-level pass is claimed.
+
+
+## Exact-head call-site correction — 8 November 2026
+
+After the formatter placement correction, workflow [#42413548898](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42413548898) passed formatting and reached Clippy compilation, where the newly private `entries` field exposed one remaining application read in `apps/island/src/serve/projection.rs`.
+
+- The timeline projection still accessed `life.replay_log().entries` directly.
+- Updated it to use the immutable `entries()` accessor, preserving the same timeline ordering and content.
+- Commit: `d6d0d62cd4a86406a858e8ed30f1736762571abb`.
+
+The previous run's compile failure is a missed call-site, not a replay algorithm failure. A fresh exact-head workflow is required; no Clippy or fast-test pass is claimed for that failed head.
