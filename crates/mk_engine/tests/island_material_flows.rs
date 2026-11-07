@@ -585,6 +585,13 @@ fn the_material_ledger_round_trips_through_a_snapshot() {
     // still materialise its pieces after the island is restored.
     assert_eq!(materials.reserve_log_ids(2), 1);
 
+    let empty_snapshot =
+        serde_json::to_string(&MaterialLedger::new()).expect("an empty ledger serializes");
+    assert!(
+        !empty_snapshot.contains("reserved_log_ids"),
+        "empty reservation state must not change legacy snapshot bytes"
+    );
+
     let text = serde_json::to_string(&materials).expect("the ledger serializes");
     let back: MaterialLedger = serde_json::from_str(&text).expect("and comes back");
 
@@ -660,7 +667,8 @@ fn plant_food_is_only_the_forests_fruit_and_seed_and_grassland_feeds_nobody() {
 }
 
 #[test]
-fn cross_cut_refuses_colliding_overflowing_unreserved_and_consumed_piece_ids_without_mutating_the_ledger() {
+fn cross_cut_refuses_colliding_overflowing_unreserved_and_consumed_piece_ids_without_mutating_the_ledger(
+) {
     let b = base();
     let cell = b.forest_cell;
     let area = b.domain.cell_area_m2(M);
@@ -685,13 +693,8 @@ fn cross_cut_refuses_colliding_overflowing_unreserved_and_consumed_piece_ids_wit
     let mut first_source = make_log((0.0, 0.0), 10.0);
     first_source.place = LogPlace::Stored;
     first_source.water_kg = 0.0;
-    let source_id = materials.receive_felled_log(
-        first_source,
-        &mut hydrology,
-        cell,
-        area,
-        &mut ledger,
-    );
+    let source_id =
+        materials.receive_felled_log(first_source, &mut hydrology, cell, area, &mut ledger);
     let occupied_id = materials.receive_felled_log(
         make_log((10.0, 0.0), 20.0),
         &mut hydrology,
