@@ -4736,7 +4736,8 @@ mod tests {
         {
             let will = life.will_of("Gem-D");
             will.liking.insert(crate::regional::choice::Work::Fell, 1.0);
-            will.liking.insert(crate::regional::choice::Work::Haul, -1.0);
+            will.liking
+                .insert(crate::regional::choice::Work::Haul, -1.0);
         }
 
         // The work loop offers the plan, but this founder strongly prefers
