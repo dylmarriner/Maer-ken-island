@@ -66,3 +66,20 @@ The initial fail-closed pass validated caller vectors before mutation, but deriv
 - Production change commit: 4228af75ed2bd1bd203d70c6303813f6caa2229b.
 - Exact-head formatting, Clippy, fast Rust tests, desktop/backend and week/year acceptance must be rerun. No local Cargo result is claimed.
 - Valid RothC equations, reference coefficients, snapshots, replay format, RNG and digest pins remain unchanged.
+
+
+## Exact-head fast-test fixture correction — 8 November 2026
+
+Workflow [#42408189828](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42408189828) completed the reference-pack acceptance successfully: both week and year packs passed. Formatting and Clippy also passed. The fast Rust suite ran 879 tests and reported **878 passed, one failed**.
+
+The failure was in `step_preflights_late_derived_decay_overflow_before_mutating_any_cell`. Its second cell is non-vegetated, so the production preflight correctly multiplies its temperature factor by `cover_bare`; the fixture had changed `cover_vegetated` instead. The test therefore never constructed the intended overflow and its `result.is_err()` assertion failed.
+
+Correction:
+- Set `soil.params.cover_bare = 2.0` for the non-vegetated second cell.
+- Document why the bare cover factor is the relevant input.
+- Leave the production preflight unchanged; the implementation was not weakened or altered to satisfy a malformed fixture.
+
+Commit:
+- `ab6aac5ea328e53e32a034ef758610194e3217a4` — correct the late-cell derived-overflow test fixture.
+
+The prior workflow proves the week and year reference packs passed on the previous code head, but it does not verify this corrected test head. Fresh exact-head formatting, Clippy, fast tests, desktop/backend and reference-pack checks are required. No local Cargo result is claimed because custom OpenCommander is returning HTTP 429.
