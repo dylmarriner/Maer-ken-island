@@ -10,6 +10,8 @@
 //! That is what makes the digest worth printing. A run that could not be
 //! reproduced would be a number about one afternoon on one machine.
 
+use std::fs::File;
+use std::io::{Read, Write};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -23,6 +25,37 @@ use super::life::{IslandLife, IslandLifeError};
 /// The log's format. A log written by another version is refused rather
 /// than guessed at, for the same reason a snapshot is.
 pub const REPLAY_LOG_VERSION: u32 = 1;
+
+/// Replay files are bounded so an imported or corrupted log cannot consume
+/// unbounded memory or disk while it is loaded or saved.
+pub const MAX_REPLAY_LOG_BYTES: u64 = 64 * 1024 * 1024;
+
+struct LimitedWriter<'a, W> {
+    inner: W,
+    written: u64,
+    limit_bytes: u64,
+    exceeded: &'a mut bool,
+}
+
+impl<W: Write> Write for LimitedWriter<'_, W> {
+    fn write(&mut self, buffer: &[u8]) -> std::io::Result<usize> {
+        if buffer.len() as u64 > self.limit_bytes.saturating_sub(self.written) {
+            *self.exceeded = true;
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "replay log exceeds configured size limit",
+            ));
+        }
+
+        let written = self.inner.write(buffer)?;
+        self.written += written as u64;
+        Ok(written)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.inner.flush()
+    }
+}
 
 /// One command, and exactly when it was applied.
 ///
@@ -105,10 +138,39 @@ impl IslandReplayLog {
         Ok(())
     }
 
-    /// Read a log from a file.
+    /// Read a log from a regular file, refusing inputs larger than the offline budget.
     pub fn load(path: &Path) -> Result<Self, IslandReplayError> {
-        let bytes = std::fs::read(path)
+        let metadata = std::fs::metadata(path)
             .map_err(|e| IslandReplayError::Io(path.display().to_string(), e))?;
+        if !metadata.is_file() {
+            return Err(IslandReplayError::Io(
+                path.display().to_string(),
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "replay source must be a regular file",
+                ),
+            ));
+        }
+        if metadata.len() > MAX_REPLAY_LOG_BYTES {
+            return Err(IslandReplayError::TooLarge {
+                path: path.display().to_string(),
+                limit_bytes: MAX_REPLAY_LOG_BYTES,
+            });
+        }
+
+        let file = File::open(path)
+            .map_err(|e| IslandReplayError::Io(path.display().to_string(), e))?;
+        let mut bytes = Vec::new();
+        file.take(MAX_REPLAY_LOG_BYTES + 1)
+            .read_to_end(&mut bytes)
+            .map_err(|e| IslandReplayError::Io(path.display().to_string(), e))?;
+        if bytes.len() as u64 > MAX_REPLAY_LOG_BYTES {
+            return Err(IslandReplayError::TooLarge {
+                path: path.display().to_string(),
+                limit_bytes: MAX_REPLAY_LOG_BYTES,
+            });
+        }
+
         let log: Self = serde_json::from_slice(&bytes)
             .map_err(|e| IslandReplayError::NotALog(path.display().to_string(), e.to_string()))?;
         if log.version != REPLAY_LOG_VERSION {
@@ -117,18 +179,40 @@ impl IslandReplayLog {
         Ok(log)
     }
 
-    /// Write a log, whole or not at all.
+    /// Write a log atomically, refusing output larger than the offline budget.
     pub fn save(&self, path: &Path) -> Result<(), IslandReplayError> {
-        let text = serde_json::to_vec_pretty(self)
-            .map_err(|e| IslandReplayError::NotALog(path.display().to_string(), e.to_string()))?;
         let temp = path.with_extension(format!("tmp-{}", std::process::id()));
-        let write = (|| -> std::io::Result<()> {
-            std::fs::write(&temp, &text)?;
-            std::fs::rename(&temp, path)
-        })();
-        if let Err(e) = write {
+        let mut file = File::create(&temp)
+            .map_err(|e| IslandReplayError::Io(path.display().to_string(), e))?;
+        let mut exceeded = false;
+        let serialized = {
+            let mut writer = LimitedWriter {
+                inner: &mut file,
+                written: 0,
+                limit_bytes: MAX_REPLAY_LOG_BYTES,
+                exceeded: &mut exceeded,
+            };
+            serde_json::to_writer_pretty(&mut writer, self)
+        };
+        if let Err(error) = serialized {
+            drop(file);
             std::fs::remove_file(&temp).ok();
-            return Err(IslandReplayError::Io(path.display().to_string(), e));
+            if exceeded {
+                return Err(IslandReplayError::TooLarge {
+                    path: path.display().to_string(),
+                    limit_bytes: MAX_REPLAY_LOG_BYTES,
+                });
+            }
+            return Err(IslandReplayError::NotALog(
+                path.display().to_string(),
+                error.to_string(),
+            ));
+        }
+
+        drop(file);
+        if let Err(error) = std::fs::rename(&temp, path) {
+            std::fs::remove_file(&temp).ok();
+            return Err(IslandReplayError::Io(path.display().to_string(), error));
         }
         Ok(())
     }
@@ -141,6 +225,11 @@ pub enum IslandReplayError {
     NotALog(String, String),
     /// A log written by a format this build does not know.
     Version(u32),
+    /// A replay file exceeds the bounded offline import/export size.
+    TooLarge {
+        path: String,
+        limit_bytes: u64,
+    },
     /// Two commands claim the same ordering position within one tick.
     DuplicateSequence {
         tick: u64,
@@ -171,6 +260,10 @@ impl std::fmt::Display for IslandReplayError {
             Self::Version(v) => write!(
                 f,
                 "that log is format {v}; this build reads {REPLAY_LOG_VERSION}"
+            ),
+            Self::TooLarge { path, limit_bytes } => write!(
+                f,
+                "{path} exceeds the {limit_bytes}-byte replay log limit"
             ),
             Self::DuplicateSequence { tick, sequence } => write!(
                 f,
@@ -341,5 +434,28 @@ impl IslandLife {
             .iter()
             .map(|b| format!("{b:02x}"))
             .collect()
+    }
+}
+
+
+#[cfg(test)]
+mod bounded_writer_tests {
+    use super::LimitedWriter;
+    use std::io::{Cursor, Write};
+
+    #[test]
+    fn limited_writer_never_writes_past_its_limit() {
+        let mut exceeded = false;
+        let mut writer = LimitedWriter {
+            inner: Cursor::new(Vec::new()),
+            written: 0,
+            limit_bytes: 4,
+            exceeded: &mut exceeded,
+        };
+
+        writer.write_all(b"1234").expect("the limit is inclusive");
+        assert!(writer.write_all(b"5").is_err());
+        assert!(exceeded);
+        assert_eq!(writer.inner.get_ref().as_slice(), b"1234");
     }
 }
