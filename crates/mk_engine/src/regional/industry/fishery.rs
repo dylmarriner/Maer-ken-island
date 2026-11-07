@@ -54,7 +54,9 @@ impl std::fmt::Display for FisheryError {
             Self::InvalidTimeStep => "fishery time step must be finite and non-negative",
             Self::InvalidStockState => "fish stock state is outside its valid domain",
             Self::NonFiniteGrowth => "fish stock growth is not finite",
-            Self::UnrepresentableGrowth => "positive fish stock growth is below binary64 representable range",
+            Self::UnrepresentableGrowth => {
+                "positive fish stock growth is below binary64 representable range"
+            },
             Self::LandedTotalOverflow => "cumulative landed biomass overflowed",
             Self::LandedTotalUnrepresentable => {
                 "cumulative landed biomass increment is not representable at stored precision"
@@ -1684,7 +1686,10 @@ mod tests {
             depensation_below: 0.25,
         };
 
-        for (carrying_capacity, biomass) in [(1.0, min_subnormal), (2.0 * min_subnormal, min_subnormal)] {
+        for (carrying_capacity, biomass) in [
+            (1.0, min_subnormal),
+            (2.0 * min_subnormal, min_subnormal),
+        ] {
             let mut stock = FishStock::unexploited(Resilience::Medium, carrying_capacity)
                 .expect("positive carrying capacity");
             stock.biomass_t = biomass;
