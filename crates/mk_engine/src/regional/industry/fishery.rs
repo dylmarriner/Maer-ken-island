@@ -298,10 +298,7 @@ impl FishStock {
             let subnormal_intermediate = p < f64::MIN_POSITIVE
                 || biomass_factor < f64::MIN_POSITIVE
                 || biomass_product < f64::MIN_POSITIVE;
-            if (direct == 0.0 || subnormal_intermediate)
-                && self.biomass_t > 0.0
-                && rate > 0.0
-            {
+            if (direct == 0.0 || subnormal_intermediate) && self.biomass_t > 0.0 && rate > 0.0 {
                 // A subnormal ratio, depensation factor or biomass product has
                 // too little precision to multiply safely: rounding that
                 // intermediate can materially distort a still-normal final
@@ -1362,8 +1359,7 @@ mod tests {
         let biomass_factor = (1.0 - p) * (p / model.depensation_below);
         let biomass_product = stock.biomass_t * biomass_factor;
         let direct = model.r(Resilience::Medium) * biomass_product;
-        let log_expected = model.r(Resilience::Medium).log2()
-            + 2.0 * stock.biomass_t.log2()
+        let log_expected = model.r(Resilience::Medium).log2() + 2.0 * stock.biomass_t.log2()
             - stock.k_t.log2()
             - model.depensation_below.log2()
             + (1.0 - p).log2();
