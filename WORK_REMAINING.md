@@ -1,3 +1,12 @@
+## Latest engineering update — 8 November 2026
+
+- PR #124 now also preserves the canonical week digest when no cross-cut is pending. The previous exact-head run on 680f757 failed the week digest pin (observed 5c975e00..., expected 29ed53bd...) while the year pack passed. Its documented physical metrics remained inside acceptance: 27,597 audits, zero food/water shortfalls, 112 economy events, 200,000 estate trees, founder body carbon at expected values and temperate-forest NPP 471 g C/m2/yr.
+- Root cause was representation-only: IslandLife::state_digest hashes MaterialLedger through Debug, so the new empty reserved_log_ids field appeared in derived Debug even though serde omits it when empty. MaterialLedger now implements Debug to preserve the exact legacy representation when the set is empty and include it when pending IDs exist.
+- Added regressions for the exact legacy empty-ledger Debug string and pending-ID inclusion. Commits: cb9d89bb (production), 6962194d (tests), 5815c34b (dedicated handoff), d52a20ff (root handoff).
+- Current exact-head CI [#42395446225](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42395446225) is in progress. At last check, repository scripts, dashboard and computer service passed; formatting, fast tests, desktop, installed backend, dependency audit and week/year acceptance were still running. The previous head's digest failure remains open until the current week pack passes.
+- Do not repin WEEK_DIGEST unless the compatibility fix still leaves a separately audited state difference. No simulation parameters, RNG, replay hash or snapshot schema changed.
+- PR #123 remains separate and its exact-head checks passed. PR #123 and #124 still overlap in HANDOFF.md, WORK_REMAINING.md, life.rs and docs/ISLAND_SYSTEM_STATUS.md; reconcile before merging either. The broader timber milestone remains Open; saw-based Ute cross-cutting is still outstanding.
+
 ## Current engineering update — 8 November 2026
 
 - PR #124 now caps one cross-cut at 10,000 pieces. The pure Log API, ledger reservation/materialisation, legacy reservation restoration and haul planner all fail closed before an oversized allocation. LabourError::CrossCutLimitExceeded reports the planner limit; regressions cover direct API, reservation and no-mutation ledger paths. Commits: 46b5c581, b6233988, 1be3fae2, ce87b0e0. Exact-head CI is pending; no local Cargo result is claimed.
@@ -63,7 +72,7 @@ this list holds the current state. The evidence for what is *done* is in
 
 | Area | Item | State | Blocked on |
 |---|---|---|---|
-| Timber | Routes, sawing logs for the ute (D40); drying and seasoning done 2026-10-14, splitting, two-person crosscut felling and excavator rigging 2026-10-23 (D63); cross-cut conservation, exact piece-ID reservation and reserved-range enforcement in draft PR #124 | Open | — |
+| Timber | Routes, sawing logs for the ute (D40); drying and seasoning done 2026-10-14, splitting, two-person crosscut felling and excavator rigging 2026-10-23 (D63); cross-cut conservation, exact/pending piece-ID reservation, consumed-range protection, 10,000-piece allocation bound and digest-compatible reservation bookkeeping in draft PR #124 | Open | Exact-head CI and PR #123 integration reconciliation |
 | Living world | Phase 3 Task 1b: species at island scale | Done (D55 open: upstream densities) | — |
 | Living world | Phase 3 Task 2: every resource and material, placers, recipes | Catalogue, mineral sites, gold placers, ironsand done (2026-10-14); diamond and platinum placers, animal, fish and plant nodes, salt works (2026-10-23); other gem and tin placers, tools, recipes open | Cited gem/tin placer models, shaft depth and rate |
 | Living world | D9: actions take one tick | In part: felling, hauling, splitting, shed, panning, foraging and water trips timed, learned by practice (R11); Craft, Explore and social actions one tick | Cited durations per task |
