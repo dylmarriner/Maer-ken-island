@@ -339,7 +339,8 @@ impl SoilCarbon {
         }
         let mut respired = 0.0;
         for (i, pools) in self.pools.iter_mut().enumerate() {
-            respired += p.step_cell(
+            assert_soil_pools(pools);
+            respired += p.step_cell_unchecked(
                 pools,
                 biomes[i],
                 inputs[i],
@@ -347,7 +348,10 @@ impl SoilCarbon {
                 vegetated[i],
                 dt_years,
             );
-            assert!(respired.is_finite(), "RothC cumulative step respiration must remain finite");
+            assert!(
+                respired.is_finite(),
+                "RothC cumulative step respiration must remain finite"
+            );
         }
         let cumulative_respired = self.respired_kgc_m2 + respired;
         assert!(
@@ -404,15 +408,16 @@ impl RothC {
         let Some(dpm_share) = p.plant_dpm_share(biome) else {
             return 0.0;
         };
-        pools[DPM] += dpm_share * input.litter + p.manure[0] * input.faeces + input.carcasses;
-        pools[RPM] += (1.0 - dpm_share) * input.litter + p.manure[1] * input.faeces;
-        pools[HUM] += p.manure[2] * input.faeces;
         let cover = if vegetated {
             p.cover_vegetated
         } else {
             p.cover_bare
         };
         let m = a * cover;
+        assert!(m.is_finite(), "RothC decay modifier must remain finite");
+        pools[DPM] += dpm_share * input.litter + p.manure[0] * input.faeces + input.carcasses;
+        pools[RPM] += (1.0 - dpm_share) * input.litter + p.manure[1] * input.faeces;
+        pools[HUM] += p.manure[2] * input.faeces;
         let mut decomposed = 0.0;
         for (pool, k) in pools.iter_mut().zip(p.k) {
             let lost = *pool * (1.0 - (-m * k * dt_years).exp());
@@ -476,7 +481,6 @@ mod tests {
         assert!(((before + 0.013) - (after + respired)).abs() < 1e-12);
     }
 
-    /// The steady state is one: fed its own input, it stays put.
     #[test]
     fn steady_state_rejects_mismatched_cell_vectors() {
         let p = params();
@@ -537,6 +541,7 @@ mod tests {
         assert_eq!(pools, before);
     }
 
+    /// The steady state is one: fed its own input, it stays put.
     #[test]
     fn the_steady_state_holds_under_its_own_input() {
         let p = params();
