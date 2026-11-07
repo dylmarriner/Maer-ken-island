@@ -479,3 +479,10 @@ The corrected exact-head Rust test suite is pending. The prior week/year pass be
 The first rerun after the candidate-selection fixture correction stopped at rustfmt only. It requested the single `litres_per_km` call to remain on one line.
 
 Commit `f6ff198bb6d67645affd13a972a1537013196fe4` applies that exact formatting. No behavior changed. The next exact-head workflow must reach fast tests before the regression can be considered verified.
+
+
+## Ute fixture module-path correction — 8 November 2026
+
+The next exact-head Rust check compiled the new fixture and found one path-resolution error: inside `life::tests`, `super::energy` refers to the `life` module's parent, which does not contain the sibling `energy` module.
+
+Commit `65bf36c3dbf29e91c595371208e98db886e06b16` uses the compiler-suggested canonical path `crate::regional::energy::Surface::OffRoadTrack` for the test fixture. No production logic changed. A fresh exact-head test run is required.
