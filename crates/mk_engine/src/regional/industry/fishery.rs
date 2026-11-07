@@ -1561,6 +1561,36 @@ mod tests {
     }
 
     #[test]
+    fn unharvested_growth_below_stock_ulp_is_rejected_without_mutation() {
+        let mut model = FisheryModel::load_default().expect("the pack loads");
+        model.r_per_year[Resilience::Medium as usize] = 1.0e308;
+        model.depensation_below = 0.25;
+
+        let mut stock = FishStock::unexploited(Resilience::Medium, 1.0e308)
+            .expect("finite positive carrying capacity");
+        stock.biomass_t = 1.0e-100;
+
+        // The interval growth is positive and representable on its own, but is
+        // too small to change the much larger existing biomass. With no catch,
+        // silently accepting this step would discard all growth from the ledger.
+        let before = stock.clone();
+        let growth = stock
+            .sustainable_catch_limit_t(&model, YEAR_S)
+            .expect("the interval growth itself is representable");
+        assert!(growth > 0.0);
+        assert_eq!(stock.biomass_t + growth, stock.biomass_t);
+
+        assert_eq!(
+            stock.fish(&model, 0.0, YEAR_S),
+            Err(FisheryError::BiomassRemainderUnrepresentable)
+        );
+        assert_eq!(
+            stock, before,
+            "a zero-catch step must not silently discard unrepresentable stock growth"
+        );
+    }
+
+    #[test]
     fn landed_increment_rounded_to_a_different_amount_is_rejected_without_mutation() {
         let mut model = FisheryModel::load_default().expect("the pack loads");
         model.r_per_year[Resilience::Medium as usize] = 0.5;
