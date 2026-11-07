@@ -653,7 +653,7 @@ fn a_run_somebody_intervened_in_replays_to_the_same_island() {
         live.advance(STEP).expect("the island steps on");
     }
     let live_digest = hex(live.state_digest());
-    assert_eq!(live.replay_log().entries.len(), script.len());
+    assert_eq!(live.replay_log().entries().len(), script.len());
 
     let replayed = replay_island(canon(), scenario(), live.replay_log(), until)
         .expect("the log replays")
@@ -672,7 +672,7 @@ fn a_run_somebody_intervened_in_replays_to_the_same_island() {
     let path = dir.path().join("intervened.json");
     live.replay_log().save(&path).unwrap();
     let from_disk = IslandReplayLog::load(&path).expect("the log reads back");
-    assert_eq!(from_disk.entries.len(), script.len());
+    assert_eq!(from_disk.entries().len(), script.len());
     let replayed = replay_island(canon(), scenario(), &from_disk, until)
         .expect("the log replays from disk")
         .state_digest();
@@ -683,7 +683,7 @@ fn a_run_somebody_intervened_in_replays_to_the_same_island() {
 fn a_refused_intervention_never_reaches_the_log() {
     let mut life = island();
     let (row, col) = a_land_cell(&life);
-    let before = life.replay_log().entries.len();
+    let before = life.replay_log().entries().len();
     let command = IslandCommand::Intervention(Box::new(InterventionAction::TriggerDisturbance {
         disturbance_type: DisturbanceType::Fire,
         intensity: 0.5,
@@ -697,7 +697,7 @@ fn a_refused_intervention_never_reaches_the_log() {
         other => panic!("the island runs no disturbances, got {other:?}"),
     }
     assert_eq!(
-        life.replay_log().entries.len(),
+        life.replay_log().entries().len(),
         before,
         "a refused command did not happen, so it is not in the record"
     );
@@ -719,7 +719,7 @@ fn an_applied_intervention_is_in_the_log_with_the_tick_it_landed_on() {
         )))
         .expect("water is a material here");
     assert!(matches!(applied, Applied::Intervened(_)));
-    let entry = life.replay_log().entries.last().expect("it is recorded");
+    let entry = life.replay_log().entries().last().expect("it is recorded");
     assert_eq!(entry.tick, tick);
     assert!(matches!(entry.command, IslandCommand::Intervention(_)));
 }
