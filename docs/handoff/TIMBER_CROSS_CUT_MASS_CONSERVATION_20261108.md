@@ -134,3 +134,33 @@ Commits:
 - Rustfmt correction: `8138ed5ba1c582a2d46bda6fe9a3ed70e5b2fb6e`
 
 The first exact-head workflow [#42379017290](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42379017290) reached checkout and reported only two rustfmt differences in the new test; Clippy and fast tests were skipped behind that format gate. The formatter output was applied in `8138ed5`. A fresh exact-head workflow is required; no Rust test or Clippy pass is claimed for the corrected head yet.
+
+
+## Refuse cross-cut destination ID collisions before mutation — 8 November 2026
+
+The planner now reserves the exact candidate piece range, but the public material-ledger
+boundary also needs to defend itself against a stale or malformed caller-supplied range.
+Previously `cross_cut_log` removed the source before inserting pieces and unconditionally
+inserted into the destination IDs; a direct caller could overwrite an existing log.
+
+- `cross_cut_log` now reads the source without removing it, clamps the requested piece count
+  to the existing minimum of one, and rejects zero, overflowing or already-occupied
+  destination ranges before any mutation.
+- The occupancy check uses the `BTreeMap::range` index, not a per-ID scan, so validation is
+  logarithmic in the ledger size plus the first matching entry.
+- Only after the full range is valid does it materialise pieces, remove the source and insert
+  the split. Invalid requests preserve the source, every existing destination and audited
+  carbon/water stocks.
+- Regression:
+  `cross_cut_refuses_colliding_or_overflowing_piece_ids_without_mutating_the_ledger`
+  creates two felled logs, attempts a colliding split and an overflowing range, and verifies
+  both logs, next-id state and material stocks remain unchanged.
+- Commits:
+  - Production: `a8c0abca755aefc59e09786aceb5f19aff15c4a3`
+  - Regression: `0855c4dcb4c534e90a1a416c7da990083498c300`
+
+Exact-head workflow [#42383634990](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42383634990)
+was pending when this handoff was written. No test pass is claimed until the exact-head
+formatting, Clippy, fast tests, desktop/backend and week/year acceptance jobs complete.
+No snapshot schema, replay log, canonical digest, RNG, simulation tick, live state or
+production infrastructure was changed.
