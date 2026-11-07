@@ -332,7 +332,11 @@ fn recording_the_last_available_sequence_then_exhaustion_is_fail_closed() {
         log.record(5, IslandCommand::Control(ControlCommand::Pause)),
         Err(ReplaySequenceExhausted { tick: 5 })
     );
-    assert_eq!(log.entries().len(), 2, "exhaustion must not append a duplicate");
+    assert_eq!(
+        log.entries().len(),
+        2,
+        "exhaustion must not append a duplicate"
+    );
 }
 
 /// Duplicate ordering positions make same-tick replay ambiguous and must fail closed.
