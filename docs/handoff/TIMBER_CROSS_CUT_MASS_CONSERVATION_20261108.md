@@ -500,3 +500,8 @@ Cross-cutting now rejects non-finite geometry, non-positive length/diameter, neg
 Regression coverage proves direct cross-cut rejects a non-finite heading and that invalid ingress leaves the allocator, log set and conservation books unchanged. No snapshot fields, replay serialization, simulation digest or single-writer ordering changed.
 
 Code/test commits: ae31d80873e81585433fd049ae2d04e7e0b1dc9b, ad08479ef7c5a6f05a196bb85e233ec5c4fb7e19, 951ce6b7d099f1ae433a25a0f6d5f72c0de4344d. Exact-head Rust format, Clippy, fast tests, desktop/backend and week/year acceptance are required; no local Cargo result is claimed because custom OpenCommander returned HTTP 429.
+
+
+## Exact-head and integration status — 8 November 2026
+
+Current PR #124 head: 3d372b8e1ce516927263ce27a1311210fe150dd7. No pull-request workflow run is associated with this exact head. The previous green run #42407133408 tested older head bb6ea969 and does not cover the invalid-physical-state guard or its new regressions. Current main is f62afa24fbc6e22bcdf36042a65cbddb4fc8df1d. PR #124 remains dirty/non-mergeable against its older base 522aba3d860435c92a4938cf5ffba2b427941cd7; rebase and reconcile the replay/timber overlap before merge. PR #126 is a separate draft documentation handoff, clean and green at workflow #42422705446, but intentionally remains draft. No open issues are currently returned for this repository; WORK_REMAINING.md remains the active engineering checklist.
