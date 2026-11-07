@@ -687,3 +687,8 @@ invertebrate densities, fire danger indices (see each report's "unsourced" secti
   sources; the container's own network blocks most hosts.
 - **Persist digests.** `WEEK_DIGEST` is `29ed53bd7769eb3025e70135bab8b7ea07718e26e7fca4cbf77ab379d62b7784`; the planetary topology pin is
   `e4ece246…73e2`. Any change that moves either is a behaviour change and must say so.
+
+
+### Fishery unrepresentable surplus follow-up (PR #118, stacked on PR #117)
+
+The non-depensated Schaefer path now re-evaluates a subnormal `r * (1 - B/K)` intermediate in log space when large biomass makes the final surplus representable. Positive mathematical surplus below the smallest binary64 subnormal now fails with `FisheryError::UnrepresentableGrowth` instead of silently reporting zero; the regression proves `fish()` leaves stock unchanged in both depensated and ordinary branches. Source/test commit `daff952a`; formatting commit `470cfc6f`. Exact-head CI is required after PR #118 is opened. See `docs/handoff/FISHERY_UNREPRESENTABLE_SURPLUS_20261107.md`. No ecological reference values or persisted state formats changed.
