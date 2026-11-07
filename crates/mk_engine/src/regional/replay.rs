@@ -444,16 +444,20 @@ mod bounded_writer_tests {
     #[test]
     fn limited_writer_never_writes_past_its_limit() {
         let mut exceeded = false;
-        let mut writer = LimitedWriter {
-            inner: Cursor::new(Vec::new()),
-            written: 0,
-            limit_bytes: 4,
-            exceeded: &mut exceeded,
+        let bytes = {
+            let mut writer = LimitedWriter {
+                inner: Cursor::new(Vec::new()),
+                written: 0,
+                limit_bytes: 4,
+                exceeded: &mut exceeded,
+            };
+
+            writer.write_all(b"1234").expect("the limit is inclusive");
+            assert!(writer.write_all(b"5").is_err());
+            writer.inner.into_inner()
         };
 
-        writer.write_all(b"1234").expect("the limit is inclusive");
-        assert!(writer.write_all(b"5").is_err());
         assert!(exceeded);
-        assert_eq!(writer.inner.get_ref().as_slice(), b"1234");
+        assert_eq!(bytes.as_slice(), b"1234");
     }
 }
