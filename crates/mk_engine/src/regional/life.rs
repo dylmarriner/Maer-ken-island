@@ -4523,6 +4523,9 @@ mod tests {
         // the conserved final remainder is materially longer and forces the
         // Ute plan to recut into fourteen pieces.
         let minimum_pieces = 13u32;
+        // Keep the log heavy enough that a Ute is faster than carrying fourteen
+        // sub-kilogram pieces by hand; length, not mass, must force the 14th cut.
+        let sustainable = life.labour.sustainable_load_kg(&body).unwrap();
         let length_m = f64::from_bits((bed * f64::from(minimum_pieces)).to_bits() - 5);
         let source_log = timber::Log {
             id: 0,
@@ -4530,8 +4533,8 @@ mod tests {
             heading_rad: 0.0,
             length_m,
             diameter_m: 0.30,
-            dry_kg: 10.0,
-            carbon_kgc: 5.0,
+            dry_kg: sustainable * 10.0,
+            carbon_kgc: sustainable * 5.0,
             water_kg: 0.0,
             place: timber::LogPlace::Ground,
         };
