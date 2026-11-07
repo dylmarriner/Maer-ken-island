@@ -31,7 +31,7 @@
 //! (the island's species are not seeded yet; Task 1b).
 
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use super::timber::Log;
 use mk_core::flux::{FluxEntry, FluxKind, Ledger, Reservoir};
@@ -325,6 +325,11 @@ pub struct MaterialLedger {
     logs: BTreeMap<u64, Log>,
     #[serde(default)]
     next_log: u64,
+    /// IDs reserved for pending cross-cut materialisation. Consumed ids are
+    /// removed and never become reservable again. Omit the empty set so
+    /// snapshots without a pending cut retain their prior representation.
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    reserved_log_ids: BTreeSet<u64>,
 }
 
 fn flow(ledger: &mut Ledger, kind: FluxKind, from: Reservoir, to: Reservoir, amount: f64) {
@@ -627,7 +632,7 @@ impl MaterialLedger {
         cell_area_m2: f64,
         ledger: &mut Ledger,
     ) -> u64 {
-        log.id = self.reserve_log_ids(1);
+        log.id = self.allocate_log_id();
         flow(
             ledger,
             FluxKind::Carbon,
@@ -658,18 +663,29 @@ impl MaterialLedger {
         id
     }
 
-    /// First log id that has not yet been reserved.
+    /// First log id that has not yet been allocated or reserved.
     ///
-    /// Planning is single-writer and may inspect this value before it reserves
-    /// the exact piece range required by the selected haul plans.
+    /// Planning is single-writer and may inspect this value before reserving
+    /// the exact piece range required by the selected haul plan.
     pub fn next_log_id(&self) -> u64 {
         self.next_log.max(1)
     }
 
-    /// Reserve `n` consecutive log ids; returns the first.
+    /// Allocate one id for a log that is materialised immediately.
+    fn allocate_log_id(&mut self) -> u64 {
+        let id = self.next_log_id();
+        self.next_log = id.checked_add(1).expect("log id space exhausted");
+        id
+    }
+
+    /// Reserve `n` consecutive ids for a future cross-cut; returns the first.
+    /// A successful cross-cut consumes the pending ids. Refused cuts leave
+    /// them pending so the original planned operation can be retried.
     pub fn reserve_log_ids(&mut self, n: u64) -> u64 {
         let first = self.next_log_id();
-        self.next_log = first.checked_add(n).expect("log id space exhausted");
+        let end = first.checked_add(n).expect("log id space exhausted");
+        self.next_log = end;
+        self.reserved_log_ids.extend(first..end);
         first
     }
 
@@ -766,10 +782,11 @@ impl MaterialLedger {
             return false;
         };
         if first_id == 0
-            // next_log is the exclusive end of the ids already reserved by
-            // the single writer. Accepting an arbitrary future range would
-            // leave the allocator behind it and let a later felled log collide.
+            // next_log is the exclusive end of ids already allocated/reserved.
+            // It cannot distinguish a pending reservation from an old id whose
+            // log was later removed, so require every id to remain pending.
             || end_exclusive > self.next_log
+            || self.reserved_log_ids.range(first_id..end_exclusive).count() != pieces as usize
             || self.logs.range(first_id..end_exclusive).next().is_some()
         {
             return false;
@@ -778,6 +795,8 @@ impl MaterialLedger {
         let split = log.cross_cut(pieces, first_id);
         self.logs.remove(&id);
         for piece in split {
+            let was_reserved = self.reserved_log_ids.remove(&piece.id);
+            debug_assert!(was_reserved, "cross-cut ids were validated as reserved");
             self.logs.insert(piece.id, piece);
         }
         true
