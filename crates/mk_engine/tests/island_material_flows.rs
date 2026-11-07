@@ -714,4 +714,23 @@ fn cross_cut_refuses_colliding_or_overflowing_piece_ids_without_mutating_the_led
     assert_eq!(materials.stock_of(R::MaterialCarbon), carbon_before);
     assert_eq!(materials.stock_of(R::MaterialWater), water_before);
     assert_eq!(materials.next_log_id(), 3);
+
+    // An unreserved future range is unoccupied, but it is still unsafe:
+    // the allocator would remain at id 3 and eventually reuse id 10.
+    assert!(!materials.cross_cut_log(source_id, 2, 10));
+    assert_eq!(materials.log(source_id), Some(&source_before));
+    assert_eq!(materials.log(10), None);
+    assert_eq!(materials.log(11), None);
+    assert_eq!(materials.stock_of(R::MaterialCarbon), carbon_before);
+    assert_eq!(materials.stock_of(R::MaterialWater), water_before);
+    assert_eq!(materials.next_log_id(), 3);
+
+    // The same cut succeeds only after the single writer reserves its range.
+    let first_piece_id = materials.reserve_log_ids(2);
+    assert_eq!(first_piece_id, 3);
+    assert!(materials.cross_cut_log(source_id, 2, first_piece_id));
+    assert_eq!(materials.log(source_id), None);
+    assert!(materials.log(first_piece_id).is_some());
+    assert!(materials.log(first_piece_id + 1).is_some());
+    assert_eq!(materials.next_log_id(), 5);
 }
