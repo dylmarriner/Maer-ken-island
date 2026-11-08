@@ -2119,6 +2119,35 @@ fn roof_water_capture_rejects_rounded_away_stock_before_debiting_soil() {
 }
 
 #[test]
+fn roof_water_capture_rejects_source_debit_that_rounds_away_before_stock_mutation() {
+    use std::panic::{catch_unwind, AssertUnwindSafe};
+
+    let b = base();
+    let cell = b.forest_cell;
+    let mut hydrology = HydrologyState::new(&b.domain.storage_spec(M), 0.5);
+    let mut soil = *hydrology.soil_water.get(cell.0, cell.1);
+    soil.storage_mm = 100.0;
+    soil.moisture_fraction = soil.storage_mm / 300.0;
+    hydrology.soil_water.set(cell.0, cell.1, soil);
+    let mut materials = MaterialLedger::new();
+    let mut ledger = Ledger::new();
+    let soil_before = *hydrology.soil_water.get(cell.0, cell.1);
+
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        materials.capture_roof_water(1.0, &mut hydrology, cell, 1.0e18, &mut ledger)
+    }));
+
+    assert!(
+        result.is_err(),
+        "one kg over a 1e18 m2 cell cannot change the source soil depth"
+    );
+    assert_eq!(materials.stock_kg(Material::Water), 0.0);
+    assert_eq!(materials.stock_of(R::MaterialWater), 0.0);
+    assert_eq!(*hydrology.soil_water.get(cell.0, cell.1), soil_before);
+    assert!(ledger.entries().is_empty());
+}
+
+#[test]
 fn receiving_felled_log_rejects_unrepresentable_carbon_before_allocating_or_debiting_soil() {
     use std::panic::{catch_unwind, AssertUnwindSafe};
 
