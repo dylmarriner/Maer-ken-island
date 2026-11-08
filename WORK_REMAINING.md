@@ -2,13 +2,13 @@
 
 ## Latest engineering slice — 9 November 2026
 
-- PR #131 merged to main as 39af4d821920ac614bfa32c965b227ffec028de2. Exact-head workflow [#42492412005](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42492412005) passed Rust formatting, Clippy, fast Rust tests, desktop application, installed backend, web dashboard, computer service, repository scripts, dependency audit and week/year reference-pack acceptance; nightly slow tests were skipped by design.
-- New PR #132, [operator water-injection audit atomicity](https://github.com/dylmarriner/Maer-ken-island/pull/132), fixes a state-neutrality defect: rejected water injections previously advanced audits_closed because the request entered IslandLife::audited before MaterialLedger::inject returned its error. A pure shared preflight now rejects before opening the audit; the audited mutation repeats the same check under the deterministic single-writer invariant.
-- PR #132 commits: pure preflight d8f29e7db9b3d6a82a98b4c2363ae7920a13c9cf; intervention guard 6137aa5d804078d0b8d99b85a25e02cadc074250; end-to-end regression 8d729b3a7c6154a9e3707f97d13aae790725a443; handoff 63aff9d7744ffa9b6c99595bac08461cc64fc8d4.
-- Regression seeds Water to f64::MAX and attempts a 1 kg operator injection. It asserts typed refusal and unchanged material stock, physical flux-entry count, audits_closed, replay-log length and state digest.
-- PR #132 exact-head CI is pending. Required: formatting, Clippy, fast Rust tests, desktop/backend acceptance, dependency audit and week/year reference packs. No local Cargo result is claimed because custom OpenCommander returned HTTP 429.
+- PR #131 merged to `main` as `39af4d821920ac614bfa32c965b227ffec028de2`. Exact-head workflow [#42492412005](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42492412005) passed formatting, Clippy, fast Rust tests, desktop/backend acceptance, dashboard, computer service, scripts, dependency audit and week/year reference packs; nightly slow tests were skipped by design.
+- PR #132, [operator water-injection audit atomicity](https://github.com/dylmarriner/Maer-ken-island/pull/132), merged to `main` as `e6304cc4423cd09e03b61922d61c8b31bfabaccd`. Exact-head workflow [#42497043271](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42497043271) passed formatting, Clippy, fast Rust tests, desktop build/tests/render/input acceptance, installed backend, dashboard, computer service, repository scripts, dependency audit and week/year reference packs; nightly slow tests were skipped by design.
+- New withdrawal-precision slice on `fix/material-withdrawal-representability-20261109`: `MaterialLedger::take` rejects positive debits that disappear when subtracted from a larger binary64 stock, and `craft` preflights every debit before any mutation. Production commit `0386e035da5dbd27d65fa4cc2ec9e73a3675e4f2`; regression commit `067c254c627d90e2cb2529361f1cc26574791986`.
+- Regression seeds Wood to `f64::MAX`, attempts a 1 kg craft withdrawal, and asserts typed rejection with unchanged Wood stock, MaterialCarbon stock and flux-entry count.
+- Handoff: `docs/handoff/MATERIAL_WITHDRAWAL_BINARY64_REPRESENTABILITY_20261109.md`. Fresh exact-head CI is required for this new branch; the green #132 workflow does not verify these commits. No local Cargo pass is claimed while OpenCommander is rate-limited.
 - No snapshot schema, append-only replay format, replay hash, RNG, tick cadence, scientific constant, reference pack or live simulation state changed.
-- Next: finish PR #132 exact-head acceptance; then advance D40 two-person saw cross-cutting with founder labour/energy accounting and D31's sourced regional soil-nutrient model.
+- Next: verify the withdrawal guard on the exact branch head, then resume D40's still-open saw cross-cut for ute transport and route modelling, followed by D31's sourced regional soil-nutrient model.
 
 ## Previous engineering slice — 8 November 2026
 
