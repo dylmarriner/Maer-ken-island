@@ -972,6 +972,13 @@ impl IslandLife {
             .scenario
             .validate()
             .map_err(IslandLifeError::Scenario)?;
+        if snapshot
+            .hauling
+            .values()
+            .any(|job| !job.has_valid_persisted_state())
+        {
+            return Err(IslandLifeError::Labour(LabourError::InvalidHaulJobState));
+        }
         let domain = IslandDomain::from_profile(snapshot.scenario.profile.clone())
             .map_err(IslandLifeError::Domain)?;
         let topology = GridTopology::regional(&domain, DomainLevel::Medium);
@@ -1521,7 +1528,7 @@ impl IslandLife {
                     if job.worked_s + 1e-9 < task.duration_s {
                         break;
                     }
-                    job.worked_s -= task.duration_s;
+                    job.worked_s = (job.worked_s - task.duration_s).max(0.0);
                     let task = job.tasks.pop_front().expect("a front task");
                     done_tasks.push((id.clone(), task));
                 }

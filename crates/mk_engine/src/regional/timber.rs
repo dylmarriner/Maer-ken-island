@@ -324,6 +324,93 @@ impl HaulJob {
     pub fn total_s(&self) -> f64 {
         self.tasks.iter().map(|t| t.duration_s).sum()
     }
+
+    /// Whether this active job can be safely resumed from a persisted snapshot.
+    ///
+    /// The progress cursor is measured into the front task only. Validate all
+    /// task inputs at the restore boundary before they can affect timing,
+    /// energy or material state.
+    pub(crate) fn has_valid_persisted_state(&self) -> bool {
+        if self.log_id == 0
+            || self.tasks.is_empty()
+            || !self.worked_s.is_finite()
+            || self.worked_s < -1e-9
+        {
+            return false;
+        }
+
+        let first = self.tasks.front().expect("non-empty haul task queue");
+        if self.worked_s > first.duration_s + 1e-9 {
+            return false;
+        }
+
+        let mut total_s = 0.0;
+        for task in &self.tasks {
+            if !task.duration_s.is_finite()
+                || task.duration_s < 0.0
+                || !task.met.is_finite()
+                || task.met < 0.0
+                || !task.ends_at_m.0.is_finite()
+                || !task.ends_at_m.1.is_finite()
+            {
+                return false;
+            }
+            total_s += task.duration_s;
+            if !total_s.is_finite() {
+                return false;
+            }
+
+            let action_is_valid = match &task.action {
+                HaulAction::Walk => true,
+                HaulAction::CrossCut {
+                    log_id,
+                    pieces,
+                    first_id,
+                } => {
+                    *log_id > 0
+                        && *pieces > 0
+                        && *pieces <= MAX_CROSS_CUT_PIECES
+                        && *first_id > 0
+                        && first_id.checked_add(u64::from(*pieces)).is_some()
+                }
+                HaulAction::Drive {
+                    vehicle_id,
+                    km,
+                    logs,
+                } => {
+                    *vehicle_id > 0
+                        && km.is_finite()
+                        && *km >= 0.0
+                        && logs.iter().all(|id| *id > 0)
+                }
+                HaulAction::Load { vehicle_id, logs } => {
+                    *vehicle_id > 0 && logs.iter().all(|id| *id > 0)
+                }
+                HaulAction::Unload { logs } => logs.iter().all(|id| *id > 0),
+                HaulAction::CarryToStore { log_id } => *log_id > 0,
+                HaulAction::Track {
+                    vehicle_id,
+                    hours,
+                    log,
+                } => {
+                    *vehicle_id > 0
+                        && hours.is_finite()
+                        && *hours >= 0.0
+                        && log.as_ref().is_none_or(|id| *id > 0)
+                }
+                HaulAction::Lift {
+                    vehicle_id,
+                    log_id,
+                } => *vehicle_id > 0 && *log_id > 0,
+                HaulAction::SetDown { log_id } => *log_id > 0,
+            };
+            if !action_is_valid {
+                return false;
+            }
+        }
+
+        true
+    }
 }
 
 /// The estate's places a haul runs between.

@@ -47,6 +47,8 @@ pub enum LabourError {
     },
     /// A public haul-planning call supplied a malformed persisted or in-memory log.
     InvalidTimberLogState,
+    /// A persisted haul job has impossible progress or malformed task inputs.
+    InvalidHaulJobState,
 }
 
 impl std::fmt::Display for LabourError {
@@ -63,6 +65,9 @@ impl std::fmt::Display for LabourError {
                 f,
                 "haul planning requires a finite, positive timber log with conserved physical state"
             ),
+            Self::InvalidHaulJobState => {
+                write!(f, "persisted haul job has invalid progress or task data")
+            }
             Self::CrossCutLimitExceeded {
                 requested_pieces,
                 maximum_pieces,

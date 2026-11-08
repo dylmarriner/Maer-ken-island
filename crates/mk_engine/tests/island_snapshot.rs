@@ -6,12 +6,15 @@
 //! because the one thing a small patch cannot tell us is whether the size
 //! the owner actually runs fits through a file.
 
+use std::collections::VecDeque;
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use mk_core::canon::CanonLocked;
 use mk_engine::io::{load_island_snapshot, save_island_snapshot, IslandSnapshotError};
+use mk_engine::regional::labour::LabourError;
 use mk_engine::regional::life::{IslandLife, IslandLifeError};
+use mk_engine::regional::timber::{HaulAction, HaulJob, HaulMethod, HaulTask};
 use mk_island::IslandScenario;
 
 fn repo(path: &str) -> PathBuf {
@@ -254,6 +257,47 @@ fn a_snapshot_carrying_a_scenario_this_build_cannot_run_is_refused() {
         ),
         "a profile with no cell size was accepted"
     );
+}
+
+fn haul_job(worked_s: f64, duration_s: f64, ends_at_m: (f64, f64)) -> HaulJob {
+    HaulJob {
+        log_id: 1,
+        method: HaulMethod::OnFoot,
+        tasks: VecDeque::from([HaulTask {
+            action: HaulAction::Walk,
+            duration_s,
+            met: 3.5,
+            ends_at_m,
+        }]),
+        worked_s,
+    }
+}
+
+#[test]
+fn restore_rejects_malformed_persisted_haul_progress_and_task_inputs() {
+    let life = small_island();
+    let mut invalid_jobs = vec![
+        haul_job(f64::NAN, 60.0, (0.0, 0.0)),
+        haul_job(60.001, 60.0, (0.0, 0.0)),
+        haul_job(10.0, f64::INFINITY, (0.0, 0.0)),
+        haul_job(10.0, 60.0, (f64::NAN, 0.0)),
+    ];
+    let mut overflow_cut = haul_job(0.0, 60.0, (0.0, 0.0));
+    overflow_cut.tasks.front_mut().unwrap().action = HaulAction::CrossCut {
+        log_id: 1,
+        pieces: 1,
+        first_id: u64::MAX,
+    };
+    invalid_jobs.push(overflow_cut);
+
+    for job in invalid_jobs {
+        let mut snapshot = life.snapshot();
+        snapshot.hauling.insert("Gem-D".to_owned(), job);
+        assert!(matches!(
+            IslandLife::restore(canon(), snapshot),
+            Err(IslandLifeError::Labour(LabourError::InvalidHaulJobState))
+        ));
+    }
 }
 
 /// The real island through a file: a quarter of a million individual stems,
