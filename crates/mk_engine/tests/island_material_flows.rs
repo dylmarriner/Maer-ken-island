@@ -681,6 +681,59 @@ fn water_gathering_rejects_invalid_amounts_and_stock_overflow_before_drain() {
 }
 
 #[test]
+fn surface_water_gathering_rejects_unrepresentable_source_and_stock_debits_before_mutation() {
+    let b = base();
+    let area = b.domain.cell_area_m2(M);
+    let cell = b.forest_cell;
+    let spec = b.domain.storage_spec(M);
+    let mut hydrology = HydrologyState::new(&spec, 0.5);
+    let (mut materials, mut ledger) = (MaterialLedger::new(), Ledger::new());
+
+    // A 1 kg transfer is too small to change this binary64 source depth.
+    // The destination is empty, so the source-debit preflight must reject it.
+    let large_source = 2_f64.powi(53);
+    hydrology.surface_water.set(cell.0, cell.1, large_source);
+    let surface_before = *hydrology.surface_water.get(cell.0, cell.1);
+    let runoff_before = *hydrology.runoff.get(cell.0, cell.1);
+    let entries_before = ledger.entries().len();
+    let source_rounding = materials.gather_water(1.0, &mut hydrology, cell, area, &mut ledger);
+    assert!(matches!(
+        source_rounding,
+        Err(MaterialError::InvalidSourceState {
+            material: Material::Water,
+            ..
+        })
+    ));
+    assert_eq!(materials.stock_kg(Material::Water), 0.0);
+    assert_eq!(*hydrology.surface_water.get(cell.0, cell.1), surface_before);
+    assert_eq!(*hydrology.runoff.get(cell.0, cell.1), runoff_before);
+    assert_eq!(ledger.entries().len(), entries_before);
+
+    // A normal source can still be drained only if the material inventory
+    // actually increases by the same amount.
+    hydrology.surface_water.set(cell.0, cell.1, 5.0);
+    materials
+        .inject(Material::Water, large_source, &mut ledger)
+        .expect("2^53 kg is a representable initial stock");
+    let stock_before = materials.stock_kg(Material::Water);
+    let surface_before = *hydrology.surface_water.get(cell.0, cell.1);
+    let runoff_before = *hydrology.runoff.get(cell.0, cell.1);
+    let entries_before = ledger.entries().len();
+    let stock_rounding = materials.gather_water(1.0, &mut hydrology, cell, area, &mut ledger);
+    assert!(matches!(
+        stock_rounding,
+        Err(MaterialError::InvalidAmount {
+            material: Material::Water,
+            amount_kg
+        }) if amount_kg == large_source
+    ));
+    assert_eq!(materials.stock_kg(Material::Water), stock_before);
+    assert_eq!(*hydrology.surface_water.get(cell.0, cell.1), surface_before);
+    assert_eq!(*hydrology.runoff.get(cell.0, cell.1), runoff_before);
+    assert_eq!(ledger.entries().len(), entries_before);
+}
+
+#[test]
 fn operator_injection_rejects_invalid_and_overflowing_amounts_before_mutation() {
     let (mut materials, mut ledger) = (MaterialLedger::new(), Ledger::new());
 
