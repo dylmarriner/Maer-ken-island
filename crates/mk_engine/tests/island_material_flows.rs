@@ -676,6 +676,40 @@ fn receiving_invalid_felled_log_fails_before_allocating_or_booking_material() {
 }
 
 #[test]
+fn receiving_felled_log_rejects_carbon_mass_above_dry_mass_before_allocating_or_booking_material() {
+    use std::panic::{catch_unwind, AssertUnwindSafe};
+
+    let b = base();
+    let cell = b.forest_cell;
+    let area = b.domain.cell_area_m2(M);
+    let mut hydrology = HydrologyState::new(&b.domain.storage_spec(M), 0.5);
+    let mut materials = MaterialLedger::new();
+    let mut ledger = Ledger::new();
+    let audit = Audit::start(&materials);
+    let log = Log {
+        id: 0,
+        position_m: (0.0, 0.0),
+        heading_rad: 0.0,
+        length_m: 2.0,
+        diameter_m: 0.2,
+        dry_kg: 10.0,
+        carbon_kgc: 10.01,
+        water_kg: 8.2,
+        place: LogPlace::Ground,
+    };
+    let next_id_before = materials.next_log_id();
+
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        materials.receive_felled_log(log, &mut hydrology, cell, area, &mut ledger)
+    }));
+
+    assert!(result.is_err(), "carbon cannot exceed the mass of dry wood");
+    assert_eq!(materials.next_log_id(), next_id_before);
+    assert_eq!(materials.logs().count(), 0);
+    audit.close(&materials, &ledger);
+}
+
+#[test]
 #[should_panic(expected = "cross-cut reservation must contain at least one id")]
 fn material_ledger_rejects_empty_cross_cut_reservations_before_allocation() {
     MaterialLedger::new().reserve_log_ids(0);
