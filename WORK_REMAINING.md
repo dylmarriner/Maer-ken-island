@@ -125,6 +125,7 @@ the log's last water is booked to the air at that moment rather than when the wo
   and two at one tree fell it at the pack's two-person crosscut time (`labour/productivity.json`, 8-25 min for
   30 cm; FAO Forest Harvesting Case Study 18 measured two-cutter crosscut crews at 1.11-1.99
   m³/h). Left: cross-cutting a log for the ute with the saw rather than the axe.
+  - 2026-11-08: public haul planning now rejects malformed source logs with a typed error before split materialisation; the two-person saw workflow for log cross-cutting remains open.
 - **Excavator rigging (done 2026-10-23, D40):** the CAT 330 has no grapple, so its operator
   slings each log by hand before the pick-up and frees it after the set-down, at Borz & Mititelu
   2022's measured hook and unhook times for hand-rigged winch logs (13.59 s and 9.30 s, 278 logs,

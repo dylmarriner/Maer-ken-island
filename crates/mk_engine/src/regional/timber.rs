@@ -324,6 +324,87 @@ impl HaulJob {
     pub fn total_s(&self) -> f64 {
         self.tasks.iter().map(|t| t.duration_s).sum()
     }
+
+    /// Whether this active job can be safely resumed from a persisted snapshot.
+    ///
+    /// The progress cursor is measured into the front task only. Validate all
+    /// task inputs at the restore boundary before they can affect timing,
+    /// energy or material state.
+    pub(crate) fn has_valid_persisted_state(&self) -> bool {
+        if self.log_id == 0
+            || self.tasks.is_empty()
+            || !self.worked_s.is_finite()
+            || self.worked_s < -1e-9
+        {
+            return false;
+        }
+
+        let first = self.tasks.front().expect("non-empty haul task queue");
+        if self.worked_s > first.duration_s + 1e-9 {
+            return false;
+        }
+
+        let mut total_s = 0.0;
+        for task in &self.tasks {
+            if !task.duration_s.is_finite()
+                || task.duration_s < 0.0
+                || !task.met.is_finite()
+                || task.met < 0.0
+                || !task.ends_at_m.0.is_finite()
+                || !task.ends_at_m.1.is_finite()
+            {
+                return false;
+            }
+            total_s += task.duration_s;
+            if !total_s.is_finite() {
+                return false;
+            }
+
+            let action_is_valid = match &task.action {
+                HaulAction::Walk => true,
+                HaulAction::CrossCut {
+                    log_id,
+                    pieces,
+                    first_id,
+                } => {
+                    *log_id > 0
+                        && *pieces > 0
+                        && *pieces <= MAX_CROSS_CUT_PIECES
+                        && *first_id > 0
+                        && first_id.checked_add(u64::from(*pieces)).is_some()
+                }
+                HaulAction::Drive {
+                    vehicle_id,
+                    km,
+                    logs,
+                } => {
+                    *vehicle_id > 0 && km.is_finite() && *km >= 0.0 && logs.iter().all(|id| *id > 0)
+                }
+                HaulAction::Load { vehicle_id, logs } => {
+                    *vehicle_id > 0 && logs.iter().all(|id| *id > 0)
+                }
+                HaulAction::Unload { logs } => logs.iter().all(|id| *id > 0),
+                HaulAction::CarryToStore { log_id } => *log_id > 0,
+                HaulAction::Track {
+                    vehicle_id,
+                    hours,
+                    log,
+                } => {
+                    *vehicle_id > 0
+                        && hours.is_finite()
+                        && *hours >= 0.0
+                        && log.as_ref().is_none_or(|id| *id > 0)
+                }
+                HaulAction::Lift { vehicle_id, log_id } => *vehicle_id > 0 && *log_id > 0,
+                HaulAction::SetDown { log_id } => *log_id > 0,
+            };
+            if !action_is_valid {
+                return false;
+            }
+        }
+
+        true
+    }
 }
 
 /// The estate's places a haul runs between.
@@ -430,6 +511,9 @@ pub fn haul_plans_over(
     first_piece_id: u64,
     climb: &dyn Fn((f64, f64), (f64, f64)) -> f64,
 ) -> Result<Vec<HaulJob>, LabourError> {
+    if !log.has_valid_physical_state() {
+        return Err(LabourError::InvalidTimberLogState);
+    }
     let walk = |d: f64| labour.walking_time_s(body, d, 0.0, 0.0);
     let leg = |from: (f64, f64), to: (f64, f64), load_kg: f64| {
         labour.walking_time_s(body, distance_m(from, to), climb(from, to), load_kg)
@@ -864,6 +948,45 @@ mod tests {
                 litres: ex_litres,
                 litres_per_hour: 32.4,
             }),
+        }
+    }
+
+    #[test]
+    fn haul_planning_returns_a_typed_error_for_invalid_source_log_state() {
+        let (labour, body) = (labour(), body());
+        let mut invalid_logs = Vec::new();
+
+        let mut zero_dry_mass = log();
+        zero_dry_mass.dry_kg = 0.0;
+        zero_dry_mass.carbon_kgc = 0.0;
+        invalid_logs.push(zero_dry_mass);
+
+        let mut zero_carbon = log();
+        zero_carbon.carbon_kgc = 0.0;
+        invalid_logs.push(zero_carbon);
+
+        let mut carbon_exceeds_dry_mass = log();
+        carbon_exceeds_dry_mass.carbon_kgc = carbon_exceeds_dry_mass.dry_kg + 1.0;
+        invalid_logs.push(carbon_exceeds_dry_mass);
+
+        let mut non_finite_position = log();
+        non_finite_position.position_m.0 = f64::NAN;
+        invalid_logs.push(non_finite_position);
+
+        for invalid in invalid_logs {
+            let result = haul_plans(
+                &invalid,
+                (0.0, 0.0),
+                &body,
+                &labour,
+                &site(),
+                &fleet(100.0, 0.0),
+                100,
+            );
+            assert!(
+                matches!(result, Err(LabourError::InvalidTimberLogState)),
+                "invalid source log must be rejected before cross-cut materialisation: {result:?}"
+            );
         }
     }
 
