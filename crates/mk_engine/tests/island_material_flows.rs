@@ -2320,7 +2320,10 @@ fn roof_water_capture_preflights_stock_and_source_precision_before_mutation() {
         materials.capture_roof_water(1.0, &mut hydrology, cell, area, &mut ledger)
     }));
 
-    assert!(result.is_err(), "one kg must not disappear in the destination stock");
+    assert!(
+        result.is_err(),
+        "one kg must not disappear in the destination stock"
+    );
     assert_eq!(materials.stock_kg(Material::Water), stock_before);
     assert_eq!(*hydrology.soil_water.get(cell.0, cell.1), soil_before);
     assert_eq!(ledger.entries().len(), entries_before);
@@ -2346,8 +2349,14 @@ fn roof_water_capture_preflights_stock_and_source_precision_before_mutation() {
         )
     }));
 
-    assert!(result.is_err(), "one kg must not disappear from source soil storage");
+    assert!(
+        result.is_err(),
+        "one kg must not disappear from source soil storage"
+    );
     assert_eq!(source_materials.stock_kg(Material::Water), 0.0);
-    assert_eq!(*source_hydrology.soil_water.get(cell.0, cell.1), source_before);
+    assert_eq!(
+        *source_hydrology.soil_water.get(cell.0, cell.1),
+        source_before
+    );
     assert!(source_ledger.entries().is_empty());
 }
