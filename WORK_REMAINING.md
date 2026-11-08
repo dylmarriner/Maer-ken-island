@@ -1,9 +1,18 @@
+## Latest PR #134 reference-pack blocker — 9 November 2026
+
+- Exact-head workflow [#42517754858](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42517754858) on `eda79a8e1a56b910cb04d62a71d93426421e44f2` passed formatting, Clippy, fast Rust tests, desktop, installed backend, computer service, dashboard, repository scripts and dependency audit, but the week reference-pack failed.
+- Actual week digest: `a3b31f72ba1a20f3b4232988c2ce350d3f04eb1e625100fe53fead3a55440719`; expected: `29ed53bd7769eb3025e70135bab8b7ea07718e26e7fca4cbf77ab379d62b7784`. The run reported one food shortfall and zero water shortfalls; the year reference pack did not run after the week failure.
+- Do not update the expected digest until the source of state drift is identified. PR #134 must remain unmerged.
+- Temporary diagnostic logging was added to the food-foraging failure paths in `life.rs` at `69ff4411359f625f09290311866c71f4105ec993`. Exact-head workflow [#42522720849](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42522720849) is running; inspect its logs, then remove the temporary instrumentation and fix the actual cause.
+- The stale exact-head CI references were corrected: the required run must target the current PR head, not `ac50da42`.
+- Next: resolve the week digest drift without weakening conservation, then rerun week and year packs on the exact final head.
+
 ## PR #134 Clippy correction — 9 November 2026
 
 - Exact-head workflow [#42517618293](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42517618293) on head `f9a493610a138515fc8b6d5569ff4f537594424e` passed formatting, then Clippy rejected the test's `Option::map_or(false, ...)` as `unnecessary_map_or`. Fast tests were skipped by the Clippy gate.
 - Corrected the predicate to `is_some_and` in `ac50da421a9f7acbaddee2c867e7f3efbfc1a3ae`.
 - On that old-head run, dependency audit, repository scripts, web dashboard and computer service passed; installed backend, desktop and week/year reference packs were still running at last inspection. Those results do not verify the corrected head.
-- Fresh exact-head CI is required for `ac50da42`.
+- Fresh exact-head CI must target the current PR head; a run on `ac50da42` or any earlier commit does not verify later changes.
 
 ## PR #134 formatting correction — 9 November 2026
 
