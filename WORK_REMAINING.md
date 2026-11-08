@@ -1,3 +1,10 @@
+## Latest exact-head formatting correction — 9 November 2026
+
+- Workflow [#42536830786](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42536830786) stopped at rustfmt on the felled-log soil-debit assignment; no Clippy or fast-test result was produced for that head.
+- Applied the exact rustfmt layout in `1b620f68811f1d5f7988ac677474c2b8143a5704`.
+- New exact-head workflow [#42536914812](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42536914812) is running. Dependency audit, repository scripts, web dashboard and computer service are green; the remaining acceptance jobs have not completed.
+- Handoff update: `8679d8b4323a4eea9693c78b7d22b865368c7e26`. PR #135 remains draft pending exact-head acceptance.
+
 ## Latest felled-log soil-debit follow-up — 9 November 2026
 
 - Found a remaining binary64 conservation gap in `receive_felled_log`: the destination MaterialWater addition was preflighted, but the source soil-water subtraction was only checked for finiteness. A positive transfer could therefore disappear from a large finite soil reservoir while the material stock and flux ledger received it.
