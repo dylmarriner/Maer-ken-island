@@ -789,12 +789,17 @@ fn cross_cut_refuses_restored_invalid_source_without_consuming_reserved_ids_or_c
         .get_mut("logs")
         .and_then(|logs| logs.get_mut(&source_key))
         .expect("source log is serialized");
-    let dry_kg = source_value["dry_kg"].as_f64().expect("dry mass is numeric");
+    let dry_kg = source_value["dry_kg"]
+        .as_f64()
+        .expect("dry mass is numeric");
     source_value["carbon_kgc"] = serde_json::Value::from(dry_kg + 1.0);
     let mut restored: MaterialLedger =
         serde_json::from_value(snapshot).expect("malformed persisted state still deserializes");
 
-    let invalid_source = restored.log(source_id).expect("source remains present").clone();
+    let invalid_source = restored
+        .log(source_id)
+        .expect("source remains present")
+        .clone();
     assert!(!restored.cross_cut_log(source_id, 2, first_piece_id));
     assert_eq!(restored.log(source_id), Some(&invalid_source));
     assert_eq!(restored.log(first_piece_id), None);
@@ -818,14 +823,13 @@ fn cross_cut_refuses_restored_invalid_source_without_consuming_reserved_ids_or_c
         serde_json::from_value(after_rejection).expect("repaired ledger restores");
     assert!(repaired.cross_cut_log(source_id, 2, first_piece_id));
     assert_eq!(repaired.log(source_id), None);
-    let first = repaired.log(first_piece_id).expect("first piece materialised");
+    let first = repaired
+        .log(first_piece_id)
+        .expect("first piece materialised");
     let second = repaired
         .log(first_piece_id + 1)
         .expect("second piece materialised");
-    assert_eq!(
-        (first.dry_kg + second.dry_kg).to_bits(),
-        dry_kg.to_bits()
-    );
+    assert_eq!((first.dry_kg + second.dry_kg).to_bits(), dry_kg.to_bits());
     assert_eq!(
         (first.carbon_kgc + second.carbon_kgc).to_bits(),
         (dry_kg * 0.5).to_bits()
