@@ -1437,10 +1437,12 @@ fn biotic_edible_and_soil_water_gathering_reject_invalid_amounts_without_mutatio
     let mut hydrology = HydrologyState::new(&b.domain.storage_spec(M), 0.5);
     let (mut materials, mut ledger) = (MaterialLedger::new(), Ledger::new());
     let biomass_before = *ecology.biomass_kgc_m2.get(cell.0, cell.1);
-    let edible_index = ecology
-        .biomass_kgc_m2
-        .grid_to_linear_index(cell.0, cell.1);
-    let edible_before = ecology.edible.as_ref().expect("edible layer").at(edible_index);
+    let edible_index = ecology.biomass_kgc_m2.grid_to_linear_index(cell.0, cell.1);
+    let edible_before = ecology
+        .edible
+        .as_ref()
+        .expect("edible layer")
+        .at(edible_index);
     let soil_before: SoilWater = *hydrology.soil_water.get(cell.0, cell.1);
 
     for amount in [-1.0, f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
@@ -1471,7 +1473,11 @@ fn biotic_edible_and_soil_water_gathering_reject_invalid_amounts_without_mutatio
         ));
         assert_eq!(*ecology.biomass_kgc_m2.get(cell.0, cell.1), biomass_before);
         assert_eq!(
-            ecology.edible.as_ref().expect("edible layer").at(edible_index),
+            ecology
+                .edible
+                .as_ref()
+                .expect("edible layer")
+                .at(edible_index),
             edible_before
         );
         assert_eq!(materials.stock_kg(Material::PlantFood), 0.0);
