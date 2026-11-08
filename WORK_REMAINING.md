@@ -1,3 +1,12 @@
+## Latest felled-log soil-depth underflow correction — 9 November 2026
+
+- The previous source-debit guard caught positive millimetre debits that rounded away against large soil-water storage, but a smaller conversion edge remained: positive subnormal kilograms can underflow to exactly zero when divided by cell area to obtain millimetres.
+- `receive_felled_log` now rejects `from_soil > 0 && removed_mm == 0` before the shared representable-debit check, log-ID allocation, hydrology, stock or flux mutation.
+- Regression: smallest positive binary64 subnormal log water with a cell area greater than 1 m²; rejection preserves soil storage, carbon/water stocks, next log ID, logs and flux entries.
+- Production commit: `0acf469543f519cf8c2f616eda5a3f8341bac8f8`; test commit: `ec352e3e84cef47f522429fa6cb013a680743896`; handoff: `398ee70ac1b4b1c3201e5d98122da3aa2cc3f6b3`.
+- Fresh exact-head CI is required. The prior workflow did not complete its required tests; no local Cargo pass is claimed while custom OpenCommander is rate-limited.
+- Next: verify the complete PR #135 matrix, then reconcile #134/#135 before merge; continue D40 saw cross-cut/ute transport and route modelling.
+
 ## Latest exact-head formatting correction — 9 November 2026
 
 - Workflow [#42536830786](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42536830786) stopped at rustfmt on the felled-log soil-debit assignment; no Clippy or fast-test result was produced for that head.
