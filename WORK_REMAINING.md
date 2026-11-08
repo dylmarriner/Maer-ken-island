@@ -767,3 +767,12 @@ PR #129 now also preflights resulting stock totals, not only individual finite/n
 
 
 - PR #129 exact-head workflow [#42469507804](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42469507804) found one rustfmt-only layout difference in the new stock-overflow test. Applied the formatter's requested single-line call form; Clippy and fast tests were skipped by the failed format gate. Fresh exact-head verification is required.
+
+
+## Material source-inflow boundary follow-up — 8 November 2026
+
+- PR #129 now validates `gather_fossil` inputs and resulting stock before any stock/flux mutation.
+- PR #129 now validates `gather_water` input and destination-stock capacity before changing hydrology or flux records.
+- Regression tests cover negative, NaN, infinity, fossil-stock overflow, water-stock overflow and unchanged source-cell water on refusal.
+- Source commit: `b06169fc6c47bc52a2ffb2917e8b98a3be7afcf1`; tests: `00ec798a4fad3b110009195e911a0a30b68a0371`; handoff follows.
+- Exact-head CI must complete for the latest PR head; no local Cargo test result is claimed.
