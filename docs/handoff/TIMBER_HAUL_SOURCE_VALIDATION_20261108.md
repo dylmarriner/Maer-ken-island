@@ -54,3 +54,19 @@ The regression covers zero dry mass, zero carbon, carbon greater than dry mass, 
 - Pass exact-head fast Rust tests after the corrected stock baseline.
 - Reconfirm formatting, Clippy, desktop/backend and week/year reference packs on the same head.
 - Keep PR #128 draft until all required checks pass; D40 two-person saw participation remains open.
+
+
+## Fail-fast validation on persisted ledger restore — 8 November 2026
+
+- The first exact-head run after the restored-ledger regression, [#42452538734](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42452538734), passed Format and Clippy but found one incorrect test baseline: 23 tests passed and the new test failed because it compared `stock_of` after deliberate snapshot corruption with the valid pre-corruption stock. `stock_of` correctly includes carbon in the current log records.
+- The follow-up now moves the invariant to the production restore boundary. `MaterialLedger` retains derived serialization but implements validated deserialization through a private snapshot type. Restore rejects a log whose map key is not its one-based ID or whose physical state fails `Log::has_valid_physical_state()`.
+- The regression now proves three paths: malformed persisted log state fails during restore; an invalid in-memory log is refused by `cross_cut_log` without changing its source, stock, allocator or reservation; and the untouched valid snapshot restores the same reservation and cross-cuts with exact binary64 dry-mass/carbon conservation and unchanged carbon/water stock.
+- Production deserializer commit: `4f86a959da89d2667be5a9a5d9624c8870ad5faa`.
+- Regression commit: `45ee8145d18e1086cff7cc07674f8e7e24c281b4`.
+- This preserves the existing serialized field names and legacy defaults for snapshots without logs/reservations. No action-log format, replay digest, RNG, reference data or live state was changed intentionally.
+- A new exact-head workflow is required for this production restore invariant and regression.
+
+## Remaining
+- Verify exact-head formatting, Clippy, fast Rust tests, desktop/backend and week/year reference packs.
+- Keep PR #128 draft until all required checks pass.
+- Next independent feature slice remains D40: two-person saw cross-cut participation and both founders' time/energy accounting.
