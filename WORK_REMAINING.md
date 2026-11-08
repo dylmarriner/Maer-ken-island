@@ -757,3 +757,4 @@ Evidence: `docs/handoff/TIMBER_CROSS_CUT_REBASE_20261108.md`.
 - Re-run all required exact-head checks after the latest handoff-only commit; do not treat predecessor-head results as current.
 
 - Material amount PR #129 first exact-head workflow [#42464939304](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42464939304) checked out merge ref `d6c9ad45` and failed at `cargo fmt --all -- --check` on the compact `InvalidAmount` enum variant layout. No Clippy or fast-test result was reached. Exact rustfmt layout was applied in `fb866220`; fresh exact-head verification is required.
+- PR #129 regression coverage also verifies that two duplicate 2 kg + 3 kg gold inputs succeed against 6 kg stock when returned as 5 kg output, preserving the final inventory. The test change is included in the final exact-head run.
