@@ -63,3 +63,24 @@ The crafting path also checked duplicate inputs independently. Two 5 kg inputs c
 
 - Extended the same finite/non-negative contract to `bank_mined`; negative and positive-infinity mined quantities are now rejected instead of being clamped or entering inventory. The regression verifies the existing 10 kg gold stock remains unchanged.
 - Call-site search found the simulation's only `bank_mined` caller in the gold-mining completion path, which supplies the non-negative `work.product_kg` output; no caller relies on negative clamping.
+
+
+## Finite resulting-stock preflight — 8 November 2026
+
+### Finding
+Finite, non-negative input amounts are not sufficient to guarantee a finite inventory result. Adding a finite amount to an already-large finite stock can overflow to infinity. Crafting could therefore pass amount validation and still write a non-finite stock value; duplicate outputs could also overflow after earlier output additions.
+
+### Change
+- `bank_mined` now checks the resulting stock total before mutation.
+- `craft` projects post-debit stock and every output addition in the original output order before the first debit.
+- Any non-finite resulting stock returns the existing typed `InvalidAmount` error without changing inventory or the flux ledger.
+- Valid recipe ordering, snapshot schema, replay hashes and normal stock arithmetic are unchanged.
+
+### Regression coverage
+- A second `f64::MAX` mined deposit is rejected while preserving the first deposit.
+- Crafting `f64::MAX` onto an existing `f64::MAX` stock is rejected atomically.
+- Two individually finite duplicate outputs that overflow their combined stock are rejected before any stock write.
+
+### Verification
+- Added to PR #129 after review of its first green exact-head run.
+- A fresh exact-head CI run is required for the updated branch head; no local Cargo result is claimed because custom OpenCommander is still returning HTTP 429.

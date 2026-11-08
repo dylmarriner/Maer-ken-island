@@ -759,3 +759,8 @@ Evidence: `docs/handoff/TIMBER_CROSS_CUT_REBASE_20261108.md`.
 - Material amount PR #129 first exact-head workflow [#42464939304](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42464939304) checked out merge ref `d6c9ad45` and failed at `cargo fmt --all -- --check` on the compact `InvalidAmount` enum variant layout. No Clippy or fast-test result was reached. Exact rustfmt layout was applied in `fb866220`; fresh exact-head verification is required.
 - PR #129 regression coverage also verifies that two duplicate 2 kg + 3 kg gold inputs succeed against 6 kg stock when returned as 5 kg output, preserving the final inventory. The test change is included in the final exact-head run.
 - PR #129 also applies the amount guard to `bank_mined`, preventing negative clamping and non-finite mineral stock from bypassing `take`. The only simulation call site supplies mined `work.product_kg`; regression coverage checks negative and infinite inputs leave existing inventory unchanged.
+
+
+## Material stock overflow follow-up — 8 November 2026
+
+PR #129 now also preflights resulting stock totals, not only individual finite/non-negative inputs. `bank_mined` rejects a finite deposit that would overflow existing inventory. `craft` simulates post-debit output additions in their original order and rejects overflow before any debit/output mutation. Regressions cover an overflowing second mined deposit, craft output overflow against existing stock, and duplicate outputs whose finite quantities overflow when combined. Exact-head CI must be rerun for the new head; no local Cargo result is claimed.

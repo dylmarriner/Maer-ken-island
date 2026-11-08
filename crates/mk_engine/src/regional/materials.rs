@@ -254,7 +254,7 @@ pub enum MaterialError {
         have_kg: f64,
         need_kg: f64,
     },
-    /// A material operation supplied a negative or non-finite quantity.
+    /// A supplied amount or resulting stock quantity is negative or non-finite.
     InvalidAmount {
         material: Material,
         amount_kg: f64,
@@ -482,6 +482,13 @@ impl MaterialLedger {
             return Err(MaterialError::WrongMaterial(m));
         }
         Self::validate_amount(m, kg)?;
+        let resulting_stock = self.stock_kg(m) + kg;
+        if !resulting_stock.is_finite() {
+            return Err(MaterialError::InvalidAmount {
+                material: m,
+                amount_kg: resulting_stock,
+            });
+        }
         self.add(m, kg);
         Ok(())
     }
@@ -1170,6 +1177,26 @@ impl MaterialLedger {
                 });
             }
         }
+
+        // Preflight the exact output additions against the post-debit stock.
+        // Finite inputs can still overflow an existing finite inventory when
+        // added, so reject the whole recipe before the first debit.
+        let mut projected_stock = self.stock.clone();
+        for (m, kg) in &required {
+            let have = projected_stock.get(m).copied().unwrap_or(0.0);
+            projected_stock.insert(*m, have - kg.min(have));
+        }
+        for (m, kg) in outputs {
+            let resulting_stock = projected_stock.get(m).copied().unwrap_or(0.0) + *kg;
+            if !resulting_stock.is_finite() {
+                return Err(MaterialError::InvalidAmount {
+                    material: *m,
+                    amount_kg: resulting_stock,
+                });
+            }
+            projected_stock.insert(*m, resulting_stock);
+        }
+
         for (m, kg) in required {
             self.take(m, kg)?;
         }

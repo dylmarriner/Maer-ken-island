@@ -355,6 +355,55 @@ fn craft_aggregates_duplicate_inputs_and_rejects_invalid_outputs_atomically() {
 }
 
 #[test]
+fn material_stock_additions_reject_overflow_before_mutation() {
+    let (mut materials, mut ledger) = (MaterialLedger::new(), Ledger::new());
+    materials
+        .bank_mined(Material::Gold, f64::MAX)
+        .expect("the first finite gold stock fits");
+
+    let overflow = materials.bank_mined(Material::Gold, f64::MAX);
+    assert!(matches!(
+        overflow,
+        Err(MaterialError::InvalidAmount {
+            material: Material::Gold,
+            amount_kg
+        }) if amount_kg.is_infinite()
+    ));
+    assert_eq!(materials.stock_kg(Material::Gold), f64::MAX);
+
+    let craft_overflow = materials.craft(
+        &[],
+        &[(Material::Gold, f64::MAX)],
+        &mut ledger,
+    );
+    assert!(matches!(
+        craft_overflow,
+        Err(MaterialError::InvalidAmount {
+            material: Material::Gold,
+            amount_kg
+        }) if amount_kg.is_infinite()
+    ));
+    assert_eq!(materials.stock_kg(Material::Gold), f64::MAX);
+    assert!(ledger.entries().is_empty());
+
+    let (mut empty, mut empty_ledger) = (MaterialLedger::new(), Ledger::new());
+    let duplicate_output_overflow = empty.craft(
+        &[],
+        &[(Material::Gold, f64::MAX), (Material::Gold, f64::MAX)],
+        &mut empty_ledger,
+    );
+    assert!(matches!(
+        duplicate_output_overflow,
+        Err(MaterialError::InvalidAmount {
+            material: Material::Gold,
+            amount_kg
+        }) if amount_kg.is_infinite()
+    ));
+    assert_eq!(empty.stock_kg(Material::Gold), 0.0);
+    assert!(empty_ledger.entries().is_empty());
+}
+
+#[test]
 fn calcining_limestone_and_making_charcoal_release_their_carbon_as_co2() {
     let (mut m, mut ledger) = (MaterialLedger::new(), Ledger::new());
     let audit = Audit::start(&m);
