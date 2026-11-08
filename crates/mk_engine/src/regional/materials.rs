@@ -565,10 +565,7 @@ impl MaterialLedger {
             });
         }
         let remaining = have - debit;
-        if !remaining.is_finite()
-            || remaining < 0.0
-            || (debit > 0.0 && remaining >= have)
-        {
+        if !remaining.is_finite() || remaining < 0.0 || (debit > 0.0 && remaining >= have) {
             return Err(MaterialError::InvalidSourceState {
                 material: m,
                 value: remaining,
@@ -1727,8 +1724,11 @@ impl MaterialLedger {
             Self::checked_source_debit_result(Material::Water, surface_water, standing_debit)?;
         let remaining_runoff =
             Self::checked_source_debit_result(Material::Water, runoff, river_debit)?;
-        let resulting_stock =
-            Self::checked_stock_addition_result(Material::Water, self.stock_kg(Material::Water), take)?;
+        let resulting_stock = Self::checked_stock_addition_result(
+            Material::Water,
+            self.stock_kg(Material::Water),
+            take,
+        )?;
 
         hydrology.surface_water.set(r, c, remaining_surface);
         hydrology.runoff.set(r, c, remaining_runoff);
