@@ -808,14 +808,14 @@ impl MaterialLedger {
         }
 
         let removed_mm = take / cell_area_m2;
+        let remaining_soil_mm = soil.storage_mm - removed_mm;
         assert!(
-            removed_mm.is_finite(),
-            "roof-water soil debit must remain finite"
-        );
-        let remaining_soil_mm = (soil.storage_mm - removed_mm).max(0.0);
-        assert!(
-            remaining_soil_mm.is_finite(),
-            "roof-water capture must leave finite soil-water storage"
+            removed_mm.is_finite()
+                && removed_mm > 0.0
+                && remaining_soil_mm.is_finite()
+                && remaining_soil_mm >= 0.0
+                && remaining_soil_mm < soil.storage_mm,
+            "roof-water source debit must remain representable in soil storage"
         );
         let resulting_stock = Self::checked_stock_addition_result(
             Material::Water,
