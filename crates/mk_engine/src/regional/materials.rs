@@ -1231,14 +1231,18 @@ impl MaterialLedger {
 
         let body_water = self.bodies.values().map(|body| body.water_kg).sum::<f64>();
         let water_before = self.stock_of(Reservoir::MaterialWater);
-        let water_after =
-            self.stock_kg(Material::Water) + body_water + remaining_log_water;
+        let water_after = self.stock_kg(Material::Water) + body_water + remaining_log_water;
         let water_delta = water_after - water_before;
         // life::net sums the one water flux per seasoned log in id order.
         // Match that same simple sum when preflighting the audit boundary.
         let booked_water = seasoned
             .iter()
-            .map(|id| self.logs.get(id).expect("seasoned id remains present").water_kg)
+            .map(|id| {
+                self.logs
+                    .get(id)
+                    .expect("seasoned id remains present")
+                    .water_kg
+            })
             .sum::<f64>();
         let water_residual = water_delta + booked_water;
         let water_tolerance = 1e-9 * (1.0 + water_delta.abs());
