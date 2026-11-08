@@ -71,3 +71,14 @@ A second operator inflow path bypassed `MaterialLedger::inject`: `InjectBiomass(
 ### Verification
 
 A fresh exact-head CI run is required after the production and test commits. No local Cargo result is claimed because custom OpenCommander access is unavailable. No replay schema, snapshot, RNG, tick cadence, physical constant or reference pack changed.
+
+### Exact-head formatting correction — 9 November 2026
+
+The first exact-head workflow after the producer-carbon implementation reached `cargo fmt --all -- --check` and failed only on four formatter layout differences in the new error display, preflight lookup, grid update and two regression assertions. No Clippy or Rust test result was reached on that head.
+
+Applied the formatter's exact requested layout:
+
+- Source formatting: `befca7646469af3cfbd5cd30f8c1a07f42778005`.
+- Test formatting: `b4c12729e0343f71477d725acd886842196a9d54`.
+
+Fresh exact-head workflow [#42487854063](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42487854063) was queued for the formatted head. This handoff update itself will create another head and requires its own exact-head CI. No Cargo test or Clippy pass is claimed for the producer-carbon slice yet.
