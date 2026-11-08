@@ -94,5 +94,13 @@ Both findings were corrected in `f408d171e7e1af4239aa6ff170996ce52d2fe98d`. A fr
 - Exact-head workflow [#42517618293](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42517618293) on head `f9a493610a138515fc8b6d5569ff4f537594424e` passed formatting, then Clippy rejected the test's `Option::map_or(false, ...)` as `unnecessary_map_or`. Fast tests were skipped by the Clippy gate.
 - Corrected the predicate to `is_some_and` in `ac50da421a9f7acbaddee2c867e7f3efbfc1a3ae`.
 - On that old-head run, dependency audit, repository scripts, web dashboard and computer service passed; installed backend, desktop and week/year reference packs were still running at last inspection. Those results do not verify the corrected head.
-- Fresh exact-head CI is required for `ac50da42`.
+- Fresh exact-head CI must target the current PR head. A run on `ac50da42` or any earlier commit does not verify later changes.
 
+
+## Week reference-pack drift investigation — 9 November 2026
+
+- Exact-head workflow [#42517754858](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42517754858) on `eda79a8e1a56b910cb04d62a71d93426421e44f2` passed formatting, Clippy, fast Rust tests, desktop application, installed backend, computer service, dashboard, repository scripts and dependency audit.
+- The required week reference-pack failed: actual digest `a3b31f72ba1a20f3b4232988c2ce350d3f04eb1e625100fe53fead3a55440719`, expected `29ed53bd7769eb3025e70135bab8b7ea07718e26e7fca4cbf77ab379d62b7784`. The test reported `shortfalls food 1 water 0`; the year reference pack did not run after the week failure.
+- Do not update the expected digest until the state divergence is explained. The run is not acceptable evidence for merge.
+- Temporary diagnostic logging was added in `life.rs` at commit `69ff4411359f625f09290311866c71f4105ec993` to distinguish no-edible-cell, gather and eat failures in the week simulation. Remove the diagnostic after identifying the cause.
+- Exact-head diagnostic workflow [#42522720849](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42522720849) is in progress. Its result must be inspected before changing simulation logic or the reference pack.
