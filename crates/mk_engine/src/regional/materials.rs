@@ -1167,16 +1167,17 @@ impl MaterialLedger {
             );
             total_water_kg = next_water;
         }
-        let total_kg = total_kg + compensation_kg;
-        let total_water_kg = total_water_kg + compensation_water_kg;
+        let summed_kg = total_kg;
+        let summed_water_kg = total_water_kg;
+        let total_kg = summed_kg + compensation_kg;
+        let total_water_kg = summed_water_kg + compensation_water_kg;
         assert!(
-            total_kg.is_finite() && (compensation_kg == 0.0 || total_kg > total_kg - compensation_kg),
+            total_kg.is_finite() && (compensation_kg == 0.0 || total_kg > summed_kg),
             "seasoned-log carbon must remain representable after batch aggregation"
         );
         assert!(
             total_water_kg.is_finite()
-                && (compensation_water_kg == 0.0
-                    || total_water_kg > total_water_kg - compensation_water_kg),
+                && (compensation_water_kg == 0.0 || total_water_kg > summed_water_kg),
             "seasoned-log water must remain representable after batch aggregation"
         );
 
