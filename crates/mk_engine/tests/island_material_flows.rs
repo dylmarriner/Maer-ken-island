@@ -236,6 +236,20 @@ fn material_withdrawals_reject_negative_and_non_finite_amounts_before_mutation()
     materials.register_human("Ada", 70.0);
 
     let gold_before = materials.stock_kg(Material::Gold);
+    assert!(matches!(
+        materials.bank_mined(Material::Gold, -1.0),
+        Err(MaterialError::InvalidAmount {
+            material: Material::Gold,
+            amount_kg
+        }) if amount_kg == -1.0
+    ));
+    assert!(matches!(
+        materials.bank_mined(Material::Gold, f64::INFINITY),
+        Err(MaterialError::InvalidAmount {
+            material: Material::Gold,
+            amount_kg
+        }) if amount_kg.is_infinite() && amount_kg.is_sign_positive()
+    ));
     let body_carbon_before = materials.stock_of(R::HumanCarbon);
     let body_water_before = materials.stock_of(R::MaterialWater);
 
