@@ -459,8 +459,6 @@ fn craft_preflight_rejects_tolerance_shortfall_before_any_input_is_debited() {
 }
 
 #[test]
-
-#[test]
 fn bank_mined_rejects_positive_stock_increment_that_rounds_away() {
     let mut materials = MaterialLedger::new();
     materials
@@ -508,8 +506,6 @@ fn craft_rejects_output_increment_that_rounds_away_before_debiting_inputs() {
     assert_eq!(materials.stock_kg(Material::Gold), gold_before);
     assert_eq!(ledger.entries().len(), entries_before);
 }
-
-#[test]
 
 #[test]
 fn craft_rejects_duplicate_input_increment_that_rounds_away_before_mutation() {
