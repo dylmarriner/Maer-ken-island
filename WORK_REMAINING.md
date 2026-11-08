@@ -755,3 +755,5 @@ Evidence: `docs/handoff/TIMBER_CROSS_CUT_REBASE_20261108.md`.
 - Current handoff: `docs/handoff/TIMBER_CROSS_CUT_REBASE_20261108.md`.
 - Exact-head workflow #42431547467: formatting and Clippy passed; fast Rust tests, desktop, installed backend and week/year reference packs were still running at the latest inspection. Dashboard, dependency audit, computer service and repository scripts passed. Nightly slow tests were skipped by design.
 - Re-run all required exact-head checks after the latest handoff-only commit; do not treat predecessor-head results as current.
+
+- Material amount PR #129 first exact-head workflow [#42464939304](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42464939304) checked out merge ref `d6c9ad45` and failed at `cargo fmt --all -- --check` on the compact `InvalidAmount` enum variant layout. No Clippy or fast-test result was reached. Exact rustfmt layout was applied in `fb866220`; fresh exact-head verification is required.
