@@ -1,3 +1,14 @@
+## Latest material-ingestion atomicity slice — 9 November 2026
+
+- New draft PR #135: [Preflight timber and roof-water material ingestion](https://github.com/dylmarriner/Maer-ken-island/pull/135), based on main `6b57ad96273c2320910f93902963bc8800974175`.
+- `receive_felled_wood`, `receive_felled_log`, `capture_roof_water` and `season_stored_logs` now validate destination/aggregate stock representability and preflight source-state changes before ID allocation, hydrology mutation, log removal or flux recording.
+- `season_stored_logs` aggregates the deterministic batch with compensation before the one Wood-stock preflight; it does not remove an earlier log if a later piece or aggregate debit is unrepresentable.
+- Regression tests cover rounded-away Wood, Water, felled-log carbon/water, atomic seasoning refusal, a successful roof-water audit, and two 1 kg logs aggregated into a representable 2 kg increment at a `2^53` kg stock.
+- Production commits: `1243825e28134e6f4791eb198a34a0798ca9b2b5`, `e1dd1ba995e1f3838ba0178a8d51c85e87eadeb7`, `6702aa3efa0935e9ff4650d00522337184eb4c9f`; test commits: `ea2136c0703b6f2c3476d1ffa9e7003ff854bbc5`, `aa026fc2a3c3c15315df4098d2ed729ef2cbbf01`; handoff: `docs/handoff/MATERIAL_INGESTION_ATOMICITY_20261109.md`.
+- Exact-head CI is pending. No local Cargo pass is claimed. Keep PR #135 draft until formatting, Clippy, fast tests, desktop/backend and required week/year acceptance are green.
+- No snapshot schema, append-only replay format, replay hash, RNG, tick cadence, scientific constant or reference pack was intentionally changed.
+- Next: complete PR #135 verification; separately resolve PR #134's week-reference digest drift before merge; then resume D40 saw-based log cross-cut/ute transport and D31 soil modelling.
+
 ## Latest exact-head formatting correction — 9 November 2026
 
 - Workflow [#42512092655](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42512092655) stopped at cargo fmt before Clippy/tests. Rustfmt identified two formatting differences in materials.rs and two blank lines between test attributes in island_material_flows.rs.
