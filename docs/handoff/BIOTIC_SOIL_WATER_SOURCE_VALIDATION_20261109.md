@@ -58,3 +58,41 @@ Custom OpenCommander device discovery returned HTTP 429, so no local Cargo resul
 - Applied the exact formatter output in test commit `480284d57f4b1ff8ef27cae59477eeaeae01850e`.
 - At the time of correction, the independent installed-backend, desktop, dependency-audit and week/year reference-pack jobs from #42477804232 were still running; their results are not evidence for the corrected head.
 - A fresh exact-head workflow is required for the corrected branch head. No test pass is claimed until that run completes.
+
+## Source-state and cell-area integrity follow-up — 9 November 2026
+
+The source boundary was still incomplete even after request-amount validation: finite/non-negative requests could be applied against NaN, infinite or negative source reservoirs, and non-positive/non-finite cell areas. `f64::min`/`max` can mask NaN operands, so relying on the requested quantity alone was insufficient.
+
+### Production changes
+
+- Added typed `MaterialError::InvalidCellArea` and `MaterialError::InvalidSourceState`.
+- Added a shared finite, strictly-positive cell-area check.
+- `gather_biotic` now validates biomass density, area-converted biomass and available material before mutating ecology.
+- `gather_edible` independently validates the edible layer and biomass before taking from either reservoir.
+- `gather_soil_water` validates moisture fraction, soil storage and area-converted available water before draining soil.
+- `gather_water` validates surface water, runoff, both area conversions and their sum before changing either hydrology source.
+- Preserved the existing ledger reservoirs: surface water remains `SurfaceWater`, river runoff remains `Rivers`.
+- No snapshot schema, append-only action log, replay hash, RNG, tick cadence, reference pack, physical constant, optional LLM path or offline/budget rule changed.
+
+### Regression coverage
+
+- Biotic biomass and edible stock reject negative, NaN and positive-infinity source values without changing source, stock or flux entries.
+- Soil storage and surface-water source values reject the same invalid states before mutation; non-finite runoff is rejected too.
+- All four cell-gathering operations reject zero, negative, NaN and infinite cell areas before mutation.
+- The earlier stock-overflow tests remain in place.
+
+### Commits
+
+- Production source validation: `64883418984a2868881e04ba91f2d6cff1db4597`.
+- Regression tests: `101ddc44d13f8d8464e5dd9f23fd675aa54b164f`.
+- Corrected river reservoir identity after backend compilation exposed an invalid enum variant: `b89e64b74403fe74b47f967428afc259c813adc8`.
+- Exact rustfmt corrections: `063c7ebac9cfc8030b9ddd1282e39a35019ae52f`, `1366320e396cf70aea2ee67464447503aebfed88`.
+
+### Verification
+
+- Workflow [#42479894903](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42479894903) on the pre-correction test head exposed a real compile error: `Reservoir::Runoff` does not exist. The code now uses the established `Reservoir::Rivers` identity; this is corrected in `b89e64b7`.
+- Workflow [#42479978630](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42479978630) on the corrected source head found only rustfmt differences. The exact formatter output is committed above.
+- Fresh exact-head workflow [#42480080363](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42480080363) is pending on test-format head `1366320e`. No current-head Rust test, Clippy, desktop or installed-backend pass is claimed yet.
+- Custom OpenCommander continues to return HTTP 429, so no local Cargo run is claimed.
+
+Keep PR #130 draft until exact-head formatting, Clippy, fast Rust tests, desktop, installed backend, dashboard, computer service, repository scripts, dependency audit and week/year reference-pack acceptance pass. Nightly slow tests remain skipped by design.
