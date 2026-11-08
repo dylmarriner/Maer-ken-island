@@ -141,8 +141,11 @@ impl std::fmt::Display for IslandInterventionError {
             Self::ReverenceVeto(v) => write!(f, "refused by Reverence Veto: {v}"),
             Self::Material(e) => write!(f, "{e}"),
             Self::InvalidProducerInjection { reason, value } => {
-                write!(f, "producer-carbon injection refused: {reason} (value {value})")
-            },
+                write!(
+                    f,
+                    "producer-carbon injection refused: {reason} (value {value})"
+                )
+            }
             Self::Audit(why) => write!(f, "conservation audit did not close: {why}"),
         }
     }
@@ -607,11 +610,7 @@ impl IslandLife {
         // earlier cells changed while the full boundary inflow is booked.
         let mut updates = Vec::with_capacity(cells.len());
         for (row, col) in &cells {
-            let Some(current_kgc_m2) = self
-                .ecology
-                .biomass_kgc_m2
-                .get_safe(*row, *col)
-                .copied()
+            let Some(current_kgc_m2) = self.ecology.biomass_kgc_m2.get_safe(*row, *col).copied()
             else {
                 return Err(invalid(
                     format!("producer biomass grid is missing land cell ({row}, {col})"),
@@ -641,9 +640,7 @@ impl IslandLife {
         }
 
         for (row, col, resulting_kgc_m2) in updates {
-            self.ecology
-                .biomass_kgc_m2
-                .set(row, col, resulting_kgc_m2);
+            self.ecology.biomass_kgc_m2.set(row, col, resulting_kgc_m2);
         }
         self.physical.ledger.push(mk_core::flux::FluxEntry::new(
             Reservoir::OperatorIntervention,
