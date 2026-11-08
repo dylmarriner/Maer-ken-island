@@ -259,6 +259,15 @@ pub enum MaterialError {
         material: Material,
         amount_kg: f64,
     },
+    /// A cell's area is not finite and strictly positive.
+    InvalidCellArea {
+        area_m2: f64,
+    },
+    /// A source reservoir value or its area conversion is negative or non-finite.
+    InvalidSourceState {
+        material: Material,
+        value: f64,
+    },
     /// The material cannot be used this way.
     WrongMaterial(Material),
     NoSuchHuman(String),
@@ -503,6 +512,20 @@ impl MaterialLedger {
         Ok(())
     }
 
+    fn validate_cell_area(area_m2: f64) -> Result<(), MaterialError> {
+        if !area_m2.is_finite() || area_m2 <= 0.0 {
+            return Err(MaterialError::InvalidCellArea { area_m2 });
+        }
+        Ok(())
+    }
+
+    fn validate_source_value(m: Material, value: f64) -> Result<(), MaterialError> {
+        if !value.is_finite() || value < 0.0 {
+            return Err(MaterialError::InvalidSourceState { material: m, value });
+        }
+        Ok(())
+    }
+
     fn add(&mut self, m: Material, kg: f64) {
         *self.stock.entry(m).or_insert(0.0) += kg;
     }
@@ -561,10 +584,24 @@ impl MaterialLedger {
         if c.origin != Origin::Biotic || c.carbon_per_kg <= 0.0 {
             return Err(MaterialError::WrongMaterial(material));
         }
-        let held_kgc = ecology.biomass_kgc_m2.get(cell.0, cell.1) * cell_area_m2;
-        let kg = kg_wanted.max(0.0).min(held_kgc / c.carbon_per_kg);
+        Self::validate_amount(material, kg_wanted)?;
+        Self::validate_cell_area(cell_area_m2)?;
+        let biomass_kgc_m2 = *ecology.biomass_kgc_m2.get(cell.0, cell.1);
+        Self::validate_source_value(material, biomass_kgc_m2)?;
+        let held_kgc = biomass_kgc_m2 * cell_area_m2;
+        Self::validate_source_value(material, held_kgc)?;
+        let available_kg = held_kgc / c.carbon_per_kg;
+        Self::validate_source_value(material, available_kg)?;
+        let kg = kg_wanted.min(available_kg);
         if kg <= 0.0 {
             return Err(MaterialError::NothingToHarvest);
+        }
+        let resulting_stock = self.stock_kg(material) + kg;
+        if !resulting_stock.is_finite() {
+            return Err(MaterialError::InvalidAmount {
+                material,
+                amount_kg: resulting_stock,
+            });
         }
         let kgc = kg * c.carbon_per_kg;
         let biomass = ecology.biomass_kgc_m2.get_mut(cell.0, cell.1);
@@ -592,6 +629,8 @@ impl MaterialLedger {
         cell_area_m2: f64,
         ledger: &mut Ledger,
     ) -> Result<f64, MaterialError> {
+        Self::validate_amount(Material::PlantFood, kg_wanted)?;
+        Self::validate_cell_area(cell_area_m2)?;
         if ecology.edible.is_none() {
             return self.gather_biotic(
                 Material::PlantFood,
@@ -604,15 +643,26 @@ impl MaterialLedger {
         }
         let c = composition(Material::PlantFood);
         let i = ecology.biomass_kgc_m2.grid_to_linear_index(cell.0, cell.1);
+        let biomass_kgc_m2 = *ecology.biomass_kgc_m2.get(cell.0, cell.1);
+        Self::validate_source_value(Material::PlantFood, biomass_kgc_m2)?;
         let edible = ecology.edible.as_mut().expect("checked above");
-        let held_kgc_m2 = edible
-            .at(i)
-            .min(*ecology.biomass_kgc_m2.get(cell.0, cell.1));
-        let kg = kg_wanted
-            .max(0.0)
-            .min(held_kgc_m2 * cell_area_m2 / c.carbon_per_kg);
+        let edible_kgc_m2 = edible.at(i);
+        Self::validate_source_value(Material::PlantFood, edible_kgc_m2)?;
+        let held_kgc_m2 = edible_kgc_m2.min(biomass_kgc_m2);
+        let held_kgc = held_kgc_m2 * cell_area_m2;
+        Self::validate_source_value(Material::PlantFood, held_kgc)?;
+        let available_kg = held_kgc / c.carbon_per_kg;
+        Self::validate_source_value(Material::PlantFood, available_kg)?;
+        let kg = kg_wanted.min(available_kg);
         if kg <= 0.0 {
             return Err(MaterialError::NothingToHarvest);
+        }
+        let resulting_stock = self.stock_kg(Material::PlantFood) + kg;
+        if !resulting_stock.is_finite() {
+            return Err(MaterialError::InvalidAmount {
+                material: Material::PlantFood,
+                amount_kg: resulting_stock,
+            });
         }
         let kgc = kg * c.carbon_per_kg;
         edible.take(i, kgc / cell_area_m2);
@@ -641,13 +691,26 @@ impl MaterialLedger {
         cell_area_m2: f64,
         ledger: &mut Ledger,
     ) -> Result<f64, MaterialError> {
+        Self::validate_amount(Material::Water, kg)?;
+        Self::validate_cell_area(cell_area_m2)?;
         let soil = *hydrology.soil_water.get(cell.0, cell.1);
+        Self::validate_source_value(Material::Water, soil.moisture_fraction)?;
+        Self::validate_source_value(Material::Water, soil.storage_mm)?;
         if soil.moisture_fraction < SOIL_DRINKABLE_FRACTION {
             return Err(MaterialError::DryCell);
         }
-        let take = kg.max(0.0).min(soil.storage_mm.max(0.0) * cell_area_m2);
+        let available_kg = soil.storage_mm * cell_area_m2;
+        Self::validate_source_value(Material::Water, available_kg)?;
+        let take = kg.min(available_kg);
         if take <= 0.0 {
             return Err(MaterialError::DryCell);
+        }
+        let resulting_stock = self.stock_kg(Material::Water) + take;
+        if !resulting_stock.is_finite() {
+            return Err(MaterialError::InvalidAmount {
+                material: Material::Water,
+                amount_kg: resulting_stock,
+            });
         }
         let storage_mm = soil.storage_mm - take / cell_area_m2;
         hydrology.soil_water.set(
@@ -1270,11 +1333,19 @@ impl MaterialLedger {
         ledger: &mut Ledger,
     ) -> Result<f64, MaterialError> {
         Self::validate_amount(Material::Water, kg)?;
+        Self::validate_cell_area(cell_area_m2)?;
         let (r, c) = cell;
-        let standing_kg = hydrology.surface_water.get(r, c).max(0.0) * cell_area_m2;
-        let river_kg =
-            hydrology.runoff.get(r, c).max(0.0) * cell_area_m2 * RIVER_WITHDRAWAL_FRACTION;
-        let take = kg.min(standing_kg + river_kg);
+        let surface_water = *hydrology.surface_water.get(r, c);
+        let runoff = *hydrology.runoff.get(r, c);
+        Self::validate_source_value(Material::Water, surface_water)?;
+        Self::validate_source_value(Material::Water, runoff)?;
+        let standing_kg = surface_water * cell_area_m2;
+        let river_kg = runoff * cell_area_m2 * RIVER_WITHDRAWAL_FRACTION;
+        Self::validate_source_value(Material::Water, standing_kg)?;
+        Self::validate_source_value(Material::Water, river_kg)?;
+        let available_kg = standing_kg + river_kg;
+        Self::validate_source_value(Material::Water, available_kg)?;
+        let take = kg.min(available_kg);
         if take <= 0.0 {
             return Err(MaterialError::DryCell);
         }
@@ -1289,15 +1360,13 @@ impl MaterialLedger {
         }
         let from_standing = take.min(standing_kg);
         let from_river = take - from_standing;
-        hydrology.surface_water.set(
-            r,
-            c,
-            hydrology.surface_water.get(r, c) - from_standing / cell_area_m2,
-        );
+        hydrology
+            .surface_water
+            .set(r, c, surface_water - from_standing / cell_area_m2);
         hydrology.runoff.set(
             r,
             c,
-            hydrology.runoff.get(r, c) - from_river / (cell_area_m2 * RIVER_WITHDRAWAL_FRACTION),
+            runoff - from_river / (cell_area_m2 * RIVER_WITHDRAWAL_FRACTION),
         );
         self.add(Material::Water, take);
         flow(

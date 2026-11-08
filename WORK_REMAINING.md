@@ -1,6 +1,15 @@
 # Work remaining
 
-## Latest engineering slice — 8 November 2026
+## Latest engineering slice — 9 November 2026
+
+- PR #129 (material quantity validation, finite resulting-stock preflight, duplicate-input craft aggregation, and atomic fossil/surface-water source operations) merged to `main` as `170e4b5f1c035bf71535294fa758bbd4b661a22b`. Exact-head workflow [#42473464844](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42473464844) passed formatting, Clippy, fast Rust tests, dependency audit, computer service, installed backend, desktop application, web dashboard, repository scripts and both week/year reference-pack acceptance tests; nightly slow tests were skipped by design.
+- PR #130 now validates both requested quantities and environmental source state across `gather_biotic`, `gather_edible`, `gather_soil_water` and `gather_water`. Added typed `InvalidCellArea` and `InvalidSourceState` errors, finite/non-negative source checks, positive finite cell-area checks and pre-mutation checks for area-converted source quantities. Regression coverage exercises negative/NaN/infinite source values, invalid areas and unchanged material stock/flux/source state.
+- Commits: source validation `64883418`; regression tests `101ddc44`; river reservoir identity correction `b89e64b7`; exact rustfmt corrections `063c7eba` and `1366320e`; handoff `c6e8c001`.
+- Workflow [#42479894903](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42479894903) exposed the incorrect `Reservoir::Runoff` enum reference on an earlier head; corrected to the existing `Reservoir::Rivers` identity in `b89e64b7`. Workflow [#42479978630](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42479978630) then found rustfmt-only differences, corrected in `063c7eba` / `1366320e`.
+- Fresh exact-head workflow [#42480080363](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42480080363) was pending on test-format head `1366320e`; the later handoff commit requires a further exact-head run. Custom OpenCommander remains HTTP 429, so no local Cargo result is claimed. No current-head test pass is claimed.
+- Next: complete exact-head PR #130 verification and merge only when green; then advance D40's two-person saw cross-cutting with separate founder time/energy accounting.
+
+## Previous engineering slice — 8 November 2026
 
 - Timber source-state, restored-ledger allocator and active-haul exclusivity hardening (PR #128) merged to `main` as `5ea337d5f5931f9349869b39f0f16e7edbcd31c6`. Exact-head workflow [#42461413038](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42461413038) passed formatting, Clippy, fast Rust tests, installed backend, desktop application, web dashboard, computer service, repository scripts, dependency audit and week/year reference-pack acceptance; nightly slow tests were skipped by design.
 
