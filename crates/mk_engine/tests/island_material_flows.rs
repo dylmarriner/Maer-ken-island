@@ -2310,15 +2310,19 @@ fn seasoning_aggregates_small_logs_before_preflighting_large_wood_stock() {
     materials
         .inject(Material::Wood, 2_f64.powi(53), &mut ledger)
         .expect("the initial Wood stock is finite");
+
+    // The audit baseline starts after setup. Only seasoning's new ledger entries
+    // belong in the delta comparison; felled-log and seed-stock flows are history.
+    let mut seasoning_ledger = Ledger::new();
     let audit = Audit::start(&materials);
 
-    let added = materials.season_stored_logs(&mut ledger);
+    let added = materials.season_stored_logs(&mut seasoning_ledger);
 
     assert_eq!(added, 2.0);
     assert_eq!(materials.stock_kg(Material::Wood), 2_f64.powi(53) + 2.0);
     assert!(materials.log(first_id).is_none());
     assert!(materials.log(second_id).is_none());
-    audit.close(&materials, &ledger);
+    audit.close(&materials, &seasoning_ledger);
 }
 
 #[test]
