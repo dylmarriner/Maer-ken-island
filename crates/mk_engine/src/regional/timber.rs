@@ -430,6 +430,9 @@ pub fn haul_plans_over(
     first_piece_id: u64,
     climb: &dyn Fn((f64, f64), (f64, f64)) -> f64,
 ) -> Result<Vec<HaulJob>, LabourError> {
+    if !log.has_valid_physical_state() {
+        return Err(LabourError::InvalidTimberLogState);
+    }
     let walk = |d: f64| labour.walking_time_s(body, d, 0.0, 0.0);
     let leg = |from: (f64, f64), to: (f64, f64), load_kg: f64| {
         labour.walking_time_s(body, distance_m(from, to), climb(from, to), load_kg)
@@ -864,6 +867,45 @@ mod tests {
                 litres: ex_litres,
                 litres_per_hour: 32.4,
             }),
+        }
+    }
+
+    #[test]
+    fn haul_planning_returns_a_typed_error_for_invalid_source_log_state() {
+        let (labour, body) = (labour(), body());
+        let mut invalid_logs = Vec::new();
+
+        let mut zero_dry_mass = log();
+        zero_dry_mass.dry_kg = 0.0;
+        zero_dry_mass.carbon_kgc = 0.0;
+        invalid_logs.push(zero_dry_mass);
+
+        let mut zero_carbon = log();
+        zero_carbon.carbon_kgc = 0.0;
+        invalid_logs.push(zero_carbon);
+
+        let mut carbon_exceeds_dry_mass = log();
+        carbon_exceeds_dry_mass.carbon_kgc = carbon_exceeds_dry_mass.dry_kg + 1.0;
+        invalid_logs.push(carbon_exceeds_dry_mass);
+
+        let mut non_finite_position = log();
+        non_finite_position.position_m.0 = f64::NAN;
+        invalid_logs.push(non_finite_position);
+
+        for invalid in invalid_logs {
+            let result = haul_plans(
+                &invalid,
+                (0.0, 0.0),
+                &body,
+                &labour,
+                &site(),
+                &fleet(100.0, 0.0),
+                100,
+            );
+            assert!(
+                matches!(result, Err(LabourError::InvalidTimberLogState)),
+                "invalid source log must be rejected before cross-cut materialisation: {result:?}"
+            );
         }
     }
 

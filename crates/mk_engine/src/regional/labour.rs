@@ -45,6 +45,8 @@ pub enum LabourError {
         requested_pieces: u32,
         maximum_pieces: u32,
     },
+    /// A public haul-planning call supplied a malformed persisted or in-memory log.
+    InvalidTimberLogState,
 }
 
 impl std::fmt::Display for LabourError {
@@ -57,6 +59,10 @@ impl std::fmt::Display for LabourError {
                     "a load of {carried_kg:.1} kg exceeds the {max_kg:.1} kg limit"
                 )
             }
+            Self::InvalidTimberLogState => write!(
+                f,
+                "haul planning requires a finite, positive timber log with conserved physical state"
+            ),
             Self::CrossCutLimitExceeded {
                 requested_pieces,
                 maximum_pieces,
