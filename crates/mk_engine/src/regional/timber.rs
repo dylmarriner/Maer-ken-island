@@ -759,18 +759,38 @@ mod tests {
             water_kg: 54.3210987654321,
             place: LogPlace::Stored,
         };
-        let pieces = l.cross_cut(3, 100);
-        let sum = |field: fn(&Log) -> f64| pieces.iter().map(field).sum::<f64>();
 
-        assert_eq!(sum(|piece| piece.dry_kg).to_bits(), l.dry_kg.to_bits());
-        assert_eq!(
-            sum(|piece| piece.carbon_kgc).to_bits(),
-            l.carbon_kgc.to_bits()
-        );
-        assert_eq!(sum(|piece| piece.water_kg).to_bits(), l.water_kg.to_bits());
-        assert_eq!(sum(|piece| piece.length_m).to_bits(), l.length_m.to_bits());
-        assert_ne!(pieces[2].dry_kg.to_bits(), pieces[0].dry_kg.to_bits());
-        assert_ne!(pieces[2].length_m.to_bits(), pieces[0].length_m.to_bits());
+        // Exercise both small cuts and the public allocation ceiling. The
+        // final remainder must keep every conserved quantity bit-identical
+        // regardless of how many rounded equal shares precede it.
+        for count in [2, 3, 4, 7, 14, 257, MAX_CROSS_CUT_PIECES] {
+            let pieces = l.cross_cut(count, 100);
+            let sum = |field: fn(&Log) -> f64| pieces.iter().map(field).sum::<f64>();
+
+            assert_eq!(pieces.len(), count as usize);
+            assert_eq!(pieces.first().expect("at least one piece").id, 100);
+            assert_eq!(
+                pieces.last().expect("at least one piece").id,
+                100 + u64::from(count) - 1
+            );
+            assert_eq!(sum(|piece| piece.dry_kg).to_bits(), l.dry_kg.to_bits());
+            assert_eq!(
+                sum(|piece| piece.carbon_kgc).to_bits(),
+                l.carbon_kgc.to_bits()
+            );
+            assert_eq!(sum(|piece| piece.water_kg).to_bits(), l.water_kg.to_bits());
+            assert_eq!(sum(|piece| piece.length_m).to_bits(), l.length_m.to_bits());
+            assert!(pieces.iter().all(|piece| {
+                piece.length_m.is_finite()
+                    && piece.length_m > 0.0
+                    && piece.dry_kg.is_finite()
+                    && piece.dry_kg >= 0.0
+                    && piece.carbon_kgc.is_finite()
+                    && piece.carbon_kgc >= 0.0
+                    && piece.water_kg.is_finite()
+                    && piece.water_kg >= 0.0
+            }));
+        }
     }
 
     #[test]
