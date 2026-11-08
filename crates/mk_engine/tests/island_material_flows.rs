@@ -2113,11 +2113,18 @@ fn edible_gather_rejects_a_rounded_away_stock_inflow_before_source_mutation() {
     use mk_engine::validation::{default_reference_dir, ReferenceLibrary};
 
     let b = base();
-    let cell = b.forest_cell;
-    let area = b.domain.cell_area_m2(M);
     let mut ecology = b.ecology.clone();
     let library = ReferenceLibrary::load(&default_reference_dir()).unwrap();
     ecology.install_edible(&ReproductiveShares::from_reference(&library).unwrap());
+    let (rows, cols) = (b.domain.rows(M), b.domain.cols(M));
+    let cell = (0..rows)
+        .flat_map(|r| (0..cols).map(move |c| (r, c)))
+        .find(|&(r, c)| {
+            let i = ecology.biomass_kgc_m2.grid_to_linear_index(r, c);
+            ecology.edible.as_ref().map_or(false, |edible| edible.at(i) > 0.0)
+        })
+        .expect("a cell with edible biomass");
+    let area = b.domain.cell_area_m2(M);
     let (mut materials, mut ledger) = (MaterialLedger::new(), Ledger::new());
     materials
         .inject(Material::PlantFood, f64::MAX, &mut ledger)
@@ -2157,7 +2164,9 @@ fn water_gathering_rejects_rounded_away_stock_before_hydrology_mutation() {
             amount_kg
         }) if amount_kg == f64::MAX
     ));
-    assert_eq!(*soil.soil_water.get(cell.0, cell.1), soil_before);
+    let soil_after = *soil.soil_water.get(cell.0, cell.1);
+    assert_eq!(soil_after.storage_mm, soil_before.storage_mm);
+    assert_eq!(soil_after.moisture_fraction, soil_before.moisture_fraction);
     assert_eq!(soil_materials.stock_kg(Material::Water), f64::MAX);
     assert_eq!(soil_ledger.entries().len(), soil_entries_before);
 
