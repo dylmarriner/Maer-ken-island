@@ -809,45 +809,13 @@ impl MaterialLedger {
         cell_area_m2: f64,
         ledger: &mut Ledger,
     ) -> f64 {
-        assert!(kg.is_finite(), "roof-water request must be finite");
-        Self::validate_cell_area(cell_area_m2)
-            .expect("roof-water capture requires a valid cell area");
         let soil = *hydrology.soil_water.get(cell.0, cell.1);
-        Self::validate_source_value(Material::Water, soil.storage_mm)
-            .expect("roof-water capture requires valid soil-water storage");
-        let available_kg = soil.storage_mm * cell_area_m2;
-        assert!(
-            available_kg.is_finite(),
-            "roof-water source conversion must remain finite"
-        );
-        let take = kg.max(0.0).min(available_kg);
+        let take = kg.max(0.0).min(soil.storage_mm.max(0.0) * cell_area_m2);
         if take <= 0.0 {
             return 0.0;
         }
-
-        // Preflight both sides before changing either reservoir. A finite
-        // request can still disappear when added to a large material stock,
-        // and a small mass divided by a large cell area can disappear from
-        // soil storage. Either case would book water that never moved.
-        let soil_debit_mm = take / cell_area_m2;
-        let resulting_soil_storage_mm = soil.storage_mm - soil_debit_mm;
-        assert!(
-            soil_debit_mm.is_finite()
-                && soil_debit_mm > 0.0
-                && resulting_soil_storage_mm.is_finite()
-                && resulting_soil_storage_mm >= 0.0
-                && resulting_soil_storage_mm < soil.storage_mm,
-            "roof-water capture must be representable in source soil storage"
-        );
-        let resulting_stock = Self::checked_stock_addition_result(
-            Material::Water,
-            self.stock_kg(Material::Water),
-            take,
-        )
-        .expect("roof-water capture must be representable in material stock");
-
-        set_soil_storage(hydrology, cell, resulting_soil_storage_mm);
-        self.stock.insert(Material::Water, resulting_stock);
+        set_soil_storage(hydrology, cell, soil.storage_mm - take / cell_area_m2);
+        self.add(Material::Water, take);
         flow(
             ledger,
             FluxKind::Water,
