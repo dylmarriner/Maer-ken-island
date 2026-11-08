@@ -96,6 +96,20 @@ fn a_sea_cell(life: &IslandLife) -> (usize, usize) {
         .expect("the island has sea inside its middle half")
 }
 
+fn biomass_bits(life: &IslandLife) -> Vec<u64> {
+    let (rows, cols) = (
+        life.domain.rows(DomainLevel::Medium),
+        life.domain.cols(DomainLevel::Medium),
+    );
+    let mut bits = Vec::with_capacity(rows * cols);
+    for row in 0..rows {
+        for col in 0..cols {
+            bits.push(life.ecology.biomass_kgc_m2.get(row, col).to_bits());
+        }
+    }
+    bits
+}
+
 fn a_profile(name: &str) -> HumanSpawnProfile {
     HumanSpawnProfile {
         name: name.to_string(),
@@ -472,6 +486,59 @@ fn producer_carbon_lands_on_land_and_not_in_the_sea() {
         before_sea,
         "the sea carries no producer carbon and should not be given any"
     );
+}
+
+#[test]
+fn producer_carbon_injection_rejects_invalid_amounts_without_mutation_or_replay_entries() {
+    let mut life = island();
+    let (row, col) = a_land_cell(&life);
+    let region = Region::new(at(&life, row, col), 2.0);
+    let before_biomass = biomass_bits(&life);
+    let before_ledger = life.physical.ledger.entries().len();
+    let before_log = life.replay_log().entries().len();
+
+    for amount in [-1.0, f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+        let action = InterventionAction::InjectBiomass {
+            biomass_type: BiomassType::Producers,
+            amount,
+            region: region.clone(),
+        };
+        match life.apply_command(IslandCommand::Intervention(Box::new(action))) {
+            Err(CommandError::Intervention(IslandInterventionError::Validation(_))) => {}
+            other => panic!("invalid producer-carbon amount must be refused before mutation, got {other:?}"),
+        }
+        assert_eq!(biomass_bits(&life), before_biomass);
+        assert_eq!(life.physical.ledger.entries().len(), before_ledger);
+        assert_eq!(life.replay_log().entries().len(), before_log);
+    }
+}
+
+#[test]
+fn producer_carbon_injection_preflights_corrupt_and_unrepresentable_cells_atomically() {
+    for invalid in [-1.0, f64::NAN, f64::INFINITY, f64::MAX] {
+        let mut life = island();
+        let (row, col) = a_land_cell(&life);
+        life.ecology.biomass_kgc_m2.set(row, col, invalid);
+        let region = Region::new(at(&life, row, col), 2.0);
+        let before_biomass = biomass_bits(&life);
+        let before_ledger = life.physical.ledger.entries().len();
+        let before_log = life.replay_log().entries().len();
+        let action = InterventionAction::InjectBiomass {
+            biomass_type: BiomassType::Producers,
+            amount: 1_000_000.0,
+            region,
+        };
+
+        match life.apply_command(IslandCommand::Intervention(Box::new(action))) {
+            Err(CommandError::Intervention(
+                IslandInterventionError::InvalidProducerInjection { .. }
+            )) => {}
+            other => panic!("invalid producer source state must be refused atomically, got {other:?}"),
+        }
+        assert_eq!(biomass_bits(&life), before_biomass);
+        assert_eq!(life.physical.ledger.entries().len(), before_ledger);
+        assert_eq!(life.replay_log().entries().len(), before_log);
+    }
 }
 
 #[test]
