@@ -546,6 +546,37 @@ impl MaterialLedger {
         Ok(())
     }
 
+    /// Validate a source-reservoir debit and return its exact remaining quantity.
+    ///
+    /// A finite debit can disappear when subtracted from a much larger finite
+    /// source. Never book an inflow to material stock unless the source itself
+    /// decreases by the amount represented by the transfer.
+    fn checked_source_debit_result(
+        m: Material,
+        have: f64,
+        debit: f64,
+    ) -> Result<f64, MaterialError> {
+        Self::validate_source_value(m, have)?;
+        Self::validate_amount(m, debit)?;
+        if have < debit {
+            return Err(MaterialError::InvalidSourceState {
+                material: m,
+                value: debit,
+            });
+        }
+        let remaining = have - debit;
+        if !remaining.is_finite()
+            || remaining < 0.0
+            || (debit > 0.0 && remaining >= have)
+        {
+            return Err(MaterialError::InvalidSourceState {
+                material: m,
+                value: remaining,
+            });
+        }
+        Ok(remaining)
+    }
+
     fn add(&mut self, m: Material, kg: f64) {
         *self.stock.entry(m).or_insert(0.0) += kg;
     }
@@ -1672,26 +1703,36 @@ impl MaterialLedger {
         if take <= 0.0 {
             return Err(MaterialError::DryCell);
         }
-        // Check the destination stock before changing either hydrology or the
-        // flux ledger. A finite source amount can still overflow existing stock.
-        let resulting_stock = self.stock_kg(Material::Water) + take;
-        if !resulting_stock.is_finite() {
-            return Err(MaterialError::InvalidAmount {
-                material: Material::Water,
-                amount_kg: resulting_stock,
-            });
-        }
+        // Split the transfer deterministically, then preflight both source
+        // reservoirs and the destination inventory before mutating any of them.
         let from_standing = take.min(standing_kg);
         let from_river = take - from_standing;
-        hydrology
-            .surface_water
-            .set(r, c, surface_water - from_standing / cell_area_m2);
-        hydrology.runoff.set(
-            r,
-            c,
-            runoff - from_river / (cell_area_m2 * RIVER_WITHDRAWAL_FRACTION),
-        );
-        self.add(Material::Water, take);
+        let river_area_factor = cell_area_m2 * RIVER_WITHDRAWAL_FRACTION;
+        if !river_area_factor.is_finite() || river_area_factor <= 0.0 {
+            return Err(MaterialError::InvalidCellArea {
+                area_m2: cell_area_m2,
+            });
+        }
+        let standing_debit = from_standing / cell_area_m2;
+        let river_debit = from_river / river_area_factor;
+        if (from_standing > 0.0 && standing_debit == 0.0)
+            || (from_river > 0.0 && river_debit == 0.0)
+        {
+            return Err(MaterialError::InvalidSourceState {
+                material: Material::Water,
+                value: 0.0,
+            });
+        }
+        let remaining_surface =
+            Self::checked_source_debit_result(Material::Water, surface_water, standing_debit)?;
+        let remaining_runoff =
+            Self::checked_source_debit_result(Material::Water, runoff, river_debit)?;
+        let resulting_stock =
+            Self::checked_stock_addition_result(Material::Water, self.stock_kg(Material::Water), take)?;
+
+        hydrology.surface_water.set(r, c, remaining_surface);
+        hydrology.runoff.set(r, c, remaining_runoff);
+        self.stock.insert(Material::Water, resulting_stock);
         flow(
             ledger,
             FluxKind::Water,
