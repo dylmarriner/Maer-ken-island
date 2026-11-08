@@ -782,6 +782,54 @@ fn material_ledger_rejects_invalid_restored_logs_and_cross_cut_preserves_reserva
     let next_id_before = materials.next_log_id();
     let valid_snapshot = serde_json::to_value(&materials).expect("valid ledger serializes");
 
+    // The allocator watermark is exclusive and must remain above every
+    // materialised id; otherwise a future allocation could reuse an existing id.
+    let mut stale_allocator = valid_snapshot.clone();
+    stale_allocator["next_log"] = serde_json::Value::from(source_id);
+    let stale_allocator_error = serde_json::from_value::<MaterialLedger>(stale_allocator)
+        .expect_err("a watermark at the highest materialised id must be rejected");
+    assert!(
+        stale_allocator_error.to_string().contains("does not exceed highest materialised log id"),
+        "unexpected allocator error: {stale_allocator_error}"
+    );
+
+    // A pending reservation may neither alias an existing log nor point at
+    // the next unallocated id beyond the exclusive watermark.
+    let mut colliding_reservation = valid_snapshot.clone();
+    colliding_reservation["reserved_log_ids"]
+        .as_array_mut()
+        .expect("reserved ids serialize as an array")
+        .push(serde_json::Value::from(source_id));
+    let collision_error = serde_json::from_value::<MaterialLedger>(colliding_reservation)
+        .expect_err("a reservation colliding with a materialised log must be rejected");
+    assert!(
+        collision_error.to_string().contains("is already materialised"),
+        "unexpected reservation collision error: {collision_error}"
+    );
+
+    let mut out_of_range_reservation = valid_snapshot.clone();
+    out_of_range_reservation["reserved_log_ids"]
+        .as_array_mut()
+        .expect("reserved ids serialize as an array")
+        .push(serde_json::Value::from(next_id_before));
+    let range_error = serde_json::from_value::<MaterialLedger>(out_of_range_reservation)
+        .expect_err("a reservation at the exclusive watermark must be rejected");
+    assert!(
+        range_error.to_string().contains("outside allocator watermark"),
+        "unexpected reservation range error: {range_error}"
+    );
+
+    // Snapshots predating log support omit all three allocator fields. Their
+    // documented defaults remain loadable and start allocation at one.
+    let mut legacy_snapshot = serde_json::to_value(MaterialLedger::new()).expect("empty ledger serializes");
+    let legacy_object = legacy_snapshot.as_object_mut().expect("ledger snapshot is an object");
+    legacy_object.remove("logs");
+    legacy_object.remove("next_log");
+    legacy_object.remove("reserved_log_ids");
+    let legacy: MaterialLedger = serde_json::from_value(legacy_snapshot)
+        .expect("pre-log snapshots retain their legacy defaults");
+    assert_eq!(legacy.next_log_id(), 1);
+
     // Persisted logs are validated at the restore boundary, before malformed
     // floating-point state can enter the live single-writer simulation.
     let mut corrupted_snapshot = valid_snapshot.clone();
