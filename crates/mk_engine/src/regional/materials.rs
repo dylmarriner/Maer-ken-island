@@ -369,6 +369,39 @@ impl<'de> Deserialize<'de> for MaterialLedger {
             }
         }
 
+        // next_log is the exclusive allocator watermark. It must remain above
+        // every materialised id so a restored allocator can never reuse a log.
+        if let Some(highest_log_id) = snapshot.logs.keys().next_back().copied() {
+            if snapshot.next_log <= highest_log_id {
+                return Err(serde::de::Error::custom(format!(
+                    "material ledger next_log {} does not exceed highest materialised log id {highest_log_id}",
+                    snapshot.next_log
+                )));
+            }
+        }
+
+        // Pending reservations are allocated ids that have not yet become logs.
+        // Reject zero, already-materialised and out-of-watermark ids at restore,
+        // before a malformed snapshot can reach the single-writer simulation.
+        for id in &snapshot.reserved_log_ids {
+            if *id == 0 {
+                return Err(serde::de::Error::custom(
+                    "material ledger reserved log ids must be one-based",
+                ));
+            }
+            if snapshot.logs.contains_key(id) {
+                return Err(serde::de::Error::custom(format!(
+                    "material ledger reserved log id {id} is already materialised"
+                )));
+            }
+            if *id >= snapshot.next_log {
+                return Err(serde::de::Error::custom(format!(
+                    "material ledger reserved log id {id} is outside allocator watermark {}",
+                    snapshot.next_log
+                )));
+            }
+        }
+
         Ok(Self {
             stock: snapshot.stock,
             structures: snapshot.structures,
