@@ -35,3 +35,15 @@ Run exact-head formatting, Clippy, fast Rust tests, desktop/backend acceptance a
 ## Exact-head CI follow-up
 
 The first workflow for the implementation head `2bafa3ef61d1a8f61ddf669a11f40623fac9556a` reached `cargo fmt --all -- --check` and identified two formatting-only differences in `materials.rs`. No Clippy or fast Rust tests ran because formatting is the first gate. Corrected both exact rustfmt diffs in commit `0531b7cc1ff653058e9e28def4d32a2f5f31404e`. A fresh exact-head CI run is required; no formatting or test pass is claimed for the corrected head yet.
+
+## Follow-up — felled-log soil source representability
+
+A neighbouring timber-ingestion path had the same source-debit defect: `receive_felled_log` checked that the post-removal soil-water value was finite, but did not prove that a positive water transfer actually reduced the source. At a sufficiently large finite soil-water depth, subtracting the log's converted water depth can round back to the unchanged value while the material stock and flux ledger still receive the water.
+
+- Replaced the finite-only result check with the shared `checked_source_debit_result` preflight.
+- The exact source debit is now validated before log-ID allocation, hydrology mutation, stock/ledger changes or insertion.
+- Added `receiving_felled_log_rejects_unrepresentable_soil_debit_before_allocating_or_booking_fluxes`, using a (2^{53}) mm source depth and a positive 8.2 kg log-water transfer.
+- The regression asserts unchanged soil storage, carbon/water stocks, next log ID, log collection and flux-entry count.
+- Production commit: `8df094d717fabe6e4c6d1bb913a8e20a2654902f`.
+- Regression commit: `72eb626e523a163fa343640235b64e2322c3527d`.
+- Exact-head CI is required. No local Cargo result is claimed because the authorised custom OpenCommander endpoint is currently rate-limited.
