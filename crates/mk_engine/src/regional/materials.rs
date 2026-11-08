@@ -817,9 +817,12 @@ impl MaterialLedger {
             remaining_soil_mm.is_finite(),
             "roof-water capture must leave finite soil-water storage"
         );
-        let resulting_stock =
-            Self::checked_stock_addition_result(Material::Water, self.stock_kg(Material::Water), take)
-                .expect("captured roof water must increase the water inventory representably");
+        let resulting_stock = Self::checked_stock_addition_result(
+            Material::Water,
+            self.stock_kg(Material::Water),
+            take,
+        )
+        .expect("captured roof water must increase the water inventory representably");
         let _resulting_water = Self::checked_stock_addition_result(
             Material::Water,
             self.stock_of(Reservoir::MaterialWater),
@@ -1181,9 +1184,12 @@ impl MaterialLedger {
             "seasoned-log water must remain representable after batch aggregation"
         );
 
-        let resulting_wood =
-            Self::checked_stock_addition_result(Material::Wood, self.stock_kg(Material::Wood), total_kg)
-                .expect("seasoned logs must increase the wood inventory representably");
+        let resulting_wood = Self::checked_stock_addition_result(
+            Material::Wood,
+            self.stock_kg(Material::Wood),
+            total_kg,
+        )
+        .expect("seasoned logs must increase the wood inventory representably");
         let water_before = self.stock_of(Reservoir::MaterialWater);
         let water_after = water_before - total_water_kg;
         assert!(
@@ -1194,7 +1200,10 @@ impl MaterialLedger {
         );
 
         for id in seasoned {
-            let log = self.logs.remove(&id).expect("preflighted log remains present");
+            let log = self
+                .logs
+                .remove(&id)
+                .expect("preflighted log remains present");
             flow(
                 ledger,
                 FluxKind::Water,
