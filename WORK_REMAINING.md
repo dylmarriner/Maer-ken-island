@@ -1,5 +1,12 @@
 # Work remaining
 
+## Latest engineering slice — 8 November 2026
+
+- Timber source-state, restored-ledger allocator and active-haul exclusivity hardening (PR #128) merged to `main` as `5ea337d5f5931f9349869b39f0f16e7edbcd31c6`. Exact-head workflow [#42461413038](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42461413038) passed formatting, Clippy, fast Rust tests, installed backend, desktop application, web dashboard, computer service, repository scripts, dependency audit and week/year reference-pack acceptance; nightly slow tests were skipped by design.
+
+- Material quantity and craft atomicity hardening is on `fix/material-amount-boundaries-20261108`: negative/non-finite withdrawals now fail before mutation; craft validates inputs/outputs and aggregates duplicate input requirements before any debit. Source commit `b3f644d8`, regression commit `2dad19f7`, handoff `docs/handoff/MATERIAL_AMOUNT_ATOMICITY_20261108.md`. Exact-head verification is pending; no local Cargo result is claimed because custom OpenCommander returned HTTP 429.
+
+
 Fishery landed-total atomicity and precision (PR #110) merged to `main` as `148ac98c95e58aac7b2065dd0cc68884790f4168`. Exact-head workflow [#42275024667](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42275024667) passed formatting, Clippy, fast Rust tests, desktop build/tests/rendering/input acceptance, installed backend, web dashboard, computer service, repository scripts, dependency audit and week/year reference-pack acceptance; nightly slow tests were skipped by design.
 
 Fishery biomass-remainder precision (PR #111) merged to `main` as `b41bb5cf24bddca5df2bc556612c5edfc8b91bde`. Exact-head workflow [#42292739398](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42292739398) passed formatting, Clippy, fast Rust tests, desktop, installed backend, dashboard, computer service, repository scripts, dependency audit and week/year reference-pack acceptance; nightly slow tests were skipped by design.
