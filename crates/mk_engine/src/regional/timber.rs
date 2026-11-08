@@ -378,10 +378,7 @@ impl HaulJob {
                     km,
                     logs,
                 } => {
-                    *vehicle_id > 0
-                        && km.is_finite()
-                        && *km >= 0.0
-                        && logs.iter().all(|id| *id > 0)
+                    *vehicle_id > 0 && km.is_finite() && *km >= 0.0 && logs.iter().all(|id| *id > 0)
                 }
                 HaulAction::Load { vehicle_id, logs } => {
                     *vehicle_id > 0 && logs.iter().all(|id| *id > 0)
@@ -398,10 +395,7 @@ impl HaulJob {
                         && *hours >= 0.0
                         && log.as_ref().is_none_or(|id| *id > 0)
                 }
-                HaulAction::Lift {
-                    vehicle_id,
-                    log_id,
-                } => *vehicle_id > 0 && *log_id > 0,
+                HaulAction::Lift { vehicle_id, log_id } => *vehicle_id > 0 && *log_id > 0,
                 HaulAction::SetDown { log_id } => *log_id > 0,
             };
             if !action_is_valid {
