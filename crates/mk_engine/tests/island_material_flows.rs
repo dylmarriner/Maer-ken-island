@@ -356,6 +356,30 @@ fn craft_aggregates_duplicate_inputs_and_rejects_invalid_outputs_atomically() {
 }
 
 #[test]
+fn material_withdrawals_reject_positive_amounts_rounded_away_before_mutation() {
+    let (mut materials, mut ledger) = (MaterialLedger::new(), Ledger::new());
+    materials
+        .inject(Material::Wood, f64::MAX, &mut ledger)
+        .expect("maximum finite wood stock has representable carbon and water");
+
+    let stock_before = materials.stock_kg(Material::Wood);
+    let carbon_before = materials.stock_of(R::MaterialCarbon);
+    let entries_before = ledger.entries().len();
+    let rejected = materials.craft(&[(Material::Wood, 1.0)], &[], &mut ledger);
+
+    assert!(matches!(
+        rejected,
+        Err(MaterialError::InvalidAmount {
+            material: Material::Wood,
+            amount_kg
+        }) if amount_kg == f64::MAX
+    ));
+    assert_eq!(materials.stock_kg(Material::Wood), stock_before);
+    assert_eq!(materials.stock_of(R::MaterialCarbon), carbon_before);
+    assert_eq!(ledger.entries().len(), entries_before);
+}
+
+#[test]
 fn material_stock_additions_reject_overflow_before_mutation() {
     let (mut materials, mut ledger) = (MaterialLedger::new(), Ledger::new());
     materials
