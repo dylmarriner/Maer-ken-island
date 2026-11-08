@@ -1507,6 +1507,9 @@ impl IslandLife {
             if !self.hauling.contains_key(&id) && !self.felling.contains_key(&id) {
                 if let Some(job) = self.plan_haul(at, &body)? {
                     if self.chooses_to_haul(&id, &job, at)? {
+                        // Planning is only a preview. Reserve the exact piece-ID
+                        // range after the founder accepts, never for a declined haul.
+                        self.reserve_haul_plan(&job);
                         self.hauling.insert(id.clone(), job);
                     }
                 }
@@ -1841,7 +1844,7 @@ impl IslandLife {
     /// The quickest haul of the log on the ground nearest `at` that no
     /// founder is already moving, or `None` if there is none.
     fn plan_haul(
-        &mut self,
+        &self,
         at: (f64, f64),
         body: &LabourBody,
     ) -> Result<Option<timber::HaulJob>, IslandLifeError> {
@@ -1886,26 +1889,71 @@ impl IslandLife {
             ute: road(HAUL_UTE).filter(|_| !in_use(timber::HaulMethod::Ute)),
             excavator: tracked(HAUL_EXCAVATOR).filter(|_| !in_use(timber::HaulMethod::Excavator)),
         };
-        // Pieces cut from this log take ids reserved now, so a plan names
-        // them before they exist: as many as the most pieces any plan cuts.
-        let carry = self
-            .labour
-            .sustainable_load_kg(body)
-            .map_err(IslandLifeError::Labour)?;
-        let bed = self
-            .labour
-            .ute_bed_length_m()
-            .map_err(IslandLifeError::Labour)?;
-        let most = (log.green_kg() / carry.max(1e-6))
-            .ceil()
-            .max((log.length_m / bed.max(1e-6)).ceil())
-            .max(1.0) as u64;
-        let first = self.materials.reserve_log_ids(most);
+        // Preview from the next id without consuming it. The conserved
+        // residual can make a haul plan cut more pieces than the average-based
+        // estimate, so reserve the largest actual CrossCut range only after
+        // every candidate plan has been built.
+        let first = self.materials.next_log_id();
         let climb = |from: (f64, f64), to: (f64, f64)| self.climb_m(from, to);
         let plans =
             timber::haul_plans_over(&log, at, body, &self.labour, &site, &fleet, first, &climb)
                 .map_err(IslandLifeError::Labour)?;
-        Ok(timber::quickest(plans))
+        let Some(selected) = timber::quickest(plans) else {
+            return Ok(None);
+        };
+        // Planning only previews the current allocator range. The range is
+        // reserved later, after the founder chooses this haul over felling.
+        for task in &selected.tasks {
+            if let timber::HaulAction::CrossCut { first_id, .. } = &task.action {
+                assert_eq!(
+                    *first_id, first,
+                    "selected haul must use the previewed piece-id range"
+                );
+            }
+        }
+        Ok(Some(selected))
+    }
+
+    /// Reserve only the exact CrossCut range in a plan the founder accepted.
+    /// Called by the work loop after chooses_to_haul returns true.
+    fn reserve_haul_plan(&mut self, job: &timber::HaulJob) {
+        let mut planned_first_id = None;
+        let piece_count = job
+            .tasks
+            .iter()
+            .filter_map(|task| match &task.action {
+                timber::HaulAction::CrossCut {
+                    pieces, first_id, ..
+                } => {
+                    if let Some(expected) = planned_first_id {
+                        assert_eq!(
+                            *first_id, expected,
+                            "one haul must use a single contiguous piece-id range"
+                        );
+                    } else {
+                        planned_first_id = Some(*first_id);
+                    }
+                    Some(u64::from(*pieces))
+                }
+                _ => None,
+            })
+            .max()
+            .unwrap_or(0);
+        if piece_count == 0 {
+            return;
+        }
+
+        let first = planned_first_id.expect("a CrossCut range has a first piece id");
+        assert_eq!(
+            self.materials.next_log_id(),
+            first,
+            "single-writer haul acceptance must still own the previewed id range"
+        );
+        let reserved_first = self.materials.reserve_log_ids(piece_count);
+        assert_eq!(
+            reserved_first, first,
+            "accepted haul must reserve the range it previewed"
+        );
     }
 
     /// What a finished haul task does to the world.
@@ -1928,7 +1976,14 @@ impl IslandLife {
                 pieces,
                 first_id,
             } => {
-                self.materials.cross_cut_log(*log_id, *pieces, *first_id);
+                assert!(
+                    self.materials.restore_pending_cross_cut_ids(*log_id, *pieces, *first_id),
+                    "an active persisted cross-cut must reference a live source and an allocated, unconsumed piece-id range"
+                );
+                assert!(
+                    self.materials.cross_cut_log(*log_id, *pieces, *first_id),
+                    "a planned cross-cut must have its source log and a collision-free reserved piece-id range"
+                );
             }
             HaulAction::Load { vehicle_id, logs } => {
                 put(logs, LogPlace::Vehicle(*vehicle_id), None);
@@ -4468,6 +4523,309 @@ mod tests {
             stored.len(),
             sum(|l| l.dry_kg) + water,
             total
+        );
+    }
+
+    #[test]
+    fn accepting_a_conserved_ute_recut_reserves_ids_before_another_log_arrives() {
+        let mut scenario =
+            IslandScenario::load(&repo("fixtures/island/default_scenario.json")).unwrap();
+        scenario.estate_patch.tree_cap = 200;
+        let canon = Arc::new(CanonLocked::load(&repo("fixtures/island/canon.json")).unwrap());
+        let mut life = IslandLife::bootstrap(scenario, canon).expect("the island bootstraps");
+        let at = life.vegetation.centre_m();
+        let body = LabourBody::from_human(life.humans.registry.get_human("Gem-D").unwrap());
+        let bed = life.labour.ute_bed_length_m().unwrap();
+        assert!(
+            life.energy.vehicle_named(HAUL_UTE).is_some(),
+            "the default estate has the ute used by the length-constrained plan"
+        );
+
+        // Thirteen nominal shares fit the bed by the average calculation, but
+        // the conserved final remainder is materially longer and forces the
+        // Ute plan to recut into fourteen pieces.
+        let minimum_pieces = 13u32;
+        // The mass requires thirteen pieces; the conserved final length
+        // requires a fourteenth for the Ute bed.
+        let sustainable = life.labour.sustainable_load_kg(&body).unwrap();
+        let length_m = f64::from_bits((bed * f64::from(minimum_pieces)).to_bits() - 5);
+        let source_log = timber::Log {
+            id: 0,
+            position_m: at,
+            heading_rad: 0.0,
+            length_m,
+            diameter_m: 0.30,
+            dry_kg: sustainable * 10.0,
+            carbon_kgc: sustainable * 5.0,
+            water_kg: 0.0,
+            place: timber::LogPlace::Ground,
+        };
+        let tolerance = bed.abs().max(1.0) * f64::EPSILON * 4.0;
+        assert!(
+            source_log
+                .cross_cut(minimum_pieces, 100)
+                .iter()
+                .any(|piece| piece.length_m > bed + tolerance),
+            "the fixture exposes the oversized conserved remainder"
+        );
+        assert!(
+            source_log
+                .cross_cut(minimum_pieces + 1, 100)
+                .iter()
+                .all(|piece| piece.length_m <= bed + tolerance),
+            "one additional cut brings every piece within the bed"
+        );
+
+        let cell = life.placed.location;
+        let area = life.domain.cell_area_m2(DomainLevel::Medium);
+        let mut ledger = Ledger::new();
+        let source_id = life.materials.receive_felled_log(
+            source_log,
+            &mut life.physical.hydrology,
+            cell,
+            area,
+            &mut ledger,
+        );
+        let first_piece_id = life.materials.next_log_id();
+
+        // Build the Ute candidate directly. The default estate geometry can
+        // make carrying faster than driving, and that choice is unrelated to
+        // whether the Ute candidate reserves the exact conserved piece range.
+        let ute_vehicle = life
+            .energy
+            .vehicle_named(HAUL_UTE)
+            .expect("the default estate has the haul ute");
+        let fleet = timber::Fleet {
+            ute: Some(timber::RoadVehicle {
+                item_id: ute_vehicle.item_id,
+                litres: ute_vehicle.litres,
+                litres_per_km: life
+                    .energy
+                    .litres_per_km(
+                        ute_vehicle.item_id,
+                        crate::regional::energy::Surface::OffRoadTrack,
+                    )
+                    .expect("the Ute has a fuel-consumption reference"),
+            }),
+            excavator: None,
+        };
+        let site = life.haul_site().expect("the estate has a garage and store");
+        let log = life
+            .materials
+            .logs()
+            .find(|log| log.id == source_id)
+            .expect("the source log is in the ledger")
+            .clone();
+        let plans = {
+            let climb = |from, to| life.climb_m(from, to);
+            timber::haul_plans_over(
+                &log,
+                at,
+                &body,
+                &life.labour,
+                &site,
+                &fleet,
+                first_piece_id,
+                &climb,
+            )
+            .unwrap()
+        };
+        let haul = plans
+            .into_iter()
+            .find(|plan| plan.method == timber::HaulMethod::Ute)
+            .expect("the length-constrained Ute candidate exists");
+        let planned_pieces = haul
+            .tasks
+            .iter()
+            .find_map(|task| match &task.action {
+                timber::HaulAction::CrossCut { pieces, .. } => Some(*pieces),
+                _ => None,
+            })
+            .expect("the Ute candidate starts by cross-cutting");
+        assert_eq!(planned_pieces, minimum_pieces + 1);
+        assert_eq!(
+            life.materials.next_log_id(),
+            first_piece_id,
+            "planning a candidate must not reserve IDs before the founder chooses it"
+        );
+        life.reserve_haul_plan(&haul);
+        assert_eq!(
+            life.materials.next_log_id(),
+            first_piece_id + u64::from(planned_pieces),
+            "accepting the Ute plan reserves its actual cut range"
+        );
+        life.hauling.insert("Gem-D".to_string(), haul);
+
+        // A second log arriving before the CrossCut task completes must get
+        // an id after every planned piece, not the final piece's id.
+        let other_log = timber::Log {
+            id: 0,
+            position_m: (at.0 + 20.0, at.1),
+            heading_rad: 0.0,
+            length_m: 1.0,
+            diameter_m: 0.20,
+            dry_kg: 123.456,
+            carbon_kgc: 61.728,
+            water_kg: 0.0,
+            place: timber::LogPlace::Ground,
+        };
+        let other_id = life.materials.receive_felled_log(
+            other_log,
+            &mut life.physical.hydrology,
+            cell,
+            area,
+            &mut ledger,
+        );
+        assert_eq!(other_id, first_piece_id + u64::from(minimum_pieces + 1));
+
+        // A pre-reservation-tracking snapshot has the active CrossCut task
+        // and the allocator watermark but no reserved_log_ids field. Restore
+        // that legacy state and prove the task safely reconstructs its range.
+        let mut legacy_value = serde_json::to_value(life.snapshot()).unwrap();
+        assert!(legacy_value["materials"]
+            .as_object_mut()
+            .unwrap()
+            .remove("reserved_log_ids")
+            .is_some());
+        let legacy_snapshot: IslandLifeSnapshot =
+            serde_json::from_value(legacy_value).expect("legacy snapshot deserializes");
+        let mut restored = IslandLife::restore(life.canon.clone(), legacy_snapshot)
+            .expect("legacy snapshot restores");
+        assert!(
+            !restored
+                .materials
+                .restore_pending_cross_cut_ids(source_id, 0, first_piece_id),
+            "a malformed zero-piece persisted task cannot reconstruct a reservation"
+        );
+        let cross_cut_task = restored
+            .hauling
+            .values()
+            .flat_map(|job| job.tasks.iter())
+            .find(|task| matches!(&task.action, timber::HaulAction::CrossCut { .. }))
+            .expect("the active Ute job retains its CrossCut task")
+            .clone();
+        let mut restored_ledger = Ledger::new();
+        restored.finish_haul_task(&cross_cut_task, &mut restored_ledger);
+
+        assert_eq!(
+            restored.materials.log(other_id).map(|log| log.dry_kg),
+            Some(123.456),
+            "cross-cut insertion must not overwrite the later log"
+        );
+        for id in first_piece_id..other_id {
+            assert!(
+                restored.materials.log(id).is_some(),
+                "reserved piece id {id} was not materialised"
+            );
+        }
+        assert_eq!(restored.materials.log(source_id), None);
+    }
+
+    #[test]
+    fn declining_a_haul_plan_does_not_reserve_piece_ids() {
+        let mut scenario =
+            IslandScenario::load(&repo("fixtures/island/default_scenario.json")).unwrap();
+        scenario.estate_patch.tree_cap = 200;
+        let canon = Arc::new(CanonLocked::load(&repo("fixtures/island/canon.json")).unwrap());
+        let mut life = IslandLife::bootstrap(scenario, canon).expect("the island bootstraps");
+        assert!(life.estate_has_tool(FELLING_TOOL), "the shed has the axe");
+
+        let at = life.vegetation.centre_m();
+        let cell = life.placed.location;
+        let area = life.domain.cell_area_m2(DomainLevel::Medium);
+        let mut ledger = Ledger::new();
+        let log = timber::Log {
+            id: 0,
+            position_m: at,
+            heading_rad: 0.0,
+            length_m: 1.0,
+            diameter_m: 0.2,
+            dry_kg: 10.0,
+            carbon_kgc: 5.0,
+            water_kg: 0.0,
+            place: timber::LogPlace::Ground,
+        };
+        let source_id = life.materials.receive_felled_log(
+            log,
+            &mut life.physical.hydrology,
+            cell,
+            area,
+            &mut ledger,
+        );
+        let first_piece_id = life.materials.next_log_id();
+        let body = LabourBody::from_human(life.humans.registry.get_human("Gem-D").unwrap());
+        assert!(
+            life.plan_haul(at, &body).unwrap().is_some(),
+            "the ground log has a valid candidate haul"
+        );
+        assert_eq!(
+            life.materials.next_log_id(),
+            first_piece_id,
+            "previewing a haul must not reserve its piece IDs"
+        );
+
+        life.positions.0.insert(
+            "Gem-D".into(),
+            super::super::humans::EstatePosition {
+                space: Space::Outdoors,
+                position_m: at,
+            },
+        );
+        life.humans
+            .registry
+            .get_human_mut("Gem-D")
+            .unwrap()
+            .economy_action
+            .kind = crate::humans::ActionKind::Gather;
+        {
+            let will = life.will_of("Gem-D");
+            will.liking.insert(crate::regional::choice::Work::Fell, 1.0);
+            will.liking
+                .insert(crate::regional::choice::Work::Haul, -1.0);
+        }
+
+        // The work loop offers the plan, but this founder strongly prefers
+        // felling. A declined plan must leave the allocator untouched.
+        life.work(1.0).unwrap();
+        assert!(!life.hauling.contains_key("Gem-D"));
+        assert!(life.felling.contains_key("Gem-D"));
+        assert_eq!(
+            life.materials.next_log_id(),
+            first_piece_id,
+            "declining the haul must not leak an unused reservation"
+        );
+        assert!(
+            !life.materials.cross_cut_log(source_id, 2, first_piece_id),
+            "a declined preview must not leave a pending cross-cut range"
+        );
+        assert!(
+            life.materials.log(source_id).is_some(),
+            "refusing an unreserved preview range must preserve the source log"
+        );
+
+        // The first subsequently felled log must be allowed to use the ID that
+        // the declined preview only inspected; no ghost reservation may burn it.
+        let later_log = timber::Log {
+            id: 0,
+            position_m: (at.0 + 10.0, at.1),
+            heading_rad: 0.0,
+            length_m: 1.0,
+            diameter_m: 0.2,
+            dry_kg: 123.456,
+            carbon_kgc: 61.728,
+            water_kg: 0.0,
+            place: timber::LogPlace::Ground,
+        };
+        let later_id = life.materials.receive_felled_log(
+            later_log,
+            &mut life.physical.hydrology,
+            cell,
+            area,
+            &mut ledger,
+        );
+        assert_eq!(
+            later_id, first_piece_id,
+            "the next real log must receive the previewed but unreserved ID"
         );
     }
 

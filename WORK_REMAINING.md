@@ -724,3 +724,26 @@ Regression `biomass_increment_rounded_up_or_down_is_rejected_without_mutation` p
 - [x] Regression for shuffled sequence identifiers 12 and 7.
 - [ ] Finish exact-head PR #123 CI after the latest code/test commits.
 - [ ] Obtain final review and merge PR #123 only after all required checks are green.
+
+
+## Timber cross-cut conservation and reservation rebase — 8 November 2026
+
+- [x] Port exact binary64 remainder allocation for length, dry mass, carbon and water onto current main.
+- [x] Derive piece centres from accumulated conserved length.
+- [x] Preserve the replay-compatible empty-ledger Debug representation while including non-empty pending reservation IDs.
+- [x] Enforce valid finite physical state before log ingress or cross-cut materialisation.
+- [x] Reject zero, overflowing, occupied, unreserved and oversized piece-ID ranges before mutating the ledger.
+- [x] Make haul planning an immutable preview and reserve the exact range only after founder acceptance.
+- [x] Add regressions for bit-identical material totals, ID reservation boundaries, invalid state, zero/oversized cuts and declined-haul allocator preservation.
+- [ ] Run exact-head `cargo fmt`, Clippy, fast Rust tests, desktop/backend acceptance and week/year reference packs on the rebased head.
+- [ ] Reconcile review threads and merge only after all required exact-head checks pass.
+
+Evidence: `docs/handoff/TIMBER_CROSS_CUT_REBASE_20261108.md`.
+
+
+### Fresh-main timber rebase CI — 8 November 2026
+
+- PR #127 is the current integration branch after replay PR #123 merged to main; original PR #124 remains draft and must not be merged.
+- Current handoff: `docs/handoff/TIMBER_CROSS_CUT_REBASE_20261108.md`.
+- Exact-head workflow #42431547467: formatting and Clippy passed; fast Rust tests, desktop, installed backend and week/year reference packs were still running at the latest inspection. Dashboard, dependency audit, computer service and repository scripts passed. Nightly slow tests were skipped by design.
+- Re-run all required exact-head checks after the latest handoff-only commit; do not treat predecessor-head results as current.
