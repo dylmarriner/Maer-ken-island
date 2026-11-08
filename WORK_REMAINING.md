@@ -1,3 +1,9 @@
+## Latest material stock-inflow slice — 9 November 2026
+
+- PR #133 now rejects positive banked-mineral and craft-output increments that round away against existing binary64 stock. Craft outputs are aggregated per material before preflight and mutation, so two individually unrepresentable increments can still be applied as one representable total when valid.
+- Regression coverage: f64::MAX mineral stock plus 1 kg; a craft whose Gold output rounds away must not debit its Wood input; duplicate 1 kg Gold outputs at 2^53 kg aggregate to one representable 2 kg increment.
+- The zero-stock withdrawal test expectation was corrected to the actual typed Insufficient result after workflow #42507201745 exposed the mismatch. Exact-head verification is still required.
+
 ## Latest verification correction — 9 November 2026
 
 - PR #133 workflow [#42507201745](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42507201745) passed rustfmt and Clippy; fast Rust tests reported 41 passed / 1 failed in island_material_flows.
