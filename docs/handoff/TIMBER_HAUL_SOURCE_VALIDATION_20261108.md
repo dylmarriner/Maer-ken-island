@@ -80,3 +80,12 @@ The regression covers zero dry mass, zero carbon, carbon greater than dry mass, 
 - This does not change the append-only action log, replay digest, RNG, snapshot field names, valid reservation behaviour or material accounting.
 - Exact-head workflow must verify formatting, Clippy, fast tests, desktop/backend and week/year reference packs. No pass is claimed for this new head.
 - D40 two-person saw participation remains the next feature slice; this change is allocator/recovery hardening, not D40 completion.
+
+
+## Allocator restore regression formatting correction — 8 November 2026
+
+- Exact-head workflow #42456976777 on the d0f9f7a6 head failed only at cargo fmt --all -- --check.
+- Rustfmt identified four layout-only differences in the new allocator regression: three wrapped error-string assertions and the legacy snapshot construction/object lookup.
+- Applied the formatter's exact layout in commit 8a48006a751351cb29539d3bde34aceba3a02ec0.
+- No allocator logic, snapshot compatibility behaviour or test assertions changed.
+- Workflow #42457183791 was created for the corrected 8a48006 head and is in progress. A handoff-only commit advances the branch again and requires a fresh exact-head run. No fast-test or desktop pass is claimed yet.
