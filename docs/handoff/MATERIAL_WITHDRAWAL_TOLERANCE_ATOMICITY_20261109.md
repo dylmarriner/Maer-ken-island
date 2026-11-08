@@ -54,3 +54,9 @@ A second binary64 conservation boundary was found in stock additions. A positive
 - Added regressions for a 1 kg mineral deposit rounded away at f64::MAX, a craft output rounded away before a valid Wood input is debited, and two 1 kg outputs at 2^53 kg that must aggregate into one representable 2 kg increment.
 - The zero-stock withdrawal regression now expects the correct typed Insufficient error (have=0, need=1e-13); the prior CI failure was a test expectation defect, not a production withdrawal failure.
 - Fresh exact-head CI is required for this expanded slice. No local Cargo result is claimed.
+
+
+## Duplicate-input aggregation representability — 9 November 2026
+
+- The same binary64 loss could occur while aggregating repeated craft inputs: adding a 1 kg requirement to a 2^53 kg requirement rounds the aggregate back to 2^53 kg.
+- Input aggregation now rejects a positive component when the aggregate does not increase, before any stock debit. Added a regression that requests 2^53 kg plus 1 kg of Gold and verifies typed refusal with unchanged stock and ledger.
