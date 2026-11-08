@@ -2,12 +2,12 @@
 
 ## Latest engineering slice — 9 November 2026
 
-- PR #129 (material quantity validation, finite resulting-stock preflight, duplicate-input craft aggregation, and atomic fossil/surface-water source operations) merged to `main` as `170e4b5f1c035bf71535294fa758bbd4b661a22b`. Exact-head workflow [#42473464844](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42473464844) passed formatting, Clippy, fast Rust tests, dependency audit, computer service, installed backend, desktop application, web dashboard, repository scripts and both week/year reference-pack acceptance tests; nightly slow tests were skipped by design.
-- PR #130 now validates both requested quantities and environmental source state across `gather_biotic`, `gather_edible`, `gather_soil_water` and `gather_water`. Added typed `InvalidCellArea` and `InvalidSourceState` errors, finite/non-negative source checks, positive finite cell-area checks and pre-mutation checks for area-converted source quantities. Regression coverage exercises negative/NaN/infinite source values, invalid areas and unchanged material stock/flux/source state.
-- Commits: source validation `64883418`; regression tests `101ddc44`; river reservoir identity correction `b89e64b7`; exact rustfmt corrections `063c7eba` and `1366320e`; handoff `c6e8c001`.
-- Workflow [#42479894903](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42479894903) exposed the incorrect `Reservoir::Runoff` enum reference on an earlier head; corrected to the existing `Reservoir::Rivers` identity in `b89e64b7`. Workflow [#42479978630](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42479978630) then found rustfmt-only differences, corrected in `063c7eba` / `1366320e`.
-- Fresh exact-head workflow [#42480080363](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42480080363) was pending on test-format head `1366320e`; the later handoff commit requires a further exact-head run. Custom OpenCommander remains HTTP 429, so no local Cargo result is claimed. No current-head test pass is claimed.
-- Next: complete exact-head PR #130 verification and merge only when green; then advance D40's two-person saw cross-cutting with separate founder time/energy accounting.
+- PR #130 merged to `main` as `7dbcc2721b9103016b296f559e2a60147248bf81`. Exact-head workflow [#42483265161](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42483265161) passed Rust formatting, Clippy, fast Rust tests, desktop application acceptance, installed backend, web dashboard, computer service, repository scripts, dependency audit and week/year reference-pack acceptance; nightly slow tests were skipped by design.
+- PR #131 extends the same material boundary to `MaterialLedger::inject` and direct `InjectBiomass(Producers)` writes. Both now reject invalid quantities and preflight destination/source state before mutation. Producer injection validates every target cell and representability before changing any cell or booking the boundary flux. The producer summary's line-continuation escape was corrected and regression-pinned to remain a single line without a literal backslash. The final post-rebase run #42488372266 reached rustfmt and failed only on two assertion line-wrap differences; exact formatter output is committed as `eb4f83e8`. A fresh exact-head run is pending after this handoff update.
+- Producer injection commits: production `1f088b8079f9f870fa7c59898ff618e2649b0313`; regression tests `3559e07ea702a389e9f69a4218429de10cddb564`; rustfmt corrections `befca7646469af3cfbd5cd30f8c1a07f42778005` and `b4c12729e0343f71477d725acd886842196a9d54`.
+- The first producer-injection exact-head run [#42487648219](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42487648219) failed only at `cargo fmt --all -- --check`; the exact formatter corrections are committed. PR #130 then merged, so PR #131 has been rebased with a two-parent merge commit that preserves both histories and the merged source-state changes. Fresh exact-head CI is required on the rebased head.
+- Custom OpenCommander is not available through the connected tools in this run; no local Cargo result is claimed. No replay schema, snapshot, RNG, tick cadence, physical constant or reference pack changed.
+- Next: complete exact-head PR #131 checks, then advance D40's two-person saw-based log cross-cutting with separate founder time/energy accounting and D31's sourced regional soil-nutrient model.
 
 ## Previous engineering slice — 8 November 2026
 
@@ -785,3 +785,27 @@ PR #129 now also preflights resulting stock totals, not only individual finite/n
 - Regression tests cover negative, NaN, infinity, fossil-stock overflow, water-stock overflow and unchanged source-cell water on refusal.
 - Source commit: `b06169fc6c47bc52a2ffb2917e8b98a3be7afcf1`; tests: `00ec798a4fad3b110009195e911a0a30b68a0371`; handoff follows.
 - Exact-head CI must complete for the latest PR head; no local Cargo test result is claimed.
+
+
+### Latest exact-head CI correction — 9 November 2026
+
+- PR #131 exact-head workflow [#42488473527](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42488473527) passed Rust formatting, then Clippy failed on two ignored `Result` values in the overflow-test fixtures after `MaterialLedger::inject` became fallible.
+- Corrected both fixtures to assert that finite maximum-sized Wood and Water seed injections succeed and return the requested stock quantity.
+- Test commit: `08b9278ace557ccc622de60119f1209145ce263f`.
+- Fast tests were skipped on the failed head; fresh exact-head formatting, Clippy, fast tests, desktop/backend and week/year reference-pack checks remain required.
+
+
+### Follow-up rustfmt correction — 9 November 2026
+
+- Fresh workflow [#42491631214](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42491631214) stopped at formatting after the ignored-Result correction; rustfmt required both `inject(...).expect(...)` chains to wrap across method-call lines.
+- Exact formatter output committed as `3987778c8dac1a8fdbe47d9aa39c3c58a1b91a91`.
+- Formatting, Clippy and fast tests must be reverified on the new exact head.
+
+
+### Rounded-away positive injection guard — 9 November 2026
+
+- Found a binary64 conservation edge case: a finite positive material injection can round away when added to an already-large stock (for example, `f64::MAX + 1.0 == f64::MAX)), while the flux ledger would still record the inflow.
+- `MaterialLedger::inject` now rejects positive increments unless the resulting stock is strictly greater than the previous stock, before inventory or ledger mutation.
+- Regression tests cover both Wood and Water at `f64::MAX`, asserting typed rejection and unchanged stock/flux entries.
+- Commits: production `a27d9af74d7a74d06e6cd776245e64f4e2513c16`; tests `534ad3279a8fe916d6d6bfd7d50e42ccde7413ae`.
+- Fresh exact-head CI is required; no local Cargo result is claimed.

@@ -107,6 +107,8 @@ pub enum IslandInterventionError {
     ReverenceVeto(crate::governance::ReverenceVetoViolation),
     /// The material ledger refused the change.
     Material(super::materials::MaterialError),
+    /// A producer-carbon injection could not be represented without changing the island inconsistently.
+    InvalidProducerInjection { reason: String, value: f64 },
     /// The island's conservation audit did not close after the change.
     ///
     /// The change has already happened: this is not a refusal but a report
@@ -138,6 +140,12 @@ impl std::fmt::Display for IslandInterventionError {
             Self::Create(e) => write!(f, "{e}"),
             Self::ReverenceVeto(v) => write!(f, "refused by Reverence Veto: {v}"),
             Self::Material(e) => write!(f, "{e}"),
+            Self::InvalidProducerInjection { reason, value } => {
+                write!(
+                    f,
+                    "producer-carbon injection refused: {reason} (value {value})"
+                )
+            }
             Self::Audit(why) => write!(f, "conservation audit did not close: {why}"),
         }
     }
@@ -549,6 +557,17 @@ impl IslandLife {
         amount: f32,
         region: &Region,
     ) -> Result<IslandApplied, IslandInterventionError> {
+        let invalid = |reason: String, value: f64| {
+            IslandInterventionError::InvalidProducerInjection { reason, value }
+        };
+        let total_kgc = f64::from(amount);
+        if !total_kgc.is_finite() || total_kgc < 0.0 {
+            return Err(invalid(
+                "total carbon amount must be finite and non-negative".to_string(),
+                total_kgc,
+            ));
+        }
+
         let level = DomainLevel::Medium;
         let cells: Vec<(usize, usize)> = self
             .cells_in_region(level, region)?
@@ -560,13 +579,68 @@ impl IslandLife {
                 what: "land inside the region — every cell in it is sea".to_string(),
             });
         }
-        let total_kgc = f64::from(amount).max(0.0);
+
         let area_m2 = self.domain.cell_area_m2(level);
-        let per_cell_kgc_m2 = total_kgc / (cells.len() as f64 * area_m2);
+        if !area_m2.is_finite() || area_m2 <= 0.0 {
+            return Err(invalid(
+                "medium-cell area must be finite and positive".to_string(),
+                area_m2,
+            ));
+        }
+        let total_area_m2 = cells.len() as f64 * area_m2;
+        if !total_area_m2.is_finite() || total_area_m2 <= 0.0 {
+            return Err(invalid(
+                "total land area for the injection must be finite and positive".to_string(),
+                total_area_m2,
+            ));
+        }
+        let per_cell_kgc_m2 = total_kgc / total_area_m2;
+        if !per_cell_kgc_m2.is_finite()
+            || per_cell_kgc_m2 < 0.0
+            || (total_kgc > 0.0 && per_cell_kgc_m2 == 0.0)
+        {
+            return Err(invalid(
+                "per-cell carbon allocation is not finite and representable".to_string(),
+                per_cell_kgc_m2,
+            ));
+        }
+
+        // Preflight every target cell before changing any of them. A corrupt
+        // reservoir or an increment rounded away in one cell must not leave
+        // earlier cells changed while the full boundary inflow is booked.
+        let mut updates = Vec::with_capacity(cells.len());
         for (row, col) in &cells {
-            if let Some(biomass) = self.ecology.biomass_kgc_m2.get_mut_safe(*row, *col) {
-                *biomass += per_cell_kgc_m2;
+            let Some(current_kgc_m2) = self.ecology.biomass_kgc_m2.get_safe(*row, *col).copied()
+            else {
+                return Err(invalid(
+                    format!("producer biomass grid is missing land cell ({row}, {col})"),
+                    f64::NAN,
+                ));
+            };
+            if !current_kgc_m2.is_finite() || current_kgc_m2 < 0.0 {
+                return Err(invalid(
+                    format!(
+                        "existing producer biomass at cell ({row}, {col}) must be finite and non-negative"
+                    ),
+                    current_kgc_m2,
+                ));
             }
+            let resulting_kgc_m2 = current_kgc_m2 + per_cell_kgc_m2;
+            if !resulting_kgc_m2.is_finite()
+                || (per_cell_kgc_m2 > 0.0 && resulting_kgc_m2 <= current_kgc_m2)
+            {
+                return Err(invalid(
+                    format!(
+                        "producer-carbon increment is not representable at cell ({row}, {col})"
+                    ),
+                    resulting_kgc_m2,
+                ));
+            }
+            updates.push((*row, *col, resulting_kgc_m2));
+        }
+
+        for (row, col, resulting_kgc_m2) in updates {
+            self.ecology.biomass_kgc_m2.set(row, col, resulting_kgc_m2);
         }
         self.physical.ledger.push(mk_core::flux::FluxEntry::new(
             Reservoir::OperatorIntervention,
@@ -602,12 +676,13 @@ impl IslandLife {
         location: &Location,
     ) -> Result<IslandApplied, IslandInterventionError> {
         let (row, col) = self.cell_for(DomainLevel::Medium, location)?;
-        let kg = f64::from(amount).max(0.0);
-        let mut added = 0.0;
+        let kg = f64::from(amount);
+        let mut injection = Ok(0.0);
         self.audited(|life, ledger| {
-            added = life.materials.inject(Material::Water, kg, ledger);
+            injection = life.materials.inject(Material::Water, kg, ledger);
         })
         .map_err(|e| IslandInterventionError::Audit(e.to_string()))?;
+        let added = injection.map_err(IslandInterventionError::Material)?;
         Ok(mutated(
             format!("put {added} kg of water into the island's stores, asked for at cell ({row}, {col})"),
             1,

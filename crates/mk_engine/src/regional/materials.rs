@@ -1293,19 +1293,48 @@ impl MaterialLedger {
     /// reservoir: the audit still closes on the tick it lands, and the
     /// inflow stays visible and attributable in the ledger rather than
     /// appearing as matter the island made from nothing.
-    pub fn inject(&mut self, m: Material, kg: f64, ledger: &mut Ledger) -> f64 {
-        let kg = kg.max(0.0);
-        if kg == 0.0 {
-            return 0.0;
+    pub fn inject(
+        &mut self,
+        m: Material,
+        kg: f64,
+        ledger: &mut Ledger,
+    ) -> Result<f64, MaterialError> {
+        // Operator inflows are still physical stock changes: reject invalid
+        // requests and overflow before touching inventory or the flux ledger.
+        Self::validate_amount(m, kg)?;
+        let current_stock = self.stock_kg(m);
+        if !current_stock.is_finite() || current_stock < 0.0 {
+            return Err(MaterialError::InvalidAmount {
+                material: m,
+                amount_kg: current_stock,
+            });
         }
+        let resulting_stock = current_stock + kg;
+        if !resulting_stock.is_finite() || (kg > 0.0 && resulting_stock <= current_stock) {
+            return Err(MaterialError::InvalidAmount {
+                material: m,
+                amount_kg: resulting_stock,
+            });
+        }
+        let material_composition = composition(m);
+        let carbon_kgc = kg * material_composition.carbon_per_kg;
+        if !carbon_kgc.is_finite() {
+            return Err(MaterialError::InvalidAmount {
+                material: m,
+                amount_kg: carbon_kgc,
+            });
+        }
+        if kg == 0.0 {
+            return Ok(0.0);
+        }
+
         self.add(m, kg);
-        let composition = composition(m);
         flow(
             ledger,
             FluxKind::Carbon,
             Reservoir::OperatorIntervention,
             Reservoir::MaterialCarbon,
-            kg * composition.carbon_per_kg,
+            carbon_kgc,
         );
         if m == Material::Water {
             // Only `Material::Water` counts toward `MaterialWater`; water
@@ -1319,7 +1348,7 @@ impl MaterialLedger {
                 kg,
             );
         }
-        kg
+        Ok(kg)
     }
 
     /// Draw `kg` of water from a cell: standing water first, then a small
