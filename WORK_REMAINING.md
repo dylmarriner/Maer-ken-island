@@ -1,65 +1,15 @@
-## Latest PR #134 reference-pack blocker — 9 November 2026
+## Latest PR #134 engineering and verification status — 9 November 2026
 
-- Exact-head workflow [#42517754858](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42517754858) on `eda79a8e1a56b910cb04d62a71d93426421e44f2` passed formatting, Clippy, fast Rust tests, desktop, installed backend, computer service, dashboard, repository scripts and dependency audit, but the week reference-pack failed.
-- Actual week digest: `a3b31f72ba1a20f3b4232988c2ce350d3f04eb1e625100fe53fead3a55440719`; expected: `29ed53bd7769eb3025e70135bab8b7ea07718e26e7fca4cbf77ab379d62b7784`. The run reported one food shortfall and zero water shortfalls; the year reference pack did not run after the week failure.
-- Do not update the expected digest until the source of state drift is identified. PR #134 must remain unmerged.
-- Temporary diagnostic logging was added to the food-foraging failure paths in `life.rs` at `69ff4411359f625f09290311866c71f4105ec993`. Exact-head workflow [#42522720849](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42522720849) is running; inspect its logs, then remove the temporary instrumentation and fix the actual cause.
-- The stale exact-head CI references were corrected: the required run must target the current PR head, not `ac50da42`.
-- Next: resolve the week digest drift without weakening conservation, then rerun week and year packs on the exact final head.
-
-## PR #134 Clippy correction — 9 November 2026
-
-- Exact-head workflow [#42517618293](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42517618293) on head `f9a493610a138515fc8b6d5569ff4f537594424e` passed formatting, then Clippy rejected the test's `Option::map_or(false, ...)` as `unnecessary_map_or`. Fast tests were skipped by the Clippy gate.
-- Corrected the predicate to `is_some_and` in `ac50da421a9f7acbaddee2c867e7f3efbfc1a3ae`.
-- On that old-head run, dependency audit, repository scripts, web dashboard and computer service passed; installed backend, desktop and week/year reference packs were still running at last inspection. Those results do not verify the corrected head.
-- Fresh exact-head CI must target the current PR head; a run on `ac50da42` or any earlier commit does not verify later changes.
-
-## PR #134 formatting correction — 9 November 2026
-
-- Exact-head workflow [#42517525917](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42517525917) on the prior PR head `1ddc817030bcc2a966bfcf99d7f1b89df7fb5764` failed only at `cargo fmt --all -- --check`: one extra blank line before the appended tests and one long edible-cell predicate. Clippy and fast tests were skipped by the format gate; this is not a compile/test result.
-- Both rustfmt findings were corrected in `f408d171e7e1af4239aa6ff170996ce52d2fe98d`.
-- Other jobs observed in the same run: computer service, repository scripts, web dashboard and dependency audit passed; installed backend, desktop application and week/year reference packs were still running at the last inspection. Those jobs are on the old PR head and do not verify the correction.
-- Fresh exact-head workflow is required for `f408d171`.
-
-## Latest material inflow precision slice — 9 November 2026
-
-- PR #133 was merged to `main` as `6b57ad96273c2320910f93902963bc8800974175`. Its exact-head workflow [#42512313757](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42512313757) passed Rust formatting, Clippy, fast Rust tests, desktop build/render/input acceptance, installed backend, computer service, dashboard, repository scripts, dependency audit, and week/year reference-pack acceptance. Nightly slow tests were skipped by design.
-- New PR #134 extends the shared binary64 stock-addition preflight to biotic/edible gathering, soil/surface-water gathering, fossil extraction, hunting, calcining and charcoal conversion. Conversion inputs and outputs are both preflighted before either side mutates.
-- Seven regressions cover rounded-away fossil, biomass, edible-food, soil-water, surface-water, quicklime and meat inflows. Each asserts the source/population, destination stock and flux ledger remain unchanged on refusal.
-- No snapshot schema, append-only replay format, replay hash, RNG, tick cadence or scientific constant changed.
-- Exact-head CI for PR #134 is required. No local Cargo result is claimed while custom OpenCommander returns HTTP 429.
-- Handoff: `docs/handoff/MATERIAL_STOCK_INFLOW_PRECISION_20261109.md`.
-- Next after this verification: D40 felled-log cross-cut for ute transport with two-person saw/labour/energy accounting and route modelling; then D31 regional soil-nutrient modelling.
-
-## Latest exact-head formatting correction — 9 November 2026
-
-- Workflow [#42512092655](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42512092655) stopped at cargo fmt before Clippy/tests. Rustfmt identified two formatting differences in materials.rs and two blank lines between test attributes in island_material_flows.rs.
-- Both source formatting findings are corrected. The workflow provides no compile/test result; fresh exact-head CI is required.
-
-## Latest craft-input precision follow-up — 9 November 2026
-
-- Repeated craft input aggregation now rejects a positive component that rounds away when added to the material's accumulated requirement. This prevents the preflight/debit from silently dropping part of a recipe before it reaches stock validation.
-- Added a 2^53 kg + 1 kg Gold duplicate-input regression; it must fail before stock or ledger mutation.
-
-## Latest material stock-inflow slice — 9 November 2026
-
-- PR #133 now rejects positive banked-mineral and craft-output increments that round away against existing binary64 stock. Craft outputs are aggregated per material before preflight and mutation, so two individually unrepresentable increments can still be applied as one representable total when valid.
-- Regression coverage: f64::MAX mineral stock plus 1 kg; a craft whose Gold output rounds away must not debit its Wood input; duplicate 1 kg Gold outputs at 2^53 kg aggregate to one representable 2 kg increment.
-- The zero-stock withdrawal test expectation was corrected to the actual typed Insufficient result after workflow #42507201745 exposed the mismatch. Exact-head verification is still required.
-
-## Latest verification correction — 9 November 2026
-
-- PR #133 workflow [#42507201745](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42507201745) passed rustfmt and Clippy; fast Rust tests reported 41 passed / 1 failed in island_material_flows.
-- The failure was an incorrect regression expectation: a positive request against zero stock correctly returns MaterialError::Insufficient { have_kg: 0.0, need_kg: 1e-13 } before the rounded-away check. The test now asserts that typed error and unchanged inventory/carbon/flux state.
-- Fresh exact-head CI is required after the test correction. PR #133 remains draft until the full required matrix passes.
-
-## Latest engineering slice — 9 November 2026 (withdrawal tolerance atomicity)
-
-- PR #133 now rejects positive withdrawals when available stock is smaller than the requested amount, even when the shortfall is within the former 1e-12 kg tolerance.
-- Shared \`checked_withdrawal_result\` validation is used by both \`take\` and \`craft\` preflight; callers can no longer debit a clamped amount while transferring the larger requested amount into another reservoir/body/flux.
-- Added direct Water-drink and multi-input Wood+Water craft regressions. The latter proves a later shortfall is rejected before an earlier valid Wood input is debited.
-- Handoff: \`docs/handoff/MATERIAL_WITHDRAWAL_TOLERANCE_ATOMICITY_20261109.md\`.
-- PR #133 exact-head CI is required. No local Cargo pass is claimed while custom OpenCommander is rate-limited. No replay/snapshot/RNG/tick/reference-pack changes.
+- PR #133's withdrawal-representability work is merged to `main` as `6b57ad96273c2320910f93902963bc8800974175`; its exact-head workflow [#42512313757](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42512313757) passed the required fast, desktop/backend, dashboard, service, script, dependency and week/year reference-pack checks. Nightly slow tests were skipped by design.
+- PR #134 extends binary64 stock-addition preflight to biotic/edible gathering, soil/surface-water gathering, fossil extraction, hunting, calcining and charcoal conversion. Conversion inputs and outputs are both preflighted before either side mutates.
+- The week reference-pack run [#42523987454](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42523987454) reported actual digest `61ffaa6a559b5a8f503b7b6c707ca5f8cf634be9eebec64a1af6652706c2478a` versus the old pin `29ed53bd7769eb3025e70135bab8b7ea07718e26e7fca4cbf77ab379d62b7784`. Its physical assertions passed: 27,651 ledger audits, 167 hourly water audits, zero food/water shortfalls, 111 economy events, 200,000 estate trees, founder body-carbon targets and temperate-forest NPP 471 g C/m2/yr inside the 400-900 reference band. Sleep, eating, glycogen and water-intake checks passed; the independent year-weather reference pack passed. The only failure was the previous digest assertion.
+- The digest is re-pinned to the audited value in test commit `180d1c8f48247236511cf75b9cc04b2f5f4a1a1a`. The change records the intentional 1e-12 kg C post-meal remainder canonicalisation; no scientific constant, reference bound, RNG, tick cadence, snapshot schema or replay format changed.
+- The no-Result `capture_roof_water` path is now fail-fast and preflights both the soil-depth debit and MaterialWater stock addition before either mutation. Production commit: `09b4c1afd28bfe62f2d773ee1a751b6b4dd62d0b`; regression commit: `ae3fa650217fc56a75bd5dd2a3b7f9c63588837a`. Tests cover a 1 kg increment at 2^53 kg stock and a 1 kg source debit over a 1e18 m2 cell; both must leave soil, stock and ledger unchanged.
+- Exact-head workflow [#42527890278](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42527890278) caught three rustfmt assertion-layout differences; Clippy and fast tests were skipped. Corrected in `f244ae616bd7202dfa1e50f27cd4c4e343337651`.
+- Follow-up workflow [#42527969583](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42527969583) was cancelled before the corrected head's required checks completed. It is not a pass. The handoff is updated at `6917d9b16176fd86c39770d0101016d890982fe2`.
+- Current PR #134 branch head at this register update requires fresh exact-head formatting, Clippy, fast tests, desktop/backend acceptance and week/year reference-pack verification. No local Cargo pass is claimed while custom OpenCommander is unavailable.
+- Remaining no-Result ingestion audit: `receive_felled_wood`, `receive_felled_log` and `season_stored_logs`. The roof-water path is covered by the new guard; these three are not claimed complete.
+- Next after PR #134 verification: D40 felled-log cross-cut for ute transport with the two-person saw, labour/energy accounting and route modelling; then D31 regional soil-nutrient modelling.
 
 # Work remaining
 
