@@ -274,6 +274,43 @@ fn haul_job(worked_s: f64, duration_s: f64, ends_at_m: (f64, f64)) -> HaulJob {
 }
 
 #[test]
+fn restore_rejects_conflicting_active_haul_claims() {
+    let life = small_island();
+
+    // Two founders cannot resume work against the same source log, even when
+    // each individual job is otherwise well-formed.
+    let mut duplicate_log = life.snapshot();
+    duplicate_log
+        .hauling
+        .insert("Gem-D".to_owned(), haul_job(0.0, 60.0, (0.0, 0.0)));
+    duplicate_log
+        .hauling
+        .insert("Gem-K".to_owned(), haul_job(0.0, 60.0, (1.0, 0.0)));
+    assert!(matches!(
+        IslandLife::restore(canon(), duplicate_log),
+        Err(IslandLifeError::Labour(LabourError::InvalidHaulJobState))
+    ));
+
+    // The island has one of each powered haul vehicle. Two active jobs cannot
+    // both claim the same machine after a snapshot restore.
+    for method in [HaulMethod::Ute, HaulMethod::Excavator] {
+        let mut first = haul_job(0.0, 60.0, (0.0, 0.0));
+        first.method = method;
+        let mut second = haul_job(0.0, 60.0, (1.0, 0.0));
+        second.log_id = 2;
+        second.method = method;
+
+        let mut duplicate_vehicle = life.snapshot();
+        duplicate_vehicle.hauling.insert("Gem-D".to_owned(), first);
+        duplicate_vehicle.hauling.insert("Gem-K".to_owned(), second);
+        assert!(matches!(
+            IslandLife::restore(canon(), duplicate_vehicle),
+            Err(IslandLifeError::Labour(LabourError::InvalidHaulJobState))
+        ));
+    }
+}
+
+#[test]
 fn restore_rejects_malformed_persisted_haul_progress_and_task_inputs() {
     let life = small_island();
     let mut invalid_jobs = vec![
