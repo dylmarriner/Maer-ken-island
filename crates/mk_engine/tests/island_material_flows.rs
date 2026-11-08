@@ -326,6 +326,18 @@ fn craft_aggregates_duplicate_inputs_and_rejects_invalid_outputs_atomically() {
     ));
     assert_eq!(materials.stock_kg(Material::Gold), 6.0);
     assert!(ledger.entries().is_empty());
+
+    // The same aggregate preflight also permits a valid repeated input when
+    // the combined requirement is available; the net stock remains 6 kg.
+    materials
+        .craft(
+            &[(Material::Gold, 2.0), (Material::Gold, 3.0)],
+            &[(Material::Gold, 5.0)],
+            &mut ledger,
+        )
+        .expect("the combined 5 kg input is available");
+    assert_eq!(materials.stock_kg(Material::Gold), 6.0);
+    assert!(ledger.entries().is_empty());
 }
 
 #[test]
