@@ -312,7 +312,7 @@ struct Structure {
 }
 
 /// Everything the economy holds as physical material.
-#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Default, PartialEq, Serialize)]
 pub struct MaterialLedger {
     stock: BTreeMap<Material, f64>,
     structures: BTreeMap<u64, Structure>,
@@ -331,6 +331,54 @@ pub struct MaterialLedger {
     /// snapshots without a pending cut retain their prior representation.
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
     reserved_log_ids: BTreeSet<u64>,
+}
+
+#[derive(Deserialize)]
+struct MaterialLedgerSnapshot {
+    stock: BTreeMap<Material, f64>,
+    structures: BTreeMap<u64, Structure>,
+    bodies: BTreeMap<String, Body>,
+    next_structure: u64,
+    /// Snapshots written before logs existed have no log map.
+    #[serde(default)]
+    logs: BTreeMap<u64, Log>,
+    /// Snapshots written before logs existed have no allocator watermark.
+    #[serde(default)]
+    next_log: u64,
+    /// Older snapshots have no pending cross-cut reservations.
+    #[serde(default)]
+    reserved_log_ids: BTreeSet<u64>,
+}
+
+impl<'de> Deserialize<'de> for MaterialLedger {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let snapshot = MaterialLedgerSnapshot::deserialize(deserializer)?;
+        for (id, log) in &snapshot.logs {
+            if *id == 0 || log.id != *id {
+                return Err(serde::de::Error::custom(format!(
+                    "material ledger log key {id} does not match its one-based log id"
+                )));
+            }
+            if !log.has_valid_physical_state() {
+                return Err(serde::de::Error::custom(format!(
+                    "material ledger log {id} has invalid physical state"
+                )));
+            }
+        }
+
+        Ok(Self {
+            stock: snapshot.stock,
+            structures: snapshot.structures,
+            bodies: snapshot.bodies,
+            next_structure: snapshot.next_structure,
+            logs: snapshot.logs,
+            next_log: snapshot.next_log,
+            reserved_log_ids: snapshot.reserved_log_ids,
+        })
+    }
 }
 
 impl fmt::Debug for MaterialLedger {
