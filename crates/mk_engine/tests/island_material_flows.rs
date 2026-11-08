@@ -510,6 +510,33 @@ fn craft_rejects_output_increment_that_rounds_away_before_debiting_inputs() {
 }
 
 #[test]
+
+#[test]
+fn craft_rejects_duplicate_input_increment_that_rounds_away_before_mutation() {
+    let (mut materials, mut ledger) = (MaterialLedger::new(), Ledger::new());
+    let starting_stock = 2_f64.powi(53);
+    materials
+        .bank_mined(Material::Gold, starting_stock)
+        .expect("the starting stock is representable");
+
+    let rejected = materials.craft(
+        &[(Material::Gold, starting_stock), (Material::Gold, 1.0)],
+        &[],
+        &mut ledger,
+    );
+
+    assert!(matches!(
+        rejected,
+        Err(MaterialError::InvalidAmount {
+            material: Material::Gold,
+            amount_kg
+        }) if amount_kg == starting_stock
+    ));
+    assert_eq!(materials.stock_kg(Material::Gold), starting_stock);
+    assert!(ledger.entries().is_empty());
+}
+
+#[test]
 fn craft_aggregates_duplicate_outputs_before_mutation() {
     let (mut materials, mut ledger) = (MaterialLedger::new(), Ledger::new());
     let starting_stock = 2_f64.powi(53) + 2.0;
