@@ -1190,13 +1190,67 @@ impl MaterialLedger {
             total_kg,
         )
         .expect("seasoned logs must increase the wood inventory representably");
+        // Predict the exact post-operation aggregates in the same iteration
+        // order used by stock_of. A mere decrease is insufficient: at large
+        // binary64 stocks, removing 1.5 kg can change the rounded aggregate by
+        // 2 kg, which would not match the per-log flux entries.
+        let remaining_log_carbon = self
+            .logs
+            .iter()
+            .filter(|(id, _)| seasoned.binary_search(*id).is_err())
+            .map(|(_, log)| log.carbon_kgc)
+            .sum::<f64>();
+        let remaining_log_water = self
+            .logs
+            .iter()
+            .filter(|(id, _)| seasoned.binary_search(*id).is_err())
+            .map(|(_, log)| log.water_kg)
+            .sum::<f64>();
+
+        let mut resulting_material_stock = self.stock.clone();
+        resulting_material_stock.insert(Material::Wood, resulting_wood);
+        let carbon_after = resulting_material_stock
+            .iter()
+            .map(|(material, kg)| kg * composition(*material).carbon_per_kg)
+            .sum::<f64>()
+            + self
+                .structures
+                .values()
+                .map(|structure| structure.kg * composition(structure.material).carbon_per_kg)
+                .sum::<f64>()
+            + remaining_log_carbon;
+        let carbon_before = self.stock_of(Reservoir::MaterialCarbon);
+        let carbon_delta = carbon_after - carbon_before;
+        let carbon_tolerance = 1e-9 * (1.0 + carbon_delta.abs());
+        assert!(
+            carbon_after.is_finite()
+                && carbon_delta.is_finite()
+                && carbon_delta.abs() <= carbon_tolerance,
+            "seasoning must preserve the audited material-carbon stock"
+        );
+
+        let body_water = self.bodies.values().map(|body| body.water_kg).sum::<f64>();
         let water_before = self.stock_of(Reservoir::MaterialWater);
-        let water_after = water_before - total_water_kg;
+        let water_after =
+            self.stock_kg(Material::Water) + body_water + remaining_log_water;
+        let water_delta = water_after - water_before;
+        // life::net sums the one water flux per seasoned log in id order.
+        // Match that same simple sum when preflighting the audit boundary.
+        let booked_water = seasoned
+            .iter()
+            .map(|id| self.logs.get(id).expect("seasoned id remains present").water_kg)
+            .sum::<f64>();
+        let water_residual = water_delta + booked_water;
+        let water_tolerance = 1e-9 * (1.0 + water_delta.abs());
         assert!(
             water_after.is_finite()
                 && water_after >= 0.0
-                && (total_water_kg == 0.0 || water_after < water_before),
-            "seasoned-log water removal must remain representable in the audited material-water stock"
+                && (total_water_kg == 0.0 || water_after < water_before)
+                && water_delta.is_finite()
+                && booked_water.is_finite()
+                && water_residual.is_finite()
+                && water_residual.abs() <= water_tolerance,
+            "seasoned-log water removal must match the audited material-water flux"
         );
 
         for id in seasoned {
