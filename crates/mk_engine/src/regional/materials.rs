@@ -536,11 +536,7 @@ impl MaterialLedger {
     /// than stock, then clamp the debit to the available amount. Callers book
     /// the requested amount in their flux/body transfer, so that clamp creates
     /// matter on paper. Exact availability is required for every withdrawal.
-    fn checked_withdrawal_result(
-        m: Material,
-        have: f64,
-        kg: f64,
-    ) -> Result<f64, MaterialError> {
+    fn checked_withdrawal_result(m: Material, have: f64, kg: f64) -> Result<f64, MaterialError> {
         Self::validate_amount(m, kg)?;
         if !have.is_finite() || have < 0.0 {
             return Err(MaterialError::InvalidAmount {
