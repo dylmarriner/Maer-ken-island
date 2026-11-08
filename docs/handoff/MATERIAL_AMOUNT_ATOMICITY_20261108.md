@@ -107,3 +107,8 @@ Commits:
 - Regression coverage: `00ec798a4fad3b110009195e911a0a30b68a0371`.
 
 Exact-head CI is required for this updated PR head. OpenCommander returned HTTP 429, so no local Cargo result is claimed.
+
+
+## Exact-head formatting correction — 8 November 2026
+
+The first exact-head run after the fossil/water source-inflow follow-up, workflow [#42473076943](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42473076943), failed only at `cargo fmt --all -- --check`. Rustfmt requested a single-line `surface_water.set` call in the new overflow fixture. Applied that exact correction in commit `a4a9771f7eeaf28b880f036c3a83f91dc581b86d`. Clippy and fast tests were skipped by the formatting failure; a fresh exact-head run is required.
