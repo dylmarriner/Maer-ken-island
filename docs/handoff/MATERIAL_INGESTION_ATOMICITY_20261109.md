@@ -56,3 +56,14 @@ Two regressions exercise:
 Both tests require unchanged stock, retained logs and unchanged flux-entry count after refusal.
 
 Exact-head CI is pending. No local Cargo result is claimed.
+
+
+## Fast-test audit-scope correction — 9 November 2026
+
+Exact-head workflow [#42528709057](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42528709057) passed formatting and Clippy, then failed one new seasoning aggregation test. The production operation completed; the test's `Audit::start` baseline was taken after setup flows had already been written, but `Audit::close` received the entire setup ledger. That compared a post-setup stock delta against historical felled-log and injection flows.
+
+- Corrected `seasoning_aggregates_small_logs_before_preflighting_large_wood_stock` to use a fresh ledger for the seasoning operation only.
+- The audit now compares the stock delta since its baseline with only the fluxes produced after that baseline.
+- This is a test-fixture accounting correction; no production behavior, replay state, reference digest or snapshot format changed.
+- Test commit: `e9aeb11d3d168aa54ee8751245c4e06289ebec1d`.
+- Fresh exact-head formatting, Clippy, fast tests, desktop/backend and week/year acceptance are required. No pass is claimed for the corrected head yet.
