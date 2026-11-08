@@ -1129,7 +1129,9 @@ impl MaterialLedger {
         // Summing one log at a time into the live stock can silently lose an
         // individual piece when the existing Wood inventory is much larger.
         let mut total_kg = 0.0;
+        let mut compensation_kg = 0.0;
         let mut total_water_kg = 0.0;
+        let mut compensation_water_kg = 0.0;
         for id in &seasoned {
             let log = self.logs.get(id).expect("seasoned id was collected above");
             assert!(
@@ -1142,19 +1144,41 @@ impl MaterialLedger {
                 "seasoned-log carbon must remain representable as wood mass"
             );
             let next_kg = total_kg + kg;
+            compensation_kg += if total_kg >= kg {
+                (total_kg - next_kg) + kg
+            } else {
+                (kg - next_kg) + total_kg
+            };
             assert!(
-                next_kg.is_finite() && (kg == 0.0 || next_kg > total_kg),
-                "seasoned-log wood mass must remain representable during batch aggregation"
+                next_kg.is_finite() && compensation_kg.is_finite(),
+                "seasoned-log wood batch must remain finite"
             );
             total_kg = next_kg;
 
             let next_water = total_water_kg + log.water_kg;
+            compensation_water_kg += if total_water_kg >= log.water_kg {
+                (total_water_kg - next_water) + log.water_kg
+            } else {
+                (log.water_kg - next_water) + total_water_kg
+            };
             assert!(
-                next_water.is_finite() && (log.water_kg == 0.0 || next_water > total_water_kg),
-                "seasoned-log water must remain representable during batch aggregation"
+                next_water.is_finite() && compensation_water_kg.is_finite(),
+                "seasoned-log water batch must remain finite"
             );
             total_water_kg = next_water;
         }
+        let total_kg = total_kg + compensation_kg;
+        let total_water_kg = total_water_kg + compensation_water_kg;
+        assert!(
+            total_kg.is_finite() && (compensation_kg == 0.0 || total_kg > total_kg - compensation_kg),
+            "seasoned-log carbon must remain representable after batch aggregation"
+        );
+        assert!(
+            total_water_kg.is_finite()
+                && (compensation_water_kg == 0.0
+                    || total_water_kg > total_water_kg - compensation_water_kg),
+            "seasoned-log water must remain representable after batch aggregation"
+        );
 
         let resulting_wood =
             Self::checked_stock_addition_result(Material::Wood, self.stock_kg(Material::Wood), total_kg)
