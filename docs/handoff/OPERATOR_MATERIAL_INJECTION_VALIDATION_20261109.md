@@ -97,3 +97,7 @@ Reviewing the merged tree exposed an escaped line-continuation typo in the new p
 - Regression: `2bb6009157ad98f983f6b22bd45dea29f19cc4ac`.
 
 This is included in the rebased PR #131 branch. Fresh exact-head CI is required after the follow-up handoff/work-register commits.
+
+### Final assertion formatting correction — 9 November 2026
+
+The first post-rebase workflow reached `cargo fmt --all -- --check` and found only two line-wrap differences in the new one-line-summary regression assertions. Applied the exact formatter layout in `eb4f83e8d8040a659dadbafdd831cffa99adbdc1`. No Clippy or fast-test result was reached on that head. The final handoff/work-register commit below triggers a fresh exact-head workflow.
