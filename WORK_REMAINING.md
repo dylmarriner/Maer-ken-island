@@ -1,3 +1,13 @@
+## Latest material inflow precision slice — 9 November 2026
+
+- PR #133 was merged to `main` as `6b57ad96273c2320910f93902963bc8800974175`. Its exact-head workflow [#42512313757](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42512313757) passed Rust formatting, Clippy, fast Rust tests, desktop build/render/input acceptance, installed backend, computer service, dashboard, repository scripts, dependency audit, and week/year reference-pack acceptance. Nightly slow tests were skipped by design.
+- New PR #134 extends the shared binary64 stock-addition preflight to biotic/edible gathering, soil/surface-water gathering, fossil extraction, hunting, calcining and charcoal conversion. Conversion inputs and outputs are both preflighted before either side mutates.
+- Seven regressions cover rounded-away fossil, biomass, edible-food, soil-water, surface-water, quicklime and meat inflows. Each asserts the source/population, destination stock and flux ledger remain unchanged on refusal.
+- No snapshot schema, append-only replay format, replay hash, RNG, tick cadence or scientific constant changed.
+- Exact-head CI for PR #134 is required. No local Cargo result is claimed while custom OpenCommander returns HTTP 429.
+- Handoff: `docs/handoff/MATERIAL_STOCK_INFLOW_PRECISION_20261109.md`.
+- Next after this verification: D40 felled-log cross-cut for ute transport with two-person saw/labour/energy accounting and route modelling; then D31 regional soil-nutrient modelling.
+
 ## Latest exact-head formatting correction — 9 November 2026
 
 - Workflow [#42512092655](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42512092655) stopped at cargo fmt before Clippy/tests. Rustfmt identified two formatting differences in materials.rs and two blank lines between test attributes in island_material_flows.rs.
