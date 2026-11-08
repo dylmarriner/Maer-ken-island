@@ -138,3 +138,10 @@ Both cases assert unchanged source soil, destination stock and ledger entries.
 - Production: `09b4c1afd28bfe62f2d773ee1a751b6b4dd62d0b`.
 - Regression: `ae3fa650217fc56a75bd5dd2a3b7f9c63588837a`.
 - A fresh exact-head CI run is required. No local Cargo result is claimed because custom OpenCommander device discovery remains unavailable.
+
+### Roof-water exact-head formatting correction — 9 November 2026
+
+- Workflow [#42527890278](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42527890278) reached the new roof-water regression but `cargo fmt --all -- --check` reported three assertion-layout differences in `island_material_flows.rs`.
+- No Clippy or fast-test result was produced; downstream jobs were cancelled when the formatting correction was pushed.
+- Corrected the exact rustfmt layout in test commit `f244ae616bd7202dfa1e50f27cd4c4e343337651`.
+- The fresh exact-head workflow for the corrected test commit is required. No local Cargo result is claimed.
