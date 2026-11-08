@@ -65,3 +65,17 @@ A second edge case remained after the positive source-debit check: a positive bu
 - Production commit: `0acf469543f519cf8c2f616eda5a3f8341bac8f8`.
 - Regression commit: `ec352e3e84cef47f522429fa6cb013a680743896`.
 - Exact-head CI must run on the final PR head; no local Cargo result is claimed while custom OpenCommander is rate-limited.
+
+## Current exact-head evidence — 9 November 2026
+
+- Final source guard: `0acf469543f519cf8c2f616eda5a3f8341bac8f8`.
+- Underflow regression: `ec352e3e84cef47f522429fa6cb013a680743896`.
+- Regression precondition proving the positive subnormal amount is available before unit conversion: `b767943c4718c2100caec6f2302e022baba9680e`.
+- Current exact-code workflow: [#42537458249](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42537458249).
+  - Rust formatting: passed.
+  - Clippy: passed.
+  - Fast Rust tests: running.
+  - Desktop application, installed backend and week/year reference packs: running.
+  - Dependency audit, repository scripts, web dashboard and computer service: passed.
+  - Nightly slow tests: skipped by design.
+- No full Rust test, desktop/backend or reference-pack pass is claimed until those jobs complete.
