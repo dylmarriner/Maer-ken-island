@@ -1425,3 +1425,132 @@ fn receiving_zero_carbon_log_fails_before_allocating_or_booking_material() {
     assert_eq!(materials.logs().count(), 0);
     audit.close(&materials, &ledger);
 }
+
+#[test]
+fn biotic_edible_and_soil_water_gathering_reject_invalid_amounts_without_mutation() {
+    use mk_engine::hydrology::SoilWater;
+
+    let b = base();
+    let cell = b.forest_cell;
+    let area = b.domain.cell_area_m2(M);
+    let mut ecology = b.ecology.clone();
+    let mut hydrology = HydrologyState::new(&b.domain.storage_spec(M), 0.5);
+    let (mut materials, mut ledger) = (MaterialLedger::new(), Ledger::new());
+    let biomass_before = *ecology.biomass_kgc_m2.get(cell.0, cell.1);
+    let edible_index = ecology
+        .biomass_kgc_m2
+        .grid_to_linear_index(cell.0, cell.1);
+    let edible_before = ecology.edible.as_ref().expect("edible layer").at(edible_index);
+    let soil_before: SoilWater = *hydrology.soil_water.get(cell.0, cell.1);
+
+    for amount in [-1.0, f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+        assert!(matches!(
+            materials.gather_biotic(
+                Material::Wood,
+                amount,
+                &mut ecology,
+                cell,
+                area,
+                &mut ledger
+            ),
+            Err(MaterialError::InvalidAmount {
+                material: Material::Wood,
+                amount_kg
+            }) if amount_kg.to_bits() == amount.to_bits()
+        ));
+        assert_eq!(*ecology.biomass_kgc_m2.get(cell.0, cell.1), biomass_before);
+        assert_eq!(materials.stock_kg(Material::Wood), 0.0);
+        assert!(ledger.entries().is_empty());
+
+        assert!(matches!(
+            materials.gather_edible(amount, &mut ecology, cell, area, &mut ledger),
+            Err(MaterialError::InvalidAmount {
+                material: Material::PlantFood,
+                amount_kg
+            }) if amount_kg.to_bits() == amount.to_bits()
+        ));
+        assert_eq!(*ecology.biomass_kgc_m2.get(cell.0, cell.1), biomass_before);
+        assert_eq!(
+            ecology.edible.as_ref().expect("edible layer").at(edible_index),
+            edible_before
+        );
+        assert_eq!(materials.stock_kg(Material::PlantFood), 0.0);
+        assert!(ledger.entries().is_empty());
+
+        assert!(matches!(
+            materials.gather_soil_water(amount, &mut hydrology, cell, area, &mut ledger),
+            Err(MaterialError::InvalidAmount {
+                material: Material::Water,
+                amount_kg
+            }) if amount_kg.to_bits() == amount.to_bits()
+        ));
+        let soil_after: SoilWater = *hydrology.soil_water.get(cell.0, cell.1);
+        assert_eq!(soil_after.storage_mm, soil_before.storage_mm);
+        assert_eq!(soil_after.moisture_fraction, soil_before.moisture_fraction);
+        assert_eq!(materials.stock_kg(Material::Water), 0.0);
+        assert!(ledger.entries().is_empty());
+    }
+}
+
+#[test]
+fn biotic_and_soil_water_gathering_reject_stock_overflow_before_source_mutation() {
+    use mk_engine::hydrology::SoilWater;
+
+    let b = base();
+    let cell = b.forest_cell;
+    let area = b.domain.cell_area_m2(M);
+    let mut ecology = b.ecology.clone();
+    let mut hydrology = HydrologyState::new(&b.domain.storage_spec(M), 0.5);
+    let (mut materials, mut ledger) = (MaterialLedger::new(), Ledger::new());
+
+    materials.inject(Material::Wood, f64::MAX, &mut ledger);
+    let biomass_before = (0.9 * f64::MAX) / area;
+    ecology.biomass_kgc_m2.set(cell.0, cell.1, biomass_before);
+    let ledger_entries_before = ledger.entries().len();
+    assert!(matches!(
+        materials.gather_biotic(
+            Material::Wood,
+            f64::MAX,
+            &mut ecology,
+            cell,
+            area,
+            &mut ledger
+        ),
+        Err(MaterialError::InvalidAmount {
+            material: Material::Wood,
+            amount_kg
+        }) if amount_kg.is_infinite()
+    ));
+    assert_eq!(*ecology.biomass_kgc_m2.get(cell.0, cell.1), biomass_before);
+    assert_eq!(materials.stock_kg(Material::Wood), f64::MAX);
+    assert_eq!(ledger.entries().len(), ledger_entries_before);
+
+    materials.inject(Material::Water, f64::MAX, &mut ledger);
+    let soil_before = (f64::MAX / 2.0) / area;
+    hydrology.soil_water.set(
+        cell.0,
+        cell.1,
+        SoilWater {
+            moisture_fraction: 0.5,
+            storage_mm: soil_before,
+        },
+    );
+    let ledger_entries_before = ledger.entries().len();
+    assert!(matches!(
+        materials.gather_soil_water(
+            f64::MAX / 2.0,
+            &mut hydrology,
+            cell,
+            area,
+            &mut ledger
+        ),
+        Err(MaterialError::InvalidAmount {
+            material: Material::Water,
+            amount_kg
+        }) if amount_kg.is_infinite()
+    ));
+    let soil_after: SoilWater = *hydrology.soil_water.get(cell.0, cell.1);
+    assert_eq!(soil_after.storage_mm, soil_before);
+    assert_eq!(materials.stock_kg(Material::Water), f64::MAX);
+    assert_eq!(ledger.entries().len(), ledger_entries_before);
+}
