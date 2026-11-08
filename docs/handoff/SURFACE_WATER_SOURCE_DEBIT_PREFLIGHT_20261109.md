@@ -31,3 +31,7 @@ No simulation state, real-world constants, replay formats, snapshots, LLM behavi
 
 ## Next
 Run exact-head formatting, Clippy, fast Rust tests, desktop/backend acceptance and week/year reference packs. Keep PR #135 draft until all required jobs pass.
+
+## Exact-head CI follow-up
+
+The first workflow for the implementation head `2bafa3ef61d1a8f61ddf669a11f40623fac9556a` reached `cargo fmt --all -- --check` and identified two formatting-only differences in `materials.rs`. No Clippy or fast Rust tests ran because formatting is the first gate. Corrected both exact rustfmt diffs in commit `0531b7cc1ff653058e9e28def4d32a2f5f31404e`. A fresh exact-head CI run is required; no formatting or test pass is claimed for the corrected head yet.
