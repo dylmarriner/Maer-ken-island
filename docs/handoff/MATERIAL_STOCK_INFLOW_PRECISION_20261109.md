@@ -127,3 +127,12 @@ A separate draft PR, [#135 — Preflight timber and roof-water material ingestio
 - Removed the duplicate roof-water regression from PR #134 in commit `9a79154a5f9d4f3f93908ae21d29ee9b436d2205`.
 - PR #135 remains the owner of roof-water source/destination representability and the remaining timber ingestion audit. Its current head has an additional source-soil debit regression; verify its own exact-head CI before merge.
 - The two PRs remain separate and unmerged. No snapshot schema, replay format, RNG, cadence, scientific constant or reference pack was changed by this scope split.
+
+
+## Exact-head documentation-gate correction — 9 November 2026
+
+Exact-head workflow [#42528864382](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42528864382) passed formatting and Clippy, and its desktop/backend, dashboard, computer-service, repository-script, dependency-audit and week/year reference-pack jobs passed. Fast Rust tests failed only at `active_week_digest_documentation_matches_the_acceptance_pin`: the acceptance test's audited `WEEK_DIGEST` had been updated to `61ffaa6a559b5a8f503b7b6c707ca5f8cf634be9eebec64a1af6652706c2478a`, but the three published guidance files still contained the prior pin.
+
+- Updated `docs/TESTING.md`, `docs/handoff/STATE_OF_THE_ISLAND.md` and `HANDOFF.md` to publish the audited current pin.
+- No simulation code, snapshot format, append-only log, RNG, tick cadence or reference bounds changed in this correction.
+- Fresh exact-head fast tests and full required acceptance are still required; no pass is claimed for the corrected head.
