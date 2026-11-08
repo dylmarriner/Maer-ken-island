@@ -481,7 +481,8 @@ impl MaterialLedger {
         if !matches!(c.origin, Origin::Mineral) || c.carbon_per_kg != 0.0 || c.water_per_kg != 0.0 {
             return Err(MaterialError::WrongMaterial(m));
         }
-        self.add(m, kg.max(0.0));
+        Self::validate_amount(m, kg)?;
+        self.add(m, kg);
         Ok(())
     }
 
