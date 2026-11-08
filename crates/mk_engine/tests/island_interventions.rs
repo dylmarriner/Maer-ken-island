@@ -479,8 +479,15 @@ fn producer_carbon_lands_on_land_and_not_in_the_sea() {
         .intervene(&action)
         .expect("producers are a field here")
         .summary();
-    assert!(!summary.contains(char::from(92)), "summary should not contain a literal backslash: {summary}");
-    assert_eq!(summary.lines().count(), 1, "summary should be a single line: {summary}");
+    assert!(
+        !summary.contains(char::from(92)),
+        "summary should not contain a literal backslash: {summary}"
+    );
+    assert_eq!(
+        summary.lines().count(),
+        1,
+        "summary should be a single line: {summary}"
+    );
 
     assert!(
         *life.ecology.biomass_kgc_m2.get(row, col) > before_land,
