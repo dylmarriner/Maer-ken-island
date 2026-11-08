@@ -121,3 +121,26 @@ Fresh exact-head workflow [#42491631214](https://github.com/dylmarriner/Maer-ken
 - Formatting correction: `3987778c8dac1a8fdbe47d9aa39c3c58a1b91a91`.
 - The previous Clippy error is not re-evaluated on that run because formatting failed first.
 - Fresh exact-head CI must now pass formatting, Clippy and fast tests.
+
+
+## Rounded-away positive injection guard — 9 November 2026
+
+A finite positive inflow can still fail to change an already-large binary64 inventory. For example, adding 1 kg to `f64::MAX` rounds back to the existing stock. The old preflight accepted that finite result, after which the flux ledger could book an inflow that the inventory did not actually receive.
+
+### Production change
+
+- `MaterialLedger::inject` now rejects a positive amount when `current_stock + amount <= current_stock`, in addition to rejecting non-finite results.
+- The guard runs before stock mutation or carbon/water boundary-flow entries.
+
+### Regression coverage
+
+- Seed Wood and Water stock at `f64::MAX`.
+- Attempt a further 1 kg injection of each.
+- Require typed rejection, unchanged stock and unchanged flux-entry count.
+
+### Commits
+
+- Production: `a27d9af74d7a74d06e6cd776245e64f4e2513c16`.
+- Regression: `534ad3279a8fe916d6d6bfd7d50e42ccde7413ae`.
+
+Fresh exact-head formatting, Clippy, fast tests, desktop/backend and week/year reference-pack acceptance are required. No local Cargo result is claimed because custom OpenCommander remains HTTP 429.
