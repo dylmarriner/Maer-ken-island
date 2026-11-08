@@ -100,10 +100,12 @@ impl Log {
             && self.length_m > 0.0
             && self.diameter_m.is_finite()
             && self.diameter_m > 0.0
+            // A positive-volume log must contain positive oven-dry wood and carbon;
+            // zero-mass logs would otherwise bypass every carrying/load calculation.
             && self.dry_kg.is_finite()
-            && self.dry_kg >= 0.0
+            && self.dry_kg > 0.0
             && self.carbon_kgc.is_finite()
-            && self.carbon_kgc >= 0.0
+            && self.carbon_kgc > 0.0
             // Carbon is a component of dry matter, never a greater mass than the dry wood.
             && self.carbon_kgc <= self.dry_kg
             && self.water_kg.is_finite()
