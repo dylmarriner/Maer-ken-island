@@ -9,6 +9,7 @@ use mk_core::flux::{FluxKind, Ledger, Reservoir, Reservoir as R};
 use mk_engine::conservation::O2_PER_CARBON;
 use mk_engine::hydrology::HydrologyState;
 use mk_engine::regional::ecology::RegionalEcologyState;
+use mk_engine::regional::edible::EdibleFood;
 use mk_engine::regional::materials::{
     composition, respired_carbon_kg_per_kcal, AnimalPopulation, Material, MaterialError,
     MaterialLedger, ALL_MATERIALS, QUICKLIME_PER_LIMESTONE,
@@ -462,7 +463,7 @@ fn water_gathering_rejects_invalid_amounts_and_stock_overflow_before_drain() {
     // Seed a finite maximum stock, then offer enough finite standing water to
     // overflow it. The source cell must not be drained on a rejected transfer.
     materials.inject(Material::Water, f64::MAX, &mut ledger);
-    hydrology.surface_water.set(cell.0, cell.1, f64::MAX / area);
+    hydrology.surface_water.set(cell.0, cell.1, (0.4 * f64::MAX) / area);
     let surface_before = *hydrology.surface_water.get(cell.0, cell.1);
     let entries_before = ledger.entries().len();
     let overflow = materials.gather_water(f64::MAX, &mut hydrology, cell, area, &mut ledger);
@@ -1434,15 +1435,19 @@ fn biotic_edible_and_soil_water_gathering_reject_invalid_amounts_without_mutatio
     let cell = b.forest_cell;
     let area = b.domain.cell_area_m2(M);
     let mut ecology = b.ecology.clone();
+    let edible_index = ecology.biomass_kgc_m2.grid_to_linear_index(cell.0, cell.1);
+    let cell_count = b.domain.rows(M) * b.domain.cols(M);
+    let mut edible = EdibleFood {
+        share: vec![0.116; cell_count],
+        kgc_m2: vec![0.0; cell_count],
+    };
+    // This low, finite test stock is below the selected forest cell's biomass.
+    edible.kgc_m2[edible_index] = 0.1;
+    ecology.edible = Some(edible);
     let mut hydrology = HydrologyState::new(&b.domain.storage_spec(M), 0.5);
     let (mut materials, mut ledger) = (MaterialLedger::new(), Ledger::new());
     let biomass_before = *ecology.biomass_kgc_m2.get(cell.0, cell.1);
-    let edible_index = ecology.biomass_kgc_m2.grid_to_linear_index(cell.0, cell.1);
-    let edible_before = ecology
-        .edible
-        .as_ref()
-        .expect("edible layer")
-        .at(edible_index);
+    let edible_before = ecology.edible.as_ref().expect("installed edible layer").at(edible_index);
     let soil_before: SoilWater = *hydrology.soil_water.get(cell.0, cell.1);
 
     for amount in [-1.0, f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
@@ -1499,6 +1504,37 @@ fn biotic_edible_and_soil_water_gathering_reject_invalid_amounts_without_mutatio
 }
 
 #[test]
+fn edible_gathering_rejects_invalid_source_stock_before_mutation() {
+    let b = base();
+    let cell = b.forest_cell;
+    let area = b.domain.cell_area_m2(M);
+    let mut ecology = b.ecology.clone();
+    let edible_index = ecology.biomass_kgc_m2.grid_to_linear_index(cell.0, cell.1);
+    let cell_count = b.domain.rows(M) * b.domain.cols(M);
+    let mut edible = EdibleFood {
+        share: vec![0.116; cell_count],
+        kgc_m2: vec![0.0; cell_count],
+    };
+    edible.kgc_m2[edible_index] = f64::NAN;
+    ecology.edible = Some(edible);
+
+    let biomass_before = *ecology.biomass_kgc_m2.get(cell.0, cell.1);
+    let (mut materials, mut ledger) = (MaterialLedger::new(), Ledger::new());
+
+    assert!(matches!(
+        materials.gather_edible(1.0, &mut ecology, cell, area, &mut ledger),
+        Err(MaterialError::InvalidSourceState {
+            material: Material::PlantFood,
+            value
+        }) if value.is_nan()
+    ));
+    assert_eq!(*ecology.biomass_kgc_m2.get(cell.0, cell.1), biomass_before);
+    assert!(ecology.edible.as_ref().unwrap().at(edible_index).is_nan());
+    assert_eq!(materials.stock_kg(Material::PlantFood), 0.0);
+    assert!(ledger.entries().is_empty());
+}
+
+#[test]
 fn biotic_and_soil_water_gathering_reject_stock_overflow_before_source_mutation() {
     use mk_engine::hydrology::SoilWater;
 
@@ -1510,7 +1546,7 @@ fn biotic_and_soil_water_gathering_reject_stock_overflow_before_source_mutation(
     let (mut materials, mut ledger) = (MaterialLedger::new(), Ledger::new());
 
     materials.inject(Material::Wood, f64::MAX, &mut ledger);
-    let biomass_before = (0.9 * f64::MAX) / area;
+    let biomass_before = (0.4 * f64::MAX) / area;
     ecology.biomass_kgc_m2.set(cell.0, cell.1, biomass_before);
     let ledger_entries_before = ledger.entries().len();
     assert!(matches!(
