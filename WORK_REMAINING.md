@@ -739,3 +739,11 @@ Regression `biomass_increment_rounded_up_or_down_is_rejected_without_mutation` p
 - [ ] Reconcile review threads and merge only after all required exact-head checks pass.
 
 Evidence: `docs/handoff/TIMBER_CROSS_CUT_REBASE_20261108.md`.
+
+
+### Fresh-main timber rebase CI — 8 November 2026
+
+- PR #127 is the current integration branch after replay PR #123 merged to main; original PR #124 remains draft and must not be merged.
+- Current handoff: `docs/handoff/TIMBER_CROSS_CUT_REBASE_20261108.md`.
+- Exact-head workflow #42431547467: formatting and Clippy passed; fast Rust tests, desktop, installed backend and week/year reference packs were still running at the latest inspection. Dashboard, dependency audit, computer service and repository scripts passed. Nightly slow tests were skipped by design.
+- Re-run all required exact-head checks after the latest handoff-only commit; do not treat predecessor-head results as current.
