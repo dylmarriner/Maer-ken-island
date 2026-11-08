@@ -42,3 +42,17 @@ No snapshot schema, append-only replay format, replay hash, RNG, tick cadence, s
 2. Keep PR #135 draft until every required check passes; do not merge a red or partially verified branch.
 3. Continue the separate PR #134 week-reference digest investigation; do not update the expected digest until the state drift is explained.
 4. Resume D40's remaining two-person saw cross-cut for ute transport, then founder labour/energy and route modelling; continue D31 regional soil-nutrient modelling.
+
+## Follow-up — seasoning audit closure
+
+A second review found that the first seasoning preflight only required the rounded MaterialWater aggregate to decrease. It did not prove that the actual `stock_of` delta equalled the per-log water fluxes. It also did not prove that converting log carbon into Wood stock preserved the aggregate MaterialCarbon value.
+
+The production preflight now predicts both post-seasoning aggregates using the same summation order as `stock_of`. It rejects a carbon drift or a water delta that does not match the ledger's per-log flux sum before removing logs or appending flux entries.
+
+Two regressions exercise:
+1. A 10 kg log converted into a (2^{53}) kg Wood stock, where binary64 rounding would otherwise change MaterialCarbon by 0.5 kgC.
+2. Three 0.5 kg-water logs removed from a (2^{53}) kg Water stock, where the aggregate would otherwise fall by 2 kg while the ledger records 1.5 kg.
+
+Both tests require unchanged stock, retained logs and unchanged flux-entry count after refusal.
+
+Exact-head CI is pending. No local Cargo result is claimed.
