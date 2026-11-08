@@ -1560,3 +1560,167 @@ fn biotic_and_soil_water_gathering_reject_stock_overflow_before_source_mutation(
     assert_eq!(materials.stock_kg(Material::Water), f64::MAX);
     assert_eq!(ledger.entries().len(), ledger_entries_before);
 }
+
+#[test]
+fn biotic_and_edible_harvests_reject_invalid_source_reservoirs_without_mutation() {
+    use mk_engine::regional::edible::ReproductiveShares;
+    use mk_engine::validation::{default_reference_dir, ReferenceLibrary};
+
+    let b = base();
+    let cell = b.forest_cell;
+    let area = b.domain.cell_area_m2(M);
+    let invalid_values = [-1.0, f64::NAN, f64::INFINITY];
+
+    for invalid in invalid_values {
+        let mut ecology = b.ecology.clone();
+        ecology.biomass_kgc_m2.set(cell.0, cell.1, invalid);
+        let (mut materials, mut ledger) = (MaterialLedger::new(), Ledger::new());
+
+        assert!(matches!(
+            materials.gather_biotic(Material::Wood, 1.0, &mut ecology, cell, area, &mut ledger),
+            Err(MaterialError::InvalidSourceState { material: Material::Wood, value })
+                if value.to_bits() == invalid.to_bits()
+        ));
+        assert_eq!(materials.stock_kg(Material::Wood), 0.0);
+        assert!(ledger.entries().is_empty());
+        assert_eq!(
+            ecology.biomass_kgc_m2.get(cell.0, cell.1).to_bits(),
+            invalid.to_bits()
+        );
+    }
+
+    let library = ReferenceLibrary::load(&default_reference_dir()).unwrap();
+    for invalid in invalid_values {
+        let mut ecology = b.ecology.clone();
+        ecology.install_edible(&ReproductiveShares::from_reference(&library).unwrap());
+        let index = ecology.biomass_kgc_m2.grid_to_linear_index(cell.0, cell.1);
+        let biomass_before = *ecology.biomass_kgc_m2.get(cell.0, cell.1);
+        ecology.edible.as_mut().unwrap().kgc_m2[index] = invalid;
+        let (mut materials, mut ledger) = (MaterialLedger::new(), Ledger::new());
+
+        assert!(matches!(
+            materials.gather_edible(1.0, &mut ecology, cell, area, &mut ledger),
+            Err(MaterialError::InvalidSourceState { material: Material::PlantFood, value })
+                if value.to_bits() == invalid.to_bits()
+        ));
+        assert_eq!(*ecology.biomass_kgc_m2.get(cell.0, cell.1), biomass_before);
+        assert_eq!(
+            ecology.edible.as_ref().unwrap().kgc_m2[index].to_bits(),
+            invalid.to_bits()
+        );
+        assert_eq!(materials.stock_kg(Material::PlantFood), 0.0);
+        assert!(ledger.entries().is_empty());
+    }
+}
+
+#[test]
+fn soil_and_surface_water_harvests_reject_invalid_source_reservoirs_without_mutation() {
+    use mk_engine::hydrology::SoilWater;
+
+    let b = base();
+    let cell = b.forest_cell;
+    let area = b.domain.cell_area_m2(M);
+    let spec = b.domain.storage_spec(M);
+    let invalid_values = [-1.0, f64::NAN, f64::INFINITY];
+
+    for invalid in invalid_values {
+        let mut hydrology = HydrologyState::new(&spec, 0.5);
+        hydrology.soil_water.set(
+            cell.0,
+            cell.1,
+            SoilWater { moisture_fraction: 0.5, storage_mm: invalid },
+        );
+        let (mut materials, mut ledger) = (MaterialLedger::new(), Ledger::new());
+
+        assert!(matches!(
+            materials.gather_soil_water(1.0, &mut hydrology, cell, area, &mut ledger),
+            Err(MaterialError::InvalidSourceState { material: Material::Water, value })
+                if value.to_bits() == invalid.to_bits()
+        ));
+        assert_eq!(
+            hydrology.soil_water.get(cell.0, cell.1).storage_mm.to_bits(),
+            invalid.to_bits()
+        );
+        assert_eq!(materials.stock_kg(Material::Water), 0.0);
+        assert!(ledger.entries().is_empty());
+    }
+
+    for invalid in invalid_values {
+        let mut hydrology = HydrologyState::new(&spec, 0.5);
+        hydrology.surface_water.set(cell.0, cell.1, invalid);
+        let runoff_before = *hydrology.runoff.get(cell.0, cell.1);
+        let (mut materials, mut ledger) = (MaterialLedger::new(), Ledger::new());
+
+        assert!(matches!(
+            materials.gather_water(1.0, &mut hydrology, cell, area, &mut ledger),
+            Err(MaterialError::InvalidSourceState { material: Material::Water, value })
+                if value.to_bits() == invalid.to_bits()
+        ));
+        assert_eq!(hydrology.surface_water.get(cell.0, cell.1).to_bits(), invalid.to_bits());
+        assert_eq!(*hydrology.runoff.get(cell.0, cell.1), runoff_before);
+        assert_eq!(materials.stock_kg(Material::Water), 0.0);
+        assert!(ledger.entries().is_empty());
+    }
+
+    let mut hydrology = HydrologyState::new(&spec, 0.5);
+    hydrology.runoff.set(cell.0, cell.1, f64::INFINITY);
+    let surface_before = *hydrology.surface_water.get(cell.0, cell.1);
+    let (mut materials, mut ledger) = (MaterialLedger::new(), Ledger::new());
+    assert!(matches!(
+        materials.gather_water(1.0, &mut hydrology, cell, area, &mut ledger),
+        Err(MaterialError::InvalidSourceState { material: Material::Water, value })
+            if value.is_infinite()
+    ));
+    assert_eq!(*hydrology.surface_water.get(cell.0, cell.1), surface_before);
+    assert!(ledger.entries().is_empty());
+}
+
+#[test]
+fn cell_harvests_reject_nonpositive_or_nonfinite_area_before_mutation() {
+    use mk_engine::regional::edible::ReproductiveShares;
+    use mk_engine::validation::{default_reference_dir, ReferenceLibrary};
+
+    let b = base();
+    let cell = b.forest_cell;
+    let spec = b.domain.storage_spec(M);
+    let library = ReferenceLibrary::load(&default_reference_dir()).unwrap();
+
+    for invalid_area in [0.0, -1.0, f64::NAN, f64::INFINITY] {
+        let mut ecology = b.ecology.clone();
+        let (mut materials, mut ledger) = (MaterialLedger::new(), Ledger::new());
+        assert!(matches!(
+            materials.gather_biotic(Material::Wood, 1.0, &mut ecology, cell, invalid_area, &mut ledger),
+            Err(MaterialError::InvalidCellArea { area_m2 })
+                if area_m2.to_bits() == invalid_area.to_bits()
+        ));
+        assert_eq!(materials.stock_kg(Material::Wood), 0.0);
+        assert!(ledger.entries().is_empty());
+
+        ecology.install_edible(&ReproductiveShares::from_reference(&library).unwrap());
+        assert!(matches!(
+            materials.gather_edible(1.0, &mut ecology, cell, invalid_area, &mut ledger),
+            Err(MaterialError::InvalidCellArea { area_m2 })
+                if area_m2.to_bits() == invalid_area.to_bits()
+        ));
+        assert_eq!(materials.stock_kg(Material::PlantFood), 0.0);
+        assert!(ledger.entries().is_empty());
+
+        let mut soil = HydrologyState::new(&spec, 0.5);
+        assert!(matches!(
+            materials.gather_soil_water(1.0, &mut soil, cell, invalid_area, &mut ledger),
+            Err(MaterialError::InvalidCellArea { area_m2 })
+                if area_m2.to_bits() == invalid_area.to_bits()
+        ));
+        assert_eq!(materials.stock_kg(Material::Water), 0.0);
+        assert!(ledger.entries().is_empty());
+
+        let mut surface = HydrologyState::new(&spec, 0.5);
+        assert!(matches!(
+            materials.gather_water(1.0, &mut surface, cell, invalid_area, &mut ledger),
+            Err(MaterialError::InvalidCellArea { area_m2 })
+                if area_m2.to_bits() == invalid_area.to_bits()
+        ));
+        assert_eq!(materials.stock_kg(Material::Water), 0.0);
+        assert!(ledger.entries().is_empty());
+    }
+}
