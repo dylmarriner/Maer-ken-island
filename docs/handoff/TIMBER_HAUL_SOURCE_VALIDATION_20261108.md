@@ -27,3 +27,9 @@ The regression covers zero dry mass, zero carbon, carbon greater than dry mass, 
 - It then repairs only the snapshot's corrupted carbon field, restores the same ledger and proves the original reservation can still be consumed exactly once with binary64-exact dry-mass and carbon totals.
 - Test commit: `60732ba2c5041662432d2c360d5834f9ca7e6bf8`.
 - Previous exact-head workflow [#42448302191](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42448302191) passed formatting, Clippy, fast Rust tests, desktop/backend, and both week/year reference-pack acceptance jobs on the earlier head. A new exact-head workflow is required for this added regression.
+
+
+## Exact-head formatting correction — 8 November 2026
+- New workflow [#42452344302](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42452344302) found rustfmt-only differences in the added restored-ledger regression. The Format step failed before Clippy or fast tests ran.
+- Applied the formatter's exact four layout changes in commit `9d75733bba9a99bf04ef5b45a8c12b1461f7b38d`.
+- No logic was changed by this correction. A fresh exact-head workflow is required to verify formatting, Clippy, tests, desktop/backend and week/year acceptance.
