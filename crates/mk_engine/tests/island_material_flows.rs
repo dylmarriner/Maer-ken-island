@@ -519,6 +519,29 @@ fn operator_injection_rejects_invalid_and_overflowing_amounts_before_mutation() 
 }
 
 #[test]
+fn operator_injection_rejects_positive_increments_that_round_away() {
+    for material in [Material::Wood, Material::Water] {
+        let (mut materials, mut ledger) = (MaterialLedger::new(), Ledger::new());
+        materials
+            .inject(material, f64::MAX, &mut ledger)
+            .expect("finite maximum stock is a valid seed");
+
+        let entries_before = ledger.entries().len();
+        let rounded_away = materials.inject(material, 1.0, &mut ledger);
+
+        assert!(matches!(
+            rounded_away,
+            Err(MaterialError::InvalidAmount {
+                material: actual,
+                amount_kg
+            }) if actual == material && amount_kg == f64::MAX
+        ));
+        assert_eq!(materials.stock_kg(material), f64::MAX);
+        assert_eq!(ledger.entries().len(), entries_before);
+    }
+}
+
+#[test]
 fn operator_injection_books_material_carbon_and_water_as_boundary_inflows() {
     let (mut materials, mut ledger) = (MaterialLedger::new(), Ledger::new());
     let audit = Audit::start(&materials);
