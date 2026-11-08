@@ -994,7 +994,14 @@ impl MaterialLedger {
         if !matches!(c.origin, Origin::Fossil | Origin::Carbonate) {
             return Err(MaterialError::WrongMaterial(material));
         }
-        let kg = kg.max(0.0);
+        Self::validate_amount(material, kg)?;
+        let resulting_stock = self.stock_kg(material) + kg;
+        if !resulting_stock.is_finite() {
+            return Err(MaterialError::InvalidAmount {
+                material,
+                amount_kg: resulting_stock,
+            });
+        }
         self.add(material, kg);
         flow(
             ledger,
@@ -1262,13 +1269,23 @@ impl MaterialLedger {
         cell_area_m2: f64,
         ledger: &mut Ledger,
     ) -> Result<f64, MaterialError> {
+        Self::validate_amount(Material::Water, kg)?;
         let (r, c) = cell;
         let standing_kg = hydrology.surface_water.get(r, c).max(0.0) * cell_area_m2;
         let river_kg =
             hydrology.runoff.get(r, c).max(0.0) * cell_area_m2 * RIVER_WITHDRAWAL_FRACTION;
-        let take = kg.max(0.0).min(standing_kg + river_kg);
+        let take = kg.min(standing_kg + river_kg);
         if take <= 0.0 {
             return Err(MaterialError::DryCell);
+        }
+        // Check the destination stock before changing either hydrology or the
+        // flux ledger. A finite source amount can still overflow existing stock.
+        let resulting_stock = self.stock_kg(Material::Water) + take;
+        if !resulting_stock.is_finite() {
+            return Err(MaterialError::InvalidAmount {
+                material: Material::Water,
+                amount_kg: resulting_stock,
+            });
         }
         let from_standing = take.min(standing_kg);
         let from_river = take - from_standing;
