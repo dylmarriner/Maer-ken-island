@@ -818,7 +818,11 @@ fn cross_cut_refuses_restored_invalid_source_without_consuming_reserved_ids_or_c
 
     // Repair only the corrupted snapshot field to prove the same reservation
     // can still be consumed exactly once by a later valid restore.
-    after_rejection["logs"][source_key]["carbon_kgc"] = serde_json::Value::from(dry_kg * 0.5);
+    let repaired_source = after_rejection
+        .get_mut("logs")
+        .and_then(|logs| logs.get_mut(&source_key))
+        .expect("source log remains serialized");
+    repaired_source["carbon_kgc"] = serde_json::Value::from(dry_kg * 0.5);
     let mut repaired: MaterialLedger =
         serde_json::from_value(after_rejection).expect("repaired ledger restores");
     assert!(repaired.cross_cut_log(source_id, 2, first_piece_id));

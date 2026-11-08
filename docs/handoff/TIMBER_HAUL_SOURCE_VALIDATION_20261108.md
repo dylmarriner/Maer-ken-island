@@ -33,3 +33,9 @@ The regression covers zero dry mass, zero carbon, carbon greater than dry mass, 
 - New workflow [#42452344302](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42452344302) found rustfmt-only differences in the added restored-ledger regression. The Format step failed before Clippy or fast tests ran.
 - Applied the formatter's exact four layout changes in commit `9d75733bba9a99bf04ef5b45a8c12b1461f7b38d`.
 - No logic was changed by this correction. A fresh exact-head workflow is required to verify formatting, Clippy, tests, desktop/backend and week/year acceptance.
+
+
+## Snapshot repair test indexing refinement — 8 November 2026
+- Changed the regression to retrieve the serialized source log through `Map::get_mut(&source_key)` before repairing the test fixture, avoiding reliance on a `String` index implementation for `serde_json::Value`.
+- This is a test-code compatibility refinement only; no simulation or ledger behavior changed.
+- Source and handoff are committed together in the current PR branch head.
