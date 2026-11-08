@@ -13,7 +13,7 @@ The recipe preflight also checked availability and output overflow, but did not 
 ## Production change
 
 - `MaterialLedger::take` now validates the existing stock and resulting stock before mutation.
-- A positive withdrawal is rejected with typed `MaterialError::InvalidAmount` when the resulting stock is not strictly lower than the existing stock.
+- A positive withdrawal is rejected with typed `MaterialError::InvalidAmount` when it withdraws zero (including a tiny request accepted by the existing availability tolerance against zero stock) or when the resulting stock is not strictly lower than the existing stock.
 - `craft` preflights every required debit against a projected stock map before mutating any input.
 - The same representability check is repeated at the private debit boundary, so non-craft callers cannot bypass it.
 - Existing small absolute availability tolerance, output-overflow checks, ledger flow ordering and material composition remain unchanged.
@@ -22,14 +22,16 @@ The recipe preflight also checked availability and output overflow, but did not 
 
 `material_withdrawals_reject_positive_amounts_rounded_away_before_mutation` seeds Wood stock to `f64::MAX`, attempts to craft with a 1 kg Wood input and no output, and requires typed rejection. It asserts unchanged Wood stock, MaterialCarbon stock and physical flux-entry count.
 
+`craft_rejects_positive_withdrawal_when_stock_is_within_tolerance_but_zero` attempts a 1e-13 kg withdrawal from empty Wood stock (inside the legacy 1e-12 availability tolerance) and requires typed rejection with zero stock/carbon and no flux entries.
+
 ## Commits
 
-- Production: `0386e035da5dbd27d65fa4cc2ec9e73a3675e4f2`.
-- Regression: `067c254c627d90e2cb2529361f1cc26574791986`.
+- Production: `0386e035da5dbd27d65fa4cc2ec9e73a3675e4f2`, `013573a3abfd172e53b5918a7498b306d4aaf66c`.
+- Regression: `067c254c627d90e2cb2529361f1cc26574791986`, `e2bb0e6a7d195dba2b6011ac1e900031642de792`.
 
 ## Verification
 
-A fresh exact-head workflow is required after the production and regression commits. The green PR #132 workflow [#42497043271](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42497043271) verifies only the preceding water-injection branch head, not this new withdrawal change. No local Cargo result is claimed because the authorised OpenCommander connector is returning HTTP 429.
+The first PR #133 workflow [#42502215055](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42502215055) was started on the earlier head `fab74a37911b71bb2b0f8ac832f1eb2ae495270b`; it does not verify the subsequent zero-stock follow-up commits. A fresh exact-head workflow is required. The green PR #132 workflow [#42497043271](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42497043271) verifies only the preceding water-injection branch head. No local Cargo result is claimed because the authorised OpenCommander connector is returning HTTP 429.
 
 ## Safety and architecture
 
