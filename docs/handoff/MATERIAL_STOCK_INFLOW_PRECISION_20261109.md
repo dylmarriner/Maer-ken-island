@@ -104,3 +104,17 @@ Both findings were corrected in `f408d171e7e1af4239aa6ff170996ce52d2fe98d`. A fr
 - Do not update the expected digest until the state divergence is explained. The run is not acceptable evidence for merge.
 - Temporary diagnostic logging was added in `life.rs` at commit `69ff4411359f625f09290311866c71f4105ec993` to distinguish no-edible-cell, gather and eat failures in the week simulation. Remove the diagnostic after identifying the cause.
 - Exact-head diagnostic workflow [#42522720849](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42522720849) is in progress. Its result must be inspected before changing simulation logic or the reference pack.
+
+## Week digest audit and re-pin — 9 November 2026
+
+The diagnostic/epsilon follow-up changed the week test's canonical digest. Exact-head workflow [#42523987454](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42523987454) reported:
+
+- Actual digest: `61ffaa6a559b5a8f503b7b6c707ca5f8cf634be9eebec64a1af6652706c2478a`.
+- Previous expected digest: `29ed53bd7769eb3025e70135bab8b7ea07718e26e7fca4cbf77ab379d62b7784`.
+- The week run's physical assertions all passed: 27,651 ledger audits, 167 hourly water audits, zero food and water shortfalls, 111 economy events, 200,000 estate-patch trees, Gem-D body carbon 13.0/13.0 kg, Gem-K 10.4/10.4 kg, and temperate-forest NPP 471 g C/m2/yr within the 400-900 reference band.
+- Sleep, eating, glycogen and water-intake checks also passed; the independent year-weather reference-pack test passed.
+- The only failed assertion was the previous digest pin.
+
+The digest moved because the completed-meal path now canonicalises a residual `respired_since_meal` balance at or below 1e-12 kg C to exactly zero. The old positive binary64 remainder could not produce a representable physical transfer. No scientific constant, reference-pack bound, RNG, tick cadence, snapshot schema or replay format was changed.
+
+The week digest is now re-pinned to the audited actual value in test commit `180d1c8f48247236511cf75b9cc04b2f5f4a1a1a`. The audit comment records the measured physical outputs. A fresh exact-head CI run on the new PR head is mandatory; workflow #42523987454 itself remains failed because it ran against the old pin. Do not merge PR #134 until the new week and year acceptance jobs, fast tests and all required checks pass.
