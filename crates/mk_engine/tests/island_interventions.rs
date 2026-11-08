@@ -505,7 +505,9 @@ fn producer_carbon_injection_rejects_invalid_amounts_without_mutation_or_replay_
         };
         match life.apply_command(IslandCommand::Intervention(Box::new(action))) {
             Err(CommandError::Intervention(IslandInterventionError::Validation(_))) => {}
-            other => panic!("invalid producer-carbon amount must be refused before mutation, got {other:?}"),
+            other => panic!(
+                "invalid producer-carbon amount must be refused before mutation, got {other:?}"
+            ),
         }
         assert_eq!(biomass_bits(&life), before_biomass);
         assert_eq!(life.physical.ledger.entries().len(), before_ledger);
@@ -531,9 +533,11 @@ fn producer_carbon_injection_preflights_corrupt_and_unrepresentable_cells_atomic
 
         match life.apply_command(IslandCommand::Intervention(Box::new(action))) {
             Err(CommandError::Intervention(
-                IslandInterventionError::InvalidProducerInjection { .. }
+                IslandInterventionError::InvalidProducerInjection { .. },
             )) => {}
-            other => panic!("invalid producer source state must be refused atomically, got {other:?}"),
+            other => {
+                panic!("invalid producer source state must be refused atomically, got {other:?}")
+            }
         }
         assert_eq!(biomass_bits(&life), before_biomass);
         assert_eq!(life.physical.ledger.entries().len(), before_ledger);
