@@ -2314,3 +2314,107 @@ fn roof_water_capture_moves_audited_soil_water_into_the_material_stock() {
     );
     audit.close(&materials, &ledger);
 }
+
+
+#[test]
+fn seasoning_rejects_wood_conversion_that_would_change_material_carbon_audit() {
+    use std::panic::{catch_unwind, AssertUnwindSafe};
+
+    let b = base();
+    let cell = b.forest_cell;
+    let area = b.domain.cell_area_m2(M);
+    let mut hydrology = HydrologyState::new(&b.domain.storage_spec(M), 0.5);
+    let mut materials = MaterialLedger::new();
+    let mut ledger = Ledger::new();
+    let log = Log {
+        id: 0,
+        position_m: (0.0, 0.0),
+        heading_rad: 0.0,
+        length_m: 2.0,
+        diameter_m: 0.2,
+        dry_kg: 10.0,
+        carbon_kgc: 4.25,
+        water_kg: 0.0,
+        place: LogPlace::Stored,
+    };
+    let id = materials.receive_felled_log(log, &mut hydrology, cell, area, &mut ledger);
+    materials
+        .inject(Material::Wood, 9_007_199_254_740_992.0, &mut ledger)
+        .expect("the initial Wood stock is finite");
+
+    let wood_before = materials.stock_kg(Material::Wood);
+    let carbon_before = materials.stock_of(R::MaterialCarbon);
+    let stored_before = materials.log(id).cloned();
+    let entries_before = ledger.entries().len();
+
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        materials.season_stored_logs(&mut ledger)
+    }));
+
+    assert!(
+        result.is_err(),
+        "the 10 kg Wood increment changes the rounded carbon aggregate by 0.5 kgC"
+    );
+    assert_eq!(materials.stock_kg(Material::Wood), wood_before);
+    assert_eq!(materials.stock_of(R::MaterialCarbon), carbon_before);
+    assert_eq!(materials.log(id), stored_before.as_ref());
+    assert_eq!(ledger.entries().len(), entries_before);
+}
+
+#[test]
+fn seasoning_rejects_water_debit_that_would_not_match_aggregate_stock_delta() {
+    use std::panic::{catch_unwind, AssertUnwindSafe};
+
+    let b = base();
+    let cell = b.forest_cell;
+    let area = b.domain.cell_area_m2(M);
+    let mut hydrology = HydrologyState::new(&b.domain.storage_spec(M), 0.5);
+    let mut materials = MaterialLedger::new();
+    let mut ledger = Ledger::new();
+    let mut ids = Vec::new();
+
+    for offset in [0.0, 10.0, 20.0] {
+        let log = Log {
+            id: 0,
+            position_m: (offset, 0.0),
+            heading_rad: 0.0,
+            length_m: 2.0,
+            diameter_m: 0.2,
+            dry_kg: 10.0,
+            carbon_kgc: 4.25,
+            water_kg: 0.5,
+            place: LogPlace::Stored,
+        };
+        ids.push(materials.receive_felled_log(
+            log,
+            &mut hydrology,
+            cell,
+            area,
+            &mut ledger,
+        ));
+    }
+    materials
+        .inject(Material::Water, 9_007_199_254_740_992.0, &mut ledger)
+        .expect("the initial Water stock is finite");
+
+    let wood_before = materials.stock_kg(Material::Wood);
+    let water_stock_before = materials.stock_kg(Material::Water);
+    let water_before = materials.stock_of(R::MaterialWater);
+    let logs_before: Vec<_> = materials.logs().cloned().collect();
+    let entries_before = ledger.entries().len();
+
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        materials.season_stored_logs(&mut ledger)
+    }));
+
+    assert!(
+        result.is_err(),
+        "the rounded aggregate falls by 2 kg while the three log fluxes book 1.5 kg"
+    );
+    assert_eq!(materials.stock_kg(Material::Wood), wood_before);
+    assert_eq!(materials.stock_kg(Material::Water), water_stock_before);
+    assert_eq!(materials.stock_of(R::MaterialWater), water_before);
+    assert_eq!(materials.logs().map(|log| log.id).collect::<Vec<_>>(), ids);
+    assert_eq!(materials.logs().cloned().collect::<Vec<_>>(), logs_before);
+    assert_eq!(ledger.entries().len(), entries_before);
+}
