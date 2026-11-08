@@ -68,3 +68,12 @@ Rebased commit sequence:
 - `deb6b725b0964e51f1127c5b5be2a0b2a2f61e49`
 
 No local Cargo result is claimed; custom OpenCommander discovery still returns HTTP 429.
+
+
+## Additional fail-fast physical invariant — 8 November 2026
+
+A log's contained carbon mass cannot exceed its dry-matter mass. The timber boundary now rejects `carbon_kgc > dry_kg` alongside non-finite and negative physical state. The regression submits such a felled log through the real MaterialLedger ingress and proves rejection occurs before advancing the log allocator, inserting a log or recording carbon/water flux. This is a physical mass bound, not a sourced carbon-fraction assumption; valid source-specific carbon fractions remain unchanged.
+
+- Production change: `crates/mk_engine/src/regional/timber.rs`.
+- Regression: `crates/mk_engine/tests/island_material_flows.rs`.
+- Exact-head CI after this change is required; predecessor workflow #42432061820 does not verify this new head.
