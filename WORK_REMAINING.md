@@ -800,3 +800,12 @@ PR #129 now also preflights resulting stock totals, not only individual finite/n
 - Fresh workflow [#42491631214](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42491631214) stopped at formatting after the ignored-Result correction; rustfmt required both `inject(...).expect(...)` chains to wrap across method-call lines.
 - Exact formatter output committed as `3987778c8dac1a8fdbe47d9aa39c3c58a1b91a91`.
 - Formatting, Clippy and fast tests must be reverified on the new exact head.
+
+
+### Rounded-away positive injection guard — 9 November 2026
+
+- Found a binary64 conservation edge case: a finite positive material injection can round away when added to an already-large stock (for example, `f64::MAX + 1.0 == f64::MAX)), while the flux ledger would still record the inflow.
+- `MaterialLedger::inject` now rejects positive increments unless the resulting stock is strictly greater than the previous stock, before inventory or ledger mutation.
+- Regression tests cover both Wood and Water at `f64::MAX`, asserting typed rejection and unchanged stock/flux entries.
+- Commits: production `a27d9af74d7a74d06e6cd776245e64f4e2513c16`; tests `534ad3279a8fe916d6d6bfd7d50e42ccde7413ae`.
+- Fresh exact-head CI is required; no local Cargo result is claimed.
