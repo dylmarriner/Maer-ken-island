@@ -254,6 +254,8 @@ pub enum MaterialError {
         have_kg: f64,
         need_kg: f64,
     },
+    /// A material operation supplied a negative or non-finite quantity.
+    InvalidAmount { material: Material, amount_kg: f64 },
     /// The material cannot be used this way.
     WrongMaterial(Material),
     NoSuchHuman(String),
@@ -480,11 +482,22 @@ impl MaterialLedger {
         Ok(())
     }
 
+    fn validate_amount(m: Material, kg: f64) -> Result<(), MaterialError> {
+        if !kg.is_finite() || kg < 0.0 {
+            return Err(MaterialError::InvalidAmount {
+                material: m,
+                amount_kg: kg,
+            });
+        }
+        Ok(())
+    }
+
     fn add(&mut self, m: Material, kg: f64) {
         *self.stock.entry(m).or_insert(0.0) += kg;
     }
 
     fn take(&mut self, m: Material, kg: f64) -> Result<(), MaterialError> {
+        Self::validate_amount(m, kg)?;
         let have = self.stock_kg(m);
         if have + 1e-12 < kg {
             return Err(MaterialError::Insufficient {
@@ -1118,6 +1131,20 @@ impl MaterialLedger {
         outputs: &[(Material, f64)],
         ledger: &mut Ledger,
     ) -> Result<(), MaterialError> {
+        // Validate every amount and aggregate repeated inputs before touching
+        // stock. Checking duplicate inputs independently can otherwise pass
+        // each availability check and then fail halfway through the debits.
+        let mut required = BTreeMap::<Material, f64>::new();
+        for (m, kg) in inputs {
+            Self::validate_amount(*m, *kg)?;
+            let total = required.entry(*m).or_insert(0.0);
+            *total += *kg;
+            Self::validate_amount(*m, *total)?;
+        }
+        for (m, kg) in outputs {
+            Self::validate_amount(*m, *kg)?;
+        }
+
         let c = |list: &[(Material, f64)]| {
             list.iter()
                 .map(|(m, kg)| kg * composition(*m).carbon_per_kg)
@@ -1130,7 +1157,7 @@ impl MaterialLedger {
                 in_kgc: in_c,
             });
         }
-        for (m, kg) in inputs {
+        for (m, kg) in &required {
             if self.stock_kg(*m) + 1e-12 < *kg {
                 return Err(MaterialError::Insufficient {
                     material: *m,
@@ -1139,8 +1166,8 @@ impl MaterialLedger {
                 });
             }
         }
-        for (m, kg) in inputs {
-            self.take(*m, *kg)?;
+        for (m, kg) in required {
+            self.take(m, kg)?;
         }
         for (m, kg) in outputs {
             self.add(*m, *kg);
