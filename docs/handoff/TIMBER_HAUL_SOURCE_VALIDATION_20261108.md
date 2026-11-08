@@ -39,3 +39,18 @@ The regression covers zero dry mass, zero carbon, carbon greater than dry mass, 
 - Changed the regression to retrieve the serialized source log through `Map::get_mut(&source_key)` before repairing the test fixture, avoiding reliance on a `String` index implementation for `serde_json::Value`.
 - This is a test-code compatibility refinement only; no simulation or ledger behavior changed.
 - Source and handoff are committed together in the current PR branch head.
+
+
+## Exact-head restored-ledger regression correction — 8 November 2026
+
+- Exact-head workflow [#42452538734](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42452538734) passed Rust formatting and Clippy, then fast tests found one failure in the newly added restored-ledger regression: 23 passed / 1 failed in `island_material_flows`.
+- The failing assertion compared `MaterialLedger::stock_of(MaterialCarbon)` after deliberately corrupting a serialized log (carbon 11 kg) with the valid pre-corruption stock (5 kg). `stock_of` intentionally derives material carbon from the current log records, so the restored corrupted snapshot correctly reports 11 kg before any cross-cut operation. The assertion was testing the wrong baseline; no production cross-cut mutation was demonstrated.
+- Corrected the regression to capture carbon and water stock immediately after restoring the deliberately corrupted snapshot, then prove the refused cross-cut leaves that restored state unchanged.
+- After repairing only the corrupted carbon field, the test now captures the valid restored stock and verifies the successful cross-cut preserves carbon and water stock as well as exact binary64 dry-mass/carbon totals and the allocator watermark.
+- Test correction commit: `dc965bd3e0c69c309986c21ef773cbccce7d968a`.
+- A new exact-head workflow is required to verify the corrected test. The previous run's formatting, Clippy, desktop/backend, reference-pack and auxiliary checks passed, but the fast-test job failed on the incorrect assertion above.
+
+## Remaining
+- Pass exact-head fast Rust tests after the corrected stock baseline.
+- Reconfirm formatting, Clippy, desktop/backend and week/year reference packs on the same head.
+- Keep PR #128 draft until all required checks pass; D40 two-person saw participation remains open.
