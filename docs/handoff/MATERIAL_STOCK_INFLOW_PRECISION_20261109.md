@@ -73,7 +73,7 @@ PR #134 exact-head CI is required for formatting, Clippy, fast Rust tests, deskt
 
 No snapshot schema, append-only replay format, replay hash, RNG, tick cadence, scientific constant, reference pack or live simulation state changed. Deterministic single-writer ownership is preserved.
 
-The no-Result ingestion paths (`receive_felled_wood`, `receive_felled_log`, `capture_roof_water`, `season_stored_logs`) remain a separate audit item; this PR does not claim every stock inflow path is complete.
+The no-Result ingestion path `capture_roof_water` is now fail-fast and preflights both source soil-depth and destination material-stock representability before mutation. Regression coverage verifies both rounding failures leave soil, stock and ledger unchanged. The remaining no-Result paths (`receive_felled_wood`, `receive_felled_log`, `season_stored_logs`) remain a separate audit item; this PR does not claim every stock inflow path is complete.
 
 ## Next
 
@@ -118,3 +118,23 @@ The diagnostic/epsilon follow-up changed the week test's canonical digest. Exact
 The digest moved because the completed-meal path now canonicalises a residual `respired_since_meal` balance at or below 1e-12 kg C to exactly zero. The old positive binary64 remainder could not produce a representable physical transfer. No scientific constant, reference-pack bound, RNG, tick cadence, snapshot schema or replay format was changed.
 
 The week digest is now re-pinned to the audited actual value in test commit `180d1c8f48247236511cf75b9cc04b2f5f4a1a1a`. The audit comment records the measured physical outputs. A fresh exact-head CI run on the new PR head is mandatory; workflow #42523987454 itself remains failed because it ran against the old pin. Do not merge PR #134 until the new week and year acceptance jobs, fast tests and all required checks pass.
+
+## Roof-water capture atomicity — 9 November 2026
+
+The no-Result `capture_roof_water` path previously debited soil and added material water without checking whether either binary64 update was representable. It now fails fast before mutation when:
+
+- the requested amount, cell area, source storage or area conversion is invalid;
+- the soil-depth decrement rounds away or produces an invalid remainder;
+- the material-water stock addition overflows or rounds away.
+
+The method inserts the exact preflighted destination stock and applies the preflighted source depth only after both sides are valid.
+
+Regression test `roof_water_capture_preflights_stock_and_source_precision_before_mutation` covers:
+1. adding 1 kg to a 2^53 kg destination stock, where the increment rounds away;
+2. subtracting 1 kg from source soil over a 1e18 m2 cell, where the depth decrement rounds away.
+
+Both cases assert unchanged source soil, destination stock and ledger entries.
+
+- Production: `09b4c1afd28bfe62f2d773ee1a751b6b4dd62d0b`.
+- Regression: `ae3fa650217fc56a75bd5dd2a3b7f9c63588837a`.
+- A fresh exact-head CI run is required. No local Cargo result is claimed because custom OpenCommander device discovery remains unavailable.
