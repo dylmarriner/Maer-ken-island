@@ -254,6 +254,11 @@ pub enum MaterialError {
         have_kg: f64,
         need_kg: f64,
     },
+    /// A supplied amount or resulting stock quantity is negative or non-finite.
+    InvalidAmount {
+        material: Material,
+        amount_kg: f64,
+    },
     /// The material cannot be used this way.
     WrongMaterial(Material),
     NoSuchHuman(String),
@@ -476,7 +481,25 @@ impl MaterialLedger {
         if !matches!(c.origin, Origin::Mineral) || c.carbon_per_kg != 0.0 || c.water_per_kg != 0.0 {
             return Err(MaterialError::WrongMaterial(m));
         }
-        self.add(m, kg.max(0.0));
+        Self::validate_amount(m, kg)?;
+        let resulting_stock = self.stock_kg(m) + kg;
+        if !resulting_stock.is_finite() {
+            return Err(MaterialError::InvalidAmount {
+                material: m,
+                amount_kg: resulting_stock,
+            });
+        }
+        self.add(m, kg);
+        Ok(())
+    }
+
+    fn validate_amount(m: Material, kg: f64) -> Result<(), MaterialError> {
+        if !kg.is_finite() || kg < 0.0 {
+            return Err(MaterialError::InvalidAmount {
+                material: m,
+                amount_kg: kg,
+            });
+        }
         Ok(())
     }
 
@@ -485,6 +508,7 @@ impl MaterialLedger {
     }
 
     fn take(&mut self, m: Material, kg: f64) -> Result<(), MaterialError> {
+        Self::validate_amount(m, kg)?;
         let have = self.stock_kg(m);
         if have + 1e-12 < kg {
             return Err(MaterialError::Insufficient {
@@ -970,7 +994,14 @@ impl MaterialLedger {
         if !matches!(c.origin, Origin::Fossil | Origin::Carbonate) {
             return Err(MaterialError::WrongMaterial(material));
         }
-        let kg = kg.max(0.0);
+        Self::validate_amount(material, kg)?;
+        let resulting_stock = self.stock_kg(material) + kg;
+        if !resulting_stock.is_finite() {
+            return Err(MaterialError::InvalidAmount {
+                material,
+                amount_kg: resulting_stock,
+            });
+        }
         self.add(material, kg);
         flow(
             ledger,
@@ -1118,6 +1149,20 @@ impl MaterialLedger {
         outputs: &[(Material, f64)],
         ledger: &mut Ledger,
     ) -> Result<(), MaterialError> {
+        // Validate every amount and aggregate repeated inputs before touching
+        // stock. Checking duplicate inputs independently can otherwise pass
+        // each availability check and then fail halfway through the debits.
+        let mut required = BTreeMap::<Material, f64>::new();
+        for (m, kg) in inputs {
+            Self::validate_amount(*m, *kg)?;
+            let total = required.entry(*m).or_insert(0.0);
+            *total += *kg;
+            Self::validate_amount(*m, *total)?;
+        }
+        for (m, kg) in outputs {
+            Self::validate_amount(*m, *kg)?;
+        }
+
         let c = |list: &[(Material, f64)]| {
             list.iter()
                 .map(|(m, kg)| kg * composition(*m).carbon_per_kg)
@@ -1130,7 +1175,7 @@ impl MaterialLedger {
                 in_kgc: in_c,
             });
         }
-        for (m, kg) in inputs {
+        for (m, kg) in &required {
             if self.stock_kg(*m) + 1e-12 < *kg {
                 return Err(MaterialError::Insufficient {
                     material: *m,
@@ -1139,8 +1184,28 @@ impl MaterialLedger {
                 });
             }
         }
-        for (m, kg) in inputs {
-            self.take(*m, *kg)?;
+
+        // Preflight the exact output additions against the post-debit stock.
+        // Finite inputs can still overflow an existing finite inventory when
+        // added, so reject the whole recipe before the first debit.
+        let mut projected_stock = self.stock.clone();
+        for (m, kg) in &required {
+            let have = projected_stock.get(m).copied().unwrap_or(0.0);
+            projected_stock.insert(*m, have - kg.min(have));
+        }
+        for (m, kg) in outputs {
+            let resulting_stock = projected_stock.get(m).copied().unwrap_or(0.0) + *kg;
+            if !resulting_stock.is_finite() {
+                return Err(MaterialError::InvalidAmount {
+                    material: *m,
+                    amount_kg: resulting_stock,
+                });
+            }
+            projected_stock.insert(*m, resulting_stock);
+        }
+
+        for (m, kg) in required {
+            self.take(m, kg)?;
         }
         for (m, kg) in outputs {
             self.add(*m, *kg);
@@ -1204,13 +1269,23 @@ impl MaterialLedger {
         cell_area_m2: f64,
         ledger: &mut Ledger,
     ) -> Result<f64, MaterialError> {
+        Self::validate_amount(Material::Water, kg)?;
         let (r, c) = cell;
         let standing_kg = hydrology.surface_water.get(r, c).max(0.0) * cell_area_m2;
         let river_kg =
             hydrology.runoff.get(r, c).max(0.0) * cell_area_m2 * RIVER_WITHDRAWAL_FRACTION;
-        let take = kg.max(0.0).min(standing_kg + river_kg);
+        let take = kg.min(standing_kg + river_kg);
         if take <= 0.0 {
             return Err(MaterialError::DryCell);
+        }
+        // Check the destination stock before changing either hydrology or the
+        // flux ledger. A finite source amount can still overflow existing stock.
+        let resulting_stock = self.stock_kg(Material::Water) + take;
+        if !resulting_stock.is_finite() {
+            return Err(MaterialError::InvalidAmount {
+                material: Material::Water,
+                amount_kg: resulting_stock,
+            });
         }
         let from_standing = take.min(standing_kg);
         let from_river = take - from_standing;

@@ -228,6 +228,257 @@ fn burning_coal_releases_its_carbon_and_binds_the_stoichiometric_oxygen() {
 }
 
 #[test]
+fn material_withdrawals_reject_negative_and_non_finite_amounts_before_mutation() {
+    let (mut materials, mut ledger) = (MaterialLedger::new(), Ledger::new());
+    materials
+        .bank_mined(Material::Gold, 10.0)
+        .expect("gold is a mineral material");
+    materials.register_human("Ada", 70.0);
+
+    let gold_before = materials.stock_kg(Material::Gold);
+    assert!(matches!(
+        materials.bank_mined(Material::Gold, -1.0),
+        Err(MaterialError::InvalidAmount {
+            material: Material::Gold,
+            amount_kg
+        }) if amount_kg == -1.0
+    ));
+    assert!(matches!(
+        materials.bank_mined(Material::Gold, f64::INFINITY),
+        Err(MaterialError::InvalidAmount {
+            material: Material::Gold,
+            amount_kg
+        }) if amount_kg.is_infinite() && amount_kg.is_sign_positive()
+    ));
+    let body_carbon_before = materials.stock_of(R::HumanCarbon);
+    let body_water_before = materials.stock_of(R::MaterialWater);
+
+    assert!(matches!(
+        materials.burn(Material::Coal, -1.0, &mut ledger),
+        Err(MaterialError::InvalidAmount {
+            material: Material::Coal,
+            amount_kg
+        }) if amount_kg == -1.0
+    ));
+    assert!(matches!(
+        materials.calcine(f64::NAN, &mut ledger),
+        Err(MaterialError::InvalidAmount {
+            material: Material::Limestone,
+            amount_kg
+        }) if amount_kg.is_nan()
+    ));
+    assert!(matches!(
+        materials.make_charcoal(f64::INFINITY, &mut ledger),
+        Err(MaterialError::InvalidAmount {
+            material: Material::Wood,
+            amount_kg
+        }) if amount_kg.is_infinite() && amount_kg.is_sign_positive()
+    ));
+    assert!(matches!(
+        materials.eat("Ada", Material::PlantFood, -0.5, &mut ledger),
+        Err(MaterialError::InvalidAmount {
+            material: Material::PlantFood,
+            amount_kg
+        }) if amount_kg == -0.5
+    ));
+    assert!(matches!(
+        materials.drink("Ada", f64::NEG_INFINITY),
+        Err(MaterialError::InvalidAmount {
+            material: Material::Water,
+            amount_kg
+        }) if amount_kg.is_infinite() && amount_kg.is_sign_negative()
+    ));
+    assert!(matches!(
+        materials.build(Material::Gold, -2.0),
+        Err(MaterialError::InvalidAmount {
+            material: Material::Gold,
+            amount_kg
+        }) if amount_kg == -2.0
+    ));
+
+    assert_eq!(materials.stock_kg(Material::Gold), gold_before);
+    assert_eq!(materials.stock_of(R::HumanCarbon), body_carbon_before);
+    assert_eq!(materials.stock_of(R::MaterialWater), body_water_before);
+    assert_eq!(materials.structure_count(), 0);
+    assert!(ledger.entries().is_empty());
+}
+
+#[test]
+fn craft_aggregates_duplicate_inputs_and_rejects_invalid_outputs_atomically() {
+    let (mut materials, mut ledger) = (MaterialLedger::new(), Ledger::new());
+    materials
+        .bank_mined(Material::Gold, 6.0)
+        .expect("gold is a mineral material");
+
+    let insufficient = materials.craft(
+        &[(Material::Gold, 5.0), (Material::Gold, 5.0)],
+        &[],
+        &mut ledger,
+    );
+    assert!(matches!(
+        insufficient,
+        Err(MaterialError::Insufficient {
+            material: Material::Gold,
+            have_kg,
+            need_kg
+        }) if have_kg == 6.0 && need_kg == 10.0
+    ));
+    assert_eq!(materials.stock_kg(Material::Gold), 6.0);
+    assert!(ledger.entries().is_empty());
+
+    let invalid_output = materials.craft(
+        &[(Material::Gold, 1.0)],
+        &[(Material::Gold, -1.0)],
+        &mut ledger,
+    );
+    assert!(matches!(
+        invalid_output,
+        Err(MaterialError::InvalidAmount {
+            material: Material::Gold,
+            amount_kg
+        }) if amount_kg == -1.0
+    ));
+    assert_eq!(materials.stock_kg(Material::Gold), 6.0);
+    assert!(ledger.entries().is_empty());
+
+    // The same aggregate preflight also permits a valid repeated input when
+    // the combined requirement is available; the net stock remains 6 kg.
+    materials
+        .craft(
+            &[(Material::Gold, 2.0), (Material::Gold, 3.0)],
+            &[(Material::Gold, 5.0)],
+            &mut ledger,
+        )
+        .expect("the combined 5 kg input is available");
+    assert_eq!(materials.stock_kg(Material::Gold), 6.0);
+    assert!(ledger.entries().is_empty());
+}
+
+#[test]
+fn material_stock_additions_reject_overflow_before_mutation() {
+    let (mut materials, mut ledger) = (MaterialLedger::new(), Ledger::new());
+    materials
+        .bank_mined(Material::Gold, f64::MAX)
+        .expect("the first finite gold stock fits");
+
+    let overflow = materials.bank_mined(Material::Gold, f64::MAX);
+    assert!(matches!(
+        overflow,
+        Err(MaterialError::InvalidAmount {
+            material: Material::Gold,
+            amount_kg
+        }) if amount_kg.is_infinite()
+    ));
+    assert_eq!(materials.stock_kg(Material::Gold), f64::MAX);
+
+    let craft_overflow = materials.craft(&[], &[(Material::Gold, f64::MAX)], &mut ledger);
+    assert!(matches!(
+        craft_overflow,
+        Err(MaterialError::InvalidAmount {
+            material: Material::Gold,
+            amount_kg
+        }) if amount_kg.is_infinite()
+    ));
+    assert_eq!(materials.stock_kg(Material::Gold), f64::MAX);
+    assert!(ledger.entries().is_empty());
+
+    let (mut empty, mut empty_ledger) = (MaterialLedger::new(), Ledger::new());
+    let duplicate_output_overflow = empty.craft(
+        &[],
+        &[(Material::Gold, f64::MAX), (Material::Gold, f64::MAX)],
+        &mut empty_ledger,
+    );
+    assert!(matches!(
+        duplicate_output_overflow,
+        Err(MaterialError::InvalidAmount {
+            material: Material::Gold,
+            amount_kg
+        }) if amount_kg.is_infinite()
+    ));
+    assert_eq!(empty.stock_kg(Material::Gold), 0.0);
+    assert!(empty_ledger.entries().is_empty());
+}
+
+#[test]
+fn fossil_gathering_rejects_invalid_and_overflowing_amounts_before_mutation() {
+    let (mut materials, mut ledger) = (MaterialLedger::new(), Ledger::new());
+
+    for amount in [-1.0, f64::NAN, f64::INFINITY] {
+        let stock_before = materials.stock_kg(Material::Coal);
+        let entries_before = ledger.entries().len();
+        let result = materials.gather_fossil(Material::Coal, amount, &mut ledger);
+        assert!(matches!(
+            result,
+            Err(MaterialError::InvalidAmount {
+                material: Material::Coal,
+                amount_kg
+            }) if amount_kg.to_bits() == amount.to_bits()
+        ));
+        assert_eq!(materials.stock_kg(Material::Coal), stock_before);
+        assert_eq!(ledger.entries().len(), entries_before);
+    }
+
+    materials
+        .gather_fossil(Material::Coal, f64::MAX, &mut ledger)
+        .expect("the first finite coal deposit fits");
+    let entries_before = ledger.entries().len();
+    let overflow = materials.gather_fossil(Material::Coal, f64::MAX, &mut ledger);
+    assert!(matches!(
+        overflow,
+        Err(MaterialError::InvalidAmount {
+            material: Material::Coal,
+            amount_kg
+        }) if amount_kg.is_infinite()
+    ));
+    assert_eq!(materials.stock_kg(Material::Coal), f64::MAX);
+    assert_eq!(ledger.entries().len(), entries_before);
+}
+
+#[test]
+fn water_gathering_rejects_invalid_amounts_and_stock_overflow_before_drain() {
+    let b = base();
+    let area = b.domain.cell_area_m2(M);
+    let cell = b.forest_cell;
+    let spec = b.domain.storage_spec(M);
+    let mut hydrology = HydrologyState::new(&spec, 0.5);
+    hydrology.surface_water.set(cell.0, cell.1, 5.0);
+    let (mut materials, mut ledger) = (MaterialLedger::new(), Ledger::new());
+
+    for amount in [-1.0, f64::NAN, f64::INFINITY] {
+        let surface_before = *hydrology.surface_water.get(cell.0, cell.1);
+        let result = materials.gather_water(amount, &mut hydrology, cell, area, &mut ledger);
+        assert!(matches!(
+            result,
+            Err(MaterialError::InvalidAmount {
+                material: Material::Water,
+                amount_kg
+            }) if amount_kg.to_bits() == amount.to_bits()
+        ));
+        assert_eq!(*hydrology.surface_water.get(cell.0, cell.1), surface_before);
+        assert_eq!(materials.stock_kg(Material::Water), 0.0);
+        assert!(ledger.entries().is_empty());
+    }
+
+    // Seed a finite maximum stock, then offer enough finite standing water to
+    // overflow it. The source cell must not be drained on a rejected transfer.
+    materials.inject(Material::Water, f64::MAX, &mut ledger);
+    hydrology.surface_water.set(cell.0, cell.1, f64::MAX / area);
+    let surface_before = *hydrology.surface_water.get(cell.0, cell.1);
+    let entries_before = ledger.entries().len();
+    let overflow = materials.gather_water(f64::MAX, &mut hydrology, cell, area, &mut ledger);
+    assert!(matches!(
+        overflow,
+        Err(MaterialError::InvalidAmount {
+            material: Material::Water,
+            amount_kg
+        }) if amount_kg.is_infinite()
+    ));
+    assert_eq!(materials.stock_kg(Material::Water), f64::MAX);
+    assert_eq!(*hydrology.surface_water.get(cell.0, cell.1), surface_before);
+    assert_eq!(ledger.entries().len(), entries_before);
+}
+
+#[test]
 fn calcining_limestone_and_making_charcoal_release_their_carbon_as_co2() {
     let (mut m, mut ledger) = (MaterialLedger::new(), Ledger::new());
     let audit = Audit::start(&m);

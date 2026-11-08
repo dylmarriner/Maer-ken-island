@@ -1,5 +1,12 @@
 # Work remaining
 
+## Latest engineering slice — 8 November 2026
+
+- Timber source-state, restored-ledger allocator and active-haul exclusivity hardening (PR #128) merged to `main` as `5ea337d5f5931f9349869b39f0f16e7edbcd31c6`. Exact-head workflow [#42461413038](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42461413038) passed formatting, Clippy, fast Rust tests, installed backend, desktop application, web dashboard, computer service, repository scripts, dependency audit and week/year reference-pack acceptance; nightly slow tests were skipped by design.
+
+- Material quantity and craft atomicity hardening is on `fix/material-amount-boundaries-20261108`: negative/non-finite withdrawals now fail before mutation; craft validates inputs/outputs and aggregates duplicate input requirements before any debit. Source commit `b3f644d8`, regression commit `2dad19f7`, handoff `docs/handoff/MATERIAL_AMOUNT_ATOMICITY_20261108.md`. Exact-head verification is pending; no local Cargo result is claimed because custom OpenCommander returned HTTP 429.
+
+
 Fishery landed-total atomicity and precision (PR #110) merged to `main` as `148ac98c95e58aac7b2065dd0cc68884790f4168`. Exact-head workflow [#42275024667](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42275024667) passed formatting, Clippy, fast Rust tests, desktop build/tests/rendering/input acceptance, installed backend, web dashboard, computer service, repository scripts, dependency audit and week/year reference-pack acceptance; nightly slow tests were skipped by design.
 
 Fishery biomass-remainder precision (PR #111) merged to `main` as `b41bb5cf24bddca5df2bc556612c5edfc8b91bde`. Exact-head workflow [#42292739398](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42292739398) passed formatting, Clippy, fast Rust tests, desktop, installed backend, dashboard, computer service, repository scripts, dependency audit and week/year reference-pack acceptance; nightly slow tests were skipped by design.
@@ -748,3 +755,24 @@ Evidence: `docs/handoff/TIMBER_CROSS_CUT_REBASE_20261108.md`.
 - Current handoff: `docs/handoff/TIMBER_CROSS_CUT_REBASE_20261108.md`.
 - Exact-head workflow #42431547467: formatting and Clippy passed; fast Rust tests, desktop, installed backend and week/year reference packs were still running at the latest inspection. Dashboard, dependency audit, computer service and repository scripts passed. Nightly slow tests were skipped by design.
 - Re-run all required exact-head checks after the latest handoff-only commit; do not treat predecessor-head results as current.
+
+- Material amount PR #129 first exact-head workflow [#42464939304](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42464939304) checked out merge ref `d6c9ad45` and failed at `cargo fmt --all -- --check` on the compact `InvalidAmount` enum variant layout. No Clippy or fast-test result was reached. Exact rustfmt layout was applied in `fb866220`; fresh exact-head verification is required.
+- PR #129 regression coverage also verifies that two duplicate 2 kg + 3 kg gold inputs succeed against 6 kg stock when returned as 5 kg output, preserving the final inventory. The test change is included in the final exact-head run.
+- PR #129 also applies the amount guard to `bank_mined`, preventing negative clamping and non-finite mineral stock from bypassing `take`. The only simulation call site supplies mined `work.product_kg`; regression coverage checks negative and infinite inputs leave existing inventory unchanged.
+
+
+## Material stock overflow follow-up — 8 November 2026
+
+PR #129 now also preflights resulting stock totals, not only individual finite/non-negative inputs. `bank_mined` rejects a finite deposit that would overflow existing inventory. `craft` simulates post-debit output additions in their original order and rejects overflow before any debit/output mutation. Regressions cover an overflowing second mined deposit, craft output overflow against existing stock, and duplicate outputs whose finite quantities overflow when combined. Exact-head CI must be rerun for the new head; no local Cargo result is claimed.
+
+
+- PR #129 exact-head workflow [#42469507804](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42469507804) found one rustfmt-only layout difference in the new stock-overflow test. Applied the formatter's requested single-line call form; Clippy and fast tests were skipped by the failed format gate. Fresh exact-head verification is required.
+
+
+## Material source-inflow boundary follow-up — 8 November 2026
+
+- PR #129 now validates `gather_fossil` inputs and resulting stock before any stock/flux mutation.
+- PR #129 now validates `gather_water` input and destination-stock capacity before changing hydrology or flux records.
+- Regression tests cover negative, NaN, infinity, fossil-stock overflow, water-stock overflow and unchanged source-cell water on refusal.
+- Source commit: `b06169fc6c47bc52a2ffb2917e8b98a3be7afcf1`; tests: `00ec798a4fad3b110009195e911a0a30b68a0371`; handoff follows.
+- Exact-head CI must complete for the latest PR head; no local Cargo test result is claimed.
