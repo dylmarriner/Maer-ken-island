@@ -971,11 +971,12 @@ impl MaterialLedger {
             removed_mm.is_finite(),
             "felled-log soil-water debit must remain finite"
         );
-        let remaining_soil_mm = (soil.storage_mm - removed_mm).max(0.0);
-        assert!(
-            remaining_soil_mm.is_finite(),
-            "felled-log receipt must leave finite soil-water storage"
-        );
+        let remaining_soil_mm = Self::checked_source_debit_result(
+            Material::Water,
+            soil.storage_mm,
+            removed_mm,
+        )
+        .expect("felled-log soil-water debit must decrease source storage representably");
 
         let _resulting_carbon = Self::checked_stock_addition_result(
             Material::Wood,
