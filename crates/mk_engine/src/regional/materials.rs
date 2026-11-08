@@ -530,34 +530,47 @@ impl MaterialLedger {
         *self.stock.entry(m).or_insert(0.0) += kg;
     }
 
-    fn take(&mut self, m: Material, kg: f64) -> Result<(), MaterialError> {
+    /// Validate an exact withdrawal and return the resulting stock.
+    ///
+    /// The old availability tolerance could accept a request slightly larger
+    /// than stock, then clamp the debit to the available amount. Callers book
+    /// the requested amount in their flux/body transfer, so that clamp creates
+    /// matter on paper. Exact availability is required for every withdrawal.
+    fn checked_withdrawal_result(
+        m: Material,
+        have: f64,
+        kg: f64,
+    ) -> Result<f64, MaterialError> {
         Self::validate_amount(m, kg)?;
-        let have = self.stock_kg(m);
         if !have.is_finite() || have < 0.0 {
             return Err(MaterialError::InvalidAmount {
                 material: m,
                 amount_kg: have,
             });
         }
-        if have + 1e-12 < kg {
+        if have < kg {
             return Err(MaterialError::Insufficient {
                 material: m,
                 have_kg: have,
                 need_kg: kg,
             });
         }
-        let withdrawn = kg.min(have);
-        let resulting_stock = have - withdrawn;
+        let resulting_stock = have - kg;
         if !resulting_stock.is_finite()
             || resulting_stock < 0.0
-            || (kg > 0.0 && (withdrawn <= 0.0 || resulting_stock >= have))
+            || (kg > 0.0 && resulting_stock >= have)
         {
             return Err(MaterialError::InvalidAmount {
                 material: m,
                 amount_kg: resulting_stock,
             });
         }
-        self.add(m, -withdrawn);
+        Ok(resulting_stock)
+    }
+
+    fn take(&mut self, m: Material, kg: f64) -> Result<(), MaterialError> {
+        let resulting_stock = Self::checked_withdrawal_result(m, self.stock_kg(m), kg)?;
+        self.stock.insert(m, resulting_stock);
         Ok(())
     }
 
@@ -1262,30 +1275,7 @@ impl MaterialLedger {
         let mut projected_stock = self.stock.clone();
         for (m, kg) in &required {
             let have = projected_stock.get(m).copied().unwrap_or(0.0);
-            if !have.is_finite() || have < 0.0 {
-                return Err(MaterialError::InvalidAmount {
-                    material: *m,
-                    amount_kg: have,
-                });
-            }
-            if have + 1e-12 < *kg {
-                return Err(MaterialError::Insufficient {
-                    material: *m,
-                    have_kg: have,
-                    need_kg: *kg,
-                });
-            }
-            let withdrawn = kg.min(have);
-            let resulting_stock = have - withdrawn;
-            if !resulting_stock.is_finite()
-                || resulting_stock < 0.0
-                || (*kg > 0.0 && (withdrawn <= 0.0 || resulting_stock >= have))
-            {
-                return Err(MaterialError::InvalidAmount {
-                    material: *m,
-                    amount_kg: resulting_stock,
-                });
-            }
+            let resulting_stock = Self::checked_withdrawal_result(*m, have, *kg)?;
             projected_stock.insert(*m, resulting_stock);
         }
 
