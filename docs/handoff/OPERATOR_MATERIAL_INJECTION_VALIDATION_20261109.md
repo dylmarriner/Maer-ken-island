@@ -101,3 +101,14 @@ This is included in the rebased PR #131 branch. Fresh exact-head CI is required 
 ### Final assertion formatting correction — 9 November 2026
 
 The first post-rebase workflow reached `cargo fmt --all -- --check` and found only two line-wrap differences in the new one-line-summary regression assertions. Applied the exact formatter layout in `eb4f83e8d8040a659dadbafdd831cffa99adbdc1`. No Clippy or fast-test result was reached on that head. The final handoff/work-register commit below triggers a fresh exact-head workflow.
+
+
+## Clippy correction — 9 November 2026
+
+Exact-head workflow [#42488473527](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42488473527) passed formatting and then failed Clippy because two overflow-test setup calls ignored the new `Result<f64, MaterialError>` returned by `MaterialLedger::inject`.
+
+The fixtures now explicitly assert that the finite maximum-sized Wood and Water seed injections succeed and return the requested stock quantity. This preserves the intended overflow test setup while making the new fallible API contract explicit.
+
+- Test correction: `08b9278ace557ccc622de60119f1209145ce263f`.
+- No production behavior changed in this correction.
+- Fresh exact-head CI is required; fast tests were skipped after Clippy failed on the previous head.
