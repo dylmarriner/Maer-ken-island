@@ -2061,3 +2061,214 @@ fn cell_harvests_reject_nonpositive_or_nonfinite_area_before_mutation() {
         assert!(ledger.entries().is_empty());
     }
 }
+
+
+#[test]
+fn receiving_felled_wood_rejects_rounded_away_stock_before_booking_carbon() {
+    use std::panic::{catch_unwind, AssertUnwindSafe};
+
+    let mut materials = MaterialLedger::new();
+    let mut ledger = Ledger::new();
+    materials
+        .inject(Material::Wood, f64::MAX, &mut ledger)
+        .expect("the initial Wood stock is finite");
+    let stock_before = materials.stock_kg(Material::Wood);
+    let carbon_before = materials.stock_of(R::MaterialCarbon);
+    let entries_before = ledger.entries().len();
+
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        materials.receive_felled_wood(0.425, &mut ledger)
+    }));
+
+    assert!(result.is_err(), "the one-kilogram inflow rounds away");
+    assert_eq!(materials.stock_kg(Material::Wood), stock_before);
+    assert_eq!(materials.stock_of(R::MaterialCarbon), carbon_before);
+    assert_eq!(ledger.entries().len(), entries_before);
+}
+
+#[test]
+fn roof_water_capture_rejects_rounded_away_stock_before_debiting_soil() {
+    use std::panic::{catch_unwind, AssertUnwindSafe};
+
+    let b = base();
+    let cell = b.forest_cell;
+    let area = b.domain.cell_area_m2(M);
+    let mut hydrology = HydrologyState::new(&b.domain.storage_spec(M), 0.5);
+    hydrology.soil_water.get_mut(cell.0, cell.1).storage_mm = 100.0;
+    let mut materials = MaterialLedger::new();
+    let mut ledger = Ledger::new();
+    materials
+        .inject(Material::Water, f64::MAX, &mut ledger)
+        .expect("the initial water stock is finite");
+    let stock_before = materials.stock_kg(Material::Water);
+    let water_before = materials.stock_of(R::MaterialWater);
+    let soil_before = hydrology.soil_water.get(cell.0, cell.1).storage_mm;
+    let entries_before = ledger.entries().len();
+
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        materials.capture_roof_water(1.0, &mut hydrology, cell, area, &mut ledger)
+    }));
+
+    assert!(result.is_err(), "the one-kilogram inflow rounds away");
+    assert_eq!(materials.stock_kg(Material::Water), stock_before);
+    assert_eq!(materials.stock_of(R::MaterialWater), water_before);
+    assert_eq!(hydrology.soil_water.get(cell.0, cell.1).storage_mm, soil_before);
+    assert_eq!(ledger.entries().len(), entries_before);
+}
+
+#[test]
+fn receiving_felled_log_rejects_unrepresentable_carbon_before_allocating_or_debiting_soil() {
+    use std::panic::{catch_unwind, AssertUnwindSafe};
+
+    let b = base();
+    let cell = b.forest_cell;
+    let area = b.domain.cell_area_m2(M);
+    let mut hydrology = HydrologyState::new(&b.domain.storage_spec(M), 0.5);
+    let mut materials = MaterialLedger::new();
+    let mut ledger = Ledger::new();
+    materials
+        .inject(Material::Coal, f64::MAX, &mut ledger)
+        .expect("the initial Coal stock is finite");
+    let carbon_before = materials.stock_of(R::MaterialCarbon);
+    let soil_before = hydrology.soil_water.get(cell.0, cell.1).storage_mm;
+    let next_id_before = materials.next_log_id();
+    let entries_before = ledger.entries().len();
+    let log = Log {
+        id: 0,
+        position_m: (0.0, 0.0),
+        heading_rad: 0.0,
+        length_m: 2.0,
+        diameter_m: 0.2,
+        dry_kg: 10.0,
+        carbon_kgc: 5.0,
+        water_kg: 8.2,
+        place: LogPlace::Ground,
+    };
+
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        materials.receive_felled_log(log, &mut hydrology, cell, area, &mut ledger)
+    }));
+
+    assert!(result.is_err(), "the log carbon disappears in aggregate stock");
+    assert_eq!(materials.next_log_id(), next_id_before);
+    assert_eq!(materials.logs().count(), 0);
+    assert_eq!(materials.stock_of(R::MaterialCarbon), carbon_before);
+    assert_eq!(hydrology.soil_water.get(cell.0, cell.1).storage_mm, soil_before);
+    assert_eq!(ledger.entries().len(), entries_before);
+}
+
+#[test]
+fn receiving_felled_log_rejects_unrepresentable_water_before_allocating_or_debiting_soil() {
+    use std::panic::{catch_unwind, AssertUnwindSafe};
+
+    let b = base();
+    let cell = b.forest_cell;
+    let area = b.domain.cell_area_m2(M);
+    let mut hydrology = HydrologyState::new(&b.domain.storage_spec(M), 0.5);
+    let mut materials = MaterialLedger::new();
+    let mut ledger = Ledger::new();
+    materials
+        .inject(Material::Water, f64::MAX, &mut ledger)
+        .expect("the initial water stock is finite");
+    let water_before = materials.stock_of(R::MaterialWater);
+    let soil_before = hydrology.soil_water.get(cell.0, cell.1).storage_mm;
+    let next_id_before = materials.next_log_id();
+    let entries_before = ledger.entries().len();
+    let log = Log {
+        id: 0,
+        position_m: (0.0, 0.0),
+        heading_rad: 0.0,
+        length_m: 2.0,
+        diameter_m: 0.2,
+        dry_kg: 10.0,
+        carbon_kgc: 5.0,
+        water_kg: 8.2,
+        place: LogPlace::Ground,
+    };
+
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        materials.receive_felled_log(log, &mut hydrology, cell, area, &mut ledger)
+    }));
+
+    assert!(result.is_err(), "the log water disappears in aggregate stock");
+    assert_eq!(materials.next_log_id(), next_id_before);
+    assert_eq!(materials.logs().count(), 0);
+    assert_eq!(materials.stock_of(R::MaterialWater), water_before);
+    assert_eq!(hydrology.soil_water.get(cell.0, cell.1).storage_mm, soil_before);
+    assert_eq!(ledger.entries().len(), entries_before);
+}
+
+#[test]
+fn seasoning_preflights_the_complete_wood_batch_before_removing_any_log() {
+    use std::panic::{catch_unwind, AssertUnwindSafe};
+
+    let b = base();
+    let cell = b.forest_cell;
+    let area = b.domain.cell_area_m2(M);
+    let mut hydrology = HydrologyState::new(&b.domain.storage_spec(M), 0.5);
+    let mut materials = MaterialLedger::new();
+    let mut ledger = Ledger::new();
+    let log = Log {
+        id: 0,
+        position_m: (0.0, 0.0),
+        heading_rad: 0.0,
+        length_m: 2.0,
+        diameter_m: 0.2,
+        dry_kg: 1.0,
+        carbon_kgc: 0.425,
+        water_kg: 0.0,
+        place: LogPlace::Stored,
+    };
+    let id = materials.receive_felled_log(log, &mut hydrology, cell, area, &mut ledger);
+    materials
+        .inject(Material::Wood, f64::MAX, &mut ledger)
+        .expect("the initial Wood stock is finite");
+    let stored_before = materials.log(id).cloned();
+    let wood_before = materials.stock_kg(Material::Wood);
+    let entries_before = ledger.entries().len();
+
+    let result = catch_unwind(AssertUnwindSafe(|| materials.season_stored_logs(&mut ledger)));
+
+    assert!(result.is_err(), "the seasoned log cannot increase Wood stock");
+    assert_eq!(materials.log(id), stored_before.as_ref());
+    assert_eq!(materials.stock_kg(Material::Wood), wood_before);
+    assert_eq!(ledger.entries().len(), entries_before);
+}
+
+#[test]
+fn seasoning_aggregates_small_logs_before_preflighting_large_wood_stock() {
+    let b = base();
+    let cell = b.forest_cell;
+    let area = b.domain.cell_area_m2(M);
+    let mut hydrology = HydrologyState::new(&b.domain.storage_spec(M), 0.5);
+    let mut materials = MaterialLedger::new();
+    let mut ledger = Ledger::new();
+    for offset in [0.0, 10.0] {
+        let log = Log {
+            id: 0,
+            position_m: (offset, 0.0),
+            heading_rad: 0.0,
+            length_m: 2.0,
+            diameter_m: 0.2,
+            dry_kg: 1.0,
+            carbon_kgc: 0.425,
+            water_kg: 0.0,
+            place: LogPlace::Stored,
+        };
+        materials.receive_felled_log(log, &mut hydrology, cell, area, &mut ledger);
+    }
+    let first_id = 1;
+    let second_id = 2;
+    materials
+        .inject(Material::Wood, 2_f64.powi(53), &mut ledger)
+        .expect("the initial Wood stock is finite");
+    let audit = Audit::start(&materials);
+
+    let added = materials.season_stored_logs(&mut ledger);
+
+    assert_eq!(added, 2.0);
+    assert_eq!(materials.stock_kg(Material::Wood), 2_f64.powi(53) + 2.0);
+    assert!(materials.log(first_id).is_none());
+    assert!(materials.log(second_id).is_none());
+    audit.close(&materials, &ledger);
+}
