@@ -823,3 +823,12 @@ PR #129 now also preflights resulting stock totals, not only individual finite/n
 - Regression tests cover both Wood and Water at `f64::MAX`, asserting typed rejection and unchanged stock/flux entries.
 - Commits: production `a27d9af74d7a74d06e6cd776245e64f4e2513c16`; tests `534ad3279a8fe916d6d6bfd7d50e42ccde7413ae`.
 - Fresh exact-head CI is required; no local Cargo result is claimed.
+
+
+## Latest PR #134 verification correction — 9 November 2026
+
+- Exact-head workflow [#42528864382](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42528864382) passed formatting and Clippy; the fast suite failed only because `docs/TESTING.md` still published the old week digest after the audited `WEEK_DIGEST` pin changed.
+- Updated `docs/TESTING.md`, `docs/handoff/STATE_OF_THE_ISLAND.md` and `HANDOFF.md` to the audited `61ffaa6a559b5a8f503b7b6c707ca5f8cf634be9eebec64a1af6652706c2478a` value.
+- Documentation commits: 05db67f4ec4aef300bc8181132ce9eab0e46c85e, 8ce576797ecc7b46f3bb19e1ffa3ce0b1763594d, 056eedc65aa61150305fadaaa92e7f7a9344eb6d. Handoff commit: 0b64c42b39d3dd6f2b7e05d6d5084e710afb86d1.
+- Fresh exact-head fast tests and full acceptance remain required. PR #134 must not be merged on the predecessor run.
+- The no-Result ingestion guards for `receive_felled_wood`, `receive_felled_log`, `capture_roof_water` and `season_stored_logs` are in separate draft PR #135; keep that work independently verified.
