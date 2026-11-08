@@ -255,7 +255,10 @@ pub enum MaterialError {
         need_kg: f64,
     },
     /// A material operation supplied a negative or non-finite quantity.
-    InvalidAmount { material: Material, amount_kg: f64 },
+    InvalidAmount {
+        material: Material,
+        amount_kg: f64,
+    },
     /// The material cannot be used this way.
     WrongMaterial(Material),
     NoSuchHuman(String),
