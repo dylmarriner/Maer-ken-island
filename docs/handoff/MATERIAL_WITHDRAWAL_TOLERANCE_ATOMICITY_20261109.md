@@ -60,3 +60,8 @@ A second binary64 conservation boundary was found in stock additions. A positive
 
 - The same binary64 loss could occur while aggregating repeated craft inputs: adding a 1 kg requirement to a 2^53 kg requirement rounds the aggregate back to 2^53 kg.
 - Input aggregation now rejects a positive component when the aggregate does not increase, before any stock debit. Added a regression that requests 2^53 kg plus 1 kg of Gold and verifies typed refusal with unchanged stock and ledger.
+
+
+## Exact-head formatting correction — 9 November 2026
+
+Workflow [#42512092655](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42512092655) checked the updated inflow and duplicate-output work. Its Rust job stopped at cargo fmt before Clippy or tests, identifying two multiline formatting differences in materials.rs and two blank lines between test attributes in island_material_flows.rs. These formatting-only findings are corrected in the current head; the run provides no Rust compile or test result. A fresh exact-head workflow is required.
