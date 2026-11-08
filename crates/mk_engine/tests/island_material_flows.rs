@@ -462,9 +462,7 @@ fn water_gathering_rejects_invalid_amounts_and_stock_overflow_before_drain() {
     // Seed a finite maximum stock, then offer enough finite standing water to
     // overflow it. The source cell must not be drained on a rejected transfer.
     materials.inject(Material::Water, f64::MAX, &mut ledger);
-    hydrology
-        .surface_water
-        .set(cell.0, cell.1, f64::MAX / area);
+    hydrology.surface_water.set(cell.0, cell.1, f64::MAX / area);
     let surface_before = hydrology.surface_water.get(cell.0, cell.1);
     let entries_before = ledger.entries().len();
     let overflow = materials.gather_water(f64::MAX, &mut hydrology, cell, area, &mut ledger);
