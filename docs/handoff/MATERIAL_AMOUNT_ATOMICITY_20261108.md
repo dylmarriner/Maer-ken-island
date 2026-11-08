@@ -58,3 +58,5 @@ The crafting path also checked duplicate inputs independently. Two 5 kg inputs c
 - Rustfmt requested the multi-line layout for `MaterialError::InvalidAmount`; no semantic or test failure was reached.
 - Applied the exact formatter layout in commit `fb86622003566e8857dc19c4918f9da61d4d6e55`.
 - The corrected branch head requires a fresh exact-head workflow. Fast tests, Clippy, desktop/backend and reference-pack results are not yet available for this slice.
+
+- Added a successful duplicate-input recipe case as well: two gold inputs totalling 5 kg against 6 kg stock are aggregated, debited and re-added as 5 kg output with the final stock unchanged. This complements the insufficient-stock no-partial-mutation case.
