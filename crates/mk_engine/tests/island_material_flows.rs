@@ -2263,3 +2263,44 @@ fn hunting_rejects_rounded_away_meat_stock_before_population_mutation() {
     assert_eq!(materials.stock_kg(Material::Meat), f64::MAX);
     assert_eq!(ledger.entries().len(), entries_before);
 }
+
+
+#[test]
+fn negligible_unrepresentable_edible_gather_is_a_noop_not_a_food_shortfall() {
+    use mk_engine::regional::edible::ReproductiveShares;
+    use mk_engine::validation::{default_reference_dir, ReferenceLibrary};
+
+    let b = base();
+    let cell = b.forest_cell;
+    let area = b.domain.cell_area_m2(M);
+    let mut ecology = b.ecology.clone();
+    let library = ReferenceLibrary::load(&default_reference_dir()).unwrap();
+    ecology.install_edible(&ReproductiveShares::from_reference(&library).unwrap());
+    let index = ecology.biomass_kgc_m2.grid_to_linear_index(cell.0, cell.1);
+    let biomass_before = *ecology.biomass_kgc_m2.get(cell.0, cell.1);
+    let edible_before = ecology.edible.as_ref().unwrap().at(index);
+    assert!(edible_before > 0.0);
+
+    let (mut materials, mut ledger) = (MaterialLedger::new(), Ledger::new());
+    materials
+        .inject(Material::PlantFood, 0.16768904162783882, &mut ledger)
+        .expect("finite initial food stock");
+    let stock_before = materials.stock_kg(Material::PlantFood);
+    let entries_before = ledger.entries().len();
+
+    let gathered = materials
+        .gather_edible(
+            7.709882115452476e-18,
+            &mut ecology,
+            cell,
+            area,
+            &mut ledger,
+        )
+        .expect("sub-nanogram meal residual is not a failed harvest");
+
+    assert_eq!(gathered, 0.0);
+    assert_eq!(materials.stock_kg(Material::PlantFood), stock_before);
+    assert_eq!(*ecology.biomass_kgc_m2.get(cell.0, cell.1), biomass_before);
+    assert_eq!(ecology.edible.as_ref().unwrap().at(index), edible_before);
+    assert_eq!(ledger.entries().len(), entries_before);
+}
