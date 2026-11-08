@@ -112,3 +112,12 @@ The fixtures now explicitly assert that the finite maximum-sized Wood and Water 
 - Test correction: `08b9278ace557ccc622de60119f1209145ce263f`.
 - No production behavior changed in this correction.
 - Fresh exact-head CI is required; fast tests were skipped after Clippy failed on the previous head.
+
+
+## Follow-up rustfmt correction — 9 November 2026
+
+Fresh exact-head workflow [#42491631214](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42491631214) ran on the Clippy-fixture correction. The fast-check job stopped at formatting because rustfmt requires the two `materials.inject(...).expect(...)` chains to be wrapped across method-call lines. Applied the exact formatter layout:
+
+- Formatting correction: `3987778c8dac1a8fdbe47d9aa39c3c58a1b91a91`.
+- The previous Clippy error is not re-evaluated on that run because formatting failed first.
+- Fresh exact-head CI must now pass formatting, Clippy and fast tests.
