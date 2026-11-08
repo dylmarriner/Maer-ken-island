@@ -2264,7 +2264,6 @@ fn hunting_rejects_rounded_away_meat_stock_before_population_mutation() {
     assert_eq!(ledger.entries().len(), entries_before);
 }
 
-
 #[test]
 fn negligible_unrepresentable_edible_gather_is_a_noop_not_a_food_shortfall() {
     use mk_engine::regional::edible::ReproductiveShares;
@@ -2289,13 +2288,7 @@ fn negligible_unrepresentable_edible_gather_is_a_noop_not_a_food_shortfall() {
     let entries_before = ledger.entries().len();
 
     let gathered = materials
-        .gather_edible(
-            7.709882115452476e-18,
-            &mut ecology,
-            cell,
-            area,
-            &mut ledger,
-        )
+        .gather_edible(7.709882115452476e-18, &mut ecology, cell, area, &mut ledger)
         .expect("sub-nanogram meal residual is not a failed harvest");
 
     assert_eq!(gathered, 0.0);
