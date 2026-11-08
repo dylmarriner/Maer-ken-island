@@ -1261,8 +1261,14 @@ impl MaterialLedger {
         for (m, kg) in inputs {
             Self::validate_amount(*m, *kg)?;
             let total = required.entry(*m).or_insert(0.0);
-            *total += *kg;
-            Self::validate_amount(*m, *total)?;
+            let combined = *total + *kg;
+            if !combined.is_finite() || (*kg > 0.0 && combined <= *total) {
+                return Err(MaterialError::InvalidAmount {
+                    material: *m,
+                    amount_kg: combined,
+                });
+            }
+            *total = combined;
         }
         // Aggregate outputs before mutation just as inputs are aggregated.
         // Sequential small additions can each round away even when their sum
