@@ -43,3 +43,28 @@ Included:
 - [ ] Run formatting, Clippy, fast Rust tests, desktop/backend acceptance and week/year reference packs.
 - [ ] Resolve review findings.
 - [ ] Merge only after all required exact-head checks pass.
+
+
+## PR and exact-head CI update — 8 November 2026
+
+- Fresh-main PR: [#127](https://github.com/dylmarriner/Maer-ken-island/pull/127).
+- Exact PR head at this inspection: `deb6b725b0964e51f1127c5b5be2a0b2a2f61e49`.
+- Exact-head workflow: [#42431547467](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42431547467).
+- Formatting and Clippy have passed. Fast Rust tests are still in progress.
+- Desktop build is in progress; desktop tests/render/input/frame-cost checks are pending.
+- Installed backend is in progress.
+- Week/year reference-pack acceptance is in progress.
+- Web dashboard, dependency audit, computer service and repository scripts have passed. Nightly slow tests are skipped by design.
+- GitHub reports the fresh-main PR mergeable, but it remains draft. Do not merge until all required exact-head jobs pass.
+- Original PR #124 remains open/draft and is superseded for integration by #127; do not merge its 12-commits-behind branch.
+
+Rebased commit sequence:
+- `0a1c7b12c1b7552ed00c57fd02f7472ee26d599d`
+- `6a90b12231bce876f431760b221cab47a6820e04`
+- `3f8a3480dfd0651170ad01d5ace31ee44320a5f2`
+- `63c134a85cf1f927448a3f7342711d7a5f55bde0`
+- `02ec05d89d5dcb68ef55fbbac7d3cc9a56e87f37`
+- `3737b845539b4af87177f5534ec24827920feb65`
+- `deb6b725b0964e51f1127c5b5be2a0b2a2f61e49`
+
+No local Cargo result is claimed; custom OpenCommander discovery still returns HTTP 429.
