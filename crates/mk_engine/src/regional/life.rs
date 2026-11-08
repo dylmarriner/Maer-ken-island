@@ -972,12 +972,32 @@ impl IslandLife {
             .scenario
             .validate()
             .map_err(IslandLifeError::Scenario)?;
-        if snapshot
-            .hauling
-            .values()
-            .any(|job| !job.has_valid_persisted_state())
-        {
-            return Err(IslandLifeError::Labour(LabourError::InvalidHaulJobState));
+        // A founder may own only one active haul for a given log, and the
+        // island has one ute and one excavator. Planning enforces these rules
+        // for new work; restore must enforce them too or a malformed snapshot
+        // could make two founders mutate the same material or vehicle.
+        let mut claimed_log_ids = std::collections::BTreeSet::new();
+        let mut ute_claimed = false;
+        let mut excavator_claimed = false;
+        for job in snapshot.hauling.values() {
+            if !job.has_valid_persisted_state() || !claimed_log_ids.insert(job.log_id) {
+                return Err(IslandLifeError::Labour(LabourError::InvalidHaulJobState));
+            }
+            match job.method {
+                timber::HaulMethod::Ute => {
+                    if ute_claimed {
+                        return Err(IslandLifeError::Labour(LabourError::InvalidHaulJobState));
+                    }
+                    ute_claimed = true;
+                }
+                timber::HaulMethod::Excavator => {
+                    if excavator_claimed {
+                        return Err(IslandLifeError::Labour(LabourError::InvalidHaulJobState));
+                    }
+                    excavator_claimed = true;
+                }
+                timber::HaulMethod::OnFoot => {}
+            }
         }
         let domain = IslandDomain::from_profile(snapshot.scenario.profile.clone())
             .map_err(IslandLifeError::Domain)?;
