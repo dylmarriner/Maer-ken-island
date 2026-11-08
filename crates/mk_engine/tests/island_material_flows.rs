@@ -2062,7 +2062,6 @@ fn cell_harvests_reject_nonpositive_or_nonfinite_area_before_mutation() {
     }
 }
 
-
 #[test]
 fn fossil_extraction_rejects_a_rounded_away_stock_inflow_before_flux() {
     let (mut materials, mut ledger) = (MaterialLedger::new(), Ledger::new());
@@ -2121,7 +2120,10 @@ fn edible_gather_rejects_a_rounded_away_stock_inflow_before_source_mutation() {
         .flat_map(|r| (0..cols).map(move |c| (r, c)))
         .find(|&(r, c)| {
             let i = ecology.biomass_kgc_m2.grid_to_linear_index(r, c);
-            ecology.edible.as_ref().map_or(false, |edible| edible.at(i) > 0.0)
+            ecology
+                .edible
+                .as_ref()
+                .map_or(false, |edible| edible.at(i) > 0.0)
         })
         .expect("a cell with edible biomass");
     let area = b.domain.cell_area_m2(M);
