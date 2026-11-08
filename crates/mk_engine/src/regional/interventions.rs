@@ -677,12 +677,23 @@ impl IslandLife {
     ) -> Result<IslandApplied, IslandInterventionError> {
         let (row, col) = self.cell_for(DomainLevel::Medium, location)?;
         let kg = f64::from(amount);
-        let mut injection = Ok(0.0);
+        // Refuse before opening an audit: the audited helper closes a successful
+        // audit window even when its closure made no stock change. A rejected
+        // injection must leave that counter, the flux ledger and replay log
+        // untouched as well as preserving the material inventory.
+        self.materials
+            .validate_injection(Material::Water, kg)
+            .map_err(IslandInterventionError::Material)?;
+        let mut added = 0.0;
         self.audited(|life, ledger| {
-            injection = life.materials.inject(Material::Water, kg, ledger);
+            // IslandLife is single-writer, so no material state can change
+            // between the pure preflight above and this audited mutation.
+            added = life
+                .materials
+                .inject(Material::Water, kg, ledger)
+                .expect("preflighted water injection remains valid on the single writer");
         })
         .map_err(|e| IslandInterventionError::Audit(e.to_string()))?;
-        let added = injection.map_err(IslandInterventionError::Material)?;
         Ok(mutated(
             format!("put {added} kg of water into the island's stores, asked for at cell ({row}, {col})"),
             1,
