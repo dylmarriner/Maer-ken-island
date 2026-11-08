@@ -2158,6 +2158,9 @@ impl IslandLife {
                 .into_iter()
                 .find(|c| self.edible_kgc_m2(*c) > 0.0);
             let Some(cell) = cell else {
+                eprintln!(
+                    "[maer-ken-week-diagnostic] no edible cell: human={id} stands={stands:?} at_home={at_home} owed_kgc={owed_kgc:.17e}"
+                );
                 self.shortfalls.food += 1;
                 continue;
             };
@@ -2555,11 +2558,16 @@ impl IslandLife {
                         } else {
                             gathered
                         };
-                        if life
+                        if let Err(error) = life
                             .materials
                             .eat(id, Material::PlantFood, kg, ledger)
-                            .is_err()
                         {
+                            eprintln!(
+                                "[maer-ken-week-diagnostic] eat failed: human={id} from_home={} cell={:?} kg={kg:.17e} stock_kg={:.17e} error={error:?}",
+                                trip.from_home,
+                                trip.cell,
+                                life.materials.stock_kg(Material::PlantFood),
+                            );
                             life.shortfalls.food += 1;
                             continue;
                         }
@@ -2567,7 +2575,16 @@ impl IslandLife {
                         life.respired_since_meal
                             .insert(id.clone(), (owed - kg * carbon_per_kg).max(0.0));
                     }
-                    _ => life.shortfalls.food += 1,
+                    Err(error) => {
+                        eprintln!(
+                            "[maer-ken-week-diagnostic] gather failed: human={id} from_home={} cell={:?} wanted_kg={:.17e} stock_kg={:.17e} error={error:?}",
+                            trip.from_home,
+                            trip.cell,
+                            trip.kgc / carbon_per_kg,
+                            life.materials.stock_kg(Material::PlantFood),
+                        );
+                        life.shortfalls.food += 1;
+                    }
                 }
             }
         })
