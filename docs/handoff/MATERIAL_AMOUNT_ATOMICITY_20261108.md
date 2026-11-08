@@ -112,3 +112,10 @@ Exact-head CI is required for this updated PR head. OpenCommander returned HTTP 
 ## Exact-head formatting correction — 8 November 2026
 
 The first exact-head run after the fossil/water source-inflow follow-up, workflow [#42473076943](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42473076943), failed only at `cargo fmt --all -- --check`. Rustfmt requested a single-line `surface_water.set` call in the new overflow fixture. Applied that exact correction in commit `a4a9771f7eeaf28b880f036c3a83f91dc581b86d`. Clippy and fast tests were skipped by the formatting failure; a fresh exact-head run is required.
+
+
+## Exact-head borrow-check correction — 8 November 2026
+
+Workflow [#42473183503](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42473183503) passed Rust formatting but Clippy's all-target compilation exposed two E0502 borrow errors in the new water-gathering regressions: the tests retained references returned by `Grid2::get` across a mutable `gather_water` call.
+
+The test now copies both before/after surface-water values (`*get(...)`) so no immutable grid borrow crosses the mutable call. Correction commit: `9d5351b1128853388c82abce753ce603db83aee9`. Clippy stopped before fast tests; a fresh exact-head workflow is required.
