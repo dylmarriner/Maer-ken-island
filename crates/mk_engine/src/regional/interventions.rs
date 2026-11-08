@@ -602,12 +602,13 @@ impl IslandLife {
         location: &Location,
     ) -> Result<IslandApplied, IslandInterventionError> {
         let (row, col) = self.cell_for(DomainLevel::Medium, location)?;
-        let kg = f64::from(amount).max(0.0);
-        let mut added = 0.0;
+        let kg = f64::from(amount);
+        let mut injection = Ok(0.0);
         self.audited(|life, ledger| {
-            added = life.materials.inject(Material::Water, kg, ledger);
+            injection = life.materials.inject(Material::Water, kg, ledger);
         })
         .map_err(|e| IslandInterventionError::Audit(e.to_string()))?;
+        let added = injection.map_err(IslandInterventionError::Material)?;
         Ok(mutated(
             format!("put {added} kg of water into the island's stores, asked for at cell ({row}, {col})"),
             1,
