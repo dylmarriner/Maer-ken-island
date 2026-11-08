@@ -201,9 +201,23 @@ const DAY: u64 = 86_400;
 /// 200,000 estate-patch trees, Gem-D body carbon 13.0/13.0 kg, Gem-K 10.4/10.4
 /// kg, and temperate-forest NPP 471 g C/m2/yr against the pack's 400-900.
 /// The independent year-weather reference-pack test passed in the same run.
-/// The only failing assertion was the previous digest pin; no simulation
-/// state or physics code was changed by this re-pin.
-const WEEK_DIGEST: &str = "29ed53bd7769eb3025e70135bab8b7ea07718e26e7fca4cbf77ab379d62b7784";
+/// The previous pin predates D40's sub-nanogram meal-balance
+/// canonicalisation in PR #134. After a completed meal, a residual owed
+/// carbon balance at or below 1e-12 kg C is now stored as exactly zero rather
+/// than preserving a positive binary64 subtraction remainder that cannot
+/// produce a representable transfer. Exact-head workflow #42523987454
+/// produced this digest after all physical acceptance assertions passed:
+/// 27,651 ledger audits (167 hourly water audits), zero food and water
+/// shortfalls, 111 economy events, 200,000 estate-patch trees, Gem-D body
+/// carbon 13.0/13.0 kg, Gem-K 10.4/10.4 kg, and temperate-forest NPP
+/// 471 g C/m2/yr within the ecology pack's 400-900. Gem-D slept at home
+/// 40 of 56 hours and Gem-K 30 of 52; their daily drinks were 2.47 L and
+/// 1.73 L, both inside the existing 0.5-1.5 adequate-intake band. The
+/// independent year-weather reference-pack test passed. The only failed
+/// assertion was the old digest pin; this re-pin records the intentional
+/// canonical state change without changing a scientific constant or
+/// relaxing a physical acceptance bound.
+const WEEK_DIGEST: &str = "61ffaa6a559b5a8f503b7b6c707ca5f8cf634be9eebec64a1af6652706c2478a";
 
 fn repo(path: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
