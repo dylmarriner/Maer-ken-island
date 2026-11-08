@@ -397,6 +397,67 @@ fn craft_rejects_positive_withdrawal_when_stock_is_within_tolerance_but_zero() {
 }
 
 #[test]
+fn direct_withdrawal_rejects_a_positive_shortfall_inside_legacy_tolerance() {
+    let (mut materials, mut ledger) = (MaterialLedger::new(), Ledger::new());
+    materials.register_human("Ada", 70.0);
+    materials
+        .inject(Material::Water, 1e-13, &mut ledger)
+        .expect("a positive representable water stock can be seeded");
+
+    let stock_before = materials.stock_kg(Material::Water);
+    let water_before = materials.stock_of(R::MaterialWater);
+    let rejected = materials.drink("Ada", 2e-13);
+
+    assert!(matches!(
+        rejected,
+        Err(MaterialError::Insufficient {
+            material: Material::Water,
+            have_kg,
+            need_kg
+        }) if have_kg == 1e-13 && need_kg == 2e-13
+    ));
+    assert_eq!(materials.stock_kg(Material::Water), stock_before);
+    assert_eq!(materials.stock_of(R::MaterialWater), water_before);
+}
+
+#[test]
+fn craft_preflight_rejects_tolerance_shortfall_before_any_input_is_debited() {
+    let (mut materials, mut ledger) = (MaterialLedger::new(), Ledger::new());
+    materials
+        .inject(Material::Wood, 10.0, &mut ledger)
+        .expect("wood input stock");
+    materials
+        .inject(Material::Water, 1e-13, &mut ledger)
+        .expect("small positive water input stock");
+
+    let wood_before = materials.stock_kg(Material::Wood);
+    let water_before = materials.stock_kg(Material::Water);
+    let carbon_before = materials.stock_of(R::MaterialCarbon);
+    let material_water_before = materials.stock_of(R::MaterialWater);
+    let entries_before = ledger.entries().len();
+
+    let rejected = materials.craft(
+        &[(Material::Wood, 1.0), (Material::Water, 2e-13)],
+        &[],
+        &mut ledger,
+    );
+
+    assert!(matches!(
+        rejected,
+        Err(MaterialError::Insufficient {
+            material: Material::Water,
+            have_kg,
+            need_kg
+        }) if have_kg == 1e-13 && need_kg == 2e-13
+    ));
+    assert_eq!(materials.stock_kg(Material::Wood), wood_before);
+    assert_eq!(materials.stock_kg(Material::Water), water_before);
+    assert_eq!(materials.stock_of(R::MaterialCarbon), carbon_before);
+    assert_eq!(materials.stock_of(R::MaterialWater), material_water_before);
+    assert_eq!(ledger.entries().len(), entries_before);
+}
+
+#[test]
 fn material_stock_additions_reject_overflow_before_mutation() {
     let (mut materials, mut ledger) = (MaterialLedger::new(), Ledger::new());
     materials
