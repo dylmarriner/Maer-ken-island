@@ -861,3 +861,12 @@ PR #129 now also preflights resulting stock totals, not only individual finite/n
 - Regression tests cover both Wood and Water at `f64::MAX`, asserting typed rejection and unchanged stock/flux entries.
 - Commits: production `a27d9af74d7a74d06e6cd776245e64f4e2513c16`; tests `534ad3279a8fe916d6d6bfd7d50e42ccde7413ae`.
 - Fresh exact-head CI is required; no local Cargo result is claimed.
+
+
+## Latest PR #135 fast-test correction — 9 November 2026
+
+- Exact-head workflow [#42528709057](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42528709057) passed formatting and Clippy; one seasoning aggregation test failed because its audit baseline began after setup flows while the close step included the historical setup ledger.
+- Corrected the regression to audit only a fresh ledger containing the seasoning operation. Production code was not changed by this correction.
+- Test commit: `e9aeb11d3d168aa54ee8751245c4e06289ebec1d`; handoff update: `497b6a04d910e1b7e434466f28c0089d9b5e0349`.
+- PR #135 remains draft. Run exact-head formatting, Clippy, fast tests, desktop/backend and week/year reference-pack acceptance before review/merge.
+- The remaining no-Result ingestion paths are tracked in PR #135: `receive_felled_wood`, `receive_felled_log`, `capture_roof_water` and `season_stored_logs`.
