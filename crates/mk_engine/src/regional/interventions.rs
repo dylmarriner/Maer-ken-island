@@ -650,7 +650,7 @@ impl IslandLife {
         ));
         Ok(mutated(
             format!(
-                "added {total_kgc} kgC of standing producer carbon over {} \\
+                "added {total_kgc} kgC of standing producer carbon over {} \
                  ({per_cell_kgc_m2:.6} kgC/m² each)",
                 plural(cells.len(), "land cell", "land cells")
             ),
