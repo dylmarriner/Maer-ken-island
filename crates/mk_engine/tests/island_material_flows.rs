@@ -228,6 +228,107 @@ fn burning_coal_releases_its_carbon_and_binds_the_stoichiometric_oxygen() {
 }
 
 #[test]
+fn material_withdrawals_reject_negative_and_non_finite_amounts_before_mutation() {
+    let (mut materials, mut ledger) = (MaterialLedger::new(), Ledger::new());
+    materials
+        .bank_mined(Material::Gold, 10.0)
+        .expect("gold is a mineral material");
+    materials.register_human("Ada", 70.0);
+
+    let gold_before = materials.stock_kg(Material::Gold);
+    let body_carbon_before = materials.stock_of(R::HumanCarbon);
+    let body_water_before = materials.stock_of(R::MaterialWater);
+
+    assert!(matches!(
+        materials.burn(Material::Coal, -1.0, &mut ledger),
+        Err(MaterialError::InvalidAmount {
+            material: Material::Coal,
+            amount_kg
+        }) if amount_kg == -1.0
+    ));
+    assert!(matches!(
+        materials.calcine(f64::NAN, &mut ledger),
+        Err(MaterialError::InvalidAmount {
+            material: Material::Limestone,
+            amount_kg
+        }) if amount_kg.is_nan()
+    ));
+    assert!(matches!(
+        materials.make_charcoal(f64::INFINITY, &mut ledger),
+        Err(MaterialError::InvalidAmount {
+            material: Material::Wood,
+            amount_kg
+        }) if amount_kg.is_infinite() && amount_kg.is_sign_positive()
+    ));
+    assert!(matches!(
+        materials.eat("Ada", Material::PlantFood, -0.5, &mut ledger),
+        Err(MaterialError::InvalidAmount {
+            material: Material::PlantFood,
+            amount_kg
+        }) if amount_kg == -0.5
+    ));
+    assert!(matches!(
+        materials.drink("Ada", f64::NEG_INFINITY),
+        Err(MaterialError::InvalidAmount {
+            material: Material::Water,
+            amount_kg
+        }) if amount_kg.is_infinite() && amount_kg.is_sign_negative()
+    ));
+    assert!(matches!(
+        materials.build(Material::Gold, -2.0),
+        Err(MaterialError::InvalidAmount {
+            material: Material::Gold,
+            amount_kg
+        }) if amount_kg == -2.0
+    ));
+
+    assert_eq!(materials.stock_kg(Material::Gold), gold_before);
+    assert_eq!(materials.stock_of(R::HumanCarbon), body_carbon_before);
+    assert_eq!(materials.stock_of(R::MaterialWater), body_water_before);
+    assert_eq!(materials.structure_count(), 0);
+    assert!(ledger.entries().is_empty());
+}
+
+#[test]
+fn craft_aggregates_duplicate_inputs_and_rejects_invalid_outputs_atomically() {
+    let (mut materials, mut ledger) = (MaterialLedger::new(), Ledger::new());
+    materials
+        .bank_mined(Material::Gold, 6.0)
+        .expect("gold is a mineral material");
+
+    let insufficient = materials.craft(
+        &[(Material::Gold, 5.0), (Material::Gold, 5.0)],
+        &[],
+        &mut ledger,
+    );
+    assert!(matches!(
+        insufficient,
+        Err(MaterialError::Insufficient {
+            material: Material::Gold,
+            have_kg,
+            need_kg
+        }) if have_kg == 6.0 && need_kg == 10.0
+    ));
+    assert_eq!(materials.stock_kg(Material::Gold), 6.0);
+    assert!(ledger.entries().is_empty());
+
+    let invalid_output = materials.craft(
+        &[(Material::Gold, 1.0)],
+        &[(Material::Gold, -1.0)],
+        &mut ledger,
+    );
+    assert!(matches!(
+        invalid_output,
+        Err(MaterialError::InvalidAmount {
+            material: Material::Gold,
+            amount_kg
+        }) if amount_kg == -1.0
+    ));
+    assert_eq!(materials.stock_kg(Material::Gold), 6.0);
+    assert!(ledger.entries().is_empty());
+}
+
+#[test]
 fn calcining_limestone_and_making_charcoal_release_their_carbon_as_co2() {
     let (mut m, mut ledger) = (MaterialLedger::new(), Ledger::new());
     let audit = Audit::start(&m);
