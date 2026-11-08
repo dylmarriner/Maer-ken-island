@@ -1,14 +1,44 @@
+## Latest exact-head formatting correction — 9 November 2026
+
+- Workflow [#42512092655](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42512092655) stopped at cargo fmt before Clippy/tests. Rustfmt identified two formatting differences in materials.rs and two blank lines between test attributes in island_material_flows.rs.
+- Both source formatting findings are corrected. The workflow provides no compile/test result; fresh exact-head CI is required.
+
+## Latest craft-input precision follow-up — 9 November 2026
+
+- Repeated craft input aggregation now rejects a positive component that rounds away when added to the material's accumulated requirement. This prevents the preflight/debit from silently dropping part of a recipe before it reaches stock validation.
+- Added a 2^53 kg + 1 kg Gold duplicate-input regression; it must fail before stock or ledger mutation.
+
+## Latest material stock-inflow slice — 9 November 2026
+
+- PR #133 now rejects positive banked-mineral and craft-output increments that round away against existing binary64 stock. Craft outputs are aggregated per material before preflight and mutation, so two individually unrepresentable increments can still be applied as one representable total when valid.
+- Regression coverage: f64::MAX mineral stock plus 1 kg; a craft whose Gold output rounds away must not debit its Wood input; duplicate 1 kg Gold outputs at 2^53 kg aggregate to one representable 2 kg increment.
+- The zero-stock withdrawal test expectation was corrected to the actual typed Insufficient result after workflow #42507201745 exposed the mismatch. Exact-head verification is still required.
+
+## Latest verification correction — 9 November 2026
+
+- PR #133 workflow [#42507201745](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42507201745) passed rustfmt and Clippy; fast Rust tests reported 41 passed / 1 failed in island_material_flows.
+- The failure was an incorrect regression expectation: a positive request against zero stock correctly returns MaterialError::Insufficient { have_kg: 0.0, need_kg: 1e-13 } before the rounded-away check. The test now asserts that typed error and unchanged inventory/carbon/flux state.
+- Fresh exact-head CI is required after the test correction. PR #133 remains draft until the full required matrix passes.
+
+## Latest engineering slice — 9 November 2026 (withdrawal tolerance atomicity)
+
+- PR #133 now rejects positive withdrawals when available stock is smaller than the requested amount, even when the shortfall is within the former 1e-12 kg tolerance.
+- Shared \`checked_withdrawal_result\` validation is used by both \`take\` and \`craft\` preflight; callers can no longer debit a clamped amount while transferring the larger requested amount into another reservoir/body/flux.
+- Added direct Water-drink and multi-input Wood+Water craft regressions. The latter proves a later shortfall is rejected before an earlier valid Wood input is debited.
+- Handoff: \`docs/handoff/MATERIAL_WITHDRAWAL_TOLERANCE_ATOMICITY_20261109.md\`.
+- PR #133 exact-head CI is required. No local Cargo pass is claimed while custom OpenCommander is rate-limited. No replay/snapshot/RNG/tick/reference-pack changes.
+
 # Work remaining
 
 ## Latest engineering slice — 9 November 2026
 
-- PR #131 merged to main as 39af4d821920ac614bfa32c965b227ffec028de2. Exact-head workflow [#42492412005](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42492412005) passed Rust formatting, Clippy, fast Rust tests, desktop application, installed backend, web dashboard, computer service, repository scripts, dependency audit and week/year reference-pack acceptance; nightly slow tests were skipped by design.
-- New PR #132, [operator water-injection audit atomicity](https://github.com/dylmarriner/Maer-ken-island/pull/132), fixes a state-neutrality defect: rejected water injections previously advanced audits_closed because the request entered IslandLife::audited before MaterialLedger::inject returned its error. A pure shared preflight now rejects before opening the audit; the audited mutation repeats the same check under the deterministic single-writer invariant.
-- PR #132 commits: pure preflight d8f29e7db9b3d6a82a98b4c2363ae7920a13c9cf; intervention guard 6137aa5d804078d0b8d99b85a25e02cadc074250; end-to-end regression 8d729b3a7c6154a9e3707f97d13aae790725a443; handoff 63aff9d7744ffa9b6c99595bac08461cc64fc8d4.
-- Regression seeds Water to f64::MAX and attempts a 1 kg operator injection. It asserts typed refusal and unchanged material stock, physical flux-entry count, audits_closed, replay-log length and state digest.
-- PR #132 exact-head CI is pending. Required: formatting, Clippy, fast Rust tests, desktop/backend acceptance, dependency audit and week/year reference packs. No local Cargo result is claimed because custom OpenCommander returned HTTP 429.
+- PR #131 merged to `main` as `39af4d821920ac614bfa32c965b227ffec028de2`. Exact-head workflow [#42492412005](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42492412005) passed formatting, Clippy, fast Rust tests, desktop/backend acceptance, dashboard, computer service, scripts, dependency audit and week/year reference packs; nightly slow tests were skipped by design.
+- PR #132, [operator water-injection audit atomicity](https://github.com/dylmarriner/Maer-ken-island/pull/132), merged to `main` as `e6304cc4423cd09e03b61922d61c8b31bfabaccd`. Exact-head workflow [#42497043271](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42497043271) passed formatting, Clippy, fast Rust tests, desktop build/tests/render/input acceptance, installed backend, dashboard, computer service, repository scripts, dependency audit and week/year reference packs; nightly slow tests were skipped by design.
+- PR #133, [binary64 withdrawal representability](https://github.com/dylmarriner/Maer-ken-island/pull/133), now also rejects positive debits that round away against large stock **and** positive withdrawals accepted by the legacy availability tolerance when stock is actually zero. `craft` preflights all required debits before any mutation; the private debit boundary repeats the guard. Production commits: `0386e035da5dbd27d65fa4cc2ec9e73a3675e4f2`, `013573a3abfd172e53b5918a7498b306d4aaf66c`; regression commits: `067c254c627d90e2cb2529361f1cc26574791986`, `e2bb0e6a7d195dba2b6011ac1e900031642de792`.
+- Regression coverage includes a 1 kg debit from `f64::MAX` Wood and a 1e-13 kg debit from empty stock (inside the 1e-12 tolerance); both must reject without changing material/carbon stock or flux entries.
+- Handoff: `docs/handoff/MATERIAL_WITHDRAWAL_BINARY64_REPRESENTABILITY_20261109.md`. Workflow [#42502215055](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42502215055) began on the earlier head `fab74a37911b71bb2b0f8ac832f1eb2ae495270b`; it does not verify the subsequent zero-stock follow-up. Fresh exact-head CI is required. No local Cargo pass is claimed while OpenCommander is rate-limited.
 - No snapshot schema, append-only replay format, replay hash, RNG, tick cadence, scientific constant, reference pack or live simulation state changed.
-- Next: finish PR #132 exact-head acceptance; then advance D40 two-person saw cross-cutting with founder labour/energy accounting and D31's sourced regional soil-nutrient model.
+- Next: verify the updated PR #133 head, then resume D40's still-open saw cross-cut for ute transport and route modelling, followed by D31's sourced regional soil-nutrient model.
 
 ## Previous engineering slice — 8 November 2026
 

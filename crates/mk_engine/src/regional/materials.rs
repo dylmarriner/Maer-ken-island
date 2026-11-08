@@ -490,15 +490,8 @@ impl MaterialLedger {
         if !matches!(c.origin, Origin::Mineral) || c.carbon_per_kg != 0.0 || c.water_per_kg != 0.0 {
             return Err(MaterialError::WrongMaterial(m));
         }
-        Self::validate_amount(m, kg)?;
-        let resulting_stock = self.stock_kg(m) + kg;
-        if !resulting_stock.is_finite() {
-            return Err(MaterialError::InvalidAmount {
-                material: m,
-                amount_kg: resulting_stock,
-            });
-        }
-        self.add(m, kg);
+        let resulting_stock = Self::checked_stock_addition_result(m, self.stock_kg(m), kg)?;
+        self.stock.insert(m, resulting_stock);
         Ok(())
     }
 
@@ -510,6 +503,33 @@ impl MaterialLedger {
             });
         }
         Ok(())
+    }
+
+    /// Validate a stock inflow and return the exact resulting inventory.
+    ///
+    /// Finite positive inputs can still disappear when added to a much larger
+    /// binary64 stock. Callers must not book their carbon/water flux unless the
+    /// material inventory actually increases by the requested amount.
+    fn checked_stock_addition_result(
+        m: Material,
+        have: f64,
+        kg: f64,
+    ) -> Result<f64, MaterialError> {
+        Self::validate_amount(m, kg)?;
+        if !have.is_finite() || have < 0.0 {
+            return Err(MaterialError::InvalidAmount {
+                material: m,
+                amount_kg: have,
+            });
+        }
+        let resulting_stock = have + kg;
+        if !resulting_stock.is_finite() || (kg > 0.0 && resulting_stock <= have) {
+            return Err(MaterialError::InvalidAmount {
+                material: m,
+                amount_kg: resulting_stock,
+            });
+        }
+        Ok(resulting_stock)
     }
 
     fn validate_cell_area(area_m2: f64) -> Result<(), MaterialError> {
@@ -530,17 +550,43 @@ impl MaterialLedger {
         *self.stock.entry(m).or_insert(0.0) += kg;
     }
 
-    fn take(&mut self, m: Material, kg: f64) -> Result<(), MaterialError> {
+    /// Validate an exact withdrawal and return the resulting stock.
+    ///
+    /// The old availability tolerance could accept a request slightly larger
+    /// than stock, then clamp the debit to the available amount. Callers book
+    /// the requested amount in their flux/body transfer, so that clamp creates
+    /// matter on paper. Exact availability is required for every withdrawal.
+    fn checked_withdrawal_result(m: Material, have: f64, kg: f64) -> Result<f64, MaterialError> {
         Self::validate_amount(m, kg)?;
-        let have = self.stock_kg(m);
-        if have + 1e-12 < kg {
+        if !have.is_finite() || have < 0.0 {
+            return Err(MaterialError::InvalidAmount {
+                material: m,
+                amount_kg: have,
+            });
+        }
+        if have < kg {
             return Err(MaterialError::Insufficient {
                 material: m,
                 have_kg: have,
                 need_kg: kg,
             });
         }
-        self.add(m, -kg.min(have));
+        let resulting_stock = have - kg;
+        if !resulting_stock.is_finite()
+            || resulting_stock < 0.0
+            || (kg > 0.0 && resulting_stock >= have)
+        {
+            return Err(MaterialError::InvalidAmount {
+                material: m,
+                amount_kg: resulting_stock,
+            });
+        }
+        Ok(resulting_stock)
+    }
+
+    fn take(&mut self, m: Material, kg: f64) -> Result<(), MaterialError> {
+        let resulting_stock = Self::checked_withdrawal_result(m, self.stock_kg(m), kg)?;
+        self.stock.insert(m, resulting_stock);
         Ok(())
     }
 
@@ -1219,59 +1265,74 @@ impl MaterialLedger {
         for (m, kg) in inputs {
             Self::validate_amount(*m, *kg)?;
             let total = required.entry(*m).or_insert(0.0);
-            *total += *kg;
-            Self::validate_amount(*m, *total)?;
+            let combined = *total + *kg;
+            if !combined.is_finite() || (*kg > 0.0 && combined <= *total) {
+                return Err(MaterialError::InvalidAmount {
+                    material: *m,
+                    amount_kg: combined,
+                });
+            }
+            *total = combined;
         }
+        // Aggregate outputs before mutation just as inputs are aggregated.
+        // Sequential small additions can each round away even when their sum
+        // is representable (for example, two 1 kg additions at 2^53 kg).
+        let mut produced = BTreeMap::<Material, f64>::new();
         for (m, kg) in outputs {
             Self::validate_amount(*m, *kg)?;
+            let total = produced.entry(*m).or_insert(0.0);
+            let combined = *total + *kg;
+            if !combined.is_finite() || (*kg > 0.0 && combined <= *total) {
+                return Err(MaterialError::InvalidAmount {
+                    material: *m,
+                    amount_kg: combined,
+                });
+            }
+            *total = combined;
         }
 
-        let c = |list: &[(Material, f64)]| {
-            list.iter()
+        let carbon = |stock: &BTreeMap<Material, f64>| {
+            stock
+                .iter()
                 .map(|(m, kg)| kg * composition(*m).carbon_per_kg)
                 .sum::<f64>()
         };
-        let (in_c, out_c) = (c(inputs), c(outputs));
+        let (in_c, out_c) = (carbon(&required), carbon(&produced));
         if out_c > in_c + 1e-9 {
             return Err(MaterialError::CreatesCarbon {
                 out_kgc: out_c,
                 in_kgc: in_c,
             });
         }
+        // Preflight every withdrawal before touching any stock. A positive
+        // amount can be finite and affordable yet round away when subtracted
+        // from a much larger binary64 inventory. Reject the whole recipe so
+        // the later carbon/water flux cannot claim matter left in stock.
+        let mut projected_stock = self.stock.clone();
         for (m, kg) in &required {
-            if self.stock_kg(*m) + 1e-12 < *kg {
-                return Err(MaterialError::Insufficient {
-                    material: *m,
-                    have_kg: self.stock_kg(*m),
-                    need_kg: *kg,
-                });
-            }
+            let have = projected_stock.get(m).copied().unwrap_or(0.0);
+            let resulting_stock = Self::checked_withdrawal_result(*m, have, *kg)?;
+            projected_stock.insert(*m, resulting_stock);
         }
 
         // Preflight the exact output additions against the post-debit stock.
         // Finite inputs can still overflow an existing finite inventory when
         // added, so reject the whole recipe before the first debit.
-        let mut projected_stock = self.stock.clone();
-        for (m, kg) in &required {
+        for (m, kg) in &produced {
             let have = projected_stock.get(m).copied().unwrap_or(0.0);
-            projected_stock.insert(*m, have - kg.min(have));
-        }
-        for (m, kg) in outputs {
-            let resulting_stock = projected_stock.get(m).copied().unwrap_or(0.0) + *kg;
-            if !resulting_stock.is_finite() {
-                return Err(MaterialError::InvalidAmount {
-                    material: *m,
-                    amount_kg: resulting_stock,
-                });
-            }
+            let resulting_stock = Self::checked_stock_addition_result(*m, have, *kg)?;
             projected_stock.insert(*m, resulting_stock);
         }
 
         for (m, kg) in required {
             self.take(m, kg)?;
         }
-        for (m, kg) in outputs {
-            self.add(*m, *kg);
+        for m in produced.keys() {
+            let resulting_stock = projected_stock
+                .get(m)
+                .copied()
+                .expect("preflighted output stock");
+            self.stock.insert(*m, resulting_stock);
         }
         flow(
             ledger,

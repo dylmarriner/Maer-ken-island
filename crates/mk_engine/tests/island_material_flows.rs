@@ -356,6 +356,203 @@ fn craft_aggregates_duplicate_inputs_and_rejects_invalid_outputs_atomically() {
 }
 
 #[test]
+fn material_withdrawals_reject_positive_amounts_rounded_away_before_mutation() {
+    let (mut materials, mut ledger) = (MaterialLedger::new(), Ledger::new());
+    materials
+        .inject(Material::Wood, f64::MAX, &mut ledger)
+        .expect("maximum finite wood stock has representable carbon and water");
+
+    let stock_before = materials.stock_kg(Material::Wood);
+    let carbon_before = materials.stock_of(R::MaterialCarbon);
+    let entries_before = ledger.entries().len();
+    let rejected = materials.craft(&[(Material::Wood, 1.0)], &[], &mut ledger);
+
+    assert!(matches!(
+        rejected,
+        Err(MaterialError::InvalidAmount {
+            material: Material::Wood,
+            amount_kg
+        }) if amount_kg == f64::MAX
+    ));
+    assert_eq!(materials.stock_kg(Material::Wood), stock_before);
+    assert_eq!(materials.stock_of(R::MaterialCarbon), carbon_before);
+    assert_eq!(ledger.entries().len(), entries_before);
+}
+
+#[test]
+fn craft_rejects_positive_withdrawal_when_stock_is_within_tolerance_but_zero() {
+    let (mut materials, mut ledger) = (MaterialLedger::new(), Ledger::new());
+    let rejected = materials.craft(&[(Material::Wood, 1e-13)], &[], &mut ledger);
+
+    assert!(matches!(
+        rejected,
+        Err(MaterialError::Insufficient {
+            material: Material::Wood,
+            have_kg,
+            need_kg
+        }) if have_kg == 0.0 && need_kg == 1e-13
+    ));
+    assert_eq!(materials.stock_kg(Material::Wood), 0.0);
+    assert_eq!(materials.stock_of(R::MaterialCarbon), 0.0);
+    assert!(ledger.entries().is_empty());
+}
+
+#[test]
+fn direct_withdrawal_rejects_a_positive_shortfall_inside_legacy_tolerance() {
+    let (mut materials, mut ledger) = (MaterialLedger::new(), Ledger::new());
+    materials.register_human("Ada", 70.0);
+    materials
+        .inject(Material::Water, 1e-13, &mut ledger)
+        .expect("a positive representable water stock can be seeded");
+
+    let stock_before = materials.stock_kg(Material::Water);
+    let water_before = materials.stock_of(R::MaterialWater);
+    let rejected = materials.drink("Ada", 2e-13);
+
+    assert!(matches!(
+        rejected,
+        Err(MaterialError::Insufficient {
+            material: Material::Water,
+            have_kg,
+            need_kg
+        }) if have_kg == 1e-13 && need_kg == 2e-13
+    ));
+    assert_eq!(materials.stock_kg(Material::Water), stock_before);
+    assert_eq!(materials.stock_of(R::MaterialWater), water_before);
+}
+
+#[test]
+fn craft_preflight_rejects_tolerance_shortfall_before_any_input_is_debited() {
+    let (mut materials, mut ledger) = (MaterialLedger::new(), Ledger::new());
+    materials
+        .inject(Material::Wood, 10.0, &mut ledger)
+        .expect("wood input stock");
+    materials
+        .inject(Material::Water, 1e-13, &mut ledger)
+        .expect("small positive water input stock");
+
+    let wood_before = materials.stock_kg(Material::Wood);
+    let water_before = materials.stock_kg(Material::Water);
+    let carbon_before = materials.stock_of(R::MaterialCarbon);
+    let material_water_before = materials.stock_of(R::MaterialWater);
+    let entries_before = ledger.entries().len();
+
+    let rejected = materials.craft(
+        &[(Material::Wood, 1.0), (Material::Water, 2e-13)],
+        &[],
+        &mut ledger,
+    );
+
+    assert!(matches!(
+        rejected,
+        Err(MaterialError::Insufficient {
+            material: Material::Water,
+            have_kg,
+            need_kg
+        }) if have_kg == 1e-13 && need_kg == 2e-13
+    ));
+    assert_eq!(materials.stock_kg(Material::Wood), wood_before);
+    assert_eq!(materials.stock_kg(Material::Water), water_before);
+    assert_eq!(materials.stock_of(R::MaterialCarbon), carbon_before);
+    assert_eq!(materials.stock_of(R::MaterialWater), material_water_before);
+    assert_eq!(ledger.entries().len(), entries_before);
+}
+
+#[test]
+fn bank_mined_rejects_positive_stock_increment_that_rounds_away() {
+    let mut materials = MaterialLedger::new();
+    materials
+        .bank_mined(Material::Gold, f64::MAX)
+        .expect("initial finite mineral stock fits");
+
+    let rejected = materials.bank_mined(Material::Gold, 1.0);
+    assert!(matches!(
+        rejected,
+        Err(MaterialError::InvalidAmount {
+            material: Material::Gold,
+            amount_kg
+        }) if amount_kg == f64::MAX
+    ));
+    assert_eq!(materials.stock_kg(Material::Gold), f64::MAX);
+}
+
+#[test]
+fn craft_rejects_output_increment_that_rounds_away_before_debiting_inputs() {
+    let (mut materials, mut ledger) = (MaterialLedger::new(), Ledger::new());
+    materials
+        .bank_mined(Material::Gold, f64::MAX)
+        .expect("initial finite mineral stock fits");
+    materials
+        .inject(Material::Wood, 1.0, &mut ledger)
+        .expect("wood input fits");
+
+    let wood_before = materials.stock_kg(Material::Wood);
+    let gold_before = materials.stock_kg(Material::Gold);
+    let entries_before = ledger.entries().len();
+    let rejected = materials.craft(
+        &[(Material::Wood, 1.0)],
+        &[(Material::Gold, 1.0)],
+        &mut ledger,
+    );
+
+    assert!(matches!(
+        rejected,
+        Err(MaterialError::InvalidAmount {
+            material: Material::Gold,
+            amount_kg
+        }) if amount_kg == f64::MAX
+    ));
+    assert_eq!(materials.stock_kg(Material::Wood), wood_before);
+    assert_eq!(materials.stock_kg(Material::Gold), gold_before);
+    assert_eq!(ledger.entries().len(), entries_before);
+}
+
+#[test]
+fn craft_rejects_duplicate_input_increment_that_rounds_away_before_mutation() {
+    let (mut materials, mut ledger) = (MaterialLedger::new(), Ledger::new());
+    let starting_stock = 2_f64.powi(53);
+    materials
+        .bank_mined(Material::Gold, starting_stock)
+        .expect("the starting stock is representable");
+
+    let rejected = materials.craft(
+        &[(Material::Gold, starting_stock), (Material::Gold, 1.0)],
+        &[],
+        &mut ledger,
+    );
+
+    assert!(matches!(
+        rejected,
+        Err(MaterialError::InvalidAmount {
+            material: Material::Gold,
+            amount_kg
+        }) if amount_kg == starting_stock
+    ));
+    assert_eq!(materials.stock_kg(Material::Gold), starting_stock);
+    assert!(ledger.entries().is_empty());
+}
+
+#[test]
+fn craft_aggregates_duplicate_outputs_before_mutation() {
+    let (mut materials, mut ledger) = (MaterialLedger::new(), Ledger::new());
+    let starting_stock = 2_f64.powi(53) + 2.0;
+    materials
+        .bank_mined(Material::Gold, starting_stock)
+        .expect("the starting stock is representable");
+
+    materials
+        .craft(
+            &[(Material::Gold, 2.0)],
+            &[(Material::Gold, 1.0), (Material::Gold, 1.0)],
+            &mut ledger,
+        )
+        .expect("the aggregated two-kilogram output restores the stock");
+
+    assert_eq!(materials.stock_kg(Material::Gold), starting_stock);
+    assert!(ledger.entries().is_empty());
+}
+
+#[test]
 fn material_stock_additions_reject_overflow_before_mutation() {
     let (mut materials, mut ledger) = (MaterialLedger::new(), Ledger::new());
     materials
