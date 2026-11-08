@@ -2272,3 +2272,27 @@ fn seasoning_aggregates_small_logs_before_preflighting_large_wood_stock() {
     assert!(materials.log(second_id).is_none());
     audit.close(&materials, &ledger);
 }
+
+
+#[test]
+fn roof_water_capture_moves_audited_soil_water_into_the_material_stock() {
+    let b = base();
+    let cell = b.forest_cell;
+    let area = b.domain.cell_area_m2(M);
+    let mut hydrology = HydrologyState::new(&b.domain.storage_spec(M), 0.5);
+    hydrology.soil_water.get_mut(cell.0, cell.1).storage_mm = 100.0;
+    let soil_before = hydrology.soil_water.get(cell.0, cell.1).storage_mm;
+    let mut materials = MaterialLedger::new();
+    let mut ledger = Ledger::new();
+    let audit = Audit::start(&materials);
+
+    let caught = materials.capture_roof_water(1.0, &mut hydrology, cell, area, &mut ledger);
+
+    assert_eq!(caught, 1.0);
+    assert_eq!(materials.stock_kg(Material::Water), 1.0);
+    assert!(
+        (soil_before - hydrology.soil_water.get(cell.0, cell.1).storage_mm - 1.0 / area).abs()
+            < 1e-12
+    );
+    audit.close(&materials, &ledger);
+}
