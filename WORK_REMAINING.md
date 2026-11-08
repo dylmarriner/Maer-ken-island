@@ -1,3 +1,11 @@
+## Latest engineering slice — 9 November 2026 (withdrawal tolerance atomicity)
+
+- PR #133 now rejects positive withdrawals when available stock is smaller than the requested amount, even when the shortfall is within the former 1e-12 kg tolerance.
+- Shared \`checked_withdrawal_result\` validation is used by both \`take\` and \`craft\` preflight; callers can no longer debit a clamped amount while transferring the larger requested amount into another reservoir/body/flux.
+- Added direct Water-drink and multi-input Wood+Water craft regressions. The latter proves a later shortfall is rejected before an earlier valid Wood input is debited.
+- Handoff: \`docs/handoff/MATERIAL_WITHDRAWAL_TOLERANCE_ATOMICITY_20261109.md\`.
+- PR #133 exact-head CI is required. No local Cargo pass is claimed while custom OpenCommander is rate-limited. No replay/snapshot/RNG/tick/reference-pack changes.
+
 # Work remaining
 
 ## Latest engineering slice — 9 November 2026
