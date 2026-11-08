@@ -1310,7 +1310,7 @@ impl MaterialLedger {
             });
         }
         let resulting_stock = current_stock + kg;
-        if !resulting_stock.is_finite() {
+        if !resulting_stock.is_finite() || (kg > 0.0 && resulting_stock <= current_stock) {
             return Err(MaterialError::InvalidAmount {
                 material: m,
                 amount_kg: resulting_stock,
