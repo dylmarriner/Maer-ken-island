@@ -1,3 +1,10 @@
+## PR #134 formatting correction — 9 November 2026
+
+- Exact-head workflow [#42517525917](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42517525917) on the prior PR head `1ddc817030bcc2a966bfcf99d7f1b89df7fb5764` failed only at `cargo fmt --all -- --check`: one extra blank line before the appended tests and one long edible-cell predicate. Clippy and fast tests were skipped by the format gate; this is not a compile/test result.
+- Both rustfmt findings were corrected in `f408d171e7e1af4239aa6ff170996ce52d2fe98d`.
+- Other jobs observed in the same run: computer service, repository scripts, web dashboard and dependency audit passed; installed backend, desktop application and week/year reference packs were still running at the last inspection. Those jobs are on the old PR head and do not verify the correction.
+- Fresh exact-head workflow is required for `f408d171`.
+
 ## Latest material inflow precision slice — 9 November 2026
 
 - PR #133 was merged to `main` as `6b57ad96273c2320910f93902963bc8800974175`. Its exact-head workflow [#42512313757](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42512313757) passed Rust formatting, Clippy, fast Rust tests, desktop build/render/input acceptance, installed backend, computer service, dashboard, repository scripts, dependency audit, and week/year reference-pack acceptance. Nightly slow tests were skipped by design.
