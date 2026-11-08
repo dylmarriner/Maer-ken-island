@@ -386,10 +386,11 @@ fn craft_rejects_positive_withdrawal_when_stock_is_within_tolerance_but_zero() {
 
     assert!(matches!(
         rejected,
-        Err(MaterialError::InvalidAmount {
+        Err(MaterialError::Insufficient {
             material: Material::Wood,
-            amount_kg
-        }) if amount_kg == 0.0
+            have_kg,
+            need_kg
+        }) if have_kg == 0.0 && need_kg == 1e-13
     ));
     assert_eq!(materials.stock_kg(Material::Wood), 0.0);
     assert_eq!(materials.stock_of(R::MaterialCarbon), 0.0);
