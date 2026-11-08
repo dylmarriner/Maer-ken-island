@@ -88,3 +88,12 @@ Fresh exact-head workflow [#42487854063](https://github.com/dylmarriner/Maer-ken
 PR #130 merged to `main` as `7dbcc2721b9103016b296f559e2a60147248bf81` after exact-head workflow [#42483265161](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42483265161) passed all required non-nightly checks. PR #131 had been based on the previous main head, so its branch was updated with a two-parent merge commit whose first parent is the prior PR #131 head and second parent is the new main commit. The merge tree preserves PR #130's biomass/soil-water source validation while applying PR #131's material-ledger and producer-carbon injection changes.
 
 The current PR #131 branch therefore contains both histories without dropping either implementation. A fresh exact-head CI run is required on the new merge head. No local Cargo result is claimed.
+
+### Producer summary formatting correction — 9 November 2026
+
+Reviewing the merged tree exposed an escaped line-continuation typo in the new producer-injection summary: it would have emitted a literal backslash and newline. Corrected the summary to retain the original single-line display and added a regression assertion that the result contains no literal backslash and exactly one line.
+
+- Production correction: `bfbebb3e53ede444aff454a7c7e9aa0efff17bf9`.
+- Regression: `2bb6009157ad98f983f6b22bd45dea29f19cc4ac`.
+
+This is included in the rebased PR #131 branch. Fresh exact-head CI is required after the follow-up handoff/work-register commits.
