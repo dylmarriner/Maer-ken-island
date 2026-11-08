@@ -2123,7 +2123,7 @@ fn edible_gather_rejects_a_rounded_away_stock_inflow_before_source_mutation() {
             ecology
                 .edible
                 .as_ref()
-                .map_or(false, |edible| edible.at(i) > 0.0)
+                .is_some_and(|edible| edible.at(i) > 0.0)
         })
         .expect("a cell with edible biomass");
     let area = b.domain.cell_area_m2(M);
