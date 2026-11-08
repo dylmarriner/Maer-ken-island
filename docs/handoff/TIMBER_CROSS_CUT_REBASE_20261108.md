@@ -92,3 +92,14 @@ Two integration regressions prove that zero-dry-mass and zero-carbon logs fail b
 allocator advances, no log is inserted, and the carbon/water audit remains unchanged.
 
 Exact-head CI is required after these commits; no local Rust test result is claimed.
+
+
+## Exact-head CI correction — 8 November 2026
+
+Workflow #42439876596 failed only in `cargo fmt --all -- --check`, not in Rust compilation or tests.
+The runner identified two formatting differences in the newly added zero-dry-mass ingress
+regression: one extra blank line and a multiline assertion. Both were corrected in
+`island_material_flows.rs` in commit `6d109d35`.
+
+The fast-test job stopped at formatting, so no passing test result is claimed for this head.
+A fresh workflow is required after the formatting correction.
