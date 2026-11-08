@@ -2062,7 +2062,6 @@ fn cell_harvests_reject_nonpositive_or_nonfinite_area_before_mutation() {
     }
 }
 
-
 #[test]
 fn receiving_felled_wood_rejects_rounded_away_stock_before_booking_carbon() {
     use std::panic::{catch_unwind, AssertUnwindSafe};
@@ -2112,7 +2111,10 @@ fn roof_water_capture_rejects_rounded_away_stock_before_debiting_soil() {
     assert!(result.is_err(), "the one-kilogram inflow rounds away");
     assert_eq!(materials.stock_kg(Material::Water), stock_before);
     assert_eq!(materials.stock_of(R::MaterialWater), water_before);
-    assert_eq!(hydrology.soil_water.get(cell.0, cell.1).storage_mm, soil_before);
+    assert_eq!(
+        hydrology.soil_water.get(cell.0, cell.1).storage_mm,
+        soil_before
+    );
     assert_eq!(ledger.entries().len(), entries_before);
 }
 
@@ -2149,11 +2151,17 @@ fn receiving_felled_log_rejects_unrepresentable_carbon_before_allocating_or_debi
         materials.receive_felled_log(log, &mut hydrology, cell, area, &mut ledger)
     }));
 
-    assert!(result.is_err(), "the log carbon disappears in aggregate stock");
+    assert!(
+        result.is_err(),
+        "the log carbon disappears in aggregate stock"
+    );
     assert_eq!(materials.next_log_id(), next_id_before);
     assert_eq!(materials.logs().count(), 0);
     assert_eq!(materials.stock_of(R::MaterialCarbon), carbon_before);
-    assert_eq!(hydrology.soil_water.get(cell.0, cell.1).storage_mm, soil_before);
+    assert_eq!(
+        hydrology.soil_water.get(cell.0, cell.1).storage_mm,
+        soil_before
+    );
     assert_eq!(ledger.entries().len(), entries_before);
 }
 
@@ -2190,11 +2198,17 @@ fn receiving_felled_log_rejects_unrepresentable_water_before_allocating_or_debit
         materials.receive_felled_log(log, &mut hydrology, cell, area, &mut ledger)
     }));
 
-    assert!(result.is_err(), "the log water disappears in aggregate stock");
+    assert!(
+        result.is_err(),
+        "the log water disappears in aggregate stock"
+    );
     assert_eq!(materials.next_log_id(), next_id_before);
     assert_eq!(materials.logs().count(), 0);
     assert_eq!(materials.stock_of(R::MaterialWater), water_before);
-    assert_eq!(hydrology.soil_water.get(cell.0, cell.1).storage_mm, soil_before);
+    assert_eq!(
+        hydrology.soil_water.get(cell.0, cell.1).storage_mm,
+        soil_before
+    );
     assert_eq!(ledger.entries().len(), entries_before);
 }
 
@@ -2227,9 +2241,14 @@ fn seasoning_preflights_the_complete_wood_batch_before_removing_any_log() {
     let wood_before = materials.stock_kg(Material::Wood);
     let entries_before = ledger.entries().len();
 
-    let result = catch_unwind(AssertUnwindSafe(|| materials.season_stored_logs(&mut ledger)));
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        materials.season_stored_logs(&mut ledger)
+    }));
 
-    assert!(result.is_err(), "the seasoned log cannot increase Wood stock");
+    assert!(
+        result.is_err(),
+        "the seasoned log cannot increase Wood stock"
+    );
     assert_eq!(materials.log(id), stored_before.as_ref());
     assert_eq!(materials.stock_kg(Material::Wood), wood_before);
     assert_eq!(ledger.entries().len(), entries_before);
@@ -2272,7 +2291,6 @@ fn seasoning_aggregates_small_logs_before_preflighting_large_wood_stock() {
     assert!(materials.log(second_id).is_none());
     audit.close(&materials, &ledger);
 }
-
 
 #[test]
 fn roof_water_capture_moves_audited_soil_water_into_the_material_stock() {
