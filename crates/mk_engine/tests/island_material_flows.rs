@@ -380,6 +380,23 @@ fn material_withdrawals_reject_positive_amounts_rounded_away_before_mutation() {
 }
 
 #[test]
+fn craft_rejects_positive_withdrawal_when_stock_is_within_tolerance_but_zero() {
+    let (mut materials, mut ledger) = (MaterialLedger::new(), Ledger::new());
+    let rejected = materials.craft(&[(Material::Wood, 1e-13)], &[], &mut ledger);
+
+    assert!(matches!(
+        rejected,
+        Err(MaterialError::InvalidAmount {
+            material: Material::Wood,
+            amount_kg
+        }) if amount_kg == 0.0
+    ));
+    assert_eq!(materials.stock_kg(Material::Wood), 0.0);
+    assert_eq!(materials.stock_of(R::MaterialCarbon), 0.0);
+    assert!(ledger.entries().is_empty());
+}
+
+#[test]
 fn material_stock_additions_reject_overflow_before_mutation() {
     let (mut materials, mut ledger) = (MaterialLedger::new(), Ledger::new());
     materials
