@@ -510,7 +510,11 @@ impl MaterialLedger {
     /// Finite positive inputs can still disappear when added to a much larger
     /// binary64 stock. Callers must not book their carbon/water flux unless the
     /// material inventory actually increases by the requested amount.
-    fn checked_stock_addition_result(m: Material, have: f64, kg: f64) -> Result<f64, MaterialError> {
+    fn checked_stock_addition_result(
+        m: Material,
+        have: f64,
+        kg: f64,
+    ) -> Result<f64, MaterialError> {
         Self::validate_amount(m, kg)?;
         if !have.is_finite() || have < 0.0 {
             return Err(MaterialError::InvalidAmount {
@@ -1324,7 +1328,10 @@ impl MaterialLedger {
             self.take(m, kg)?;
         }
         for m in produced.keys() {
-            let resulting_stock = projected_stock.get(m).copied().expect("preflighted output stock");
+            let resulting_stock = projected_stock
+                .get(m)
+                .copied()
+                .expect("preflighted output stock");
             self.stock.insert(*m, resulting_stock);
         }
         flow(
