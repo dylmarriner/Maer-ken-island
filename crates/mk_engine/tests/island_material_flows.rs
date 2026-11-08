@@ -2061,3 +2061,194 @@ fn cell_harvests_reject_nonpositive_or_nonfinite_area_before_mutation() {
         assert!(ledger.entries().is_empty());
     }
 }
+
+
+#[test]
+fn fossil_extraction_rejects_a_rounded_away_stock_inflow_before_flux() {
+    let (mut materials, mut ledger) = (MaterialLedger::new(), Ledger::new());
+    materials
+        .inject(Material::Coal, f64::MAX, &mut ledger)
+        .expect("maximum finite coal stock is representable");
+
+    let entries_before = ledger.entries().len();
+    assert!(matches!(
+        materials.gather_fossil(Material::Coal, 1.0, &mut ledger),
+        Err(MaterialError::InvalidAmount {
+            material: Material::Coal,
+            amount_kg
+        }) if amount_kg == f64::MAX
+    ));
+    assert_eq!(materials.stock_kg(Material::Coal), f64::MAX);
+    assert_eq!(ledger.entries().len(), entries_before);
+}
+
+#[test]
+fn biotic_gather_rejects_a_rounded_away_stock_inflow_before_source_mutation() {
+    let b = base();
+    let cell = b.forest_cell;
+    let area = b.domain.cell_area_m2(M);
+    let mut ecology = b.ecology.clone();
+    let (mut materials, mut ledger) = (MaterialLedger::new(), Ledger::new());
+    materials
+        .inject(Material::Wood, f64::MAX, &mut ledger)
+        .expect("maximum finite wood stock is representable");
+
+    let biomass_before = *ecology.biomass_kgc_m2.get(cell.0, cell.1);
+    let entries_before = ledger.entries().len();
+    assert!(matches!(
+        materials.gather_biotic(Material::Wood, 1.0, &mut ecology, cell, area, &mut ledger),
+        Err(MaterialError::InvalidAmount {
+            material: Material::Wood,
+            amount_kg
+        }) if amount_kg == f64::MAX
+    ));
+    assert_eq!(materials.stock_kg(Material::Wood), f64::MAX);
+    assert_eq!(*ecology.biomass_kgc_m2.get(cell.0, cell.1), biomass_before);
+    assert_eq!(ledger.entries().len(), entries_before);
+}
+
+#[test]
+fn edible_gather_rejects_a_rounded_away_stock_inflow_before_source_mutation() {
+    use mk_engine::regional::edible::ReproductiveShares;
+    use mk_engine::validation::{default_reference_dir, ReferenceLibrary};
+
+    let b = base();
+    let cell = b.forest_cell;
+    let area = b.domain.cell_area_m2(M);
+    let mut ecology = b.ecology.clone();
+    let library = ReferenceLibrary::load(&default_reference_dir()).unwrap();
+    ecology.install_edible(&ReproductiveShares::from_reference(&library).unwrap());
+    let (mut materials, mut ledger) = (MaterialLedger::new(), Ledger::new());
+    materials
+        .inject(Material::PlantFood, f64::MAX, &mut ledger)
+        .expect("maximum finite plant-food stock is representable");
+
+    let biomass_before = *ecology.biomass_kgc_m2.get(cell.0, cell.1);
+    let entries_before = ledger.entries().len();
+    assert!(matches!(
+        materials.gather_edible(1.0, &mut ecology, cell, area, &mut ledger),
+        Err(MaterialError::InvalidAmount {
+            material: Material::PlantFood,
+            amount_kg
+        }) if amount_kg == f64::MAX
+    ));
+    assert_eq!(materials.stock_kg(Material::PlantFood), f64::MAX);
+    assert_eq!(*ecology.biomass_kgc_m2.get(cell.0, cell.1), biomass_before);
+    assert_eq!(ledger.entries().len(), entries_before);
+}
+
+#[test]
+fn water_gathering_rejects_rounded_away_stock_before_hydrology_mutation() {
+    let b = base();
+    let cell = b.forest_cell;
+    let spec = b.domain.storage_spec(M);
+
+    let mut soil = HydrologyState::new(&spec, 0.5);
+    let soil_before = *soil.soil_water.get(cell.0, cell.1);
+    let (mut soil_materials, mut soil_ledger) = (MaterialLedger::new(), Ledger::new());
+    soil_materials
+        .inject(Material::Water, f64::MAX, &mut soil_ledger)
+        .expect("maximum finite water stock is representable");
+    let soil_entries_before = soil_ledger.entries().len();
+    assert!(matches!(
+        soil_materials.gather_soil_water(1.0, &mut soil, cell, b.domain.cell_area_m2(M), &mut soil_ledger),
+        Err(MaterialError::InvalidAmount {
+            material: Material::Water,
+            amount_kg
+        }) if amount_kg == f64::MAX
+    ));
+    assert_eq!(*soil.soil_water.get(cell.0, cell.1), soil_before);
+    assert_eq!(soil_materials.stock_kg(Material::Water), f64::MAX);
+    assert_eq!(soil_ledger.entries().len(), soil_entries_before);
+
+    let mut surface = HydrologyState::new(&spec, 0.5);
+    surface.surface_water.set(cell.0, cell.1, 1.0);
+    let surface_before = *surface.surface_water.get(cell.0, cell.1);
+    let runoff_before = *surface.runoff.get(cell.0, cell.1);
+    let (mut surface_materials, mut surface_ledger) = (MaterialLedger::new(), Ledger::new());
+    surface_materials
+        .inject(Material::Water, f64::MAX, &mut surface_ledger)
+        .expect("maximum finite water stock is representable");
+    let surface_entries_before = surface_ledger.entries().len();
+    assert!(matches!(
+        surface_materials.gather_water(1.0, &mut surface, cell, b.domain.cell_area_m2(M), &mut surface_ledger),
+        Err(MaterialError::InvalidAmount {
+            material: Material::Water,
+            amount_kg
+        }) if amount_kg == f64::MAX
+    ));
+    assert_eq!(*surface.surface_water.get(cell.0, cell.1), surface_before);
+    assert_eq!(*surface.runoff.get(cell.0, cell.1), runoff_before);
+    assert_eq!(surface_materials.stock_kg(Material::Water), f64::MAX);
+    assert_eq!(surface_ledger.entries().len(), surface_entries_before);
+}
+
+#[test]
+fn mineral_conversion_rejects_rounded_away_quicklime_before_limestone_debit() {
+    let (mut materials, mut ledger) = (MaterialLedger::new(), Ledger::new());
+    materials
+        .inject(Material::Limestone, 10.0, &mut ledger)
+        .expect("limestone input stock");
+    materials
+        .inject(Material::Quicklime, f64::MAX, &mut ledger)
+        .expect("maximum finite quicklime stock is representable");
+    let entries_before = ledger.entries().len();
+
+    assert!(matches!(
+        materials.calcine(1.0, &mut ledger),
+        Err(MaterialError::InvalidAmount {
+            material: Material::Quicklime,
+            amount_kg
+        }) if amount_kg == f64::MAX
+    ));
+    assert_eq!(materials.stock_kg(Material::Limestone), 10.0);
+    assert_eq!(materials.stock_kg(Material::Quicklime), f64::MAX);
+    assert_eq!(ledger.entries().len(), entries_before);
+}
+
+#[test]
+fn charcoal_conversion_rejects_rounded_away_output_before_wood_debit() {
+    let (mut materials, mut ledger) = (MaterialLedger::new(), Ledger::new());
+    materials
+        .inject(Material::Wood, 10.0, &mut ledger)
+        .expect("wood input stock");
+    materials
+        .inject(Material::Charcoal, f64::MAX, &mut ledger)
+        .expect("maximum finite charcoal stock is representable");
+    let entries_before = ledger.entries().len();
+
+    assert!(matches!(
+        materials.make_charcoal(1.0, &mut ledger),
+        Err(MaterialError::InvalidAmount {
+            material: Material::Charcoal,
+            amount_kg
+        }) if amount_kg == f64::MAX
+    ));
+    assert_eq!(materials.stock_kg(Material::Wood), 10.0);
+    assert_eq!(materials.stock_kg(Material::Charcoal), f64::MAX);
+    assert_eq!(ledger.entries().len(), entries_before);
+}
+
+#[test]
+fn hunting_rejects_rounded_away_meat_stock_before_population_mutation() {
+    let (mut materials, mut ledger) = (MaterialLedger::new(), Ledger::new());
+    materials
+        .inject(Material::Meat, f64::MAX, &mut ledger)
+        .expect("maximum finite meat stock is representable");
+    let mut population = AnimalPopulation::new(10, 100.0);
+    let count_before = population.count;
+    let carbon_before = population.carbon_kgc();
+    let entries_before = ledger.entries().len();
+
+    assert!(matches!(
+        materials.hunt(&mut population, 1.0, &mut ledger),
+        Err(MaterialError::InvalidAmount {
+            material: Material::Meat,
+            amount_kg
+        }) if amount_kg == f64::MAX
+    ));
+    assert_eq!(population.count, count_before);
+    assert_eq!(population.carbon_kgc(), carbon_before);
+    assert_eq!(materials.stock_kg(Material::Meat), f64::MAX);
+    assert_eq!(ledger.entries().len(), entries_before);
+}
