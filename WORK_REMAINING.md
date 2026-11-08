@@ -1,3 +1,12 @@
+## Latest felled-log soil-debit follow-up — 9 November 2026
+
+- Found a remaining binary64 conservation gap in `receive_felled_log`: the destination MaterialWater addition was preflighted, but the source soil-water subtraction was only checked for finiteness. A positive transfer could therefore disappear from a large finite soil reservoir while the material stock and flux ledger received it.
+- Reused `checked_source_debit_result` to require an exact positive source reduction before log-ID allocation or any hydrology/stock/ledger mutation.
+- Added a (2^{53}) mm soil-depth regression with an 8.2 kg log-water transfer; rejection must preserve soil storage, carbon/water stocks, next log ID, logs and flux entries.
+- Production commit: `8df094d717fabe6e4c6d1bb913a8e20a2654902f`; test commit: `72eb626e523a163fa343640235b64e2322c3527d`; handoff update: `383de3215cac92df2e256c8b2619e1e9eb387625`.
+- Exact-head PR #135 verification is required. No local Cargo pass is claimed while custom OpenCommander is returning HTTP 429.
+- Next: run formatting, Clippy, fast tests, desktop/backend and week/year reference packs on the new exact head; then reconcile #134/#135 and continue D40 saw cross-cut/ute transport.
+
 ## Latest seasoning audit-closure follow-up — 9 November 2026
 
 - PR #135 follow-up found that `season_stored_logs` only required the rounded MaterialWater aggregate to decrease. That did not prove its actual post-removal stock delta matched the per-log water fluxes; binary64 rounding could turn a 1.5 kg transfer into a 2 kg aggregate change.
