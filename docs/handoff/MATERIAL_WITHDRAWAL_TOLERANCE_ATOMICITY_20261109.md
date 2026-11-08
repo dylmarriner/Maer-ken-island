@@ -43,3 +43,14 @@ No snapshot schema, append-only replay format, replay hash, RNG, tick cadence, s
 ## Exact-head CI finding and regression correction — 9 November 2026
 
 Workflow [#42507201745](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42507201745) passed formatting and Clippy. The fast Rust suite ran 42 tests in island_material_flows: 41 passed and one failed because the new zero-stock test expected InvalidAmount. The production path correctly returns Insufficient { have_kg: 0.0, need_kg: 1e-13 } at the exact-availability check before subtraction; the regression expectation was wrong, not the withdrawal guard. The test now asserts the precise typed Insufficient result and still checks unchanged stock, carbon and flux entries. A fresh exact-head workflow is required; the earlier run does not verify this correction.
+
+
+## Material inflow representability and duplicate-output aggregation — 9 November 2026
+
+A second binary64 conservation boundary was found in stock additions. A positive finite inflow could round away against an existing large stock. Operator injection already rejected that case, but mineral banking and craft outputs did not. Craft also applied duplicate outputs sequentially, so two individually rounded-away increments could be lost even when their combined amount was representable.
+
+- Added shared checked_stock_addition_result validation for exact stock inflows and applied it to bank_mined and craft output preflight.
+- Craft now aggregates duplicate outputs in deterministic BTreeMap order, validates the aggregate before any debit, computes carbon from the actual aggregated inputs/outputs, and installs the preflighted final stock values.
+- Added regressions for a 1 kg mineral deposit rounded away at f64::MAX, a craft output rounded away before a valid Wood input is debited, and two 1 kg outputs at 2^53 kg that must aggregate into one representable 2 kg increment.
+- The zero-stock withdrawal regression now expects the correct typed Insufficient error (have=0, need=1e-13); the prior CI failure was a test expectation defect, not a production withdrawal failure.
+- Fresh exact-head CI is required for this expanded slice. No local Cargo result is claimed.
