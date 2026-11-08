@@ -1293,12 +1293,15 @@ impl MaterialLedger {
     /// reservoir: the audit still closes on the tick it lands, and the
     /// inflow stays visible and attributable in the ledger rather than
     /// appearing as matter the island made from nothing.
-    pub fn inject(
-        &mut self,
-        m: Material,
-        kg: f64,
-        ledger: &mut Ledger,
-    ) -> Result<f64, MaterialError> {
+    /// Validate an operator inflow without changing stock, fluxes or audit state.
+    ///
+    /// The intervention adapter calls this before opening its audited transaction:
+    /// a rejected request must not count as a closed audit or enter the replay log.
+    pub(crate) fn validate_injection(&self, m: Material, kg: f64) -> Result<(), MaterialError> {
+        self.injection_carbon_kgc(m, kg).map(|_| ())
+    }
+
+    fn injection_carbon_kgc(&self, m: Material, kg: f64) -> Result<f64, MaterialError> {
         // Operator inflows are still physical stock changes: reject invalid
         // requests and overflow before touching inventory or the flux ledger.
         Self::validate_amount(m, kg)?;
@@ -1316,14 +1319,23 @@ impl MaterialLedger {
                 amount_kg: resulting_stock,
             });
         }
-        let material_composition = composition(m);
-        let carbon_kgc = kg * material_composition.carbon_per_kg;
+        let carbon_kgc = kg * composition(m).carbon_per_kg;
         if !carbon_kgc.is_finite() {
             return Err(MaterialError::InvalidAmount {
                 material: m,
                 amount_kg: carbon_kgc,
             });
         }
+        Ok(carbon_kgc)
+    }
+
+    pub fn inject(
+        &mut self,
+        m: Material,
+        kg: f64,
+        ledger: &mut Ledger,
+    ) -> Result<f64, MaterialError> {
+        let carbon_kgc = self.injection_carbon_kgc(m, kg)?;
         if kg == 0.0 {
             return Ok(0.0);
         }
