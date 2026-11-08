@@ -33,3 +33,7 @@ The live haul loop also subtracted the completed task duration after allowing a 
 
 - Finish D40: source-backed saw-based log cross-cutting for the ute and estate routes.
 - Continue D31 regional soil nutrient modelling only with sourced nitrogen/phosphorus data and explicit deviations.
+
+
+### Exact-head formatting correction
+- Workflow [#42459497037](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42459497037) identified two rustfmt-only line wraps in the new haul action validator. Applied the exact formatter output in the follow-up commit. The run's formatting job stopped before Clippy/fast tests; the next exact-head run is required.
