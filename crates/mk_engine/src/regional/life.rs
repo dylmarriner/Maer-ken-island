@@ -94,6 +94,10 @@ const FORAGE_RADIUS_CELLS: usize = 1;
 const WATER_RADIUS_CELLS: usize = 2;
 /// Within this many cells of the household's stream a person also uses it (cells).
 const HOME_RANGE_CELLS: usize = 3;
+/// Ignore sub-nanogram carbon remainders after a completed meal. Below this
+/// scale, binary64 subtraction can leave a positive balance that cannot
+/// produce a representable body/material transfer or a meaningful shortfall.
+const FOOD_NEED_ROUNDING_EPSILON_KGC: f64 = 1.0e-12;
 
 /// Wall-clock time spent in each major part of the island step. Runtime-only
 /// instrumentation: never hashed, saved or read by the simulation.
@@ -2158,9 +2162,6 @@ impl IslandLife {
                 .into_iter()
                 .find(|c| self.edible_kgc_m2(*c) > 0.0);
             let Some(cell) = cell else {
-                eprintln!(
-                    "[maer-ken-week-diagnostic] no edible cell: human={id} stands={stands:?} at_home={at_home} owed_kgc={owed_kgc:.17e}"
-                );
                 self.shortfalls.food += 1;
                 continue;
             };
@@ -2558,33 +2559,24 @@ impl IslandLife {
                         } else {
                             gathered
                         };
-                        if let Err(error) = life
+                        if life
                             .materials
                             .eat(id, Material::PlantFood, kg, ledger)
+                            .is_err()
                         {
-                            eprintln!(
-                                "[maer-ken-week-diagnostic] eat failed: human={id} from_home={} cell={:?} kg={kg:.17e} stock_kg={:.17e} error={error:?}",
-                                trip.from_home,
-                                trip.cell,
-                                life.materials.stock_kg(Material::PlantFood),
-                            );
                             life.shortfalls.food += 1;
                             continue;
                         }
                         let owed = life.respired_since_meal.get(id).copied().unwrap_or(0.0);
-                        life.respired_since_meal
-                            .insert(id.clone(), (owed - kg * carbon_per_kg).max(0.0));
+                        let remaining_kgc = (owed - kg * carbon_per_kg).max(0.0);
+                        let remaining_kgc = if remaining_kgc <= FOOD_NEED_ROUNDING_EPSILON_KGC {
+                            0.0
+                        } else {
+                            remaining_kgc
+                        };
+                        life.respired_since_meal.insert(id.clone(), remaining_kgc);
                     }
-                    Err(error) => {
-                        eprintln!(
-                            "[maer-ken-week-diagnostic] gather failed: human={id} from_home={} cell={:?} wanted_kg={:.17e} stock_kg={:.17e} error={error:?}",
-                            trip.from_home,
-                            trip.cell,
-                            trip.kgc / carbon_per_kg,
-                            life.materials.stock_kg(Material::PlantFood),
-                        );
-                        life.shortfalls.food += 1;
-                    }
+                    Err(_) => life.shortfalls.food += 1,
                 }
             }
         })
