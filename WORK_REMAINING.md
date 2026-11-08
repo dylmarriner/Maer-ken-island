@@ -1,6 +1,8 @@
 # Work remaining
 
-## Latest engineering slice — 8 November 2026
+## Latest engineering slice — 9 November 2026
+
+- Operator material injection now rejects negative/non-finite requests, invalid existing stock and resulting-stock overflow before changing inventory or flux entries. `MaterialLedger::inject` returns typed `MaterialError`; the island's `InjectResource(Water)` path propagates the refusal instead of silently clamping. Regressions cover invalid inputs, overflow rollback, carbon/water boundary-ledger closure and unchanged state on refusal. Branch: `fix/operator-material-injection-validation-20261109`; exact-head CI pending.
 
 - Timber source-state, restored-ledger allocator and active-haul exclusivity hardening (PR #128) merged to `main` as `5ea337d5f5931f9349869b39f0f16e7edbcd31c6`. Exact-head workflow [#42461413038](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42461413038) passed formatting, Clippy, fast Rust tests, installed backend, desktop application, web dashboard, computer service, repository scripts, dependency audit and week/year reference-pack acceptance; nightly slow tests were skipped by design.
 
