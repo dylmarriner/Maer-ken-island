@@ -50,3 +50,11 @@ Custom OpenCommander device discovery returned HTTP 429, so no local Cargo resul
 - Continue auditing public material source/sink operations with typed errors and pre-mutation checks.
 - Then advance D40 two-person saw cross-cutting with separate founder time/energy accounting.
 - Keep deterministic single-writer simulation state, append-only logs, replay-hash equality, optional LLM behavior and offline/budget constraints unchanged.
+
+## Exact-head formatting correction — 9 November 2026
+
+- Initial PR #130 workflow [#42477804232](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42477804232) checked out the initial handoff head and failed only at `cargo fmt --all -- --check`.
+- Rustfmt identified two line-wrap differences in the newly appended regression test; no Rust compilation, Clippy or fast-test result was reached in that job.
+- Applied the exact formatter output in test commit `480284d57f4b1ff8ef27cae59477eeaeae01850e`.
+- At the time of correction, the independent installed-backend, desktop, dependency-audit and week/year reference-pack jobs from #42477804232 were still running; their results are not evidence for the corrected head.
+- A fresh exact-head workflow is required for the corrected branch head. No test pass is claimed until that run completes.
