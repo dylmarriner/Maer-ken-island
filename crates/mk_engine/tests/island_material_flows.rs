@@ -371,11 +371,7 @@ fn material_stock_additions_reject_overflow_before_mutation() {
     ));
     assert_eq!(materials.stock_kg(Material::Gold), f64::MAX);
 
-    let craft_overflow = materials.craft(
-        &[],
-        &[(Material::Gold, f64::MAX)],
-        &mut ledger,
-    );
+    let craft_overflow = materials.craft(&[], &[(Material::Gold, f64::MAX)], &mut ledger);
     assert!(matches!(
         craft_overflow,
         Err(MaterialError::InvalidAmount {

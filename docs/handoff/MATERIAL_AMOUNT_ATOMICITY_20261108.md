@@ -84,3 +84,10 @@ Finite, non-negative input amounts are not sufficient to guarantee a finite inve
 ### Verification
 - Added to PR #129 after review of its first green exact-head run.
 - A fresh exact-head CI run is required for the updated branch head; no local Cargo result is claimed because custom OpenCommander is still returning HTTP 429.
+
+
+## Rustfmt correction — 8 November 2026
+
+- Exact-head workflow [#42469507804](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42469507804) reached `cargo fmt --all -- --check` and found one formatting-only difference in the new stock-overflow regression.
+- Applied the formatter's exact single-line call layout. The run did not reach Clippy or fast tests; those checks remain unverified for this head.
+- A fresh exact-head workflow is required after this correction.

@@ -764,3 +764,6 @@ Evidence: `docs/handoff/TIMBER_CROSS_CUT_REBASE_20261108.md`.
 ## Material stock overflow follow-up — 8 November 2026
 
 PR #129 now also preflights resulting stock totals, not only individual finite/non-negative inputs. `bank_mined` rejects a finite deposit that would overflow existing inventory. `craft` simulates post-debit output additions in their original order and rejects overflow before any debit/output mutation. Regressions cover an overflowing second mined deposit, craft output overflow against existing stock, and duplicate outputs whose finite quantities overflow when combined. Exact-head CI must be rerun for the new head; no local Cargo result is claimed.
+
+
+- PR #129 exact-head workflow [#42469507804](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42469507804) found one rustfmt-only layout difference in the new stock-overflow test. Applied the formatter's requested single-line call form; Clippy and fast tests were skipped by the failed format gate. Fresh exact-head verification is required.
