@@ -2342,6 +2342,55 @@ fn receiving_felled_log_rejects_unrepresentable_soil_debit_before_allocating_or_
 }
 
 #[test]
+fn receiving_felled_log_rejects_soil_depth_underflow_before_allocating_or_booking_fluxes() {
+    use std::panic::{catch_unwind, AssertUnwindSafe};
+
+    let b = base();
+    let cell = b.forest_cell;
+    let area = b.domain.cell_area_m2(M);
+    assert!(area > 1.0);
+    let mut hydrology = HydrologyState::new(&b.domain.storage_spec(M), 0.5);
+    hydrology.soil_water.get_mut(cell.0, cell.1).storage_mm = 100.0;
+    let soil_before = hydrology.soil_water.get(cell.0, cell.1).storage_mm;
+    let mut materials = MaterialLedger::new();
+    let mut ledger = Ledger::new();
+    let carbon_before = materials.stock_of(R::MaterialCarbon);
+    let water_before = materials.stock_of(R::MaterialWater);
+    let next_id_before = materials.next_log_id();
+    let entries_before = ledger.entries().len();
+    let log = Log {
+        id: 0,
+        position_m: (0.0, 0.0),
+        heading_rad: 0.0,
+        length_m: 2.0,
+        diameter_m: 0.2,
+        dry_kg: 10.0,
+        carbon_kgc: 5.0,
+        water_kg: f64::from_bits(1),
+        place: LogPlace::Ground,
+    };
+
+    assert_eq!(log.water_kg / area, 0.0);
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        materials.receive_felled_log(log, &mut hydrology, cell, area, &mut ledger)
+    }));
+
+    assert!(
+        result.is_err(),
+        "a positive log-water transfer must not underflow to zero source depth"
+    );
+    assert_eq!(
+        hydrology.soil_water.get(cell.0, cell.1).storage_mm,
+        soil_before
+    );
+    assert_eq!(materials.stock_of(R::MaterialCarbon), carbon_before);
+    assert_eq!(materials.stock_of(R::MaterialWater), water_before);
+    assert_eq!(materials.next_log_id(), next_id_before);
+    assert_eq!(materials.logs().count(), 0);
+    assert_eq!(ledger.entries().len(), entries_before);
+}
+
+#[test]
 fn seasoning_preflights_the_complete_wood_batch_before_removing_any_log() {
     use std::panic::{catch_unwind, AssertUnwindSafe};
 
