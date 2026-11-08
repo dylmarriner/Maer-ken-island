@@ -1360,11 +1360,9 @@ impl MaterialLedger {
         }
         let from_standing = take.min(standing_kg);
         let from_river = take - from_standing;
-        hydrology.surface_water.set(
-            r,
-            c,
-            surface_water - from_standing / cell_area_m2,
-        );
+        hydrology
+            .surface_water
+            .set(r, c, surface_water - from_standing / cell_area_m2);
         hydrology.runoff.set(
             r,
             c,
