@@ -8,7 +8,7 @@
 - Exact-head workflow [#42527890278](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42527890278) caught three rustfmt assertion-layout differences; Clippy and fast tests were skipped. Corrected in `f244ae616bd7202dfa1e50f27cd4c4e343337651`.
 - Follow-up workflow [#42527969583](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42527969583) was cancelled before the corrected head's required checks completed. It is not a pass. The handoff is updated at `6917d9b16176fd86c39770d0101016d890982fe2`.
 - Current PR #134 branch head at this register update requires fresh exact-head formatting, Clippy, fast tests, desktop/backend acceptance and week/year reference-pack verification. No local Cargo pass is claimed while custom OpenCommander is unavailable.
-- Remaining no-Result ingestion audit: `receive_felled_wood`, `receive_felled_log` and `season_stored_logs`. The roof-water path is covered by the new guard; these three are not claimed complete.
+- Pending no-Result ingestion paths remain in unmerged draft PR #135: `receive_felled_wood`, `receive_felled_log`, `capture_roof_water` and `season_stored_logs`. Their guards are not in `main` until PR #135 merges after its own exact-head acceptance; none is claimed complete on PR #134.
 - Next after PR #134 verification: D40 felled-log cross-cut for ute transport with the two-person saw, labour/energy accounting and route modelling; then D31 regional soil-nutrient modelling.
 
 # Work remaining
@@ -719,7 +719,7 @@ invertebrate densities, fire danger indices (see each report's "unsourced" secti
   push; the `dependency audit` CI job replaced it.
 - **Firecrawl credits ran out** on 2026-10-12. WebSearch and the TinyFish fetcher still work for
   sources; the container's own network blocks most hosts.
-- **Persist digests.** `WEEK_DIGEST` is `29ed53bd7769eb3025e70135bab8b7ea07718e26e7fca4cbf77ab379d62b7784`; the planetary topology pin is
+- **Persist digests.** `WEEK_DIGEST` is `61ffaa6a559b5a8f503b7b6c707ca5f8cf634be9eebec64a1af6652706c2478a`; the planetary topology pin is
   `e4ece246…73e2`. Any change that moves either is a behaviour change and must say so.
 
 
