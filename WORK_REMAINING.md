@@ -1,3 +1,13 @@
+## Latest seasoning audit-closure follow-up — 9 November 2026
+
+- PR #135 follow-up found that `season_stored_logs` only required the rounded MaterialWater aggregate to decrease. That did not prove its actual post-removal stock delta matched the per-log water fluxes; binary64 rounding could turn a 1.5 kg transfer into a 2 kg aggregate change.
+- The Wood conversion also preflighted only that inventory increased, not that the resulting MaterialCarbon aggregate remained unchanged when logs moved into the Wood stock.
+- The preflight now predicts post-seasoning MaterialCarbon and MaterialWater using the same aggregation order as `stock_of`, and compares the predicted deltas with the audit contract before removing any log or appending any water flux.
+- Regressions: a 10 kg log seasoned into a (2^{53}) kg Wood stock would otherwise lose 0.5 kgC through rounding; three 0.5 kg-water logs seasoned against a (2^{53}) kg Water stock would otherwise change the aggregate by 2 kg while the ledger books 1.5 kg. Both cases must refuse without changing stocks, logs or flux entries.
+- No snapshot schema, append-only replay format, replay hash, RNG, tick cadence, scientific constant or reference pack was intentionally changed.
+- Exact-head CI is pending after these commits. No local Cargo result is claimed while custom OpenCommander is rate-limited.
+- Next: complete PR #135 formatting, Clippy, fast tests, desktop/backend and week/year acceptance; separately resolve PR #134's week-reference digest drift before merge.
+
 ## Latest material-ingestion atomicity slice — 9 November 2026
 
 - New draft PR #135: [Preflight timber and roof-water material ingestion](https://github.com/dylmarriner/Maer-ken-island/pull/135), based on main `6b57ad96273c2320910f93902963bc8800974175`.
