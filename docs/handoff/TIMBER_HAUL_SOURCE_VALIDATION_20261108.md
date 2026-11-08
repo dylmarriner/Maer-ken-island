@@ -70,3 +70,13 @@ The regression covers zero dry mass, zero carbon, carbon greater than dry mass, 
 - Verify exact-head formatting, Clippy, fast Rust tests, desktop/backend and week/year reference packs.
 - Keep PR #128 draft until all required checks pass.
 - Next independent feature slice remains D40: two-person saw cross-cut participation and both founders' time/energy accounting.
+
+
+## Persisted log allocator validation — 8 November 2026
+
+- The restored-ledger review found that physical log validation alone did not prove allocator consistency. A corrupt snapshot could set the exclusive next-log watermark at or below an existing log, reserve an id already occupied by a log, or reserve the watermark itself (an id not yet allocated).
+- MaterialLedger deserialization now rejects all three states before constructing the live ledger. One-based ids, the exclusive allocator watermark, materialised logs and pending reservations are checked together.
+- Regression coverage verifies stale watermarks, reservation/log collisions, reservations at or beyond the watermark, and compatibility with pre-log snapshots that omit the three newer fields.
+- This does not change the append-only action log, replay digest, RNG, snapshot field names, valid reservation behaviour or material accounting.
+- Exact-head workflow must verify formatting, Clippy, fast tests, desktop/backend and week/year reference packs. No pass is claimed for this new head.
+- D40 two-person saw participation remains the next feature slice; this change is allocator/recovery hardening, not D40 completion.
