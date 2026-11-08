@@ -1,3 +1,8 @@
+## Latest exact-head formatting correction — 9 November 2026
+
+- Workflow [#42512092655](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42512092655) stopped at cargo fmt before Clippy/tests. Rustfmt identified two formatting differences in materials.rs and two blank lines between test attributes in island_material_flows.rs.
+- Both source formatting findings are corrected. The workflow provides no compile/test result; fresh exact-head CI is required.
+
 ## Latest craft-input precision follow-up — 9 November 2026
 
 - Repeated craft input aggregation now rejects a positive component that rounds away when added to the material's accumulated requirement. This prevents the preflight/debit from silently dropping part of a recipe before it reaches stock validation.
