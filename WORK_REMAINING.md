@@ -1,3 +1,9 @@
+## Latest verification correction — 9 November 2026
+
+- PR #133 workflow [#42507201745](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42507201745) passed rustfmt and Clippy; fast Rust tests reported 41 passed / 1 failed in island_material_flows.
+- The failure was an incorrect regression expectation: a positive request against zero stock correctly returns MaterialError::Insufficient { have_kg: 0.0, need_kg: 1e-13 } before the rounded-away check. The test now asserts that typed error and unchanged inventory/carbon/flux state.
+- Fresh exact-head CI is required after the test correction. PR #133 remains draft until the full required matrix passes.
+
 ## Latest engineering slice — 9 November 2026 (withdrawal tolerance atomicity)
 
 - PR #133 now rejects positive withdrawals when available stock is smaller than the requested amount, even when the shortfall is within the former 1e-12 kg tolerance.
