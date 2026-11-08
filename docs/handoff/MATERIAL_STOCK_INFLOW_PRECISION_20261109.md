@@ -80,3 +80,10 @@ The no-Result ingestion paths (`receive_felled_wood`, `receive_felled_log`, `cap
 1. Verify PR #134 exact head.
 2. Continue D40: cross-cut felled logs for ute transport using the two-person saw, with both founders' labour/energy accounted for and route modelling.
 3. Continue D31 regional soil-nutrient modelling.
+
+
+## Exact-head formatting correction — 9 November 2026
+
+Workflow [#42517525917](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42517525917) ran on the prior PR head `1ddc817030bcc2a966bfcf99d7f1b89df7fb5764`. `cargo fmt --all -- --check` found two test-file formatting differences: one extra blank line before the appended cases and one long edible-cell predicate. Clippy and fast tests were skipped by the format gate; no compile/test result is claimed from that job.
+
+Both findings were corrected in `f408d171e7e1af4239aa6ff170996ce52d2fe98d`. A fresh exact-head workflow is required. The same old-head run had computer service, repository scripts, web dashboard and dependency audit passing; installed backend, desktop application and week/year reference packs were still running at the last inspection. Those results do not verify the corrected head.
