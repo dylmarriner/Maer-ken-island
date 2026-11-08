@@ -777,8 +777,6 @@ fn cross_cut_refuses_restored_invalid_source_without_consuming_reserved_ids_or_c
     };
     let source_id = materials.receive_felled_log(source, &mut hydrology, cell, area, &mut ledger);
     let first_piece_id = materials.reserve_log_ids(2);
-    let carbon_before = materials.stock_of(R::MaterialCarbon);
-    let water_before = materials.stock_of(R::MaterialWater);
     let next_id_before = materials.next_log_id();
 
     // A restored snapshot can contain malformed state even though the public
@@ -800,12 +798,18 @@ fn cross_cut_refuses_restored_invalid_source_without_consuming_reserved_ids_or_c
         .log(source_id)
         .expect("source remains present")
         .clone();
+    // stock_of includes log records, so the deliberately corrupted snapshot
+    // has a correspondingly corrupted derived stock before the operation.
+    // Capture that restored state, then prove refusal itself changes nothing.
+    let carbon_before_rejection = restored.stock_of(R::MaterialCarbon);
+    let water_before_rejection = restored.stock_of(R::MaterialWater);
+    assert_eq!(carbon_before_rejection, dry_kg + 1.0);
     assert!(!restored.cross_cut_log(source_id, 2, first_piece_id));
     assert_eq!(restored.log(source_id), Some(&invalid_source));
     assert_eq!(restored.log(first_piece_id), None);
     assert_eq!(restored.log(first_piece_id + 1), None);
-    assert_eq!(restored.stock_of(R::MaterialCarbon), carbon_before);
-    assert_eq!(restored.stock_of(R::MaterialWater), water_before);
+    assert_eq!(restored.stock_of(R::MaterialCarbon), carbon_before_rejection);
+    assert_eq!(restored.stock_of(R::MaterialWater), water_before_rejection);
     assert_eq!(restored.next_log_id(), next_id_before);
 
     // The failed materialisation must leave the complete reservation intact.
@@ -825,6 +829,9 @@ fn cross_cut_refuses_restored_invalid_source_without_consuming_reserved_ids_or_c
     repaired_source["carbon_kgc"] = serde_json::Value::from(dry_kg * 0.5);
     let mut repaired: MaterialLedger =
         serde_json::from_value(after_rejection).expect("repaired ledger restores");
+    let carbon_before_cut = repaired.stock_of(R::MaterialCarbon);
+    let water_before_cut = repaired.stock_of(R::MaterialWater);
+    assert_eq!(carbon_before_cut, dry_kg * 0.5);
     assert!(repaired.cross_cut_log(source_id, 2, first_piece_id));
     assert_eq!(repaired.log(source_id), None);
     let first = repaired
@@ -838,6 +845,8 @@ fn cross_cut_refuses_restored_invalid_source_without_consuming_reserved_ids_or_c
         (first.carbon_kgc + second.carbon_kgc).to_bits(),
         (dry_kg * 0.5).to_bits()
     );
+    assert_eq!(repaired.stock_of(R::MaterialCarbon), carbon_before_cut);
+    assert_eq!(repaired.stock_of(R::MaterialWater), water_before_cut);
     assert_eq!(repaired.next_log_id(), next_id_before);
 }
 
