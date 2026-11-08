@@ -1628,7 +1628,10 @@ fn soil_and_surface_water_harvests_reject_invalid_source_reservoirs_without_muta
         hydrology.soil_water.set(
             cell.0,
             cell.1,
-            SoilWater { moisture_fraction: 0.5, storage_mm: invalid },
+            SoilWater {
+                moisture_fraction: 0.5,
+                storage_mm: invalid,
+            },
         );
         let (mut materials, mut ledger) = (MaterialLedger::new(), Ledger::new());
 
@@ -1638,7 +1641,11 @@ fn soil_and_surface_water_harvests_reject_invalid_source_reservoirs_without_muta
                 if value.to_bits() == invalid.to_bits()
         ));
         assert_eq!(
-            hydrology.soil_water.get(cell.0, cell.1).storage_mm.to_bits(),
+            hydrology
+                .soil_water
+                .get(cell.0, cell.1)
+                .storage_mm
+                .to_bits(),
             invalid.to_bits()
         );
         assert_eq!(materials.stock_kg(Material::Water), 0.0);
@@ -1656,7 +1663,10 @@ fn soil_and_surface_water_harvests_reject_invalid_source_reservoirs_without_muta
             Err(MaterialError::InvalidSourceState { material: Material::Water, value })
                 if value.to_bits() == invalid.to_bits()
         ));
-        assert_eq!(hydrology.surface_water.get(cell.0, cell.1).to_bits(), invalid.to_bits());
+        assert_eq!(
+            hydrology.surface_water.get(cell.0, cell.1).to_bits(),
+            invalid.to_bits()
+        );
         assert_eq!(*hydrology.runoff.get(cell.0, cell.1), runoff_before);
         assert_eq!(materials.stock_kg(Material::Water), 0.0);
         assert!(ledger.entries().is_empty());
