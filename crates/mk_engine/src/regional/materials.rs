@@ -550,7 +550,7 @@ impl MaterialLedger {
         let resulting_stock = have - withdrawn;
         if !resulting_stock.is_finite()
             || resulting_stock < 0.0
-            || (withdrawn > 0.0 && resulting_stock >= have)
+            || (kg > 0.0 && (withdrawn <= 0.0 || resulting_stock >= have))
         {
             return Err(MaterialError::InvalidAmount {
                 material: m,
@@ -1279,7 +1279,7 @@ impl MaterialLedger {
             let resulting_stock = have - withdrawn;
             if !resulting_stock.is_finite()
                 || resulting_stock < 0.0
-                || (withdrawn > 0.0 && resulting_stock >= have)
+                || (*kg > 0.0 && (withdrawn <= 0.0 || resulting_stock >= have))
             {
                 return Err(MaterialError::InvalidAmount {
                     material: *m,
