@@ -77,3 +77,18 @@ A log's contained carbon mass cannot exceed its dry-matter mass. The timber boun
 - Production change: `crates/mk_engine/src/regional/timber.rs`.
 - Regression: `crates/mk_engine/tests/island_material_flows.rs`.
 - Exact-head CI after this change is required; predecessor workflow #42432061820 does not verify this new head.
+
+
+## Positive timber mass invariant follow-up — 8 November 2026
+
+A log with positive geometry but zero oven-dry mass or zero carbon could previously pass
+`has_valid_physical_state`. Such a log could be cross-cut and carried with no meaningful
+mass, bypassing the sustainable-load and vehicle-payload calculations.
+
+The validator now requires both `dry_kg > 0` and `carbon_kgc > 0`, while retaining the
+existing finite/non-negative water, finite geometry, and `carbon_kgc <= dry_kg` checks.
+
+Two integration regressions prove that zero-dry-mass and zero-carbon logs fail before the
+allocator advances, no log is inserted, and the carbon/water audit remains unchanged.
+
+Exact-head CI is required after these commits; no local Rust test result is claimed.
