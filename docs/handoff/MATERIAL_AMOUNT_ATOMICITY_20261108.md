@@ -91,3 +91,19 @@ Finite, non-negative input amounts are not sufficient to guarantee a finite inve
 - Exact-head workflow [#42469507804](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42469507804) reached `cargo fmt --all -- --check` and found one formatting-only difference in the new stock-overflow regression.
 - Applied the formatter's exact single-line call layout. The run did not reach Clippy or fast tests; those checks remain unverified for this head.
 - A fresh exact-head workflow is required after this correction.
+
+
+## Fossil and surface-water source boundary follow-up — 8 November 2026
+
+A second audit found public source-inflow methods that bypassed the shared withdrawal guard.
+
+- `gather_fossil` now rejects negative/non-finite requests and rejects a resulting stock total that would overflow before changing stock or appending a carbon flux.
+- `gather_water` now rejects negative/non-finite requests and preflights the destination water stock before draining standing water/runoff or appending water fluxes.
+- Regressions prove invalid requests preserve stock, source hydrology and flux-ledger length.
+- Overflow regressions prove a finite maximum fossil/water stock cannot be increased into infinity and that a rejected water transfer does not drain the source cell.
+
+Commits:
+- Production boundary checks: `b06169fc6c47bc52a2ffb2917e8b98a3be7afcf1`.
+- Regression coverage: `00ec798a4fad3b110009195e911a0a30b68a0371`.
+
+Exact-head CI is required for this updated PR head. OpenCommander returned HTTP 429, so no local Cargo result is claimed.
