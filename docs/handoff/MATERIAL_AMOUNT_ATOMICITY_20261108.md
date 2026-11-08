@@ -60,3 +60,6 @@ The crafting path also checked duplicate inputs independently. Two 5 kg inputs c
 - The corrected branch head requires a fresh exact-head workflow. Fast tests, Clippy, desktop/backend and reference-pack results are not yet available for this slice.
 
 - Added a successful duplicate-input recipe case as well: two gold inputs totalling 5 kg against 6 kg stock are aggregated, debited and re-added as 5 kg output with the final stock unchanged. This complements the insufficient-stock no-partial-mutation case.
+
+- Extended the same finite/non-negative contract to `bank_mined`; negative and positive-infinity mined quantities are now rejected instead of being clamped or entering inventory. The regression verifies the existing 10 kg gold stock remains unchanged.
+- Call-site search found the simulation's only `bank_mined` caller in the gold-mining completion path, which supplies the non-negative `work.product_kg` output; no caller relies on negative clamping.
