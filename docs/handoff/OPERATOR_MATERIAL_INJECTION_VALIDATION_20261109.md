@@ -41,3 +41,33 @@ Base: `main` at `170e4b5f1c035bf71535294fa758bbd4b661a22b`
 
 - Verify exact-head CI and merge only after every required non-nightly job is green.
 - Continue the D40 two-person saw-based log cross-cutting workflow and the D31 sourced regional soil-nutrient model.
+
+## Producer-carbon field injection atomicity — 9 November 2026
+
+A second operator inflow path bypassed `MaterialLedger::inject`: `InjectBiomass(Producers)` wrote directly into the regional biomass field and booked the total carbon only after looping through cells. It silently clamped negative values and did not preflight corrupt source cells or increments that round away.
+
+### Production change
+
+- Added typed `IslandInterventionError::InvalidProducerInjection`.
+- Reject invalid amount, cell area, total area and per-cell allocation before mutation.
+- Preflight every target land cell for finite, non-negative existing biomass.
+- Reject non-finite results and positive increments that are not representable at a target cell.
+- Collect all resulting cell values first; only mutate the grid and append the boundary flux after every target cell passes.
+- Preserve sea exclusion and the existing `OperatorIntervention -> BiomassCarbon` flux.
+
+### Regression coverage
+
+- Negative, NaN and infinite amounts are rejected by the upstream validator without changing biomass, flux entries or replay log.
+- Negative, NaN and infinite source biomass values are rejected with the typed island error.
+- A finite `f64::MAX` source whose requested positive increment rounds away is rejected.
+- Full-grid bit comparisons prove no earlier target cell is partially changed when a later target is invalid.
+- Flux-ledger length and replay-log length remain unchanged on refusal.
+
+### Commits
+
+- Production: `1f088b8079f9f870fa7c59898ff618e2649b0313`.
+- Regression tests: `3559e07ea702a389e9f69a4218429de10cddb564`.
+
+### Verification
+
+A fresh exact-head CI run is required after the production and test commits. No local Cargo result is claimed because custom OpenCommander access is unavailable. No replay schema, snapshot, RNG, tick cadence, physical constant or reference pack changed.
