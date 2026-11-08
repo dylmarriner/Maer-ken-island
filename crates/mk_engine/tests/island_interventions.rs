@@ -18,7 +18,7 @@ use mk_engine::regional::interventions::{
     action_name, refusal, IslandApplied, IslandDirective, IslandInterventionError,
 };
 use mk_engine::regional::life::IslandLife;
-use mk_engine::regional::materials::Material;
+use mk_engine::regional::materials::{Material, MaterialError};
 use mk_engine::regional::replay::{replay_island, IslandReplayLog};
 use mk_interventions::{
     BiomassType, ClimateParameter, DisturbanceType, EnergyType, HumanSpawnProfile,
@@ -555,6 +555,44 @@ fn producer_carbon_injection_preflights_corrupt_and_unrepresentable_cells_atomic
         assert_eq!(life.physical.ledger.entries().len(), before_ledger);
         assert_eq!(life.replay_log().entries().len(), before_log);
     }
+}
+
+#[test]
+fn rejected_operator_water_injection_does_not_close_audit_or_enter_replay_log() {
+    let mut life = island();
+    let (row, col) = a_land_cell(&life);
+
+    // Put the audited water stock at the largest finite value. A further
+    // positive f32-sized operator injection is then rounded away.
+    life.materials
+        .inject(Material::Water, f64::MAX, &mut life.physical.ledger)
+        .expect("the maximum finite water seed fits");
+    let stock_before = life.materials.stock_kg(Material::Water);
+    let flux_entries_before = life.physical.ledger.entries().len();
+    let audits_before = life.audits_closed;
+    let replay_entries_before = life.replay_log().entries().len();
+    let digest_before = life.state_digest();
+
+    let action = InterventionAction::InjectResource {
+        resource_type: ResourceType::Water,
+        amount: 1.0,
+        location: at(&life, row, col),
+    };
+    match life.apply_command(IslandCommand::Intervention(Box::new(action))) {
+        Err(CommandError::Intervention(IslandInterventionError::Material(
+            MaterialError::InvalidAmount {
+                material: Material::Water,
+                ..
+            },
+        ))) => {}
+        other => panic!("unrepresentable water injection must be refused, got {other:?}"),
+    }
+
+    assert_eq!(life.materials.stock_kg(Material::Water), stock_before);
+    assert_eq!(life.physical.ledger.entries().len(), flux_entries_before);
+    assert_eq!(life.audits_closed, audits_before);
+    assert_eq!(life.replay_log().entries().len(), replay_entries_before);
+    assert_eq!(life.state_digest(), digest_before);
 }
 
 #[test]
