@@ -1,3 +1,10 @@
+## PR #134 Clippy correction — 9 November 2026
+
+- Exact-head workflow [#42517618293](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42517618293) on head `f9a493610a138515fc8b6d5569ff4f537594424e` passed formatting, then Clippy rejected the test's `Option::map_or(false, ...)` as `unnecessary_map_or`. Fast tests were skipped by the Clippy gate.
+- Corrected the predicate to `is_some_and` in `ac50da421a9f7acbaddee2c867e7f3efbfc1a3ae`.
+- On that old-head run, dependency audit, repository scripts, web dashboard and computer service passed; installed backend, desktop and week/year reference packs were still running at last inspection. Those results do not verify the corrected head.
+- Fresh exact-head CI is required for `ac50da42`.
+
 ## PR #134 formatting correction — 9 November 2026
 
 - Exact-head workflow [#42517525917](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42517525917) on the prior PR head `1ddc817030bcc2a966bfcf99d7f1b89df7fb5764` failed only at `cargo fmt --all -- --check`: one extra blank line before the appended tests and one long edible-cell predicate. Clippy and fast tests were skipped by the format gate; this is not a compile/test result.
