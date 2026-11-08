@@ -785,3 +785,11 @@ PR #129 now also preflights resulting stock totals, not only individual finite/n
 - Regression tests cover negative, NaN, infinity, fossil-stock overflow, water-stock overflow and unchanged source-cell water on refusal.
 - Source commit: `b06169fc6c47bc52a2ffb2917e8b98a3be7afcf1`; tests: `00ec798a4fad3b110009195e911a0a30b68a0371`; handoff follows.
 - Exact-head CI must complete for the latest PR head; no local Cargo test result is claimed.
+
+
+### Latest exact-head CI correction — 9 November 2026
+
+- PR #131 exact-head workflow [#42488473527](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42488473527) passed Rust formatting, then Clippy failed on two ignored `Result` values in the overflow-test fixtures after `MaterialLedger::inject` became fallible.
+- Corrected both fixtures to assert that finite maximum-sized Wood and Water seed injections succeed and return the requested stock quantity.
+- Test commit: `08b9278ace557ccc622de60119f1209145ce263f`.
+- Fast tests were skipped on the failed head; fresh exact-head formatting, Clippy, fast tests, desktop/backend and week/year reference-pack checks remain required.
