@@ -51,3 +51,10 @@ The crafting path also checked duplicate inputs independently. Two 5 kg inputs c
 - Verify this exact branch head in CI.
 - Continue D40's two-person saw cross-cut workflow with both founders' time and energy accounted separately.
 - Continue D31 only with sourced regional nitrogen/phosphorus data and explicit deviations.
+
+## Exact-head formatting correction — 8 November 2026
+
+- Workflow [#42464939304](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42464939304) checked out merge ref `d6c9ad45d27d8ac16de501dacd4cb86a280ce8a0` and failed only at `cargo fmt --all -- --check`.
+- Rustfmt requested the multi-line layout for `MaterialError::InvalidAmount`; no semantic or test failure was reached.
+- Applied the exact formatter layout in commit `fb86622003566e8857dc19c4918f9da61d4d6e55`.
+- The corrected branch head requires a fresh exact-head workflow. Fast tests, Clippy, desktop/backend and reference-pack results are not yet available for this slice.
