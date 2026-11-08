@@ -2370,6 +2370,7 @@ fn receiving_felled_log_rejects_soil_depth_underflow_before_allocating_or_bookin
         place: LogPlace::Ground,
     };
 
+    assert_eq!(log.water_kg.min(soil_before * area), log.water_kg);
     assert_eq!(log.water_kg / area, 0.0);
     let result = catch_unwind(AssertUnwindSafe(|| {
         materials.receive_felled_log(log, &mut hydrology, cell, area, &mut ledger)
