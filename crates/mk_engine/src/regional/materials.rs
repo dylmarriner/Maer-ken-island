@@ -971,6 +971,10 @@ impl MaterialLedger {
             removed_mm.is_finite(),
             "felled-log soil-water debit must remain finite"
         );
+        assert!(
+            from_soil == 0.0 || removed_mm > 0.0,
+            "positive felled-log soil-water transfer must have a representable source depth"
+        );
         let remaining_soil_mm =
             Self::checked_source_debit_result(Material::Water, soil.storage_mm, removed_mm)
                 .expect("felled-log soil-water debit must decrease source storage representably");
