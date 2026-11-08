@@ -1192,6 +1192,11 @@ impl MaterialLedger {
         ledger: &mut Ledger,
     ) -> Result<f64, MaterialError> {
         Self::validate_amount(Material::Limestone, limestone_kg)?;
+        Self::checked_withdrawal_result(
+            Material::Limestone,
+            self.stock_kg(Material::Limestone),
+            limestone_kg,
+        )?;
         let quicklime_kg = limestone_kg * QUICKLIME_PER_LIMESTONE;
         let resulting_quicklime_stock = Self::checked_stock_addition_result(
             Material::Quicklime,
@@ -1227,6 +1232,7 @@ impl MaterialLedger {
         ledger: &mut Ledger,
     ) -> Result<f64, MaterialError> {
         Self::validate_amount(Material::Wood, wood_kg)?;
+        Self::checked_withdrawal_result(Material::Wood, self.stock_kg(Material::Wood), wood_kg)?;
         let wood = composition(Material::Wood);
         let dry = wood_kg * (1.0 - wood.water_per_kg);
         let char_kg = CHARCOAL_YIELD_BY_DRY_MASS * dry;
