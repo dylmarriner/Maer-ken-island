@@ -948,7 +948,6 @@ fn plant_food_is_only_the_forests_fruit_and_seed_and_grassland_feeds_nobody() {
     }
 }
 
-
 #[test]
 fn receiving_zero_dry_mass_log_fails_before_allocating_or_booking_material() {
     use std::panic::{catch_unwind, AssertUnwindSafe};
@@ -977,7 +976,10 @@ fn receiving_zero_dry_mass_log_fails_before_allocating_or_booking_material() {
         materials.receive_felled_log(log, &mut hydrology, cell, area, &mut ledger)
     }));
 
-    assert!(result.is_err(), "a positive-volume log cannot have zero dry mass");
+    assert!(
+        result.is_err(),
+        "a positive-volume log cannot have zero dry mass"
+    );
     assert_eq!(materials.next_log_id(), next_id_before);
     assert_eq!(materials.logs().count(), 0);
     audit.close(&materials, &ledger);
