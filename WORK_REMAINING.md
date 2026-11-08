@@ -1,6 +1,12 @@
 # Work remaining
 
-## Latest engineering slice — 8 November 2026
+## Latest engineering slice — 9 November 2026
+
+- PR #129 (material quantity validation, finite resulting-stock preflight, duplicate-input craft aggregation, and atomic fossil/surface-water source operations) merged to `main` as `170e4b5f1c035bf71535294fa758bbd4b661a22b`. Exact-head workflow [#42473464844](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42473464844) passed formatting, Clippy, fast Rust tests, dependency audit, computer service, installed backend, desktop application, web dashboard, repository scripts and both week/year reference-pack acceptance tests; nightly slow tests were skipped by design.
+- PR #130 extends the same typed finite/non-negative and pre-mutation stock-overflow contract to `gather_biotic`, `gather_edible` and `gather_soil_water`. Source commit `ef4368bc`, regression commit `4e2b3cc8`, handoff `docs/handoff/BIOTIC_SOIL_WATER_SOURCE_VALIDATION_20261109.md`. Exact-head CI is pending; custom OpenCommander returned HTTP 429, so no local Cargo result is claimed.
+- Next: verify and merge PR #130 only after exact-head acceptance, then advance D40's two-person saw cross-cutting with separate founder time/energy accounting.
+
+## Previous engineering slice — 8 November 2026
 
 - Timber source-state, restored-ledger allocator and active-haul exclusivity hardening (PR #128) merged to `main` as `5ea337d5f5931f9349869b39f0f16e7edbcd31c6`. Exact-head workflow [#42461413038](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42461413038) passed formatting, Clippy, fast Rust tests, installed backend, desktop application, web dashboard, computer service, repository scripts, dependency audit and week/year reference-pack acceptance; nightly slow tests were skipped by design.
 
