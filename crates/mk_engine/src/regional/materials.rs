@@ -1381,7 +1381,7 @@ impl MaterialLedger {
         flow(
             ledger,
             FluxKind::Water,
-            Reservoir::Runoff,
+            Reservoir::Rivers,
             Reservoir::MaterialWater,
             from_river,
         );
