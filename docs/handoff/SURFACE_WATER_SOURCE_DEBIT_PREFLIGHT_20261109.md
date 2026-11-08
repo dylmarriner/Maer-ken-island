@@ -54,3 +54,14 @@ A neighbouring timber-ingestion path had the same source-debit defect: `receive_
 - Corrected the formatting in commit `1b620f68811f1d5f7988ac677474c2b8143a5704`.
 - New exact-head workflow [#42536914812](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42536914812) is running. Dependency audit, repository scripts, web dashboard and computer service have passed; formatting/Clippy/fast tests, desktop, installed backend and week/year reference packs remain in progress at the latest inspection.
 - PR #135 remains draft. No full Rust test or desktop/backend pass is claimed yet.
+
+## Felled-log source-depth conversion underflow follow-up — 9 November 2026
+
+A second edge case remained after the positive source-debit check: a positive but subnormal `from_soil` quantity can underflow to exactly zero when converted from kilograms to millimetres (`from_soil / cell_area_m2`). The shared debit helper sees a zero amount and cannot distinguish that lost positive transfer.
+
+- Added an explicit invariant: if `from_soil > 0`, the converted `removed_mm` must also be positive before the source-debit helper is called.
+- Added `receiving_felled_log_rejects_soil_depth_underflow_before_allocating_or_booking_fluxes`, using the smallest positive binary64 subnormal water quantity and a cell area greater than 1 m².
+- The test asserts unchanged soil storage, carbon/water stocks, next log ID, log collection and flux-entry count.
+- Production commit: `0acf469543f519cf8c2f616eda5a3f8341bac8f8`.
+- Regression commit: `ec352e3e84cef47f522429fa6cb013a680743896`.
+- Exact-head CI must run on the final PR head; no local Cargo result is claimed while custom OpenCommander is rate-limited.
