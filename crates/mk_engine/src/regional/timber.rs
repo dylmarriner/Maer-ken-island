@@ -104,6 +104,8 @@ impl Log {
             && self.dry_kg >= 0.0
             && self.carbon_kgc.is_finite()
             && self.carbon_kgc >= 0.0
+            // Carbon is a component of dry matter, never a greater mass than the dry wood.
+            && self.carbon_kgc <= self.dry_kg
             && self.water_kg.is_finite()
             && self.water_kg >= 0.0
             && (self.dry_kg + self.water_kg).is_finite()
