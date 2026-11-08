@@ -47,3 +47,10 @@ A neighbouring timber-ingestion path had the same source-debit defect: `receive_
 - Production commit: `8df094d717fabe6e4c6d1bb913a8e20a2654902f`.
 - Regression commit: `72eb626e523a163fa343640235b64e2322c3527d`.
 - Exact-head CI is required. No local Cargo result is claimed because the authorised custom OpenCommander endpoint is currently rate-limited.
+
+## Exact-head formatting follow-up — 9 November 2026
+
+- Workflow [#42536830786](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42536830786) checked out the prior PR merge head and stopped at `cargo fmt --all -- --check`. The only reported diff was rustfmt layout of the new source-debit assignment; Clippy and fast tests did not run on that head.
+- Corrected the formatting in commit `1b620f68811f1d5f7988ac677474c2b8143a5704`.
+- New exact-head workflow [#42536914812](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42536914812) is running. Dependency audit, repository scripts, web dashboard and computer service have passed; formatting/Clippy/fast tests, desktop, installed backend and week/year reference packs remain in progress at the latest inspection.
+- PR #135 remains draft. No full Rust test or desktop/backend pass is claimed yet.
