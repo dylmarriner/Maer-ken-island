@@ -80,6 +80,12 @@ pub const ALL_MATERIALS: [Material; 10] = [
     Material::Gold,
 ];
 
+/// Food amounts below one nanogram are numerical meal residuals, not a
+/// meaningful harvest. They may be below the next representable PlantFood
+/// stock increment; in that case a completed forage trip may return zero
+/// without debiting ecology or booking a material transfer.
+const NEGLIGIBLE_FORAGE_KG: f64 = 1.0e-12;
+
 /// What a kilogram of a material is made of.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Composition {
@@ -532,6 +538,27 @@ impl MaterialLedger {
         Ok(resulting_stock)
     }
 
+    fn checked_gather_stock_addition_result(
+        &self,
+        material: Material,
+        kg: f64,
+    ) -> Result<Option<f64>, MaterialError> {
+        let have = self.stock_kg(material);
+        Self::validate_source_value(material, have)?;
+        Self::validate_amount(material, kg)?;
+        match Self::checked_stock_addition_result(material, have, kg) {
+            Ok(resulting_stock) => Ok(Some(resulting_stock)),
+            Err(MaterialError::InvalidAmount { .. })
+                if material == Material::PlantFood && kg <= NEGLIGIBLE_FORAGE_KG =>
+            {
+                // The foraging caller still completes the trip and practices
+                // the skill, but no source, stock or flux is mutated.
+                Ok(None)
+            }
+            Err(error) => Err(error),
+        }
+    }
+
     fn validate_cell_area(area_m2: f64) -> Result<(), MaterialError> {
         if !area_m2.is_finite() || area_m2 <= 0.0 {
             return Err(MaterialError::InvalidCellArea { area_m2 });
@@ -642,8 +669,9 @@ impl MaterialLedger {
         if kg <= 0.0 {
             return Err(MaterialError::NothingToHarvest);
         }
-        let resulting_stock =
-            Self::checked_stock_addition_result(material, self.stock_kg(material), kg)?;
+        let Some(resulting_stock) = self.checked_gather_stock_addition_result(material, kg)? else {
+            return Ok(0.0);
+        };
         let kgc = kg * c.carbon_per_kg;
         let biomass = ecology.biomass_kgc_m2.get_mut(cell.0, cell.1);
         *biomass = (*biomass - kgc / cell_area_m2).max(0.0);
@@ -698,11 +726,11 @@ impl MaterialLedger {
         if kg <= 0.0 {
             return Err(MaterialError::NothingToHarvest);
         }
-        let resulting_stock = Self::checked_stock_addition_result(
-            Material::PlantFood,
-            self.stock_kg(Material::PlantFood),
-            kg,
-        )?;
+        let Some(resulting_stock) =
+            self.checked_gather_stock_addition_result(Material::PlantFood, kg)?
+        else {
+            return Ok(0.0);
+        };
         let kgc = kg * c.carbon_per_kg;
         edible.take(i, kgc / cell_area_m2);
         let biomass = ecology.biomass_kgc_m2.get_mut(cell.0, cell.1);
