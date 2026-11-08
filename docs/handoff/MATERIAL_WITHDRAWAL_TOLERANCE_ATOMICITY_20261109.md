@@ -38,3 +38,8 @@ Exact-head PR CI is required: cargo fmt --all -- --check, Clippy, fast Rust test
 ## Invariants
 
 No snapshot schema, append-only replay format, replay hash, RNG, tick cadence, scientific constant, reference pack or live simulation state changed.
+
+
+## Exact-head CI finding and regression correction — 9 November 2026
+
+Workflow [#42507201745](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42507201745) passed formatting and Clippy. The fast Rust suite ran 42 tests in island_material_flows: 41 passed and one failed because the new zero-stock test expected InvalidAmount. The production path correctly returns Insufficient { have_kg: 0.0, need_kg: 1e-13 } at the exact-availability check before subtraction; the regression expectation was wrong, not the withdrawal guard. The test now asserts the precise typed Insufficient result and still checks unchanged stock, carbon and flux entries. A fresh exact-head workflow is required; the earlier run does not verify this correction.
