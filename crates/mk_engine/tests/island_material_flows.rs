@@ -400,6 +400,87 @@ fn material_stock_additions_reject_overflow_before_mutation() {
 }
 
 #[test]
+fn fossil_gathering_rejects_invalid_and_overflowing_amounts_before_mutation() {
+    let (mut materials, mut ledger) = (MaterialLedger::new(), Ledger::new());
+
+    for amount in [-1.0, f64::NAN, f64::INFINITY] {
+        let stock_before = materials.stock_kg(Material::Coal);
+        let entries_before = ledger.entries().len();
+        let result = materials.gather_fossil(Material::Coal, amount, &mut ledger);
+        assert!(matches!(
+            result,
+            Err(MaterialError::InvalidAmount {
+                material: Material::Coal,
+                amount_kg
+            }) if amount_kg.to_bits() == amount.to_bits()
+        ));
+        assert_eq!(materials.stock_kg(Material::Coal), stock_before);
+        assert_eq!(ledger.entries().len(), entries_before);
+    }
+
+    materials
+        .gather_fossil(Material::Coal, f64::MAX, &mut ledger)
+        .expect("the first finite coal deposit fits");
+    let entries_before = ledger.entries().len();
+    let overflow = materials.gather_fossil(Material::Coal, f64::MAX, &mut ledger);
+    assert!(matches!(
+        overflow,
+        Err(MaterialError::InvalidAmount {
+            material: Material::Coal,
+            amount_kg
+        }) if amount_kg.is_infinite()
+    ));
+    assert_eq!(materials.stock_kg(Material::Coal), f64::MAX);
+    assert_eq!(ledger.entries().len(), entries_before);
+}
+
+#[test]
+fn water_gathering_rejects_invalid_amounts_and_stock_overflow_before_drain() {
+    let b = base();
+    let area = b.domain.cell_area_m2(M);
+    let cell = b.forest_cell;
+    let spec = b.domain.storage_spec(M);
+    let mut hydrology = HydrologyState::new(&spec, 0.5);
+    hydrology.surface_water.set(cell.0, cell.1, 5.0);
+    let (mut materials, mut ledger) = (MaterialLedger::new(), Ledger::new());
+
+    for amount in [-1.0, f64::NAN, f64::INFINITY] {
+        let surface_before = hydrology.surface_water.get(cell.0, cell.1);
+        let result = materials.gather_water(amount, &mut hydrology, cell, area, &mut ledger);
+        assert!(matches!(
+            result,
+            Err(MaterialError::InvalidAmount {
+                material: Material::Water,
+                amount_kg
+            }) if amount_kg.to_bits() == amount.to_bits()
+        ));
+        assert_eq!(hydrology.surface_water.get(cell.0, cell.1), surface_before);
+        assert_eq!(materials.stock_kg(Material::Water), 0.0);
+        assert!(ledger.entries().is_empty());
+    }
+
+    // Seed a finite maximum stock, then offer enough finite standing water to
+    // overflow it. The source cell must not be drained on a rejected transfer.
+    materials.inject(Material::Water, f64::MAX, &mut ledger);
+    hydrology
+        .surface_water
+        .set(cell.0, cell.1, f64::MAX / area);
+    let surface_before = hydrology.surface_water.get(cell.0, cell.1);
+    let entries_before = ledger.entries().len();
+    let overflow = materials.gather_water(f64::MAX, &mut hydrology, cell, area, &mut ledger);
+    assert!(matches!(
+        overflow,
+        Err(MaterialError::InvalidAmount {
+            material: Material::Water,
+            amount_kg
+        }) if amount_kg.is_infinite()
+    ));
+    assert_eq!(materials.stock_kg(Material::Water), f64::MAX);
+    assert_eq!(hydrology.surface_water.get(cell.0, cell.1), surface_before);
+    assert_eq!(ledger.entries().len(), entries_before);
+}
+
+#[test]
 fn calcining_limestone_and_making_charcoal_release_their_carbon_as_co2() {
     let (mut m, mut ledger) = (MaterialLedger::new(), Ledger::new());
     let audit = Audit::start(&m);
