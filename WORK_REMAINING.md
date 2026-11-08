@@ -1,3 +1,8 @@
+## Latest craft-input precision follow-up — 9 November 2026
+
+- Repeated craft input aggregation now rejects a positive component that rounds away when added to the material's accumulated requirement. This prevents the preflight/debit from silently dropping part of a recipe before it reaches stock validation.
+- Added a 2^53 kg + 1 kg Gold duplicate-input regression; it must fail before stock or ledger mutation.
+
 ## Latest material stock-inflow slice — 9 November 2026
 
 - PR #133 now rejects positive banked-mineral and craft-output increments that round away against existing binary64 stock. Craft outputs are aggregated per material before preflight and mutation, so two individually unrepresentable increments can still be applied as one representable total when valid.
