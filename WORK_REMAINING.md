@@ -793,3 +793,10 @@ PR #129 now also preflights resulting stock totals, not only individual finite/n
 - Corrected both fixtures to assert that finite maximum-sized Wood and Water seed injections succeed and return the requested stock quantity.
 - Test commit: `08b9278ace557ccc622de60119f1209145ce263f`.
 - Fast tests were skipped on the failed head; fresh exact-head formatting, Clippy, fast tests, desktop/backend and week/year reference-pack checks remain required.
+
+
+### Follow-up rustfmt correction — 9 November 2026
+
+- Fresh workflow [#42491631214](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42491631214) stopped at formatting after the ignored-Result correction; rustfmt required both `inject(...).expect(...)` chains to wrap across method-call lines.
+- Exact formatter output committed as `3987778c8dac1a8fdbe47d9aa39c3c58a1b91a91`.
+- Formatting, Clippy and fast tests must be reverified on the new exact head.
