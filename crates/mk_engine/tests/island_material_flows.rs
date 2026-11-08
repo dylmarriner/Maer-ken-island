@@ -461,7 +461,9 @@ fn water_gathering_rejects_invalid_amounts_and_stock_overflow_before_drain() {
 
     // Seed a finite maximum stock, then offer enough finite standing water to
     // overflow it. The source cell must not be drained on a rejected transfer.
-    materials.inject(Material::Water, f64::MAX, &mut ledger);
+    materials
+        .inject(Material::Water, f64::MAX, &mut ledger)
+        .expect("seed the maximum finite water stock");
     hydrology.surface_water.set(cell.0, cell.1, f64::MAX / area);
     let surface_before = *hydrology.surface_water.get(cell.0, cell.1);
     let entries_before = ledger.entries().len();
@@ -476,6 +478,59 @@ fn water_gathering_rejects_invalid_amounts_and_stock_overflow_before_drain() {
     assert_eq!(materials.stock_kg(Material::Water), f64::MAX);
     assert_eq!(*hydrology.surface_water.get(cell.0, cell.1), surface_before);
     assert_eq!(ledger.entries().len(), entries_before);
+}
+
+#[test]
+fn operator_injection_rejects_invalid_and_overflowing_amounts_before_mutation() {
+    let (mut materials, mut ledger) = (MaterialLedger::new(), Ledger::new());
+
+    for amount in [-1.0, f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+        let stock_before = materials.stock_kg(Material::Water);
+        let entries_before = ledger.entries().len();
+        let result = materials.inject(Material::Water, amount, &mut ledger);
+        assert!(matches!(
+            result,
+            Err(MaterialError::InvalidAmount {
+                material: Material::Water,
+                amount_kg
+            }) if amount_kg.to_bits() == amount.to_bits()
+        ));
+        assert_eq!(materials.stock_kg(Material::Water), stock_before);
+        assert_eq!(ledger.entries().len(), entries_before);
+    }
+
+    materials
+        .inject(Material::Water, f64::MAX, &mut ledger)
+        .expect("the first finite operator inflow fits");
+    let entries_before = ledger.entries().len();
+    let overflow = materials.inject(Material::Water, f64::MAX, &mut ledger);
+    assert!(matches!(
+        overflow,
+        Err(MaterialError::InvalidAmount {
+            material: Material::Water,
+            amount_kg
+        }) if amount_kg.is_infinite()
+    ));
+    assert_eq!(materials.stock_kg(Material::Water), f64::MAX);
+    assert_eq!(ledger.entries().len(), entries_before);
+}
+
+#[test]
+fn operator_injection_books_material_carbon_and_water_as_boundary_inflows() {
+    let (mut materials, mut ledger) = (MaterialLedger::new(), Ledger::new());
+    let audit = Audit::start(&materials);
+
+    materials
+        .inject(Material::Wood, 10.0, &mut ledger)
+        .expect("valid wood inflow");
+    materials
+        .inject(Material::Water, 4.0, &mut ledger)
+        .expect("valid water inflow");
+
+    let expected_carbon = 10.0 * composition(Material::Wood).carbon_per_kg;
+    assert!((net(&ledger, R::MaterialCarbon, FluxKind::Carbon) - expected_carbon).abs() < 1e-12);
+    assert!((net(&ledger, R::MaterialWater, FluxKind::Water) - 4.0).abs() < 1e-12);
+    audit.close(&materials, &ledger);
 }
 
 #[test]
