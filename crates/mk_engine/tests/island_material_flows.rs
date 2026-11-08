@@ -1606,7 +1606,10 @@ fn biotic_and_soil_water_gathering_reject_stock_overflow_before_source_mutation(
     let mut hydrology = HydrologyState::new(&b.domain.storage_spec(M), 0.5);
     let (mut materials, mut ledger) = (MaterialLedger::new(), Ledger::new());
 
-    materials.inject(Material::Wood, f64::MAX, &mut ledger);
+    assert_eq!(
+        materials.inject(Material::Wood, f64::MAX, &mut ledger).expect("finite maximum wood seed is valid"),
+        f64::MAX,
+    );
     let biomass_before = (0.4 * f64::MAX) / area;
     ecology.biomass_kgc_m2.set(cell.0, cell.1, biomass_before);
     let ledger_entries_before = ledger.entries().len();
@@ -1628,7 +1631,10 @@ fn biotic_and_soil_water_gathering_reject_stock_overflow_before_source_mutation(
     assert_eq!(materials.stock_kg(Material::Wood), f64::MAX);
     assert_eq!(ledger.entries().len(), ledger_entries_before);
 
-    materials.inject(Material::Water, f64::MAX, &mut ledger);
+    assert_eq!(
+        materials.inject(Material::Water, f64::MAX, &mut ledger).expect("finite maximum water seed is valid"),
+        f64::MAX,
+    );
     let soil_before = (f64::MAX / 2.0) / area;
     hydrology.soil_water.set(
         cell.0,
