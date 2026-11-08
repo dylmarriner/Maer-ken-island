@@ -445,7 +445,7 @@ fn water_gathering_rejects_invalid_amounts_and_stock_overflow_before_drain() {
     let (mut materials, mut ledger) = (MaterialLedger::new(), Ledger::new());
 
     for amount in [-1.0, f64::NAN, f64::INFINITY] {
-        let surface_before = hydrology.surface_water.get(cell.0, cell.1);
+        let surface_before = *hydrology.surface_water.get(cell.0, cell.1);
         let result = materials.gather_water(amount, &mut hydrology, cell, area, &mut ledger);
         assert!(matches!(
             result,
@@ -454,7 +454,7 @@ fn water_gathering_rejects_invalid_amounts_and_stock_overflow_before_drain() {
                 amount_kg
             }) if amount_kg.to_bits() == amount.to_bits()
         ));
-        assert_eq!(hydrology.surface_water.get(cell.0, cell.1), surface_before);
+        assert_eq!(*hydrology.surface_water.get(cell.0, cell.1), surface_before);
         assert_eq!(materials.stock_kg(Material::Water), 0.0);
         assert!(ledger.entries().is_empty());
     }
@@ -463,7 +463,7 @@ fn water_gathering_rejects_invalid_amounts_and_stock_overflow_before_drain() {
     // overflow it. The source cell must not be drained on a rejected transfer.
     materials.inject(Material::Water, f64::MAX, &mut ledger);
     hydrology.surface_water.set(cell.0, cell.1, f64::MAX / area);
-    let surface_before = hydrology.surface_water.get(cell.0, cell.1);
+    let surface_before = *hydrology.surface_water.get(cell.0, cell.1);
     let entries_before = ledger.entries().len();
     let overflow = materials.gather_water(f64::MAX, &mut hydrology, cell, area, &mut ledger);
     assert!(matches!(
@@ -474,7 +474,7 @@ fn water_gathering_rejects_invalid_amounts_and_stock_overflow_before_drain() {
         }) if amount_kg.is_infinite()
     ));
     assert_eq!(materials.stock_kg(Material::Water), f64::MAX);
-    assert_eq!(hydrology.surface_water.get(cell.0, cell.1), surface_before);
+    assert_eq!(*hydrology.surface_water.get(cell.0, cell.1), surface_before);
     assert_eq!(ledger.entries().len(), entries_before);
 }
 
