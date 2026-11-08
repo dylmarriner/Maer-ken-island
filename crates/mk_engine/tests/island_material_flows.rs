@@ -2315,7 +2315,6 @@ fn roof_water_capture_moves_audited_soil_water_into_the_material_stock() {
     audit.close(&materials, &ledger);
 }
 
-
 #[test]
 fn seasoning_rejects_wood_conversion_that_would_change_material_carbon_audit() {
     use std::panic::{catch_unwind, AssertUnwindSafe};
@@ -2385,13 +2384,7 @@ fn seasoning_rejects_water_debit_that_would_not_match_aggregate_stock_delta() {
             water_kg: 0.5,
             place: LogPlace::Stored,
         };
-        ids.push(materials.receive_felled_log(
-            log,
-            &mut hydrology,
-            cell,
-            area,
-            &mut ledger,
-        ));
+        ids.push(materials.receive_felled_log(log, &mut hydrology, cell, area, &mut ledger));
     }
     materials
         .inject(Material::Water, 9_007_199_254_740_992.0, &mut ledger)
