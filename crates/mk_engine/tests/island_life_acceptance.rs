@@ -535,6 +535,7 @@ fn slow_a_week_on_the_island_matches_the_reference_packs() {
             "{id} drank {drunk:.2} L a day"
         );
     }
+    assert_eq!(w.shortfalls.food, 0, "the founders found food every time");
     assert_eq!(w.shortfalls.water, 0, "the founders found water every time");
     assert_eq!(deferred_digest, WEEK_DIGEST);
 }
