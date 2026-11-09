@@ -4857,7 +4857,8 @@ mod tests {
             IslandScenario::load(&repo("fixtures/island/default_scenario.json")).unwrap();
         scenario.estate_patch.tree_cap = 200;
         let canon = Arc::new(CanonLocked::load(&repo("fixtures/island/canon.json")).unwrap());
-        let mut life = IslandLife::bootstrap(scenario, canon.clone()).expect("the island bootstraps");
+        let mut life =
+            IslandLife::bootstrap(scenario, canon.clone()).expect("the island bootstraps");
         assert!(life.estate_has_tool(FELLING_SAW), "the shed has the saw");
 
         let site = life.haul_site().expect("the estate has a garage and store");
@@ -4931,7 +4932,10 @@ mod tests {
             .expect("the long ground log has a haul plan");
 
         assert_eq!(job.method, timber::HaulMethod::Ute);
-        let task = job.tasks.front().expect("the Ute starts with cross-cutting");
+        let task = job
+            .tasks
+            .front()
+            .expect("the Ute starts with cross-cutting");
         let piece_count = match &task.action {
             timber::HaulAction::CrossCutCrew {
                 pieces,
@@ -4996,10 +5000,22 @@ mod tests {
             })
             .collect();
         assert_eq!(pieces.len(), piece_count as usize);
-        assert_eq!(pieces.iter().map(|piece| piece.length_m).sum::<f64>(), source.length_m);
-        assert_eq!(pieces.iter().map(|piece| piece.dry_kg).sum::<f64>(), source.dry_kg);
-        assert_eq!(pieces.iter().map(|piece| piece.carbon_kgc).sum::<f64>(), source.carbon_kgc);
-        assert_eq!(pieces.iter().map(|piece| piece.water_kg).sum::<f64>(), source.water_kg);
+        assert_eq!(
+            pieces.iter().map(|piece| piece.length_m).sum::<f64>(),
+            source.length_m
+        );
+        assert_eq!(
+            pieces.iter().map(|piece| piece.dry_kg).sum::<f64>(),
+            source.dry_kg
+        );
+        assert_eq!(
+            pieces.iter().map(|piece| piece.carbon_kgc).sum::<f64>(),
+            source.carbon_kgc
+        );
+        assert_eq!(
+            pieces.iter().map(|piece| piece.water_kg).sum::<f64>(),
+            source.water_kg
+        );
         assert!(
             restored.labour_kcal.get("Gem-D").copied().unwrap_or(0.0) > 0.0,
             "the primary founder pays their own energy"
