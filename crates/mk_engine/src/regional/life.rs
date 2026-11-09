@@ -4849,6 +4849,194 @@ mod tests {
     /// nearest tree and fells it after exactly the walk plus the felling
     /// pack's time for that trunk; its usable wood lands in the estate's
     /// stock and the books close.
+    /// The real Ute route survives a mid-cross-cut snapshot, completes the
+    /// crew cut, carries every reserved piece and unloads the conserved wood.
+    #[test]
+    fn two_person_ute_crosscut_restores_and_completes_the_full_material_haul() {
+        let mut scenario =
+            IslandScenario::load(&repo("fixtures/island/default_scenario.json")).unwrap();
+        scenario.estate_patch.tree_cap = 200;
+        let canon = Arc::new(CanonLocked::load(&repo("fixtures/island/canon.json")).unwrap());
+        let mut life = IslandLife::bootstrap(scenario, canon.clone()).expect("the island bootstraps");
+        assert!(life.estate_has_tool(FELLING_SAW), "the shed has the saw");
+
+        let site = life.haul_site().expect("the estate has a garage and store");
+        let at = site.garage_m;
+        for who in ["Gem-D", "Gem-K"] {
+            life.positions.0.insert(
+                who.into(),
+                super::super::humans::EstatePosition {
+                    space: Space::Outdoors,
+                    position_m: at,
+                },
+            );
+            life.humans
+                .registry
+                .get_human_mut(who)
+                .unwrap()
+                .economy_action
+                .kind = crate::humans::ActionKind::Gather;
+        }
+
+        let excavator_id = life
+            .energy
+            .vehicle_named(HAUL_EXCAVATOR)
+            .expect("the estate has an excavator")
+            .item_id;
+        life.energy
+            .vehicles
+            .iter_mut()
+            .find(|vehicle| vehicle.item_id == excavator_id)
+            .expect("the excavator is in the fleet")
+            .litres = 0.0;
+        let ute_id = life
+            .energy
+            .vehicle_named(HAUL_UTE)
+            .expect("the estate has a Ute")
+            .item_id;
+        life.energy
+            .vehicles
+            .iter_mut()
+            .find(|vehicle| vehicle.item_id == ute_id)
+            .expect("the Ute is in the fleet")
+            .litres = 100.0;
+
+        let log = timber::Log {
+            id: 0,
+            position_m: (site.garage_m.0 + 1_000.0, site.garage_m.1),
+            heading_rad: 0.0,
+            length_m: 20.0,
+            diameter_m: 0.30,
+            dry_kg: 500.0,
+            carbon_kgc: 250.0,
+            water_kg: 410.0,
+            place: timber::LogPlace::Ground,
+        };
+        let cell = life.placed.location;
+        let area = life.domain.cell_area_m2(DomainLevel::Medium);
+        let mut ledger = Ledger::new();
+        let source_id = life.materials.receive_felled_log(
+            log,
+            &mut life.physical.hydrology,
+            cell,
+            area,
+            &mut ledger,
+        );
+        let source = life.materials.log(source_id).unwrap().clone();
+        let first_piece_id = life.materials.next_log_id();
+        let body = LabourBody::from_human(life.humans.registry.get_human("Gem-D").unwrap());
+        let job = life
+            .plan_haul("Gem-D", at, &body, &BTreeMap::new())
+            .unwrap()
+            .expect("the long ground log has a haul plan");
+
+        assert_eq!(job.method, timber::HaulMethod::Ute);
+        let task = job.tasks.front().expect("the Ute starts with cross-cutting");
+        let piece_count = match &task.action {
+            timber::HaulAction::CrossCutCrew {
+                pieces,
+                partner_id,
+                partner_met,
+                ..
+            } => {
+                assert_eq!(partner_id, "Gem-K");
+                assert!(partner_met.is_finite() && *partner_met > 0.0);
+                *pieces
+            }
+            other => panic!("the Ute plan must start with a crew cross-cut, got {other:?}"),
+        };
+        assert!(piece_count > 1);
+        assert!(task.duration_s > 30.0);
+        assert_eq!(
+            life.materials.next_log_id(),
+            first_piece_id,
+            "planning previews IDs without reserving them"
+        );
+
+        life.reserve_haul_plan(&job);
+        life.hauling.insert("Gem-D".into(), job);
+        life.work(30.0).unwrap();
+        let snapshot = life.snapshot();
+        assert_eq!(
+            snapshot.hauling.get("Gem-D").map(|job| job.worked_s),
+            Some(30.0),
+            "the partially completed Ute crew cut is persisted"
+        );
+
+        let mut restored =
+            IslandLife::restore(canon, snapshot).expect("the partial Ute crew restores");
+        assert_eq!(
+            restored.materials.next_log_id(),
+            first_piece_id + u64::from(piece_count),
+            "the reserved piece range survives restoration"
+        );
+        let mut crew_ticks = 0;
+        while restored
+            .hauling
+            .get("Gem-D")
+            .and_then(|job| job.tasks.front())
+            .is_some_and(|task| matches!(&task.action, timber::HaulAction::CrossCutCrew { .. }))
+        {
+            restored.work(60.0).unwrap();
+            crew_ticks += 1;
+            assert!(crew_ticks < 100, "the persisted saw cut must finish");
+        }
+
+        assert!(
+            restored.materials.log(source_id).is_none(),
+            "the completed cross-cut replaces its source exactly once"
+        );
+        let pieces: Vec<_> = (0..piece_count)
+            .map(|offset| {
+                restored
+                    .materials
+                    .log(first_piece_id + u64::from(offset))
+                    .expect("every reserved piece exists")
+                    .clone()
+            })
+            .collect();
+        assert_eq!(pieces.len(), piece_count as usize);
+        assert_eq!(pieces.iter().map(|piece| piece.length_m).sum::<f64>(), source.length_m);
+        assert_eq!(pieces.iter().map(|piece| piece.dry_kg).sum::<f64>(), source.dry_kg);
+        assert_eq!(pieces.iter().map(|piece| piece.carbon_kgc).sum::<f64>(), source.carbon_kgc);
+        assert_eq!(pieces.iter().map(|piece| piece.water_kg).sum::<f64>(), source.water_kg);
+        assert!(
+            restored.labour_kcal.get("Gem-D").copied().unwrap_or(0.0) > 0.0,
+            "the primary founder pays their own energy"
+        );
+        assert!(
+            restored.labour_kcal.get("Gem-K").copied().unwrap_or(0.0) > 0.0,
+            "the assistant pays their own energy across the restored cut"
+        );
+
+        // The crew is finished. Keep the assistant from claiming a second
+        // ground job while the primary's one Ute job loads, drives and unloads.
+        restored.positions.0.remove("Gem-K");
+        let mut haul_ticks = 0;
+        while restored.hauling.contains_key("Gem-D") {
+            restored.work(60.0).unwrap();
+            haul_ticks += 1;
+            assert!(haul_ticks < 500, "the Ute route must finish and unload");
+        }
+
+        for offset in 0..piece_count {
+            let piece = restored
+                .materials
+                .log(first_piece_id + u64::from(offset))
+                .expect("the transported piece remains in the material ledger");
+            assert_eq!(piece.place, timber::LogPlace::Stored);
+        }
+        assert!(
+            restored.energy.vehicle_named(HAUL_UTE).unwrap().litres < 100.0,
+            "the completed off-road route consumes the Ute's fuel"
+        );
+        assert_eq!(
+            restored.materials.next_log_id(),
+            first_piece_id + u64::from(piece_count),
+            "the complete route does not reserve or create duplicate piece IDs"
+        );
+    }
+
     fn persisted_saw_crew_job(log_id: u64, first_id: u64, partner_id: &str) -> timber::HaulJob {
         timber::HaulJob {
             log_id,
