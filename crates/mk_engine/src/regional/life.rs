@@ -4891,7 +4891,8 @@ mod tests {
         let scenario =
             IslandScenario::load(&repo("fixtures/island/default_scenario.json")).unwrap();
         let canon = Arc::new(CanonLocked::load(&repo("fixtures/island/canon.json")).unwrap());
-        let mut life = IslandLife::bootstrap(scenario, canon.clone()).expect("the island bootstraps");
+        let mut life =
+            IslandLife::bootstrap(scenario, canon.clone()).expect("the island bootstraps");
         let site = life.haul_site().expect("the estate has a garage and store");
         let at = site.garage_m;
 
