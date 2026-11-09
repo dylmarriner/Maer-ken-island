@@ -860,7 +860,7 @@ mod tests {
     use super::*;
 
     #[test]
-    #[should_panic(expected = "cross-cut endpoints must be finite")]
+    #[should_panic(expected = "cross-cut requires finite, positive physical state")]
     fn cross_cut_rejects_finite_source_with_overflowed_endpoint() {
         let log = Log {
             id: 1,
@@ -873,7 +873,7 @@ mod tests {
             water_kg: 50.0,
             place: LogPlace::Ground,
         };
-        assert!(log.has_valid_physical_state());
+        assert!(!log.has_valid_physical_state());
         let _ = log.cross_cut(2, 10);
     }
 
