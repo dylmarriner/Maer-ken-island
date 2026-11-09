@@ -111,6 +111,8 @@ impl Log {
             && self.water_kg.is_finite()
             && self.water_kg >= 0.0
             && (self.dry_kg + self.water_kg).is_finite()
+            // A public/persisted log cannot have a zero identifier.
+            && self.id > 0
             // Finite inputs may still overflow when the centre is projected
             // to either endpoint. Reject such logs at the validation boundary.
             && self.butt_m().0.is_finite()
