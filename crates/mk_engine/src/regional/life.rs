@@ -1658,7 +1658,7 @@ impl IslandLife {
             // Between jobs, the person chooses for themselves whether to
             // haul a log lying on the ground or to fell a tree (R14).
             if !self.hauling.contains_key(&id) && !self.felling.contains_key(&id) {
-                if let Some(job) = self.plan_haul(&id, at, &body)? {
+                if let Some(job) = self.plan_haul(&id, at, &body, &saw_assistants)? {
                     if self.chooses_to_haul(&id, &job, at)? {
                         // Planning is only a preview. Reserve the exact piece-ID
                         // range after the founder accepts, never for a declined haul.
@@ -2033,6 +2033,7 @@ impl IslandLife {
         primary_id: &str,
         at: (f64, f64),
         body: &LabourBody,
+        assigned_saw_assistants: &BTreeMap<String, (String, f64, f64)>,
     ) -> Result<Option<timber::HaulJob>, IslandLifeError> {
         let claimed: std::collections::BTreeSet<u64> =
             self.hauling.values().map(|j| j.log_id).collect();
@@ -2107,6 +2108,7 @@ impl IslandLife {
                         && !self.mining.contains_key(id)
                         && !self.foraging.contains_key(id)
                         && !self.water_trips.contains_key(id)
+                        && !assigned_saw_assistants.contains_key(id)
                 })
                 .filter_map(|human| {
                     let position = self.positions.0.get(human.agent_id())?;
@@ -4690,8 +4692,23 @@ mod tests {
         let first_piece_id = life.materials.next_log_id();
         let body = LabourBody::from_human(life.humans.registry.get_human("Gem-D").unwrap());
 
+        // A founder already assigned to an earlier primary's crew cannot be
+        // selected again by a later haul planner in the same work tick.
+        let assigned = BTreeMap::from([(
+            "Gem-K".to_string(),
+            ("Gem-D".to_string(), 3.0, 60.0),
+        )]);
+        let solo_plan = life
+            .plan_haul("Gem-D", at, &body, &assigned)
+            .unwrap()
+            .expect("the Ute still has a solo axe plan");
+        assert!(matches!(
+            solo_plan.tasks.front().map(|task| &task.action),
+            Some(timber::HaulAction::CrossCut { .. })
+        ));
+
         let job = life
-            .plan_haul("Gem-D", at, &body)
+            .plan_haul("Gem-D", at, &body, &BTreeMap::new())
             .unwrap()
             .expect("the long ground log has a haul plan");
         assert_eq!(
@@ -4928,13 +4945,13 @@ mod tests {
         );
 
         // A vehicle another founder is hauling with is not in the garage.
-        let quickest = life.plan_haul("Gem-D", at, &body).unwrap().expect("a plan");
+        let quickest = life.plan_haul("Gem-D", at, &body, &BTreeMap::new()).unwrap().expect("a plan");
         if quickest.method != timber::HaulMethod::OnFoot {
             let mut elsewhere = quickest.clone();
             elsewhere.log_id = u64::MAX;
             life.hauling.insert("Elsewhere".into(), elsewhere);
             let next = life
-                .plan_haul("Gem-D", at, &body)
+                .plan_haul("Gem-D", at, &body, &BTreeMap::new())
                 .unwrap()
                 .expect("another plan");
             assert_ne!(next.method, quickest.method, "the vehicle is out");
@@ -5213,7 +5230,7 @@ mod tests {
         let first_piece_id = life.materials.next_log_id();
         let body = LabourBody::from_human(life.humans.registry.get_human("Gem-D").unwrap());
         assert!(
-            life.plan_haul("Gem-D", at, &body).unwrap().is_some(),
+            life.plan_haul("Gem-D", at, &body, &BTreeMap::new()).unwrap().is_some(),
             "the ground log has a valid candidate haul"
         );
         assert_eq!(
