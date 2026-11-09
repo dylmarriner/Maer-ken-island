@@ -1,3 +1,12 @@
+## Latest D40 acceptance-test correction — 9 November 2026
+
+- PR [#136](https://github.com/dylmarriner/Maer-ken-island/pull/136) adds the full 20 m log → two-founder saw cross-cut → snapshot/restore → Ute load/drive/unload acceptance path, with exact length, dry-mass, carbon and water conservation, founder labour energy, reserved piece IDs, stored-piece locations and fuel assertions.
+- Exact-head workflow #42564181241 passed formatting/Clippy, then reported 897 passed / 1 failed. The only failure was an arbitrary 100 × 60-second test cap shorter than the persisted pack-derived saw duration.
+- The test now advances the restored crew cut by its exact remaining duration and advances each Ute task to its own recorded boundary, bounded by the persisted task count. This changes the test harness only; no production simulation duration, cadence, RNG, material calculation, snapshot or replay format changed.
+- Source/test correction: `0b46fbda85ab6621585d5d6866ea59a625c46213`; exact rustfmt correction: `2255b67bc2e6cb5161ca7a395be95ea0f4f4d2cd`.
+- Fresh workflow [#42569859195](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42569859195), on source-equivalent head `00a76298ad05744adb5002d736e79b36f86d6f42), passed formatting, Clippy, week/year reference packs, desktop build/tests, installed backend, dashboard, computer service, repository scripts and dependency audit. Fast Rust tests and desktop render/interaction/performance acceptance were still running at last inspection; do not mark D40 complete.
+- Handoff: `docs/handoff/D40_FULL_UTE_CROSSCUT_RESTORE_ACCEPTANCE_20261109.md`. PR #136 remains draft. Next: finish workflow #42569859195, fix any real failures without weakening assertions, then continue terrain-aware Ute route modelling and D31's sourced soil-nutrient model.
+
 ## Latest exact-head formatting correction — 9 November 2026
 
 - Workflow [#42512092655](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42512092655) stopped at cargo fmt before Clippy/tests. Rustfmt identified two formatting differences in materials.rs and two blank lines between test attributes in island_material_flows.rs.
