@@ -2594,3 +2594,86 @@ fn seasoning_rejects_water_debit_that_would_not_match_aggregate_stock_delta() {
     assert_eq!(materials.logs().cloned().collect::<Vec<_>>(), logs_before);
     assert_eq!(ledger.entries().len(), entries_before);
 }
+
+
+#[test]
+fn seasoning_accepts_negative_compensation_in_the_carbon_batch_sum() {
+    let b = base();
+    let cell = b.forest_cell;
+    let area = b.domain.cell_area_m2(M);
+    let mut hydrology = HydrologyState::new(&b.domain.storage_spec(M), 0.5);
+    let mut materials = MaterialLedger::new();
+    let mut setup_ledger = Ledger::new();
+
+    // At a running total of 1 kg, 3 * 2^-53 is 1.5 ULPs. The rounded
+    // addition advances by 2 ULPs and Neumaier records a -0.5 ULP correction.
+    let tiny_wood_kg = 3.0 * 2.0_f64.powi(-53);
+    for (offset, dry_kg, carbon_kgc) in [
+        (0.0, 10.0, 0.425),
+        (
+            10.0,
+            1.0,
+            tiny_wood_kg * composition(Material::Wood).carbon_per_kg,
+        ),
+    ] {
+        let log = Log {
+            id: 0,
+            position_m: (offset, 0.0),
+            heading_rad: 0.0,
+            length_m: 2.0,
+            diameter_m: 0.2,
+            dry_kg,
+            carbon_kgc,
+            water_kg: 0.0,
+            place: LogPlace::Stored,
+        };
+        materials.receive_felled_log(log, &mut hydrology, cell, area, &mut setup_ledger);
+    }
+
+    let audit = Audit::start(&materials);
+    let mut seasoning_ledger = Ledger::new();
+    let added = materials.season_stored_logs(&mut seasoning_ledger);
+
+    assert_eq!(added, 1.0 + 2.0_f64.powi(-51));
+    assert_eq!(materials.stock_kg(Material::Wood), added);
+    assert_eq!(materials.logs().count(), 0);
+    audit.close(&materials, &seasoning_ledger);
+}
+
+#[test]
+fn seasoning_accepts_negative_compensation_in_the_water_batch_sum() {
+    let b = base();
+    let cell = b.forest_cell;
+    // A small but valid cell area keeps the tiny positive source-water debit
+    // representable in soil-depth units after the first log is received.
+    let area = 0.01;
+    let mut hydrology = HydrologyState::new(&b.domain.storage_spec(M), 0.5);
+    let mut materials = MaterialLedger::new();
+    let mut setup_ledger = Ledger::new();
+
+    let tiny_water_kg = 3.0 * 2.0_f64.powi(-53);
+    for (offset, water_kg) in [(0.0, 1.0), (10.0, tiny_water_kg)] {
+        let log = Log {
+            id: 0,
+            position_m: (offset, 0.0),
+            heading_rad: 0.0,
+            length_m: 2.0,
+            diameter_m: 0.2,
+            dry_kg: 10.0,
+            carbon_kgc: 0.425,
+            water_kg,
+            place: LogPlace::Stored,
+        };
+        materials.receive_felled_log(log, &mut hydrology, cell, area, &mut setup_ledger);
+    }
+
+    let audit = Audit::start(&materials);
+    let mut seasoning_ledger = Ledger::new();
+    let added = materials.season_stored_logs(&mut seasoning_ledger);
+
+    assert_eq!(added, 2.0);
+    assert_eq!(materials.stock_kg(Material::Wood), 2.0);
+    assert_eq!(materials.stock_kg(Material::Water), 0.0);
+    assert_eq!(materials.logs().count(), 0);
+    audit.close(&materials, &seasoning_ledger);
+}

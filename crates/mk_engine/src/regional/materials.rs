@@ -1204,14 +1204,16 @@ impl MaterialLedger {
         let summed_water_kg = total_water_kg;
         let total_kg = summed_kg + compensation_kg;
         let total_water_kg = summed_water_kg + compensation_water_kg;
+        // Neumaier's correction can be positive or negative. A negative
+        // correction may round back to the naive sum, which is still the
+        // correctly rounded binary64 batch total; its sign is not a failure.
         assert!(
-            total_kg.is_finite() && (compensation_kg == 0.0 || total_kg > summed_kg),
-            "seasoned-log carbon must remain representable after batch aggregation"
+            total_kg.is_finite() && total_kg > 0.0,
+            "seasoned-log wood batch must remain a positive finite quantity"
         );
         assert!(
-            total_water_kg.is_finite()
-                && (compensation_water_kg == 0.0 || total_water_kg > summed_water_kg),
-            "seasoned-log water must remain representable after batch aggregation"
+            total_water_kg.is_finite() && total_water_kg >= 0.0,
+            "seasoned-log water batch must remain a finite non-negative quantity"
         );
 
         let resulting_wood = Self::checked_stock_addition_result(
