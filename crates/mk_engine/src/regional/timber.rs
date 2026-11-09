@@ -147,6 +147,16 @@ impl Log {
         let equal_carbon_kgc = self.carbon_kgc / k;
         let equal_water_kg = self.water_kg / k;
         let butt = self.butt_m();
+        // Finite source fields can still overflow when projected into endpoints.
+        // Reject impossible geometry before allocating any pieces or IDs.
+        let tip = (
+            self.position_m.0 + 0.5 * self.length_m * self.heading_rad.cos(),
+            self.position_m.1 + 0.5 * self.length_m * self.heading_rad.sin(),
+        );
+        assert!(
+            butt.0.is_finite() && butt.1.is_finite() && tip.0.is_finite() && tip.1.is_finite(),
+            "cross-cut endpoints must be finite"
+        );
         let mut allocated_length = 0.0;
         let mut allocated_dry_kg = 0.0;
         let mut allocated_carbon_kgc = 0.0;
@@ -821,6 +831,24 @@ pub fn quickest(plans: Vec<HaulJob>) -> Option<HaulJob> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[should_panic(expected = "cross-cut endpoints must be finite")]
+    fn cross_cut_rejects_finite_source_with_overflowed_endpoint() {
+        let log = Log {
+            id: 1,
+            position_m: (f64::MAX, 0.0),
+            heading_rad: std::f64::consts::PI,
+            length_m: 1.0e308,
+            diameter_m: 0.5,
+            dry_kg: 100.0,
+            carbon_kgc: 50.0,
+            water_kg: 50.0,
+            place: LogPlace::Ground,
+        };
+        assert!(log.has_valid_physical_state());
+        let _ = log.cross_cut(2, 10);
+    }
 
     #[test]
     fn a_walk_climbs_the_rises_along_it_and_going_down_is_free() {
