@@ -1419,6 +1419,15 @@ mod tests {
     }
 
     #[test]
+    fn physical_state_rejects_finite_coordinates_with_overflowing_endpoints() {
+        let mut source = log();
+        source.position_m = (f64::MAX, 0.0);
+        source.length_m = f64::MAX;
+        source.heading_rad = 0.0;
+        assert!(!source.has_valid_physical_state());
+    }
+
+    #[test]
     fn persisted_haul_rejects_cross_cut_for_a_different_source_log() {
         for crew in [false, true] {
             let action = if crew {
