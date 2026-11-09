@@ -1586,4 +1586,17 @@ mod tests {
         .unwrap();
         assert_eq!(quickest(plans).unwrap().method, HaulMethod::OnFoot);
     }
+
+    #[test]
+    fn shared_tip_projection_matches_cross_cut_source_geometry() {
+        let source = log();
+        let tip = source.tip_m();
+        let butt = source.butt_m();
+        let pieces = source.cross_cut(2, 100);
+        assert_eq!(pieces.len(), 2);
+        assert!(source.has_valid_physical_state());
+        assert!((pieces[0].butt_m().0 - butt.0).abs() < 1e-9);
+        assert!((pieces[1].tip_m().0 - tip.0).abs() < 1e-9);
+        assert!((pieces[1].tip_m().1 - tip.1).abs() < 1e-9);
+    }
 }
