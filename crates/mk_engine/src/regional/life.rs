@@ -1026,6 +1026,9 @@ impl IslandLife {
                         {
                             return Err(IslandLifeError::Labour(LabourError::InvalidHaulJobState));
                         }
+                        if snapshot.humans.registry.get_human(partner_id).is_none() {
+                            return Err(IslandLifeError::Labour(LabourError::InvalidHaulJobState));
+                        }
                         if active_haul_owners.contains(partner_id)
                             || !claimed_saw_partners.insert(partner_id.clone())
                         {
@@ -4896,7 +4899,8 @@ mod tests {
         let scenario =
             IslandScenario::load(&repo("fixtures/island/default_scenario.json")).unwrap();
         let canon = Arc::new(CanonLocked::load(&repo("fixtures/island/canon.json")).unwrap());
-        let mut life = IslandLife::bootstrap(scenario, canon.clone()).expect("the island bootstraps");
+        let mut life =
+            IslandLife::bootstrap(scenario, canon.clone()).expect("the island bootstraps");
         let source_a = add_test_ground_log(&mut life);
         let source_b = add_test_ground_log(&mut life);
         let first_a = life.materials.reserve_log_ids(2);
@@ -4923,7 +4927,8 @@ mod tests {
         let scenario =
             IslandScenario::load(&repo("fixtures/island/default_scenario.json")).unwrap();
         let canon = Arc::new(CanonLocked::load(&repo("fixtures/island/canon.json")).unwrap());
-        let mut life = IslandLife::bootstrap(scenario, canon.clone()).expect("the island bootstraps");
+        let mut life =
+            IslandLife::bootstrap(scenario, canon.clone()).expect("the island bootstraps");
         let source_id = add_test_ground_log(&mut life);
         let first_id = life.materials.reserve_log_ids(2);
         let mut snapshot = life.snapshot();
@@ -4958,7 +4963,8 @@ mod tests {
         let scenario =
             IslandScenario::load(&repo("fixtures/island/default_scenario.json")).unwrap();
         let canon = Arc::new(CanonLocked::load(&repo("fixtures/island/canon.json")).unwrap());
-        let mut life = IslandLife::bootstrap(scenario, canon.clone()).expect("the island bootstraps");
+        let mut life =
+            IslandLife::bootstrap(scenario, canon.clone()).expect("the island bootstraps");
         let first_id = life.materials.reserve_log_ids(2);
         let mut snapshot = life.snapshot();
         snapshot.hauling.insert(
@@ -4974,11 +4980,34 @@ mod tests {
     }
 
     #[test]
+    fn restore_rejects_a_saw_crew_partner_missing_from_the_human_registry() {
+        let scenario =
+            IslandScenario::load(&repo("fixtures/island/default_scenario.json")).unwrap();
+        let canon = Arc::new(CanonLocked::load(&repo("fixtures/island/canon.json")).unwrap());
+        let mut life =
+            IslandLife::bootstrap(scenario, canon.clone()).expect("the island bootstraps");
+        let source_id = add_test_ground_log(&mut life);
+        let first_id = life.materials.reserve_log_ids(2);
+        let mut snapshot = life.snapshot();
+        snapshot.hauling.insert(
+            "Gem-D".into(),
+            persisted_saw_crew_job(source_id, first_id, "missing-founder"),
+        );
+
+        let restored = IslandLife::restore(canon, snapshot);
+        assert!(matches!(
+            restored,
+            Err(IslandLifeError::Labour(LabourError::InvalidHaulJobState))
+        ));
+    }
+
+    #[test]
     fn restore_rejects_a_saw_cut_that_targets_another_jobs_log() {
         let scenario =
             IslandScenario::load(&repo("fixtures/island/default_scenario.json")).unwrap();
         let canon = Arc::new(CanonLocked::load(&repo("fixtures/island/canon.json")).unwrap());
-        let mut life = IslandLife::bootstrap(scenario, canon.clone()).expect("the island bootstraps");
+        let mut life =
+            IslandLife::bootstrap(scenario, canon.clone()).expect("the island bootstraps");
         let source_id = add_test_ground_log(&mut life);
         let other_id = add_test_ground_log(&mut life);
         let first_id = life.materials.reserve_log_ids(2);
