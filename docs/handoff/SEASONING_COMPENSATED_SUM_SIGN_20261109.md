@@ -41,3 +41,8 @@ No simulation tick, RNG, snapshot schema, append-only flux format, replay hash, 
 1. Verify this exact PR #135 head through the full required CI matrix.
 2. Reconcile PR #134 and #135 only after both branches' code and tests are reviewed together; do not merge overlapping material-ledger changes blindly.
 3. Continue D40 transport cross-cut and ute route/energy accounting.
+## Formatting follow-up — 9 November 2026
+
+- Exact-head workflow [#42545264928](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42545264928) checked out commit `2de5d6c` and stopped at `cargo fmt --all -- --check`; rustfmt reported only the extra blank line before the new regression tests and the missing final newline.
+- Corrected both formatting findings. The workflow's other jobs are independent and continue; this formatting failure is not a test assertion result.
+- A fresh exact-head CI run is required on the formatting-corrected commit. No local Cargo test is claimed while OpenCommander remains rate-limited.

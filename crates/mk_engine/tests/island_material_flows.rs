@@ -2595,7 +2595,6 @@ fn seasoning_rejects_water_debit_that_would_not_match_aggregate_stock_delta() {
     assert_eq!(ledger.entries().len(), entries_before);
 }
 
-
 #[test]
 fn seasoning_accepts_negative_compensation_in_the_carbon_batch_sum() {
     let b = base();
