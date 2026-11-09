@@ -1633,13 +1633,16 @@ impl IslandLife {
                             if let Some(task) = job.tasks.front_mut() {
                                 task.duration_s = progress_s.max(fallback_s);
                                 task.met = fallback_met;
-                                if let timber::HaulAction::CrossCutCrew {
-                                    log_id,
-                                    pieces,
-                                    first_id,
-                                    ..
-                                } = task.action
-                                {
+                                let solo_cross_cut = match &task.action {
+                                    timber::HaulAction::CrossCutCrew {
+                                        log_id,
+                                        pieces,
+                                        first_id,
+                                        ..
+                                    } => Some((*log_id, *pieces, *first_id)),
+                                    _ => None,
+                                };
+                                if let Some((log_id, pieces, first_id)) = solo_cross_cut {
                                     task.action = timber::HaulAction::CrossCut {
                                         log_id,
                                         pieces,
