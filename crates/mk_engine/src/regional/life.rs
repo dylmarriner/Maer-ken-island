@@ -976,12 +976,32 @@ impl IslandLife {
         // island has one ute and one excavator. Planning enforces these rules
         // for new work; restore must enforce them too or a malformed snapshot
         // could make two founders mutate the same material or vehicle.
+        let active_haul_owners: std::collections::BTreeSet<String> =
+            snapshot.hauling.keys().cloned().collect();
         let mut claimed_log_ids = std::collections::BTreeSet::new();
+        let mut claimed_saw_partners = std::collections::BTreeSet::new();
         let mut ute_claimed = false;
         let mut excavator_claimed = false;
-        for job in snapshot.hauling.values() {
+        for (owner_id, job) in &snapshot.hauling {
             if !job.has_valid_persisted_state() || !claimed_log_ids.insert(job.log_id) {
                 return Err(IslandLifeError::Labour(LabourError::InvalidHaulJobState));
+            }
+            // A persisted saw assistant is a real labour participant, not a
+            // second material-owning HaulJob. Reject snapshots that assign the
+            // same founder to two crews, or let a founder assist while also
+            // owning another active haul. Live planning enforces this per tick;
+            // restore must preserve the same single-writer invariant.
+            for task in &job.tasks {
+                if let timber::HaulAction::CrossCutCrew { partner_id, .. } = &task.action {
+                    if active_haul_owners.contains(partner_id)
+                        || !claimed_saw_partners.insert(partner_id.clone())
+                    {
+                        return Err(IslandLifeError::Labour(LabourError::InvalidHaulJobState));
+                    }
+                    if partner_id == owner_id {
+                        return Err(IslandLifeError::Labour(LabourError::InvalidHaulJobState));
+                    }
+                }
             }
             match job.method {
                 timber::HaulMethod::Ute => {
@@ -4791,6 +4811,83 @@ mod tests {
     /// nearest tree and fells it after exactly the walk plus the felling
     /// pack's time for that trunk; its usable wood lands in the estate's
     /// stock and the books close.
+    fn persisted_saw_crew_job(
+        log_id: u64,
+        first_id: u64,
+        partner_id: &str,
+    ) -> timber::HaulJob {
+        timber::HaulJob {
+            log_id,
+            method: timber::HaulMethod::OnFoot,
+            tasks: std::collections::VecDeque::from(vec![timber::HaulTask {
+                action: timber::HaulAction::CrossCutCrew {
+                    log_id,
+                    pieces: 2,
+                    first_id,
+                    partner_id: partner_id.to_string(),
+                    partner_met: 3.0,
+                },
+                duration_s: 60.0,
+                met: 3.0,
+                ends_at_m: (0.0, 0.0),
+            }]),
+            worked_s: 0.0,
+        }
+    }
+
+    #[test]
+    fn restore_rejects_two_persisted_saw_crews_claiming_the_same_partner() {
+        let scenario =
+            IslandScenario::load(&repo("fixtures/island/default_scenario.json")).unwrap();
+        let canon = Arc::new(CanonLocked::load(&repo("fixtures/island/canon.json")).unwrap());
+        let life = IslandLife::bootstrap(scenario, canon.clone()).expect("the island bootstraps");
+        let mut snapshot = life.snapshot();
+        snapshot
+            .hauling
+            .insert("primary-a".into(), persisted_saw_crew_job(1, 10, "Gem-K"));
+        snapshot
+            .hauling
+            .insert("primary-b".into(), persisted_saw_crew_job(2, 20, "Gem-K"));
+
+        let restored = IslandLife::restore(canon, snapshot);
+        assert!(matches!(
+            restored,
+            Err(IslandLifeError::Labour(LabourError::InvalidHaulJobState))
+        ));
+    }
+
+    #[test]
+    fn restore_rejects_a_saw_partner_who_owns_another_active_haul() {
+        let scenario =
+            IslandScenario::load(&repo("fixtures/island/default_scenario.json")).unwrap();
+        let canon = Arc::new(CanonLocked::load(&repo("fixtures/island/canon.json")).unwrap());
+        let life = IslandLife::bootstrap(scenario, canon.clone()).expect("the island bootstraps");
+        let mut snapshot = life.snapshot();
+        snapshot
+            .hauling
+            .insert("Gem-D".into(), persisted_saw_crew_job(1, 10, "Gem-K"));
+        snapshot.hauling.insert(
+            "Gem-K".into(),
+            timber::HaulJob {
+                log_id: 2,
+                method: timber::HaulMethod::OnFoot,
+                tasks: std::collections::VecDeque::from(vec![timber::HaulTask {
+                    action: timber::HaulAction::Walk,
+                    duration_s: 60.0,
+                    met: 1.0,
+                    ends_at_m: (0.0, 0.0),
+                }]),
+                worked_s: 0.0,
+            },
+        );
+
+        let restored = IslandLife::restore(canon, snapshot);
+        assert!(matches!(
+            restored,
+            Err(IslandLifeError::Labour(LabourError::InvalidHaulJobState))
+        ));
+    }
+
     #[test]
     fn a_beginner_fells_slower_than_the_pack_and_learns_from_it() {
         let mut scenario =
