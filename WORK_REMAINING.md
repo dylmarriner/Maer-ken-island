@@ -174,6 +174,7 @@ the log's last water is booked to the air at that moment rather than when the wo
   m³/h). Already-felled log cross-cutting for Ute transport is implemented 2026-11-09; left: terrain-aware Ute routes and persistent vehicle positions.
   - 2026-11-08: public haul planning rejects malformed source logs with a typed error before split materialisation.
   - 2026-11-09: the Ute plan can use the shed's two-person crosscut saw when a second gathering founder is available; one persisted crew task owns the material split, both founders' bodies are charged separately, and a partner who leaves work falls back to the axe. Regression: regional::life::tests::two_founders_cross_cut_a_ute_log_with_the_saw_and_both_pay_energy.
+  - 2026-11-09: `regional::life::tests::persisted_saw_crew_resumes_after_snapshot_restore_and_conserves_material` advances a crew cut halfway, snapshots/restores, finishes the remaining work, and checks exact length, dry-mass, carbon and water totals plus single reservation of the piece-ID range. Fresh exact-head CI is required.
 - **Excavator rigging (done 2026-10-23, D40):** the CAT 330 has no grapple, so its operator
   slings each log by hand before the pick-up and frees it after the set-down, at Borz & Mititelu
   2022's measured hook and unhook times for hand-rigged winch logs (13.59 s and 9.30 s, 278 logs,
