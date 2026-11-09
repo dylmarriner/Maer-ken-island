@@ -164,10 +164,7 @@ impl Log {
         let butt = self.butt_m();
         // Finite source fields can still overflow when projected into endpoints.
         // Reject impossible geometry before allocating any pieces or IDs.
-        let tip = (
-            self.position_m.0 + 0.5 * self.length_m * self.heading_rad.cos(),
-            self.position_m.1 + 0.5 * self.length_m * self.heading_rad.sin(),
-        );
+        let tip = self.tip_m();
         assert!(
             butt.0.is_finite() && butt.1.is_finite() && tip.0.is_finite() && tip.1.is_finite(),
             "cross-cut endpoints must be finite"
