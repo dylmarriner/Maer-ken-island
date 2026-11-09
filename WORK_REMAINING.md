@@ -3,7 +3,9 @@
 - PR #136 now rejects malformed public `RoadVehicle` and `TrackedMachine` inputs before constructing a haul plan: zero IDs, negative/non-finite fuel, and non-positive/non-finite burn rates fail with typed `LabourError::InvalidVehicleState`. Zero fuel remains valid but cannot power a haul.
 - Regression `haul_planning_rejects_malformed_road_and_tracked_vehicle_state` covers all invalid categories for both vehicle classes.
 - Production commit: `8947bfe8bd5c686670a161b5fba86120a32ee215`; tests: `b50d4d4278e56edebf08bcf2b2d630efd65a7d12`; handoff: `docs/handoff/HAUL_PLANNING_VEHICLE_STATE_VALIDATION_20261109.md`.
-- No fuel coefficients, routes, snapshots, replay hashes, RNG, material ledger or reference data changed. Exact-head CI is required for this new slice.
+- No fuel coefficients, routes, snapshots, replay hashes, RNG, material ledger or reference data changed.
+- First exact-head workflow [#42576631488](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42576631488) failed only the rustfmt gate on multiline test-fixture formatting; Clippy and fast tests were skipped, and downstream desktop/backend/reference jobs were cancelled after the branch advanced. Applied exact rustfmt output in `0442a7201006fd3918b90d5bce62f197bc69e400`.
+- Fresh corrected-head workflow [#42577138058](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42577138058) is queued; do not claim the new vehicle guard verified until its required jobs pass.
 
 ## Latest D40 full Ute acceptance verification — 9 November 2026
 
