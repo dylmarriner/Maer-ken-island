@@ -66,3 +66,13 @@ No snapshot schema, append-only log format, replay hash, RNG, tick cadence, scie
 - Rustfmt identified one line-wrap difference in the new `matches!` assertion. Applied the exact formatter output, with no semantic change.
 - Formatting correction commit: `2255b67bc2e6cb5161ca7a395be95ea0f4f4d2cd`.
 - The same workflow's week/year reference-pack, installed-backend and desktop jobs were still running on the preceding head; they do not certify this formatting correction. A fresh exact-head workflow is required.
+
+
+## Fresh exact-head verification after formatting correction — 9 November 2026
+
+- Current head: `8e5f4b882ba9b7be8f3fa3ee724b0917b0f27d9f`.
+- Fresh workflow [#42569801043](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42569801043) is now running on the handoff head.
+- Repository scripts passed. Web dashboard checks passed through the workforce assertion and were still running at inspection.
+- Desktop, installed backend, dependency audit and week/year reference-pack jobs are running. The fast Rust format/Clippy/test job is queued.
+- This fresh run supersedes the previous rustfmt-only failure for acceptance purposes; no format/Clippy/fast-test pass is claimed until its queued job completes.
+- The prior run [#42569581446](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42569581446) failed only at one formatter line-wrap before Clippy/tests. The exact output is committed at `2255b67bc2e6cb5161ca7a395be95ea0f4f4d2cd`.
