@@ -31,7 +31,7 @@
 //! costs its Compendium MET. Fuel burns as the vehicles move. A log in the
 //! store keeps its water: nothing here dries it (deviation D40).
 
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 
 use serde::{Deserialize, Serialize};
 
@@ -419,12 +419,12 @@ impl HaulJob {
                     km,
                     logs,
                 } => {
-                    *vehicle_id > 0 && km.is_finite() && *km >= 0.0 && logs.iter().all(|id| *id > 0)
+                    *vehicle_id > 0 && km.is_finite() && *km >= 0.0 && valid_manifest(logs)
                 }
                 HaulAction::Load { vehicle_id, logs } => {
-                    *vehicle_id > 0 && logs.iter().all(|id| *id > 0)
+                    *vehicle_id > 0 && valid_manifest(logs)
                 }
-                HaulAction::Unload { logs } => logs.iter().all(|id| *id > 0),
+                HaulAction::Unload { logs } => valid_manifest(logs),
                 HaulAction::CarryToStore { log_id } => *log_id > 0,
                 HaulAction::Track {
                     vehicle_id,
@@ -446,6 +446,13 @@ impl HaulJob {
 
         true
     }
+}
+
+/// Reject duplicate or zero log IDs in persisted vehicle manifests.
+/// Duplicate entries could otherwise debit or move the same timber twice.
+fn valid_manifest(logs: &[u64]) -> bool {
+    let mut seen = HashSet::with_capacity(logs.len());
+    logs.iter().all(|id| *id > 0 && seen.insert(*id))
 }
 
 /// The estate's places a haul runs between.
@@ -1458,6 +1465,30 @@ mod tests {
             };
             assert!(!job.has_valid_persisted_state());
         }
+    }
+
+    #[test]
+    fn persisted_haul_rejects_duplicate_vehicle_manifest_ids() {
+        for action in [
+            HaulAction::Drive { vehicle_id: 7, km: 1.0, logs: vec![42, 42] },
+            HaulAction::Load { vehicle_id: 7, logs: vec![42, 42] },
+            HaulAction::Unload { logs: vec![42, 42] },
+        ] {
+            let job = HaulJob {
+                log_id: 42,
+                method: HaulMethod::Ute,
+                tasks: VecDeque::from([HaulTask {
+                    action,
+                    duration_s: 10.0,
+                    met: 2.0,
+                    ends_at_m: (0.0, 0.0),
+                }]),
+                worked_s: 0.0,
+            };
+            assert!(!job.has_valid_persisted_state());
+        }
+        assert!(valid_manifest(&[42, 43]));
+        assert!(!valid_manifest(&[0]));
     }
 
     #[test]
