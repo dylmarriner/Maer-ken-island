@@ -37,3 +37,12 @@ Exact-head Rust formatting, Clippy, fast tests, desktop and installed-backend ac
 ## Safety
 
 No production deployment, live data migration, destructive action, external communication or paid service was used.
+
+
+## Exact-head CI correction — 9 November 2026
+
+- Workflow [#42549729268](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42549729268) exposed a compile error: the assistant map stores a `String` primary founder ID, so reading its tuple with `.copied()` incorrectly required `String: Copy`. The lookup now clones the tuple.
+- The same workflow's rustfmt gate required the completed-task `CrossCutCrew` pattern to use the formatter's single-line form.
+- Corrected source commit: `ddda1903e58202e6ed6c6b2c4e7c43b1cede3993`.
+- The prior run's desktop Clippy, installed-backend build and reference-pack acceptance failed or stopped because of this compile error; they are not treated as independent feature failures. Fresh exact-head CI is required.
+- Full-duration cross-cut completion/conservation and interruption/restart acceptance remain open; the existing test only covers selection, energy, single-writer ownership, reservation and partner departure fallback.
