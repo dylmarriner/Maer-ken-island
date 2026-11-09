@@ -428,9 +428,9 @@ impl HaulJob {
                     *vehicle_id > 0 && km.is_finite() && *km >= 0.0 && valid_manifest(logs)
                 }
                 HaulAction::Load { vehicle_id, logs } => {
-                    *vehicle_id > 0 && valid_manifest(logs)
+                    *vehicle_id > 0 && !logs.is_empty() && valid_manifest(logs)
                 }
-                HaulAction::Unload { logs } => valid_manifest(logs),
+                HaulAction::Unload { logs } => !logs.is_empty() && valid_manifest(logs),
                 HaulAction::CarryToStore { log_id } => *log_id > 0,
                 HaulAction::Track {
                     vehicle_id,
@@ -1477,6 +1477,40 @@ mod tests {
             };
             assert!(!job.has_valid_persisted_state());
         }
+    }
+
+    #[test]
+    fn persisted_haul_rejects_empty_load_and_unload_manifests() {
+        for action in [
+            HaulAction::Load { vehicle_id: 7, logs: vec![] },
+            HaulAction::Unload { logs: vec![] },
+        ] {
+            let job = HaulJob {
+                log_id: 42,
+                method: HaulMethod::Ute,
+                tasks: VecDeque::from([HaulTask {
+                    action,
+                    duration_s: 10.0,
+                    met: 2.0,
+                    ends_at_m: (0.0, 0.0),
+                }]),
+                worked_s: 0.0,
+            };
+            assert!(!job.has_valid_persisted_state());
+        }
+        // Empty return drives remain legitimate after unloading timber.
+        let return_drive = HaulJob {
+            log_id: 42,
+            method: HaulMethod::Ute,
+            tasks: VecDeque::from([HaulTask {
+                action: HaulAction::Drive { vehicle_id: 7, km: 1.0, logs: vec![] },
+                duration_s: 10.0,
+                met: 2.0,
+                ends_at_m: (0.0, 0.0),
+            }]),
+            worked_s: 0.0,
+        };
+        assert!(return_drive.has_valid_persisted_state());
     }
 
     #[test]
