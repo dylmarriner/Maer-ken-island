@@ -55,3 +55,11 @@ No production deployment, live data migration, destructive action, external comm
 - Regression coverage injects an already-assigned partner and proves the planner selects the solo axe CrossCut instead of creating a second crew assignment.
 - Source commit: `dcde66d472ed5bfbb8c77b7572ed84ab81585e98`; work-register update: `46e3a22063e4ce5d14f5ca1844161c24c140926e`.
 - Exact-head Rust formatting, Clippy, fast tests, desktop/backend and reference-pack CI remain required.
+
+
+## Exact-head rustfmt correction — 9 November 2026
+
+- Workflow [#42550746339](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42550746339) reached the formatter and identified three layout-only differences in the new assigned-assistant regression: compact `BTreeMap::from` tuple layout and wrapped planner assertions.
+- Applied the exact rustfmt forms in `life.rs`; no production logic changed in this formatting correction.
+- Commit: `5f1c9649c79db1711c60b6ce0b56ae2c3623052e`.
+- The run's other acceptance jobs were still in progress when the format gate failed; their results are not a substitute for fresh exact-head CI.
