@@ -4811,11 +4811,7 @@ mod tests {
     /// nearest tree and fells it after exactly the walk plus the felling
     /// pack's time for that trunk; its usable wood lands in the estate's
     /// stock and the books close.
-    fn persisted_saw_crew_job(
-        log_id: u64,
-        first_id: u64,
-        partner_id: &str,
-    ) -> timber::HaulJob {
+    fn persisted_saw_crew_job(log_id: u64, first_id: u64, partner_id: &str) -> timber::HaulJob {
         timber::HaulJob {
             log_id,
             method: timber::HaulMethod::OnFoot,
