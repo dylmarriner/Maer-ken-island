@@ -47,6 +47,8 @@ pub enum LabourError {
     },
     /// A public haul-planning call supplied a malformed persisted or in-memory log.
     InvalidTimberLogState,
+    /// A public haul-planning call supplied an invalid vehicle id, fuel level or burn rate.
+    InvalidVehicleState,
     /// A persisted haul job has impossible progress or malformed task inputs.
     InvalidHaulJobState,
 }
@@ -64,6 +66,10 @@ impl std::fmt::Display for LabourError {
             Self::InvalidTimberLogState => write!(
                 f,
                 "haul planning requires a finite, positive timber log with conserved physical state"
+            ),
+            Self::InvalidVehicleState => write!(
+                f,
+                "haul planning requires valid vehicle ids, finite non-negative fuel and positive finite burn rates"
             ),
             Self::InvalidHaulJobState => {
                 write!(f, "persisted haul job has invalid progress or task data")
