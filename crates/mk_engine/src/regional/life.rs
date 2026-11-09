@@ -4694,10 +4694,7 @@ mod tests {
 
         // A founder already assigned to an earlier primary's crew cannot be
         // selected again by a later haul planner in the same work tick.
-        let assigned = BTreeMap::from([(
-            "Gem-K".to_string(),
-            ("Gem-D".to_string(), 3.0, 60.0),
-        )]);
+        let assigned = BTreeMap::from([("Gem-K".to_string(), ("Gem-D".to_string(), 3.0, 60.0))]);
         let solo_plan = life
             .plan_haul("Gem-D", at, &body, &assigned)
             .unwrap()
@@ -4945,7 +4942,10 @@ mod tests {
         );
 
         // A vehicle another founder is hauling with is not in the garage.
-        let quickest = life.plan_haul("Gem-D", at, &body, &BTreeMap::new()).unwrap().expect("a plan");
+        let quickest = life
+            .plan_haul("Gem-D", at, &body, &BTreeMap::new())
+            .unwrap()
+            .expect("a plan");
         if quickest.method != timber::HaulMethod::OnFoot {
             let mut elsewhere = quickest.clone();
             elsewhere.log_id = u64::MAX;
@@ -5230,7 +5230,9 @@ mod tests {
         let first_piece_id = life.materials.next_log_id();
         let body = LabourBody::from_human(life.humans.registry.get_human("Gem-D").unwrap());
         assert!(
-            life.plan_haul("Gem-D", at, &body, &BTreeMap::new()).unwrap().is_some(),
+            life.plan_haul("Gem-D", at, &body, &BTreeMap::new())
+                .unwrap()
+                .is_some(),
             "the ground log has a valid candidate haul"
         );
         assert_eq!(
