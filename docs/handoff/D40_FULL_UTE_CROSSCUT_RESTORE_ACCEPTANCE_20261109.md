@@ -78,10 +78,10 @@ No snapshot schema, append-only log format, replay hash, RNG, tick cadence, scie
 - The prior run [#42569581446](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42569581446) failed only at one formatter line-wrap before Clippy/tests. The exact output is committed at `2255b67bc2e6cb5161ca7a395be95ea0f4f4d2cd`.
 
 
-## Current exact-head status — 9 November 2026
+## Current acceptance status — 9 November 2026
 
-- Current PR #136 head: `00a76298ad05744adb5002d736e79b36f86d6f42`.
-- Latest workflow: [#42569859195](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42569859195).
-- Verified on this exact head: Rust formatting, Clippy, web dashboard, computer service, repository scripts and dependency audit passed.
+- Current PR #136 head: `524104dc580d5e2727b01ee6fb3c5ed5bc9eaabb`.
+- Latest workflow: [#42569859195](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42569859195), run on source-equivalent head `00a76298ad05744adb5002d736e79b36f86d6f42`. The only later commit changes this handoff document; no source or test files changed after that workflow started.
+- Verified on the workflow head: Rust formatting, Clippy, web dashboard, computer service, repository scripts and dependency audit passed.
 - Still running at last inspection: fast Rust tests, desktop build/tests, installed-backend build/smoke test and week/year reference-pack acceptance.
-- The earlier workflow #42569801043 was superseded by this latest handoff head. Do not treat the in-progress jobs as passes; inspect #42569859195 before continuing.
+- Do not treat the in-progress jobs as passes; inspect #42569859195 before continuing.
