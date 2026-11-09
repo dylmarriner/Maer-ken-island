@@ -457,6 +457,11 @@ impl HaulJob {
 /// Reject duplicate or zero log IDs in persisted vehicle manifests.
 /// Duplicate entries could otherwise debit or move the same timber twice.
 fn valid_manifest(logs: &[u64]) -> bool {
+    // A persisted manifest must not exceed the maximum pieces from one cross-cut.
+    // Reject before allocating a potentially unbounded duplicate-detection set.
+    if logs.len() > MAX_CROSS_CUT_PIECES as usize {
+        return false;
+    }
     let mut seen = HashSet::with_capacity(logs.len());
     logs.iter().all(|id| *id > 0 && seen.insert(*id))
 }
@@ -1496,6 +1501,8 @@ mod tests {
         }
         assert!(valid_manifest(&[42, 43]));
         assert!(!valid_manifest(&[0]));
+        assert!(valid_manifest(&(1..=MAX_CROSS_CUT_PIECES as u64).collect::<Vec<_>>()));
+        assert!(!valid_manifest(&(1..=MAX_CROSS_CUT_PIECES as u64 + 1).collect::<Vec<_>>()));
     }
 
     #[test]
