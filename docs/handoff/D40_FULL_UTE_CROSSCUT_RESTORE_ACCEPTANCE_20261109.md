@@ -48,3 +48,13 @@ No snapshot schema, append-only log format, replay hash, RNG, tick cadence, scie
 - Verify the exact-head CI for this test.
 - Reconcile material-ingestion PRs #134 and #135 only after controlled integration and green exact-head checks.
 - Continue D40 route modelling, then D31 only with sourced regional nitrogen/phosphorus data.
+
+
+## Exact-head fast-test failure and correction — 9 November 2026
+
+- Exact-head workflow [#42564181241](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42564181241) passed formatting and Clippy, then ran the fast Rust suite: **897 passed, 1 failed**.
+- The only failure was this acceptance test's arbitrary 100 × 60-second loop cap. The persisted saw task remained valid but its pack-derived duration exceeded 6,000 seconds; the assertion treated that longer task as a hang.
+- Replaced the fixed minute cap with task-duration-driven advancement: the test reads the restored front task's exact remaining seconds and advances to that task boundary. The Ute route now advances each persisted haul task by its own remaining duration and bounds progress by the persisted task count, rather than an unrelated 500-minute ceiling.
+- Production simulation behaviour, reference values, snapshot schema, replay hashes, RNG, cadence and material calculations are unchanged. This corrects the acceptance test's time horizon, not the saw duration or the assertion about completion.
+- Source/test correction commit: `0b46fbda85ab6621585d5d6866ea59a625c46213`.
+- Fresh exact-head formatting, Clippy, fast tests, desktop/backend and week/year reference-pack acceptance are required. No pass is claimed until the new head completes.
