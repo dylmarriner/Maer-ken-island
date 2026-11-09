@@ -1,3 +1,16 @@
+## Latest haul-planning vehicle-state validation — 9 November 2026
+
+- PR #136 now rejects malformed public `RoadVehicle` and `TrackedMachine` inputs before constructing a haul plan: zero IDs, negative/non-finite fuel, and non-positive/non-finite burn rates fail with typed `LabourError::InvalidVehicleState`. Zero fuel remains valid but cannot power a haul.
+- Regression `haul_planning_rejects_malformed_road_and_tracked_vehicle_state` covers all invalid categories for both vehicle classes.
+- Production commit: `8947bfe8bd5c686670a161b5fba86120a32ee215`; tests: `b50d4d4278e56edebf08bcf2b2d630efd65a7d12`; handoff: `docs/handoff/HAUL_PLANNING_VEHICLE_STATE_VALIDATION_20261109.md`.
+- No fuel coefficients, routes, snapshots, replay hashes, RNG, material ledger or reference data changed. Exact-head CI is required for this new slice.
+
+## Latest D40 full Ute acceptance verification — 9 November 2026
+
+- Workflow [#42569859195](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42569859195) completed successfully for its required jobs: Rust formatting, Clippy, fast tests, week/year reference packs, desktop build/tests/render/input/frame-cost acceptance, installed backend build/smoke, web dashboard, computer service, repository scripts and dependency audit. Nightly slow tests were skipped by design.
+- This verifies the source-equivalent D40 test head `00a76298ad05744adb5002d736e79b36f86d6f42`; the later commits in that PR at the time were handoff-only. It does not verify the new vehicle-state guard added after this workflow.
+- D40's full two-person saw → snapshot/restore → Ute load/drive/unload acceptance is green. Terrain-aware routes and persistent vehicle positions remain open.
+
 ## Latest D40 acceptance-test correction — 9 November 2026
 
 - PR [#136](https://github.com/dylmarriner/Maer-ken-island/pull/136) adds the full 20 m log → two-founder saw cross-cut → snapshot/restore → Ute load/drive/unload acceptance path, with exact length, dry-mass, carbon and water conservation, founder labour energy, reserved piece IDs, stored-piece locations and fuel assertions.
