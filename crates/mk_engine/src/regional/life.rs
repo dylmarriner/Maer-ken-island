@@ -4974,17 +4974,27 @@ mod tests {
             first_piece_id + u64::from(piece_count),
             "the reserved piece range survives restoration"
         );
-        let mut crew_ticks = 0;
-        while restored
+        let crew_remaining_s = restored
             .hauling
             .get("Gem-D")
-            .and_then(|job| job.tasks.front())
-            .is_some_and(|task| matches!(&task.action, timber::HaulAction::CrossCutCrew { .. }))
-        {
-            restored.work(60.0).unwrap();
-            crew_ticks += 1;
-            assert!(crew_ticks < 100, "the persisted saw cut must finish");
-        }
+            .and_then(|job| {
+                job.tasks
+                    .front()
+                    .map(|task| (task.duration_s - job.worked_s).max(0.0))
+            })
+            .expect("the restored saw cut remains at the front");
+        // The saw pack's duration is diameter-based and can exceed the old
+        // arbitrary 100-minute test cap. Advance exactly the persisted task
+        // remainder rather than mistaking a long, valid cut for a hang.
+        restored.work(crew_remaining_s + 1e-8).unwrap();
+        assert!(
+            !restored
+                .hauling
+                .get("Gem-D")
+                .and_then(|job| job.tasks.front())
+                .is_some_and(|task| matches!(&task.action, timber::HaulAction::CrossCutCrew { .. })),
+            "the persisted saw cut must finish at its recorded duration"
+        );
 
         assert!(
             restored.materials.log(source_id).is_none(),
@@ -5028,11 +5038,31 @@ mod tests {
         // The crew is finished. Keep the assistant from claiming a second
         // ground job while the primary's one Ute job loads, drives and unloads.
         restored.positions.0.remove("Gem-K");
-        let mut haul_ticks = 0;
+        let maximum_haul_tasks = restored
+            .hauling
+            .get("Gem-D")
+            .map(|job| job.tasks.len())
+            .expect("the primary retains the Ute haul");
+        let mut completed_haul_tasks = 0;
         while restored.hauling.contains_key("Gem-D") {
-            restored.work(60.0).unwrap();
-            haul_ticks += 1;
-            assert!(haul_ticks < 500, "the Ute route must finish and unload");
+            let remaining_s = restored
+                .hauling
+                .get("Gem-D")
+                .and_then(|job| {
+                    job.tasks
+                        .front()
+                        .map(|task| (task.duration_s - job.worked_s).max(0.0))
+                })
+                .expect("an active Ute haul has a front task");
+            // Drive each persisted task to its own recorded boundary. This
+            // keeps the acceptance test independent of arbitrary minute caps
+            // while preserving the task-by-task material and vehicle effects.
+            restored.work(remaining_s + 1e-8).unwrap();
+            completed_haul_tasks += 1;
+            assert!(
+                completed_haul_tasks <= maximum_haul_tasks,
+                "the Ute route must finish within its persisted task count"
+            );
         }
 
         for offset in 0..piece_count {
