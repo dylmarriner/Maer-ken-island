@@ -46,3 +46,12 @@ No production deployment, live data migration, destructive action, external comm
 - Corrected source commit: `ddda1903e58202e6ed6c6b2c4e7c43b1cede3993`.
 - The prior run's desktop Clippy, installed-backend build and reference-pack acceptance failed or stopped because of this compile error; they are not treated as independent feature failures. Fresh exact-head CI is required.
 - Full-duration cross-cut completion/conservation and interruption/restart acceptance remain open; the existing test only covers selection, energy, single-writer ownership, reservation and partner departure fallback.
+
+
+## Same-tick saw-assistant exclusivity — 9 November 2026
+
+- Review of the work loop found that a founder selected as a saw partner by an earlier primary could remain eligible for a later primary's haul plan in the same tick. The later plan could overwrite the partner-to-primary map entry, leaving one crew without its partner energy charge and assigning the same person to two persisted crew tasks.
+- `plan_haul` now receives the current tick's assigned-assistant map and excludes any already-reserved partner from later candidate selection. The single-writer primary task remains the only owner of the material split.
+- Regression coverage injects an already-assigned partner and proves the planner selects the solo axe CrossCut instead of creating a second crew assignment.
+- Source commit: `dcde66d472ed5bfbb8c77b7572ed84ab81585e98`; work-register update: `46e3a22063e4ce5d14f5ca1844161c24c140926e`.
+- Exact-head Rust formatting, Clippy, fast tests, desktop/backend and reference-pack CI remain required.
