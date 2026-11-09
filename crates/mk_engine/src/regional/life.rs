@@ -4992,7 +4992,10 @@ mod tests {
                 .hauling
                 .get("Gem-D")
                 .and_then(|job| job.tasks.front())
-                .is_some_and(|task| matches!(&task.action, timber::HaulAction::CrossCutCrew { .. })),
+                .is_some_and(|task| matches!(
+                    &task.action,
+                    timber::HaulAction::CrossCutCrew { .. }
+                )),
             "the persisted saw cut must finish at its recorded duration"
         );
 
