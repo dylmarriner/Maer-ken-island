@@ -1048,14 +1048,38 @@ mod tests {
         };
 
         let invalid_utes = [
-            RoadVehicle { item_id: 0, ..valid_ute },
-            RoadVehicle { litres: -1.0, ..valid_ute },
-            RoadVehicle { litres: f64::NAN, ..valid_ute },
-            RoadVehicle { litres: f64::INFINITY, ..valid_ute },
-            RoadVehicle { litres_per_km: 0.0, ..valid_ute },
-            RoadVehicle { litres_per_km: -0.1, ..valid_ute },
-            RoadVehicle { litres_per_km: f64::NAN, ..valid_ute },
-            RoadVehicle { litres_per_km: f64::INFINITY, ..valid_ute },
+            RoadVehicle {
+                item_id: 0,
+                ..valid_ute
+            },
+            RoadVehicle {
+                litres: -1.0,
+                ..valid_ute
+            },
+            RoadVehicle {
+                litres: f64::NAN,
+                ..valid_ute
+            },
+            RoadVehicle {
+                litres: f64::INFINITY,
+                ..valid_ute
+            },
+            RoadVehicle {
+                litres_per_km: 0.0,
+                ..valid_ute
+            },
+            RoadVehicle {
+                litres_per_km: -0.1,
+                ..valid_ute
+            },
+            RoadVehicle {
+                litres_per_km: f64::NAN,
+                ..valid_ute
+            },
+            RoadVehicle {
+                litres_per_km: f64::INFINITY,
+                ..valid_ute
+            },
         ];
         for ute in invalid_utes {
             let result = haul_plans(
@@ -1064,7 +1088,10 @@ mod tests {
                 &body,
                 &labour,
                 &site(),
-                &Fleet { ute: Some(ute), excavator: None },
+                &Fleet {
+                    ute: Some(ute),
+                    excavator: None,
+                },
                 100,
             );
             assert!(
@@ -1074,14 +1101,38 @@ mod tests {
         }
 
         let invalid_excavators = [
-            TrackedMachine { item_id: 0, ..valid_excavator },
-            TrackedMachine { litres: -1.0, ..valid_excavator },
-            TrackedMachine { litres: f64::NAN, ..valid_excavator },
-            TrackedMachine { litres: f64::INFINITY, ..valid_excavator },
-            TrackedMachine { litres_per_hour: 0.0, ..valid_excavator },
-            TrackedMachine { litres_per_hour: -0.1, ..valid_excavator },
-            TrackedMachine { litres_per_hour: f64::NAN, ..valid_excavator },
-            TrackedMachine { litres_per_hour: f64::INFINITY, ..valid_excavator },
+            TrackedMachine {
+                item_id: 0,
+                ..valid_excavator
+            },
+            TrackedMachine {
+                litres: -1.0,
+                ..valid_excavator
+            },
+            TrackedMachine {
+                litres: f64::NAN,
+                ..valid_excavator
+            },
+            TrackedMachine {
+                litres: f64::INFINITY,
+                ..valid_excavator
+            },
+            TrackedMachine {
+                litres_per_hour: 0.0,
+                ..valid_excavator
+            },
+            TrackedMachine {
+                litres_per_hour: -0.1,
+                ..valid_excavator
+            },
+            TrackedMachine {
+                litres_per_hour: f64::NAN,
+                ..valid_excavator
+            },
+            TrackedMachine {
+                litres_per_hour: f64::INFINITY,
+                ..valid_excavator
+            },
         ];
         for excavator in invalid_excavators {
             let result = haul_plans(
@@ -1090,7 +1141,10 @@ mod tests {
                 &body,
                 &labour,
                 &site(),
-                &Fleet { ute: None, excavator: Some(excavator) },
+                &Fleet {
+                    ute: None,
+                    excavator: Some(excavator),
+                },
                 100,
             );
             assert!(
