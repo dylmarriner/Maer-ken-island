@@ -111,6 +111,12 @@ impl Log {
             && self.water_kg.is_finite()
             && self.water_kg >= 0.0
             && (self.dry_kg + self.water_kg).is_finite()
+            // Finite inputs may still overflow when the centre is projected
+            // to either endpoint. Reject such logs at the validation boundary.
+            && self.butt_m().0.is_finite()
+            && self.butt_m().1.is_finite()
+            && (self.position_m.0 + 0.5 * self.length_m * self.heading_rad.cos()).is_finite()
+            && (self.position_m.1 + 0.5 * self.length_m * self.heading_rad.sin()).is_finite()
     }
 
     /// The butt end (domain metres).
