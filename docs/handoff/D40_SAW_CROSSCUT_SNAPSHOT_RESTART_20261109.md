@@ -1,33 +1,36 @@
 # D40 saw cross-cut snapshot/restart acceptance — 9 November 2026
 
-## Change
+## Production change
 
-Added `persisted_saw_crew_resumes_after_snapshot_restore_and_conserves_material` to `crates/mk_engine/src/regional/life.rs`.
+`IslandLife::restore` now reconstructs and validates pending cross-cut ID ranges before accepting an active haul snapshot.
 
-The regression:
-- creates one ground log and one persisted `CrossCutCrew` haul;
-- advances half of the task and snapshots the island;
-- restores the snapshot with the same canonical rules;
-- completes the remaining task time;
-- verifies the source log is replaced by the reserved pieces;
-- checks exact conservation of length, oven-dry mass, carbon and water;
-- verifies the piece-ID range is not reserved a second time;
-- verifies the primary and assistant each pay labour energy.
+For both solo `CrossCut` and `CrossCutCrew` tasks, restore now requires:
+- the task's source log ID to equal the owning haul job's log ID;
+- the source log to still exist;
+- the reserved piece-ID range to be valid, unoccupied and below the allocator watermark.
 
-The existing restore tests continue to reject duplicate assistant claims and an assistant who owns another active haul.
+The existing ledger helper also reconstructs ranges for older snapshots whose allocator watermark was persisted before pending-ID tracking existed. Invalid state now returns `InvalidHaulJobState` during restore instead of reaching a later assertion/panic when the task completes.
+
+The existing crew-ownership checks remain: an assistant cannot be claimed by two crews, own another active haul, or assist their own haul.
+
+## Regression coverage
+
+- `restore_rejects_a_saw_crew_whose_source_log_is_missing`
+- `restore_rejects_a_saw_cut_that_targets_another_jobs_log`
+- Existing duplicate-assistant and assistant-own-haul restore tests now use real source logs and valid reserved ranges, so they isolate the ownership invariants.
+- `persisted_saw_crew_resumes_after_snapshot_restore_and_conserves_material` advances a crew cut halfway, snapshots/restores, finishes the remaining work, and checks exact length, oven-dry mass, carbon and water totals, one-time piece-ID reservation, and separate energy expenditure by both founders.
 
 ## Verification
 
-Before this test-only acceptance slice, PR #136 head `07e650102d6443e036f77246c629e957ebc242c8` passed exact-head workflow #42552777537:
-- formatting, Clippy and fast Rust tests;
-- desktop application;
-- installed backend;
-- week/year reference-pack acceptance;
-- web dashboard, computer service, repository scripts and dependency audit.
-Nightly slow tests were skipped by design.
+The earlier exact-head workflow #42552777537 passed formatting, Clippy, fast Rust tests, desktop application, installed backend, week/year reference packs, dashboard, computer service, repository scripts and dependency audit. That run predates the new restore guard and regression tests.
 
-The new test commit `5899edb8d26371038f3964f10413771c17c9458e` triggered workflow #42558252972. That run failed only at `cargo fmt --all -- --check`, which requested the bootstrap assignment wrap at line 4891. The exact rustfmt output was applied in commit `801d6f6e9f7bfe29ccdfbcc731ae1dc682a279c7`. A fresh exact-head workflow is required before this regression is considered verified.
+On the test-only head, workflow #42558437059 passed formatting and Clippy; fast Rust tests and the remaining application/reference-pack jobs were still running when the production guard was added. That predecessor run does not verify the new code.
+
+Production guard commit: `a05f1ccbc65dc3765f6f94e91c8cc6ff2b1899b9`.
+Roadmap update: `79a73fcb5b484b3be308780048b063982e81606d`.
+
+A fresh exact-head workflow is triggered by this handoff commit. No test pass is claimed for the new restore guard until that run completes green.
 
 ## Invariants
 
-No production simulation logic, snapshot schema, append-only log format, replay hash, RNG, tick cadence, scientific constant or reference pack was changed by this test. No production deployment or live simulation state was modified.
+No snapshot schema, append-only log format, replay hash, RNG, tick cadence, scientific constant or reference pack was changed. The change tightens validation of existing persisted state and preserves the single-writer material mutation model. No production deployment or live simulation state was modified.
