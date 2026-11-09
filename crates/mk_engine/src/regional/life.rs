@@ -1525,7 +1525,10 @@ impl IslandLife {
                         ..
                     } => {
                         let work_s = dt_s.min((task.duration_s - job.worked_s).max(0.0));
-                        Some((partner_id.clone(), (primary_id.clone(), *partner_met, work_s)))
+                        Some((
+                            partner_id.clone(),
+                            (primary_id.clone(), *partner_met, work_s),
+                        ))
                     }
                     _ => None,
                 }
@@ -1571,7 +1574,8 @@ impl IslandLife {
                         .labour
                         .energy_kcal(&body, awake_met, dt_s)
                         .map_err(IslandLifeError::Labour)?;
-                    *self.labour_kcal.entry(id.clone()).or_insert(0.0) += (spent - baseline).max(0.0);
+                    *self.labour_kcal.entry(id.clone()).or_insert(0.0) +=
+                        (spent - baseline).max(0.0);
                     let effective_met = if dt_s > 0.0 {
                         (partner_met * work_s + awake_met * idle_s) / dt_s
                     } else {
@@ -1663,10 +1667,8 @@ impl IslandLife {
                             } = &task.action
                             {
                                 let work_s = dt_s.min((task.duration_s - job.worked_s).max(0.0));
-                                saw_assistants.insert(
-                                    partner_id.clone(),
-                                    (id.clone(), *partner_met, work_s),
-                                );
+                                saw_assistants
+                                    .insert(partner_id.clone(), (id.clone(), *partner_met, work_s));
                             }
                         }
                         self.reserve_haul_plan(&job);
@@ -1895,10 +1897,7 @@ impl IslandLife {
                     p.space = Space::Outdoors;
                     p.position_m = task.ends_at_m;
                 }
-                if let timber::HaulAction::CrossCutCrew {
-                    partner_id,
-                    ..
-                } = &task.action
+                if let timber::HaulAction::CrossCutCrew { partner_id, .. } = &task.action
                 {
                     if let Some(p) = life.positions.0.get_mut(partner_id) {
                         p.space = Space::Outdoors;
@@ -2115,8 +2114,8 @@ impl IslandLife {
                     })
                 })
                 .min_by(|a, b| {
-                    let da = (a.2.0 - butt.0).hypot(a.2.1 - butt.1);
-                    let db = (b.2.0 - butt.0).hypot(b.2.1 - butt.1);
+                    let da = (a.2 .0 - butt.0).hypot(a.2 .1 - butt.1);
+                    let db = (b.2 .0 - butt.0).hypot(b.2 .1 - butt.1);
                     da.total_cmp(&db).then(a.0.cmp(&b.0))
                 });
 
@@ -2161,9 +2160,7 @@ impl IslandLife {
                                 .map_err(IslandLifeError::Labour)?;
                             let blended_met = |walk_s: f64| {
                                 let wait_s = (crew_walk_s - walk_s).max(0.0);
-                                (walk_s * WALKING_MET
-                                    + wait_s * awake_met
-                                    + saw_cut_s * saw.met)
+                                (walk_s * WALKING_MET + wait_s * awake_met + saw_cut_s * saw.met)
                                     / crew_duration_s
                             };
                             if let Some(task) = selected.tasks.front_mut() {
@@ -4692,8 +4689,15 @@ mod tests {
             .plan_haul("Gem-D", at, &body)
             .unwrap()
             .expect("the long ground log has a haul plan");
-        assert_eq!(job.method, timber::HaulMethod::Ute, "the Ute is the quickest vehicle");
-        let task = job.tasks.front().expect("the Ute starts with cross-cutting");
+        assert_eq!(
+            job.method,
+            timber::HaulMethod::Ute,
+            "the Ute is the quickest vehicle"
+        );
+        let task = job
+            .tasks
+            .front()
+            .expect("the Ute starts with cross-cutting");
         let pieces = match &task.action {
             timber::HaulAction::CrossCutCrew {
                 pieces,
@@ -4720,7 +4724,9 @@ mod tests {
         life.work(60.0).unwrap();
 
         assert!(
-            life.hauling.get("Gem-D").is_some_and(|job| job.worked_s >= 60.0),
+            life.hauling
+                .get("Gem-D")
+                .is_some_and(|job| job.worked_s >= 60.0),
             "the primary haul advances"
         );
         assert!(
@@ -4736,7 +4742,12 @@ mod tests {
             "the saw partner pays their own work energy"
         );
         assert!(
-            life.humans.registry.get_human("Gem-K").unwrap().labour_met.is_some(),
+            life.humans
+                .registry
+                .get_human("Gem-K")
+                .unwrap()
+                .labour_met
+                .is_some(),
             "the partner's labour is visible to the next lifecycle step"
         );
         assert!(
@@ -4905,7 +4916,10 @@ mod tests {
             let mut elsewhere = quickest.clone();
             elsewhere.log_id = u64::MAX;
             life.hauling.insert("Elsewhere".into(), elsewhere);
-            let next = life.plan_haul("Gem-D", at, &body).unwrap().expect("another plan");
+            let next = life
+                .plan_haul("Gem-D", at, &body)
+                .unwrap()
+                .expect("another plan");
             assert_ne!(next.method, quickest.method, "the vehicle is out");
             life.hauling.remove("Elsewhere");
         }
