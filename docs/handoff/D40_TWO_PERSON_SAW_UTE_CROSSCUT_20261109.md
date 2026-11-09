@@ -4,6 +4,7 @@ Date: 2026-11-09
 Repository: dylmarriner/Maer-ken-island
 Branch: feat/d40-two-person-saw-ute-crosscut-20261109
 Base: 6b57ad96273c2320910f93902963bc8800974175
+Latest implementation commit: 1ea46166976aaf1b0e808e712dde4e9a4e42f9b2
 
 ## Slice
 
@@ -20,7 +21,7 @@ Implemented the still-open D40 step that cross-cuts an already-felled log with t
 
 ## Regression
 
-regional::life::tests::two_founders_cross_cut_a_ute_log_with_the_saw_and_both_pay_energy creates a long remote log, disables the excavator, ensures the Ute plan is selected, verifies the partner identity and MET, reserves the exact piece-ID range only after plan acceptance, advances the task, and asserts both founders pay energy while only the primary owns the haul job.
+regional::life::tests::two_founders_cross_cut_a_ute_log_with_the_saw_and_both_pay_energy creates a long remote log, disables the excavator, ensures the Ute plan is selected, verifies the partner identity and MET, reserves the exact piece-ID range only after plan acceptance, advances the task, and asserts both founders pay energy while only the primary owns the haul job, then removes the partner from the work site and verifies the primary task falls back to a solo axe CrossCut.
 
 ## Verification
 

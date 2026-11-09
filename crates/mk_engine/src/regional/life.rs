@@ -1903,6 +1903,8 @@ impl IslandLife {
                         p.space = Space::Outdoors;
                         p.position_m = task.ends_at_m;
                     }
+                    life.will_of(partner_id)
+                        .learn(super::choice::Work::Haul, WORK_DONE);
                 }
             }
         })
@@ -2010,8 +2012,7 @@ impl IslandLife {
         self.wills.of(&self.scenario.seed, id, openness)
     }
 
-    /// The quickest haul of the log on the ground nearest `at` that no
-    /// founder is already moving, or `None` if there is none.
+    /// Whether a founder is gathering outdoors and can assist a saw crew.
     fn is_gathering_outdoors(&self, id: &str) -> bool {
         self.humans.registry.get_human(id).is_some_and(|human| {
             matches!(human.profile.status, mk_core::human::HumanStatus::Alive)
@@ -2023,6 +2024,8 @@ impl IslandLife {
             .is_some_and(|position| position.space == Space::Outdoors)
     }
 
+    /// The quickest haul of the log on the ground nearest at that no
+    /// founder is already moving, or None if there is none.
     fn plan_haul(
         &self,
         primary_id: &str,
@@ -4754,6 +4757,18 @@ mod tests {
             life.materials.log(source_id).is_some(),
             "the source log remains until the planned saw task finishes"
         );
+
+        // If the second founder leaves the work site, the persisted crew
+        // task falls back to the solo axe rather than waiting forever.
+        life.positions.0.remove("Gem-K");
+        life.work(60.0).unwrap();
+        assert!(matches!(
+            life.hauling
+                .get("Gem-D")
+                .and_then(|job| job.tasks.front())
+                .map(|task| &task.action),
+            Some(timber::HaulAction::CrossCut { .. })
+        ));
     }
 
     /// A founder who gathers outdoors with the shed's axe walks to the

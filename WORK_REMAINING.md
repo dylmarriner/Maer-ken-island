@@ -171,7 +171,7 @@ the log's last water is booked to the air at that moment rather than when the wo
   tree of their own takes the other end of the shed's saw at a tree one other founder fells,
   and two at one tree fell it at the pack's two-person crosscut time (`labour/productivity.json`, 8-25 min for
   30 cm; FAO Forest Harvesting Case Study 18 measured two-cutter crosscut crews at 1.11-1.99
-  m³/h). Left: cross-cutting a log for the ute with the saw rather than the axe.
+  m³/h). Already-felled log cross-cutting for Ute transport is implemented 2026-11-09; left: terrain-aware Ute routes and persistent vehicle positions.
   - 2026-11-08: public haul planning rejects malformed source logs with a typed error before split materialisation.
   - 2026-11-09: the Ute plan can use the shed's two-person crosscut saw when a second gathering founder is available; one persisted crew task owns the material split, both founders' bodies are charged separately, and a partner who leaves work falls back to the axe. Regression: regional::life::tests::two_founders_cross_cut_a_ute_log_with_the_saw_and_both_pay_energy.
 - **Excavator rigging (done 2026-10-23, D40):** the CAT 330 has no grapple, so its operator
@@ -847,7 +847,7 @@ PR #129 now also preflights resulting stock totals, not only individual finite/n
 
 - [x] The Ute haul plan can select the two-person crosscut saw when a second gathering founder is available and the crew cut is faster than the axe plan.
 - [x] Persist one primary crew task; charge the partner's own MET/energy separately without duplicating material mutation.
-- [x] Fall back to the axe if the partner leaves gathering/outdoors work.
+- [x] Fall back to the axe if the partner leaves gathering/outdoors work; regression now removes the partner from the work site and verifies the persisted task becomes a solo CrossCut.
 - [x] Regression covers deterministic partner selection, Ute selection, ID reservation, and both founders' energy.
 - [ ] Verify exact-head Rust, desktop and installed-backend CI.
 - [ ] Add full-duration cross-cut completion/conservation and interruption/restart acceptance.
