@@ -4884,6 +4884,114 @@ mod tests {
         ));
     }
 
+    /// A partially completed two-person saw cut survives snapshot restore,
+    /// finishes once, and conserves every physical component of the source log.
+    #[test]
+    fn persisted_saw_crew_resumes_after_snapshot_restore_and_conserves_material() {
+        let scenario =
+            IslandScenario::load(&repo("fixtures/island/default_scenario.json")).unwrap();
+        let canon = Arc::new(CanonLocked::load(&repo("fixtures/island/canon.json")).unwrap());
+        let mut life = IslandLife::bootstrap(scenario, canon.clone()).expect("the island bootstraps");
+        let site = life.haul_site().expect("the estate has a garage and store");
+        let at = site.garage_m;
+
+        for who in ["Gem-D", "Gem-K"] {
+            life.positions.0.insert(
+                who.into(),
+                super::super::humans::EstatePosition {
+                    space: Space::Outdoors,
+                    position_m: at,
+                },
+            );
+            life.humans
+                .registry
+                .get_human_mut(who)
+                .unwrap()
+                .economy_action
+                .kind = crate::humans::ActionKind::Gather;
+        }
+
+        let log = timber::Log {
+            id: 0,
+            position_m: (at.0 + 100.0, at.1),
+            heading_rad: 0.0,
+            length_m: 2.0,
+            diameter_m: 0.30,
+            dry_kg: 500.0,
+            carbon_kgc: 250.0,
+            water_kg: 410.0,
+            place: timber::LogPlace::Ground,
+        };
+        let cell = life.placed.location;
+        let area = life.domain.cell_area_m2(DomainLevel::Medium);
+        let mut ledger = Ledger::new();
+        let source_id = life.materials.receive_felled_log(
+            log,
+            &mut life.physical.hydrology,
+            cell,
+            area,
+            &mut ledger,
+        );
+        let source = life.materials.log(source_id).unwrap().clone();
+        let first_piece_id = life.materials.next_log_id();
+        let job = persisted_saw_crew_job(source_id, first_piece_id, "Gem-K");
+        life.reserve_haul_plan(&job);
+        life.hauling.insert("Gem-D".into(), job);
+
+        life.work(30.0).unwrap();
+        let snapshot = life.snapshot();
+        assert_eq!(
+            snapshot.hauling.get("Gem-D").map(|job| job.worked_s),
+            Some(30.0),
+            "the partial saw-task cursor is persisted"
+        );
+
+        let mut restored =
+            IslandLife::restore(canon, snapshot).expect("the partial saw crew restores");
+        assert!(restored.materials.log(source_id).is_some());
+        assert_eq!(
+            restored.materials.next_log_id(),
+            first_piece_id + 2,
+            "the reserved piece-id range survives restoration"
+        );
+
+        restored.work(30.0).unwrap();
+
+        assert!(
+            restored.materials.log(source_id).is_none(),
+            "the source is replaced exactly when the persisted cut finishes"
+        );
+        let first = restored
+            .materials
+            .log(first_piece_id)
+            .expect("the first reserved piece exists");
+        let second = restored
+            .materials
+            .log(first_piece_id + 1)
+            .expect("the second reserved piece exists");
+        assert_eq!(first.length_m + second.length_m, source.length_m);
+        assert_eq!(first.dry_kg + second.dry_kg, source.dry_kg);
+        assert_eq!(first.carbon_kgc + second.carbon_kgc, source.carbon_kgc);
+        assert_eq!(first.water_kg + second.water_kg, source.water_kg);
+        assert_eq!(
+            restored.materials.next_log_id(),
+            first_piece_id + 2,
+            "restoration and completion do not reserve the range twice"
+        );
+        assert!(
+            !restored.hauling.contains_key("Gem-D"),
+            "the one persisted material-owning job completes"
+        );
+        assert!(
+            restored.labour_kcal.get("Gem-D").copied().unwrap_or(0.0) > 0.0,
+            "the primary founder pays their own energy"
+        );
+        assert!(
+            restored.labour_kcal.get("Gem-K").copied().unwrap_or(0.0) > 0.0,
+            "the assistant pays their own energy across the restored task"
+        );
+    }
+
     #[test]
     fn a_beginner_fells_slower_than_the_pack_and_learns_from_it() {
         let mut scenario =
