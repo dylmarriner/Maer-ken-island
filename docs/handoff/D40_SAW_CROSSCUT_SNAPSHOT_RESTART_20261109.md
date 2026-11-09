@@ -26,7 +26,7 @@ Before this test-only acceptance slice, PR #136 head `07e650102d6443e036f77246c6
 - web dashboard, computer service, repository scripts and dependency audit.
 Nightly slow tests were skipped by design.
 
-The new test commit `5899edb8d26371038f3964f10413771c17c9458e` triggered workflow #42558252972. The workflow was in progress at handoff time; a fresh exact-head green result is required before this regression is considered verified.
+The new test commit `5899edb8d26371038f3964f10413771c17c9458e` triggered workflow #42558252972. That run failed only at `cargo fmt --all -- --check`, which requested the bootstrap assignment wrap at line 4891. The exact rustfmt output was applied in commit `801d6f6e9f7bfe29ccdfbcc731ae1dc682a279c7`. A fresh exact-head workflow is required before this regression is considered verified.
 
 ## Invariants
 
