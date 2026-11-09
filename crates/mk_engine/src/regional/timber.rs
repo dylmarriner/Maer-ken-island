@@ -1631,6 +1631,14 @@ mod tests {
     }
 
     #[test]
+    fn persisted_zero_log_id_is_invalid_physical_state() {
+        let mut source = log();
+        assert!(source.has_valid_physical_state());
+        source.id = 0;
+        assert!(!source.has_valid_physical_state());
+    }
+
+    #[test]
     fn shared_tip_projection_matches_cross_cut_source_geometry() {
         let source = log();
         let tip = source.tip_m();
