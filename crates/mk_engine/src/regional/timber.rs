@@ -539,6 +539,23 @@ pub fn haul_plans_over(
     if !log.has_valid_physical_state() {
         return Err(LabourError::InvalidTimberLogState);
     }
+    let valid_ute = fleet.ute.is_none_or(|ute| {
+        ute.item_id > 0
+            && ute.litres.is_finite()
+            && ute.litres >= 0.0
+            && ute.litres_per_km.is_finite()
+            && ute.litres_per_km > 0.0
+    });
+    let valid_excavator = fleet.excavator.is_none_or(|excavator| {
+        excavator.item_id > 0
+            && excavator.litres.is_finite()
+            && excavator.litres >= 0.0
+            && excavator.litres_per_hour.is_finite()
+            && excavator.litres_per_hour > 0.0
+    });
+    if !valid_ute || !valid_excavator {
+        return Err(LabourError::InvalidVehicleState);
+    }
     let walk = |d: f64| labour.walking_time_s(body, d, 0.0, 0.0);
     let leg = |from: (f64, f64), to: (f64, f64), load_kg: f64| {
         labour.walking_time_s(body, distance_m(from, to), climb(from, to), load_kg)
@@ -1011,6 +1028,74 @@ mod tests {
             assert!(
                 matches!(result, Err(LabourError::InvalidTimberLogState)),
                 "invalid source log must be rejected before cross-cut materialisation: {result:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn haul_planning_rejects_malformed_road_and_tracked_vehicle_state() {
+        let (labour, body) = (labour(), body());
+        let l = log();
+        let valid_ute = RoadVehicle {
+            item_id: 1,
+            litres: 100.0,
+            litres_per_km: 0.27,
+        };
+        let valid_excavator = TrackedMachine {
+            item_id: 2,
+            litres: 100.0,
+            litres_per_hour: 32.4,
+        };
+
+        let invalid_utes = [
+            RoadVehicle { item_id: 0, ..valid_ute },
+            RoadVehicle { litres: -1.0, ..valid_ute },
+            RoadVehicle { litres: f64::NAN, ..valid_ute },
+            RoadVehicle { litres: f64::INFINITY, ..valid_ute },
+            RoadVehicle { litres_per_km: 0.0, ..valid_ute },
+            RoadVehicle { litres_per_km: -0.1, ..valid_ute },
+            RoadVehicle { litres_per_km: f64::NAN, ..valid_ute },
+            RoadVehicle { litres_per_km: f64::INFINITY, ..valid_ute },
+        ];
+        for ute in invalid_utes {
+            let result = haul_plans(
+                &l,
+                (0.0, 0.0),
+                &body,
+                &labour,
+                &site(),
+                &Fleet { ute: Some(ute), excavator: None },
+                100,
+            );
+            assert!(
+                matches!(result, Err(LabourError::InvalidVehicleState)),
+                "malformed road vehicle must be rejected before planning: {result:?}"
+            );
+        }
+
+        let invalid_excavators = [
+            TrackedMachine { item_id: 0, ..valid_excavator },
+            TrackedMachine { litres: -1.0, ..valid_excavator },
+            TrackedMachine { litres: f64::NAN, ..valid_excavator },
+            TrackedMachine { litres: f64::INFINITY, ..valid_excavator },
+            TrackedMachine { litres_per_hour: 0.0, ..valid_excavator },
+            TrackedMachine { litres_per_hour: -0.1, ..valid_excavator },
+            TrackedMachine { litres_per_hour: f64::NAN, ..valid_excavator },
+            TrackedMachine { litres_per_hour: f64::INFINITY, ..valid_excavator },
+        ];
+        for excavator in invalid_excavators {
+            let result = haul_plans(
+                &l,
+                (0.0, 0.0),
+                &body,
+                &labour,
+                &site(),
+                &Fleet { ute: None, excavator: Some(excavator) },
+                100,
+            );
+            assert!(
+                matches!(result, Err(LabourError::InvalidVehicleState)),
+                "malformed tracked vehicle must be rejected before planning: {result:?}"
             );
         }
     }
