@@ -128,7 +128,16 @@ impl Log {
         )
     }
 
-    /// The tip end (domain metres).\n    pub fn tip_m(&self) -> (f64, f64) {\n        let half = 0.5 * self.length_m;\n        (\n            self.position_m.0 + half * self.heading_rad.cos(),\n            self.position_m.1 + half * self.heading_rad.sin(),\n        )\n    }\n\n    /// Cross-cut into `n` as-equal-as-binary64-allows pieces along the log,
+    /// The tip end (domain metres).
+    pub fn tip_m(&self) -> (f64, f64) {
+        let half = 0.5 * self.length_m;
+        (
+            self.position_m.0 + half * self.heading_rad.cos(),
+            self.position_m.1 + half * self.heading_rad.sin(),
+        )
+    }
+
+    /// Cross-cut into `n` as-equal-as-binary64-allows pieces along the log,
     /// numbered from the butt with ids `first_id..first_id + n`. The final
     /// piece receives each floating-point remainder so totals are conserved.
     /// The caller must supply a reserved, one-based range whose exclusive end
@@ -1431,7 +1440,8 @@ mod tests {
         source.position_m = (f64::MAX, 0.0);
         source.length_m = f64::MAX;
         source.heading_rad = 0.0;
-        assert!(!source.has_valid_physical_state());\n        assert!(!source.tip_m().0.is_finite());
+        assert!(!source.has_valid_physical_state());
+        assert!(!source.tip_m().0.is_finite());
     }
 
     #[test]
