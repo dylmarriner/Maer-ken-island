@@ -1558,7 +1558,7 @@ impl IslandLife {
 
             // The partner works the primary's one persisted crew task. Charge
             // their own body and do not let them start a competing haul/felling job.
-            if let Some((primary_id, partner_met, work_s)) = saw_assistants.get(&id).copied() {
+            if let Some((primary_id, partner_met, work_s)) = saw_assistants.get(&id).cloned() {
                 if self.is_gathering_outdoors(&primary_id) {
                     let work_s = work_s.min(dt_s).max(0.0);
                     let idle_s = (dt_s - work_s).max(0.0);
@@ -1900,8 +1900,7 @@ impl IslandLife {
                     p.space = Space::Outdoors;
                     p.position_m = task.ends_at_m;
                 }
-                if let timber::HaulAction::CrossCutCrew { partner_id, .. } = &task.action
-                {
+                if let timber::HaulAction::CrossCutCrew { partner_id, .. } = &task.action {
                     if let Some(p) = life.positions.0.get_mut(partner_id) {
                         p.space = Space::Outdoors;
                         p.position_m = task.ends_at_m;
