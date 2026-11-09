@@ -595,6 +595,11 @@ pub fn haul_plans_over(
                     maximum_pieces: MAX_CROSS_CUT_PIECES,
                 });
             }
+            // Reject an exhausted one-based ID range before cross_cut can panic
+            // or a later task can wrap its reserved piece identifiers.
+            if first_piece_id == 0 || first_piece_id.checked_add(u64::from(pieces)).is_none() {
+                return Err(LabourError::InvalidHaulJobState);
+            }
             let split = log.cross_cut(pieces, first_piece_id);
             let largest_mass = split.iter().map(Log::green_kg).fold(0.0, f64::max);
             let largest_length = split.iter().map(|piece| piece.length_m).fold(0.0, f64::max);
@@ -1405,6 +1410,23 @@ mod tests {
             .map(|piece| piece.length_m)
             .fold(0.0, f64::max);
         assert!(largest_piece_m <= bed + tolerance);
+    }
+
+    #[test]
+    fn haul_planner_rejects_exhausted_piece_ids_before_cross_cut() {
+        let (labour, body) = (labour(), body());
+        for first_id in [0, u64::MAX] {
+            let result = haul_plans(
+                &log(),
+                (0.0, 0.0),
+                &body,
+                &labour,
+                &site(),
+                &fleet(100.0, 0.0),
+                first_id,
+            );
+            assert!(matches!(result, Err(LabourError::InvalidHaulJobState)));
+        }
     }
 
     #[test]
