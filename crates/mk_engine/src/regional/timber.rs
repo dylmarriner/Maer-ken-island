@@ -386,7 +386,7 @@ impl HaulJob {
                     pieces,
                     first_id,
                 } => {
-                    *log_id > 0
+                    *log_id == self.log_id
                         && *pieces > 0
                         && *pieces <= MAX_CROSS_CUT_PIECES
                         && *first_id > 0
@@ -399,7 +399,7 @@ impl HaulJob {
                     partner_id,
                     partner_met,
                 } => {
-                    *log_id > 0
+                    *log_id == self.log_id
                         && *pieces > 0
                         && *pieces <= MAX_CROSS_CUT_PIECES
                         && *first_id > 0
@@ -1410,6 +1410,39 @@ mod tests {
             .map(|piece| piece.length_m)
             .fold(0.0, f64::max);
         assert!(largest_piece_m <= bed + tolerance);
+    }
+
+    #[test]
+    fn persisted_haul_rejects_cross_cut_for_a_different_source_log() {
+        for crew in [false, true] {
+            let action = if crew {
+                HaulAction::CrossCutCrew {
+                    log_id: 99,
+                    pieces: 2,
+                    first_id: 100,
+                    partner_id: "partner".to_owned(),
+                    partner_met: 3.0,
+                }
+            } else {
+                HaulAction::CrossCut {
+                    log_id: 99,
+                    pieces: 2,
+                    first_id: 100,
+                }
+            };
+            let job = HaulJob {
+                log_id: 42,
+                method: HaulMethod::OnFoot,
+                tasks: VecDeque::from([HaulTask {
+                    action,
+                    duration_s: 60.0,
+                    met: 3.0,
+                    ends_at_m: (0.0, 0.0),
+                }]),
+                worked_s: 0.0,
+            };
+            assert!(!job.has_valid_persisted_state());
+        }
     }
 
     #[test]
