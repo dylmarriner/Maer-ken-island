@@ -58,3 +58,11 @@ No snapshot schema, append-only log format, replay hash, RNG, tick cadence, scie
 - Production simulation behaviour, reference values, snapshot schema, replay hashes, RNG, cadence and material calculations are unchanged. This corrects the acceptance test's time horizon, not the saw duration or the assertion about completion.
 - Source/test correction commit: `0b46fbda85ab6621585d5d6866ea59a625c46213`.
 - Fresh exact-head formatting, Clippy, fast tests, desktop/backend and week/year reference-pack acceptance are required. No pass is claimed until the new head completes.
+
+
+## Follow-up rustfmt correction — 9 November 2026
+
+- The fresh workflow [#42569581446](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42569581446) ran on the duration-driven test correction. The fast-test job stopped at `cargo fmt --all -- --check` before Clippy or fast tests.
+- Rustfmt identified one line-wrap difference in the new `matches!` assertion. Applied the exact formatter output, with no semantic change.
+- Formatting correction commit: `2255b67bc2e6cb5161ca7a395be95ea0f4f4d2cd`.
+- The same workflow's week/year reference-pack, installed-backend and desktop jobs were still running on the preceding head; they do not certify this formatting correction. A fresh exact-head workflow is required.
