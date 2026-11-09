@@ -80,8 +80,8 @@ No snapshot schema, append-only log format, replay hash, RNG, tick cadence, scie
 
 ## Current acceptance status — 9 November 2026
 
-- Current PR #136 head: `524104dc580d5e2727b01ee6fb3c5ed5bc9eaabb`.
-- Latest workflow: [#42569859195](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42569859195), run on source-equivalent head `00a76298ad05744adb5002d736e79b36f86d6f42`. The only later commit changes this handoff document; no source or test files changed after that workflow started.
-- Verified on the workflow head: Rust formatting, Clippy, web dashboard, computer service, repository scripts and dependency audit passed.
-- Still running at last inspection: fast Rust tests, desktop build/tests, installed-backend build/smoke test and week/year reference-pack acceptance.
+- Source/test head for the latest acceptance workflow: `00a76298ad05744adb5002d736e79b36f86d6f42`; workflow [#42569859195](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42569859195).
+- Later commits `524104dc` and `618a3459` only update this handoff; no source or test files changed after the workflow started.
+- Verified on the workflow head: Rust formatting, Clippy, week/year reference-pack acceptance, desktop build and tests, installed-backend build/smoke test, web dashboard, computer service, repository scripts and dependency audit.
+- Still running at last inspection: fast Rust tests and the desktop render/interaction/performance acceptance steps.
 - Do not treat the in-progress jobs as passes; inspect #42569859195 before continuing.
