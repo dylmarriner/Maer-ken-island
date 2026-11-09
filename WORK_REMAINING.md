@@ -848,7 +848,8 @@ PR #129 now also preflights resulting stock totals, not only individual finite/n
 - [x] The Ute haul plan can select the two-person crosscut saw when a second gathering founder is available and the crew cut is faster than the axe plan.
 - [x] Persist one primary crew task; charge the partner's own MET/energy separately without duplicating material mutation.
 - [x] Fall back to the axe if the partner leaves gathering/outdoors work; regression now removes the partner from the work site and verifies the persisted task becomes a solo CrossCut.
-- [x] Regression covers deterministic partner selection, Ute selection, ID reservation, and both founders' energy.
+- [x] Reserve each selected saw assistant for one crew in the current work tick; a later primary cannot claim a founder already assigned to an earlier crew.
+- [x] Regression covers deterministic partner selection, Ute selection, ID reservation, both founders' energy, and exclusion of an already assigned assistant.
 - [ ] Verify exact-head Rust, desktop and installed-backend CI.
 - [ ] Add full-duration cross-cut completion/conservation and interruption/restart acceptance.
 - [ ] Continue terrain-aware routes and vehicle positions.
