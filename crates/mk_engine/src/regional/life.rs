@@ -1501,13 +1501,37 @@ impl IslandLife {
             .labour
             .met(AWAKE_AT_HOME_ACTIVITY)
             .map_err(IslandLifeError::Labour)?;
-        let ids: Vec<String> = self
+        let mut ids: Vec<String> = self
             .humans
             .registry
             .iter()
             .filter(|h| matches!(h.profile.status, mk_core::human::HumanStatus::Alive))
             .map(|h| h.agent_id().to_string())
             .collect();
+        ids.sort();
+
+        // A saw partner is not a second haul job: the primary's persisted
+        // CrossCutCrew task owns the single material mutation, while this map
+        // charges the partner's own body for the same elapsed work.
+        let mut saw_assistants: BTreeMap<String, (String, f64, f64)> = self
+            .hauling
+            .iter()
+            .filter_map(|(primary_id, job)| {
+                let task = job.tasks.front()?;
+                match &task.action {
+                    timber::HaulAction::CrossCutCrew {
+                        partner_id,
+                        partner_met,
+                        ..
+                    } => {
+                        let work_s = dt_s.min((task.duration_s - job.worked_s).max(0.0));
+                        Some((partner_id.clone(), (primary_id.clone(), *partner_met, work_s)))
+                    }
+                    _ => None,
+                }
+            })
+            .collect();
+
         let mut felled: Vec<(String, u64)> = Vec::new();
         let mut done_tasks: Vec<(String, HaulTask)> = Vec::new();
         for id in ids {
@@ -1529,13 +1553,122 @@ impl IslandLife {
                 continue;
             };
 
+            // The partner works the primary's one persisted crew task. Charge
+            // their own body and do not let them start a competing haul/felling job.
+            if let Some((primary_id, partner_met, work_s)) = saw_assistants.get(&id).copied() {
+                if self.is_gathering_outdoors(&primary_id) {
+                    let work_s = work_s.min(dt_s).max(0.0);
+                    let idle_s = (dt_s - work_s).max(0.0);
+                    let spent = self
+                        .labour
+                        .energy_kcal(&body, partner_met, work_s)
+                        .map_err(IslandLifeError::Labour)?
+                        + self
+                            .labour
+                            .energy_kcal(&body, awake_met, idle_s)
+                            .map_err(IslandLifeError::Labour)?;
+                    let baseline = self
+                        .labour
+                        .energy_kcal(&body, awake_met, dt_s)
+                        .map_err(IslandLifeError::Labour)?;
+                    *self.labour_kcal.entry(id.clone()).or_insert(0.0) += (spent - baseline).max(0.0);
+                    let effective_met = if dt_s > 0.0 {
+                        (partner_met * work_s + awake_met * idle_s) / dt_s
+                    } else {
+                        awake_met
+                    };
+                    self.physiques
+                        .record(&self.physique_models, &id, effective_met, dt_s, 0.0);
+                    if let Some(h) = self.humans.registry.get_human_mut(&id) {
+                        h.labour_met = Some(effective_met);
+                    }
+                } else if let Some(h) = self.humans.registry.get_human_mut(&id) {
+                    h.labour_met = None;
+                }
+                continue;
+            }
+
+            // A crew cut can fall back to the axe if its partner leaves work.
+            // Time already spent walking/waiting at the log remains credited.
+            let saw_partner = self
+                .hauling
+                .get(&id)
+                .and_then(|job| job.tasks.front())
+                .and_then(|task| match &task.action {
+                    timber::HaulAction::CrossCutCrew {
+                        log_id,
+                        pieces,
+                        partner_id,
+                        ..
+                    } => Some((*log_id, *pieces, partner_id.clone())),
+                    _ => None,
+                });
+            if let Some((log_id, pieces, partner_id)) = saw_partner {
+                if !self.is_gathering_outdoors(&partner_id) {
+                    saw_assistants.remove(&partner_id);
+                    if let Some(log) = self.materials.log(log_id).cloned() {
+                        let axe = self
+                            .labour
+                            .fell_tree(LabourTool::SteelAxe, log.diameter_m * 100.0)
+                            .map_err(IslandLifeError::Labour)?;
+                        let butt = log.butt_m();
+                        let distance_m = (butt.0 - at.0).hypot(butt.1 - at.1);
+                        let walk_s = self
+                            .labour
+                            .walking_time_s(&body, distance_m, self.climb_m(at, butt), 0.0)
+                            .map_err(IslandLifeError::Labour)?;
+                        let cut_s = f64::from(pieces - 1) * axe.duration_s;
+                        let fallback_s = walk_s + cut_s;
+                        let fallback_met = if fallback_s > 0.0 {
+                            (walk_s * WALKING_MET + cut_s * axe.met) / fallback_s
+                        } else {
+                            WALKING_MET
+                        };
+                        if let Some(job) = self.hauling.get_mut(&id) {
+                            let progress_s = job.worked_s;
+                            if let Some(task) = job.tasks.front_mut() {
+                                task.duration_s = progress_s.max(fallback_s);
+                                task.met = fallback_met;
+                                if let timber::HaulAction::CrossCutCrew {
+                                    log_id,
+                                    pieces,
+                                    first_id,
+                                    ..
+                                } = task.action
+                                {
+                                    task.action = timber::HaulAction::CrossCut {
+                                        log_id,
+                                        pieces,
+                                        first_id,
+                                    };
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             // Between jobs, the person chooses for themselves whether to
             // haul a log lying on the ground or to fell a tree (R14).
             if !self.hauling.contains_key(&id) && !self.felling.contains_key(&id) {
-                if let Some(job) = self.plan_haul(at, &body)? {
+                if let Some(job) = self.plan_haul(&id, at, &body)? {
                     if self.chooses_to_haul(&id, &job, at)? {
                         // Planning is only a preview. Reserve the exact piece-ID
                         // range after the founder accepts, never for a declined haul.
+                        if let Some(task) = job.tasks.front() {
+                            if let timber::HaulAction::CrossCutCrew {
+                                partner_id,
+                                partner_met,
+                                ..
+                            } = &task.action
+                            {
+                                let work_s = dt_s.min((task.duration_s - job.worked_s).max(0.0));
+                                saw_assistants.insert(
+                                    partner_id.clone(),
+                                    (id.clone(), *partner_met, work_s),
+                                );
+                            }
+                        }
                         self.reserve_haul_plan(&job);
                         self.hauling.insert(id.clone(), job);
                     }
@@ -1762,6 +1895,16 @@ impl IslandLife {
                     p.space = Space::Outdoors;
                     p.position_m = task.ends_at_m;
                 }
+                if let timber::HaulAction::CrossCutCrew {
+                    partner_id,
+                    ..
+                } = &task.action
+                {
+                    if let Some(p) = life.positions.0.get_mut(partner_id) {
+                        p.space = Space::Outdoors;
+                        p.position_m = task.ends_at_m;
+                    }
+                }
             }
         })
     }
@@ -1870,8 +2013,20 @@ impl IslandLife {
 
     /// The quickest haul of the log on the ground nearest `at` that no
     /// founder is already moving, or `None` if there is none.
+    fn is_gathering_outdoors(&self, id: &str) -> bool {
+        self.humans.registry.get_human(id).is_some_and(|human| {
+            matches!(human.profile.status, mk_core::human::HumanStatus::Alive)
+                && human.economy_action.kind == crate::humans::ActionKind::Gather
+        }) && self
+            .positions
+            .0
+            .get(id)
+            .is_some_and(|position| position.space == Space::Outdoors)
+    }
+
     fn plan_haul(
         &self,
+        primary_id: &str,
         at: (f64, f64),
         body: &LabourBody,
     ) -> Result<Option<timber::HaulJob>, IslandLifeError> {
@@ -1925,13 +2080,115 @@ impl IslandLife {
         let plans =
             timber::haul_plans_over(&log, at, body, &self.labour, &site, &fleet, first, &climb)
                 .map_err(IslandLifeError::Labour)?;
-        let Some(selected) = timber::quickest(plans) else {
+        let Some(mut selected) = timber::quickest(plans) else {
             return Ok(None);
         };
+
+        // The Ute's first task can use the shed's two-person crosscut saw.
+        // The lower-sorted founder owns the single persisted haul job; the
+        // partner's body is charged separately by work() for the same task.
+        if selected.method == timber::HaulMethod::Ute && self.estate_has_tool(FELLING_SAW) {
+            let butt = log.butt_m();
+            let partner = self
+                .humans
+                .registry
+                .iter()
+                .filter(|human| human.agent_id() > primary_id)
+                .filter(|human| matches!(human.profile.status, mk_core::human::HumanStatus::Alive))
+                .filter(|human| human.economy_action.kind == crate::humans::ActionKind::Gather)
+                .filter(|human| {
+                    let id = human.agent_id();
+                    !self.hauling.contains_key(id)
+                        && !self.felling.contains_key(id)
+                        && !self.mining.contains_key(id)
+                        && !self.foraging.contains_key(id)
+                        && !self.water_trips.contains_key(id)
+                })
+                .filter_map(|human| {
+                    let position = self.positions.0.get(human.agent_id())?;
+                    (position.space == Space::Outdoors).then(|| {
+                        (
+                            human.agent_id().to_string(),
+                            LabourBody::from_human(human),
+                            position.position_m,
+                        )
+                    })
+                })
+                .min_by(|a, b| {
+                    let da = (a.2.0 - butt.0).hypot(a.2.1 - butt.1);
+                    let db = (b.2.0 - butt.0).hypot(b.2.1 - butt.1);
+                    da.total_cmp(&db).then(a.0.cmp(&b.0))
+                });
+
+            if let Some((partner_id, partner_body, partner_at)) = partner {
+                let cross_cut = selected.tasks.front().and_then(|task| match &task.action {
+                    timber::HaulAction::CrossCut {
+                        log_id: task_log_id,
+                        pieces,
+                        first_id,
+                        ..
+                    } if *task_log_id == log.id => Some((*pieces, *first_id, task.duration_s)),
+                    _ => None,
+                });
+                if let Some((pieces, first_id, axe_task_s)) = cross_cut {
+                    if pieces > 1 {
+                        let saw = self
+                            .labour
+                            .fell_tree(LabourTool::CrosscutSaw, log.diameter_m * 100.0)
+                            .map_err(IslandLifeError::Labour)?;
+                        let primary_distance = (butt.0 - at.0).hypot(butt.1 - at.1);
+                        let partner_distance = (butt.0 - partner_at.0).hypot(butt.1 - partner_at.1);
+                        let primary_walk_s = self
+                            .labour
+                            .walking_time_s(body, primary_distance, self.climb_m(at, butt), 0.0)
+                            .map_err(IslandLifeError::Labour)?;
+                        let partner_walk_s = self
+                            .labour
+                            .walking_time_s(
+                                &partner_body,
+                                partner_distance,
+                                self.climb_m(partner_at, butt),
+                                0.0,
+                            )
+                            .map_err(IslandLifeError::Labour)?;
+                        let crew_walk_s = primary_walk_s.max(partner_walk_s);
+                        let saw_cut_s = f64::from(pieces - 1) * saw.duration_s;
+                        let crew_duration_s = crew_walk_s + saw_cut_s;
+                        if crew_duration_s + 1e-9 < axe_task_s && crew_duration_s > 0.0 {
+                            let awake_met = self
+                                .labour
+                                .met(AWAKE_AT_HOME_ACTIVITY)
+                                .map_err(IslandLifeError::Labour)?;
+                            let blended_met = |walk_s: f64| {
+                                let wait_s = (crew_walk_s - walk_s).max(0.0);
+                                (walk_s * WALKING_MET
+                                    + wait_s * awake_met
+                                    + saw_cut_s * saw.met)
+                                    / crew_duration_s
+                            };
+                            if let Some(task) = selected.tasks.front_mut() {
+                                task.duration_s = crew_duration_s;
+                                task.met = blended_met(primary_walk_s);
+                                task.action = timber::HaulAction::CrossCutCrew {
+                                    log_id: log.id,
+                                    pieces,
+                                    first_id,
+                                    partner_id,
+                                    partner_met: blended_met(partner_walk_s),
+                                };
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // Planning only previews the current allocator range. The range is
         // reserved later, after the founder chooses this haul over felling.
         for task in &selected.tasks {
-            if let timber::HaulAction::CrossCut { first_id, .. } = &task.action {
+            if let timber::HaulAction::CrossCut { first_id, .. }
+            | timber::HaulAction::CrossCutCrew { first_id, .. } = &task.action
+            {
                 assert_eq!(
                     *first_id, first,
                     "selected haul must use the previewed piece-id range"
@@ -1950,6 +2207,9 @@ impl IslandLife {
             .iter()
             .filter_map(|task| match &task.action {
                 timber::HaulAction::CrossCut {
+                    pieces, first_id, ..
+                }
+                | timber::HaulAction::CrossCutCrew {
                     pieces, first_id, ..
                 } => {
                     if let Some(expected) = planned_first_id {
@@ -2002,6 +2262,12 @@ impl IslandLife {
                 log_id,
                 pieces,
                 first_id,
+            }
+            | HaulAction::CrossCutCrew {
+                log_id,
+                pieces,
+                first_id,
+                ..
             } => {
                 assert!(
                     self.materials.restore_pending_cross_cut_ids(*log_id, *pieces, *first_id),
@@ -4345,6 +4611,140 @@ mod tests {
         assert_eq!(life.materials.logs().count(), 1, "one log came down");
     }
 
+    /// Two founders use the shed's crosscut saw to prepare a long log
+    /// for the Ute. The single persisted haul owns the cut, while both
+    /// founders' own bodies pay the walking and saw energy.
+    #[test]
+    fn two_founders_cross_cut_a_ute_log_with_the_saw_and_both_pay_energy() {
+        let mut scenario =
+            IslandScenario::load(&repo("fixtures/island/default_scenario.json")).unwrap();
+        scenario.estate_patch.tree_cap = 200;
+        let canon = Arc::new(CanonLocked::load(&repo("fixtures/island/canon.json")).unwrap());
+        let mut life = IslandLife::bootstrap(scenario, canon).expect("the island bootstraps");
+        assert!(life.estate_has_tool(FELLING_SAW), "the shed has the saw");
+
+        let site = life.haul_site().expect("the estate has a garage and store");
+        let at = site.garage_m;
+        for who in ["Gem-D", "Gem-K"] {
+            life.positions.0.insert(
+                who.into(),
+                super::super::humans::EstatePosition {
+                    space: Space::Outdoors,
+                    position_m: at,
+                },
+            );
+            life.humans
+                .registry
+                .get_human_mut(who)
+                .unwrap()
+                .economy_action
+                .kind = crate::humans::ActionKind::Gather;
+        }
+
+        let excavator_id = life
+            .energy
+            .vehicle_named(HAUL_EXCAVATOR)
+            .expect("the estate has an excavator")
+            .item_id;
+        life.energy
+            .vehicles
+            .iter_mut()
+            .find(|vehicle| vehicle.item_id == excavator_id)
+            .expect("the excavator is in the fleet")
+            .litres = 0.0;
+        let ute_id = life
+            .energy
+            .vehicle_named(HAUL_UTE)
+            .expect("the estate has a Ute")
+            .item_id;
+        life.energy
+            .vehicles
+            .iter_mut()
+            .find(|vehicle| vehicle.item_id == ute_id)
+            .expect("the Ute is in the fleet")
+            .litres = 100.0;
+
+        let log = timber::Log {
+            id: 0,
+            position_m: (site.garage_m.0 + 1_000.0, site.garage_m.1),
+            heading_rad: 0.0,
+            length_m: 20.0,
+            diameter_m: 0.30,
+            dry_kg: 500.0,
+            carbon_kgc: 250.0,
+            water_kg: 410.0,
+            place: timber::LogPlace::Ground,
+        };
+        let cell = life.placed.location;
+        let area = life.domain.cell_area_m2(DomainLevel::Medium);
+        let mut ledger = Ledger::new();
+        let source_id = life.materials.receive_felled_log(
+            log,
+            &mut life.physical.hydrology,
+            cell,
+            area,
+            &mut ledger,
+        );
+        let first_piece_id = life.materials.next_log_id();
+        let body = LabourBody::from_human(life.humans.registry.get_human("Gem-D").unwrap());
+
+        let job = life
+            .plan_haul("Gem-D", at, &body)
+            .unwrap()
+            .expect("the long ground log has a haul plan");
+        assert_eq!(job.method, timber::HaulMethod::Ute, "the Ute is the quickest vehicle");
+        let task = job.tasks.front().expect("the Ute starts with cross-cutting");
+        let pieces = match &task.action {
+            timber::HaulAction::CrossCutCrew {
+                pieces,
+                partner_id,
+                partner_met,
+                ..
+            } => {
+                assert_eq!(partner_id, "Gem-K");
+                assert!(partner_met.is_finite() && *partner_met > 0.0);
+                *pieces
+            }
+            other => panic!("the Ute plan must start with a crew cross-cut, got {other:?}"),
+        };
+        assert!(pieces > 1);
+        assert!(task.duration_s > 60.0);
+        assert_eq!(
+            life.materials.next_log_id(),
+            first_piece_id,
+            "planning previews IDs without reserving them"
+        );
+
+        life.reserve_haul_plan(&job);
+        life.hauling.insert("Gem-D".into(), job);
+        life.work(60.0).unwrap();
+
+        assert!(
+            life.hauling.get("Gem-D").is_some_and(|job| job.worked_s >= 60.0),
+            "the primary haul advances"
+        );
+        assert!(
+            !life.hauling.contains_key("Gem-K"),
+            "the saw partner is not a second material-owning haul job"
+        );
+        assert!(
+            life.labour_kcal.get("Gem-D").copied().unwrap_or(0.0) > 0.0,
+            "the primary founder pays their own work energy"
+        );
+        assert!(
+            life.labour_kcal.get("Gem-K").copied().unwrap_or(0.0) > 0.0,
+            "the saw partner pays their own work energy"
+        );
+        assert!(
+            life.humans.registry.get_human("Gem-K").unwrap().labour_met.is_some(),
+            "the partner's labour is visible to the next lifecycle step"
+        );
+        assert!(
+            life.materials.log(source_id).is_some(),
+            "the source log remains until the planned saw task finishes"
+        );
+    }
+
     /// A founder who gathers outdoors with the shed's axe walks to the
     /// nearest tree and fells it after exactly the walk plus the felling
     /// pack's time for that trunk; its usable wood lands in the estate's
@@ -4500,12 +4900,12 @@ mod tests {
         );
 
         // A vehicle another founder is hauling with is not in the garage.
-        let quickest = life.plan_haul(at, &body).unwrap().expect("a plan");
+        let quickest = life.plan_haul("Gem-D", at, &body).unwrap().expect("a plan");
         if quickest.method != timber::HaulMethod::OnFoot {
             let mut elsewhere = quickest.clone();
             elsewhere.log_id = u64::MAX;
             life.hauling.insert("Elsewhere".into(), elsewhere);
-            let next = life.plan_haul(at, &body).unwrap().expect("another plan");
+            let next = life.plan_haul("Gem-D", at, &body).unwrap().expect("another plan");
             assert_ne!(next.method, quickest.method, "the vehicle is out");
             life.hauling.remove("Elsewhere");
         }
@@ -4782,7 +5182,7 @@ mod tests {
         let first_piece_id = life.materials.next_log_id();
         let body = LabourBody::from_human(life.humans.registry.get_human("Gem-D").unwrap());
         assert!(
-            life.plan_haul(at, &body).unwrap().is_some(),
+            life.plan_haul("Gem-D", at, &body).unwrap().is_some(),
             "the ground log has a valid candidate haul"
         );
         assert_eq!(

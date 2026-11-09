@@ -274,6 +274,15 @@ pub enum HaulAction {
         pieces: u32,
         first_id: u64,
     },
+    /// One founder owns the material cut; a second founder supplies the
+    /// other end of the saw and is charged separately by the life work loop.
+    CrossCutCrew {
+        log_id: u64,
+        pieces: u32,
+        first_id: u64,
+        partner_id: String,
+        partner_met: f64,
+    },
     /// Drive a road vehicle `km`, carrying `logs`.
     Drive {
         vehicle_id: u64,
@@ -372,6 +381,22 @@ impl HaulJob {
                         && *pieces <= MAX_CROSS_CUT_PIECES
                         && *first_id > 0
                         && first_id.checked_add(u64::from(*pieces)).is_some()
+                }
+                HaulAction::CrossCutCrew {
+                    log_id,
+                    pieces,
+                    first_id,
+                    partner_id,
+                    partner_met,
+                } => {
+                    *log_id > 0
+                        && *pieces > 0
+                        && *pieces <= MAX_CROSS_CUT_PIECES
+                        && *first_id > 0
+                        && first_id.checked_add(u64::from(*pieces)).is_some()
+                        && !partner_id.trim().is_empty()
+                        && partner_met.is_finite()
+                        && *partner_met > 0.0
                 }
                 HaulAction::Drive {
                     vehicle_id,

@@ -172,7 +172,8 @@ the log's last water is booked to the air at that moment rather than when the wo
   and two at one tree fell it at the pack's two-person crosscut time (`labour/productivity.json`, 8-25 min for
   30 cm; FAO Forest Harvesting Case Study 18 measured two-cutter crosscut crews at 1.11-1.99
   m³/h). Left: cross-cutting a log for the ute with the saw rather than the axe.
-  - 2026-11-08: public haul planning now rejects malformed source logs with a typed error before split materialisation; the two-person saw workflow for log cross-cutting remains open.
+  - 2026-11-08: public haul planning rejects malformed source logs with a typed error before split materialisation.
+  - 2026-11-09: the Ute plan can use the shed's two-person crosscut saw when a second gathering founder is available; one persisted crew task owns the material split, both founders' bodies are charged separately, and a partner who leaves work falls back to the axe. Regression: regional::life::tests::two_founders_cross_cut_a_ute_log_with_the_saw_and_both_pay_energy.
 - **Excavator rigging (done 2026-10-23, D40):** the CAT 330 has no grapple, so its operator
   slings each log by hand before the pick-up and frees it after the set-down, at Borz & Mititelu
   2022's measured hook and unhook times for hand-rigged winch logs (13.59 s and 9.30 s, 278 logs,
@@ -840,3 +841,14 @@ PR #129 now also preflights resulting stock totals, not only individual finite/n
 - Regression tests cover both Wood and Water at `f64::MAX`, asserting typed rejection and unchanged stock/flux entries.
 - Commits: production `a27d9af74d7a74d06e6cd776245e64f4e2513c16`; tests `534ad3279a8fe916d6d6bfd7d50e42ccde7413ae`.
 - Fresh exact-head CI is required; no local Cargo result is claimed.
+
+
+## D40 two-person Ute cross-cut — 9 November 2026
+
+- [x] The Ute haul plan can select the two-person crosscut saw when a second gathering founder is available and the crew cut is faster than the axe plan.
+- [x] Persist one primary crew task; charge the partner's own MET/energy separately without duplicating material mutation.
+- [x] Fall back to the axe if the partner leaves gathering/outdoors work.
+- [x] Regression covers deterministic partner selection, Ute selection, ID reservation, and both founders' energy.
+- [ ] Verify exact-head Rust, desktop and installed-backend CI.
+- [ ] Add full-duration cross-cut completion/conservation and interruption/restart acceptance.
+- [ ] Continue terrain-aware routes and vehicle positions.
