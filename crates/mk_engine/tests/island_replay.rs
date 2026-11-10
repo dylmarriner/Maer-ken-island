@@ -620,6 +620,33 @@ fn load_refuses_nonobject_and_non_utf8_replay_sources() {
     }
 }
 
+/// Syntactically valid objects missing mandatory replay fields must fail closed.
+#[test]
+fn load_refuses_incomplete_replay_objects() {
+    let dir = tempfile::tempdir().unwrap();
+    for (name, bytes) in [
+        ("empty-object.json", b"{}".as_slice()),
+        (
+            "missing-entries.json",
+            br#"{"version":1,"scenario_digest":"abc"}"#.as_slice(),
+        ),
+        (
+            "wrong-entries.json",
+            br#"{"version":1,"scenario_digest":"abc","entries":{}}"#.as_slice(),
+        ),
+    ] {
+        let path = dir.path().join(name);
+        std::fs::write(&path, bytes).unwrap();
+        assert!(
+            matches!(
+                IslandReplayLog::load(&path),
+                Err(IslandReplayError::NotALog(..))
+            ),
+            "incomplete replay object {name} was accepted"
+        );
+    }
+}
+
 /// A replay path must name the private file itself, not a symlink to another file.
 #[cfg(unix)]
 #[test]
