@@ -558,6 +558,16 @@ fn save_refuses_serialized_replay_over_the_size_limit() {
     );
 }
 
+/// Directories must be rejected before attempting to read replay bytes.
+#[test]
+fn load_refuses_directory_replay_sources() {
+    let dir = tempfile::tempdir().unwrap();
+    assert!(matches!(
+        IslandReplayLog::load(dir.path()),
+        Err(IslandReplayError::NotALog(_, _))
+    ));
+}
+
 /// A replay path must name the private file itself, not a symlink to another file.
 #[cfg(unix)]
 #[test]
