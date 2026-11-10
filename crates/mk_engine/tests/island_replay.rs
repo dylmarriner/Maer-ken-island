@@ -579,6 +579,26 @@ fn load_refuses_missing_replay_sources() {
     ));
 }
 
+/// Existing but malformed replay files must never be treated as empty histories.
+#[test]
+fn load_refuses_empty_and_malformed_replay_files() {
+    let dir = tempfile::tempdir().unwrap();
+    for (name, bytes) in [
+        ("empty.json", "".as_bytes()),
+        ("truncated.json", b"{\"version\":".as_slice()),
+    ] {
+        let path = dir.path().join(name);
+        std::fs::write(&path, bytes).unwrap();
+        assert!(
+            matches!(
+                IslandReplayLog::load(&path),
+                Err(IslandReplayError::NotALog(_, _))
+            ),
+            "invalid replay source {name} was accepted"
+        );
+    }
+}
+
 /// A replay path must name the private file itself, not a symlink to another file.
 #[cfg(unix)]
 #[test]
