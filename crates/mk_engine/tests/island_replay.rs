@@ -568,6 +568,17 @@ fn load_refuses_directory_replay_sources() {
     ));
 }
 
+/// Missing replay sources must produce an I/O error rather than an empty log.
+#[test]
+fn load_refuses_missing_replay_sources() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("missing-replay.json");
+    assert!(matches!(
+        IslandReplayLog::load(&path),
+        Err(IslandReplayError::Io(_, error)) if error.kind() == std::io::ErrorKind::NotFound
+    ));
+}
+
 /// A replay path must name the private file itself, not a symlink to another file.
 #[cfg(unix)]
 #[test]
