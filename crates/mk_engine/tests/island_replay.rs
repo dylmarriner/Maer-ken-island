@@ -599,6 +599,27 @@ fn load_refuses_empty_and_malformed_replay_files() {
     }
 }
 
+/// A valid JSON scalar or invalid UTF-8 must never masquerade as a replay log.
+#[test]
+fn load_refuses_nonobject_and_non_utf8_replay_sources() {
+    let dir = tempfile::tempdir().unwrap();
+    for (name, bytes) in [
+        ("scalar.json", b"null".as_slice()),
+        ("array.json", b"[]".as_slice()),
+        ("invalid-utf8.json", b"\xff\xfe".as_slice()),
+    ] {
+        let path = dir.path().join(name);
+        std::fs::write(&path, bytes).unwrap();
+        assert!(
+            matches!(
+                IslandReplayLog::load(&path),
+                Err(IslandReplayError::NotALog(_, _))
+            ),
+            "invalid replay source {name} was accepted"
+        );
+    }
+}
+
 /// A replay path must name the private file itself, not a symlink to another file.
 #[cfg(unix)]
 #[test]
