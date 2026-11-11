@@ -688,6 +688,20 @@ mod replay_serialization_tests {
     }
 
     #[test]
+    fn replay_loader_refuses_utf8_bom_before_valid_history() {
+        let dir = tempfile::tempdir().expect("temporary directory");
+        let path = dir.path().join("bom-prefixed.json");
+        let log = IslandReplayLog::new("0".repeat(64));
+        let mut bytes = vec![0xef, 0xbb, 0xbf];
+        bytes.extend_from_slice(&serde_json::to_vec(&log).expect("serialize replay"));
+        std::fs::write(&path, bytes).expect("write replay");
+        assert!(matches!(
+            IslandReplayLog::load(&path),
+            Err(IslandReplayError::NotALog(_, _))
+        ));
+    }
+
+    #[test]
     fn replay_loader_refuses_trailing_data_after_valid_history() {
         let dir = tempfile::tempdir().expect("temporary directory");
         let path = dir.path().join("trailing-data.json");
