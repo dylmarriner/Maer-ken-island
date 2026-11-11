@@ -684,6 +684,19 @@ fn load_refuses_symlinked_replay_paths() {
     ));
 }
 
+/// Even a symlink whose target is a directory must fail before opening it.
+#[cfg(unix)]
+#[test]
+fn load_refuses_symlinked_directory_replay_paths() {
+    let dir = tempfile::tempdir().unwrap();
+    let link = dir.path().join("linked-directory.json");
+    std::os::unix::fs::symlink(dir.path(), &link).unwrap();
+    assert!(matches!(
+        IslandReplayLog::load(&link),
+        Err(IslandReplayError::NotALog(_, reason)) if reason.contains("regular file")
+    ));
+}
+
 /// A FIFO is not a replay file. Loading it must refuse the special file rather than
 /// treating a stream with no stable length as a bounded replay document.
 #[cfg(unix)]
