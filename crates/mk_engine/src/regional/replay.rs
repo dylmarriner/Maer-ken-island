@@ -136,6 +136,21 @@ impl IslandReplayLog {
             ));
         }
 
+        // Reject a path replaced between lstat and open, even if both targets
+        // are regular files. This prevents silently replaying a different log.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt;
+            if path_metadata.dev() != opened_metadata.dev()
+                || path_metadata.ino() != opened_metadata.ino()
+            {
+                return Err(IslandReplayError::NotALog(
+                    path_name.clone(),
+                    "replay source changed while opening".to_string(),
+                ));
+            }
+        }
+
         let size = opened_metadata.len();
         if size > MAX_REPLAY_LOG_BYTES {
             return Err(IslandReplayError::TooLarge {
