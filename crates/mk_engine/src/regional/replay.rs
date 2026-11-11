@@ -649,6 +649,14 @@ mod replay_serialization_tests {
     }
 
     #[test]
+    fn replay_loader_refuses_invalid_utf8() {
+        let dir = tempfile::tempdir().expect("temporary directory");
+        let path = dir.path().join("invalid-utf8.json");
+        std::fs::write(&path, [0xff, 0xfe, 0xfd]).expect("write invalid bytes");
+        assert!(IslandReplayLog::load(&path).is_err());
+    }
+
+    #[test]
     fn replay_loader_refuses_empty_regular_file() {
         let path = std::env::temp_dir().join(format!(
             "mk-replay-empty-{}-{:?}.json",
