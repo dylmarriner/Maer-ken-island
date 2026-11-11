@@ -662,6 +662,24 @@ mod replay_serialization_tests {
     }
 
     #[test]
+    fn record_rejects_exhausted_sequence_without_mutating_history() {
+        let mut log = IslandReplayLog::new("0".repeat(64));
+        let command = IslandCommand::Control(ControlCommand::Pause);
+        log.entries.push(IslandReplayEntry {
+            tick: 7,
+            sequence: u64::MAX,
+            command: command.clone(),
+        });
+        let before = serde_json::to_value(&log).expect("serialize original history");
+        let result = log.record(7, command);
+        assert!(matches!(
+            result,
+            Err(IslandReplayError::SequenceExhausted { tick: 7 })
+        ));
+        assert_eq!(serde_json::to_value(&log).unwrap(), before);
+    }
+
+    #[test]
     fn replay_loader_refuses_invalid_utf8() {
         let dir = tempfile::tempdir().expect("temporary directory");
         let path = dir.path().join("invalid-utf8.json");
