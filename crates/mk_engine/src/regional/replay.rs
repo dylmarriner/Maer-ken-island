@@ -196,6 +196,33 @@ impl IslandReplayLog {
                 "replay source size changed during read".to_string(),
             ));
         }
+        // Equal-length rewrites can evade a size-only check. Detect ordinary
+        // in-place modifications by comparing the opened inode's timestamps.
+        // This is best-effort: writers that forge timestamps require external
+        // file-integrity protection.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt;
+            let final_metadata = file
+                .metadata()
+                .map_err(|error| IslandReplayError::Io(path_name.clone(), error))?;
+            if (
+                opened_metadata.mtime(),
+                opened_metadata.mtime_nsec(),
+                opened_metadata.ctime(),
+                opened_metadata.ctime_nsec(),
+            ) != (
+                final_metadata.mtime(),
+                final_metadata.mtime_nsec(),
+                final_metadata.ctime(),
+                final_metadata.ctime_nsec(),
+            ) {
+                return Err(IslandReplayError::NotALog(
+                    path_name.clone(),
+                    "replay source modified during read".to_string(),
+                ));
+            }
+        }
 
         // A path may be swapped after open. Refuse to accept history if its
         // directory entry no longer identifies the file we actually read.
