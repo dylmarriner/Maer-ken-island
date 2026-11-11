@@ -175,6 +175,15 @@ impl IslandReplayLog {
             });
         }
 
+        // An in-place truncation during the read must not silently turn into
+        // a different replay history, even when the remaining JSON is valid.
+        if (read as u64) < size {
+            return Err(IslandReplayError::NotALog(
+                path_name.clone(),
+                "replay source truncated during read".to_string(),
+            ));
+        }
+
         // A path may be swapped after open. Refuse to accept history if its
         // directory entry no longer identifies the file we actually read.
         #[cfg(unix)]
