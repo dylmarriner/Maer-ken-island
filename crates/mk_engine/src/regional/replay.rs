@@ -681,6 +681,21 @@ mod replay_serialization_tests {
     }
 
     #[test]
+    fn replay_loader_accepts_trailing_json_whitespace() {
+        let dir = tempfile::tempdir().expect("temporary directory");
+        let path = dir.path().join("trailing-whitespace.json");
+        let log = IslandReplayLog::new("0".repeat(64));
+        let mut bytes = serde_json::to_vec(&log).expect("serialize replay");
+        bytes.extend_from_slice(b" \n\t ");
+        std::fs::write(&path, bytes).expect("write replay");
+        let loaded = IslandReplayLog::load(&path).expect("whitespace is valid JSON");
+        assert_eq!(
+            serde_json::to_value(loaded).unwrap(),
+            serde_json::to_value(log).unwrap()
+        );
+    }
+
+    #[test]
     fn replay_loader_refuses_empty_regular_file() {
         let path = std::env::temp_dir().join(format!(
             "mk-replay-empty-{}-{:?}.json",
