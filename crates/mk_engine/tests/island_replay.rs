@@ -647,6 +647,26 @@ fn load_refuses_incomplete_replay_objects() {
     }
 }
 
+/// JSON with trailing data is not a single unambiguous replay document.
+#[test]
+fn load_refuses_trailing_json_documents() {
+    let dir = tempfile::tempdir().unwrap();
+    for (name, bytes) in [
+        ("two-documents.json", b"{}{}".as_slice()),
+        ("trailing-garbage.json", b"{} unexpected".as_slice()),
+    ] {
+        let path = dir.path().join(name);
+        std::fs::write(&path, bytes).unwrap();
+        assert!(
+            matches!(
+                IslandReplayLog::load(&path),
+                Err(IslandReplayError::NotALog(..))
+            ),
+            "trailing content in {name} was accepted"
+        );
+    }
+}
+
 /// A replay path must name the private file itself, not a symlink to another file.
 #[cfg(unix)]
 #[test]
