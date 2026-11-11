@@ -670,6 +670,17 @@ mod replay_serialization_tests {
     }
 
     #[test]
+    fn replay_loader_refuses_trailing_data_after_valid_history() {
+        let dir = tempfile::tempdir().expect("temporary directory");
+        let path = dir.path().join("trailing-data.json");
+        let log = IslandReplayLog::new("0".repeat(64));
+        let mut bytes = serde_json::to_vec(&log).expect("serialize replay");
+        bytes.extend_from_slice(b"\n{\"injected\":true}");
+        std::fs::write(&path, bytes).expect("write malformed replay");
+        assert!(IslandReplayLog::load(&path).is_err());
+    }
+
+    #[test]
     fn replay_loader_refuses_empty_regular_file() {
         let path = std::env::temp_dir().join(format!(
             "mk-replay-empty-{}-{:?}.json",
