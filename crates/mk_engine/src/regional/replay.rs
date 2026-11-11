@@ -595,6 +595,24 @@ mod replay_serialization_tests {
     }
 
     #[test]
+    fn replay_loader_rejects_truncated_json_without_accepting_partial_history() {
+        let base = std::env::temp_dir().join(format!(
+            "mk-replay-truncated-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        std::fs::create_dir(&base).unwrap();
+        let path = base.join("truncated.json");
+        let log = IslandReplayLog::new("0".repeat(64));
+        let mut bytes = serde_json::to_vec(&log).unwrap();
+        bytes.pop();
+        std::fs::write(&path, bytes).unwrap();
+        let result = IslandReplayLog::load(&path);
+        std::fs::remove_dir_all(&base).unwrap();
+        assert!(matches!(result, Err(IslandReplayError::NotALog(_, _))));
+    }
+
+    #[test]
     fn serialized_size_is_counted_exactly_before_output_allocation() {
         let log = IslandReplayLog::new("0".repeat(64));
         let expected = serde_json::to_vec_pretty(&log).unwrap();
