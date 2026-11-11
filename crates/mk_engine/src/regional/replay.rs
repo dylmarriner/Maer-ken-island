@@ -175,6 +175,24 @@ impl IslandReplayLog {
             });
         }
 
+        // A path may be swapped after open. Refuse to accept history if its
+        // directory entry no longer identifies the file we actually read.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt;
+            let final_metadata = fs::symlink_metadata(path)
+                .map_err(|error| IslandReplayError::Io(path_name.clone(), error))?;
+            if !final_metadata.is_file()
+                || final_metadata.dev() != opened_metadata.dev()
+                || final_metadata.ino() != opened_metadata.ino()
+            {
+                return Err(IslandReplayError::NotALog(
+                    path_name.clone(),
+                    "replay source changed during read".to_string(),
+                ));
+            }
+        }
+
         let log: Self = serde_json::from_slice(&bytes)
             .map_err(|e| IslandReplayError::NotALog(path_name, e.to_string()))?;
         if log.version != REPLAY_LOG_VERSION {
