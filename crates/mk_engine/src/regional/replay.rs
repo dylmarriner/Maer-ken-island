@@ -541,6 +541,26 @@ mod replay_serialization_tests {
     use super::*;
     use std::path::Path;
 
+    #[cfg(unix)]
+    #[test]
+    fn replay_loader_refuses_symlinks_even_when_target_is_valid() {
+        use std::os::unix::fs::symlink;
+        let base = std::env::temp_dir().join(format!(
+            "mk-replay-symlink-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        std::fs::create_dir(&base).unwrap();
+        let target = base.join("valid.json");
+        let link = base.join("linked.json");
+        let log = IslandReplayLog::new("0".repeat(64));
+        std::fs::write(&target, serde_json::to_vec(&log).unwrap()).unwrap();
+        symlink(&target, &link).unwrap();
+        let result = IslandReplayLog::load(&link);
+        std::fs::remove_dir_all(&base).unwrap();
+        assert!(matches!(result, Err(IslandReplayError::NotALog(_, _))));
+    }
+
     #[test]
     fn serialized_size_is_counted_exactly_before_output_allocation() {
         let log = IslandReplayLog::new("0".repeat(64));
