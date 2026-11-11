@@ -623,6 +623,32 @@ mod replay_serialization_tests {
     }
 
     #[test]
+    fn replay_loader_refuses_directory_as_log() {
+        let base = std::env::temp_dir().join(format!(
+            "mk-replay-direct-directory-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        std::fs::create_dir(&base).unwrap();
+        let result = IslandReplayLog::load(&base);
+        std::fs::remove_dir(&base).unwrap();
+        assert!(matches!(result, Err(IslandReplayError::NotALog(_, _))));
+    }
+
+    #[test]
+    fn replay_loader_refuses_empty_regular_file() {
+        let path = std::env::temp_dir().join(format!(
+            "mk-replay-empty-{}-{:?}.json",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        std::fs::File::create_new(&path).unwrap();
+        let result = IslandReplayLog::load(&path);
+        std::fs::remove_file(&path).unwrap();
+        assert!(matches!(result, Err(IslandReplayError::NotALog(_, _))));
+    }
+
+    #[test]
     fn replay_loader_rejects_sparse_oversize_before_reading() {
         let path = std::env::temp_dir().join(format!(
             "mk-replay-oversize-{}-{:?}.json",
