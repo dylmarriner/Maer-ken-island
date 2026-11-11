@@ -184,6 +184,19 @@ impl IslandReplayLog {
             ));
         }
 
+        // Also reject in-place mutation after the read. A concurrent writer
+        // may extend or truncate the same inode without replacing its path.
+        let final_opened_size = file
+            .metadata()
+            .map_err(|error| IslandReplayError::Io(path_name.clone(), error))?
+            .len();
+        if final_opened_size != size {
+            return Err(IslandReplayError::NotALog(
+                path_name.clone(),
+                "replay source size changed during read".to_string(),
+            ));
+        }
+
         // A path may be swapped after open. Refuse to accept history if its
         // directory entry no longer identifies the file we actually read.
         #[cfg(unix)]
