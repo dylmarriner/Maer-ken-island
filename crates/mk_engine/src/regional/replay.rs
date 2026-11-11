@@ -595,6 +595,28 @@ mod replay_serialization_tests {
     }
 
     #[test]
+    fn replay_loader_rejects_sparse_oversize_before_reading() {
+        let path = std::env::temp_dir().join(format!(
+            "mk-replay-oversize-{}-{:?}.json",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+            .unwrap();
+        file.set_len(MAX_REPLAY_LOG_BYTES + 1).unwrap();
+        drop(file);
+        let result = IslandReplayLog::load(&path);
+        std::fs::remove_file(&path).unwrap();
+        assert!(
+            matches!(result, Err(IslandReplayError::TooLarge { bytes, max_bytes, .. })
+            if bytes == MAX_REPLAY_LOG_BYTES + 1 && max_bytes == MAX_REPLAY_LOG_BYTES)
+        );
+    }
+
+    #[test]
     fn replay_loader_rejects_truncated_json_without_accepting_partial_history() {
         let base = std::env::temp_dir().join(format!(
             "mk-replay-truncated-{}-{:?}",
