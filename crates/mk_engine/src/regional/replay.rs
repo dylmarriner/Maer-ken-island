@@ -123,7 +123,7 @@ impl IslandReplayLog {
             use std::os::unix::fs::OpenOptionsExt;
             options.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
         }
-        let file = options
+        let mut file = options
             .open(path)
             .map_err(|error| IslandReplayError::Io(path_name.clone(), error))?;
         let opened_metadata = file
@@ -163,7 +163,7 @@ impl IslandReplayLog {
         // Read at most one byte beyond the limit as well: the file may grow
         // after metadata was inspected, and that must not bypass the bound.
         let mut bytes = Vec::with_capacity(size as usize);
-        let read = file
+        let read = (&mut file)
             .take(MAX_REPLAY_LOG_BYTES + 1)
             .read_to_end(&mut bytes)
             .map_err(|error| IslandReplayError::Io(path_name.clone(), error))?;
