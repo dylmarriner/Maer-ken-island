@@ -603,6 +603,25 @@ mod replay_serialization_tests {
         assert!(matches!(result, Err(IslandReplayError::NotALog(_, _))));
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn replay_loader_refuses_directory_symlinks() {
+        use std::os::unix::fs::symlink;
+        let base = std::env::temp_dir().join(format!(
+            "mk-replay-dir-link-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        std::fs::create_dir(&base).unwrap();
+        let target = base.join("directory");
+        let link = base.join("linked-directory");
+        std::fs::create_dir(&target).unwrap();
+        symlink(&target, &link).unwrap();
+        let result = IslandReplayLog::load(&link);
+        std::fs::remove_dir_all(&base).unwrap();
+        assert!(matches!(result, Err(IslandReplayError::NotALog(_, _))));
+    }
+
     #[test]
     fn replay_loader_rejects_sparse_oversize_before_reading() {
         let path = std::env::temp_dir().join(format!(
