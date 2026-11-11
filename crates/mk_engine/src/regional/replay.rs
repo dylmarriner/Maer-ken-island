@@ -649,6 +649,19 @@ mod replay_serialization_tests {
     }
 
     #[test]
+    fn replay_loader_accepts_valid_empty_history() {
+        let dir = tempfile::tempdir().expect("temporary directory");
+        let path = dir.path().join("valid-empty-history.json");
+        let log = IslandReplayLog::new("0".repeat(64));
+        std::fs::write(&path, serde_json::to_vec(&log).expect("serialize log")).expect("write log");
+        let loaded = IslandReplayLog::load(&path).expect("valid replay must load");
+        assert_eq!(
+            serde_json::to_value(loaded).unwrap(),
+            serde_json::to_value(log).unwrap()
+        );
+    }
+
+    #[test]
     fn replay_loader_refuses_invalid_utf8() {
         let dir = tempfile::tempdir().expect("temporary directory");
         let path = dir.path().join("invalid-utf8.json");
