@@ -12,4 +12,9 @@ export CARGO_PROFILE_DEV_PACKAGE_MK_ISLAND_OPT_LEVEL=0
 # artifacts and can trigger a complete rebuild on memory-constrained hosts.
 # The profile debug setting above controls debug info without that override.
 # Exit 124 is a timeout, not a passing test.
-timeout "${REPLAY_TEST_TIMEOUT:-900}" cargo test --offline --locked -p mk_engine --lib replay -- --test-threads=1
+test_timeout="${REPLAY_TEST_TIMEOUT:-900}"
+if ! [[ "$test_timeout" =~ ^[1-9][0-9]*$ ]]; then
+  printf 'REPLAY_TEST_TIMEOUT must be a positive integer number of seconds\n' >&2
+  exit 2
+fi
+timeout --signal=TERM --kill-after=15s "$test_timeout" cargo test --offline --locked -p mk_engine --lib replay -- --test-threads=1
