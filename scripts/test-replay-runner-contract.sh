@@ -52,4 +52,18 @@ if [[ "$timeout_status" != 124 ]]; then
   echo "Expected replay timeout exit 124, got $timeout_status" >&2
   exit 1
 fi
+# A failing Rust test must propagate its status, not be mistaken for success.
+cat > "$tmp/cargo" <<'FAIL_CARGO'
+#!/usr/bin/env bash
+exit 42
+FAIL_CARGO
+chmod +x "$tmp/cargo"
+set +e
+PATH="$tmp:$PATH" REPLAY_TEST_TIMEOUT=5 REPLAY_REDUCED_DEBUG=0 bash scripts/test-replay-low-memory.sh >"$tmp/out" 2>&1
+failure_status=$?
+set -e
+if [[ "$failure_status" != 42 ]]; then
+  echo "Expected Cargo failure exit 42, got $failure_status" >&2
+  exit 1
+fi
 echo 'runner contract tests passed'
