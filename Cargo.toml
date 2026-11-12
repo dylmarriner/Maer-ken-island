@@ -102,7 +102,6 @@ opt-level = 2
 lto = false
 codegen-units = 16
 
-[workspace.lints.cargo]
-non_kebab_case_bins = "allow"
-missing_lints_inheritance = "allow"
-unused_dependencies = "allow"
+# Removed unsupported Cargo lint keys: they were ignored by Cargo and produced warnings.
+
+[workspace.lints.rust]
