@@ -735,6 +735,34 @@ mod replay_serialization_tests {
     }
 
     #[test]
+    fn replay_loader_refuses_missing_same_tick_sequence() {
+        let dir = tempfile::tempdir().expect("temporary directory");
+        let path = dir.path().join("missing-sequence.json");
+        let mut log = IslandReplayLog::new("0".repeat(64));
+        let command = IslandCommand::Control(ControlCommand::Pause);
+        log.entries.push(IslandReplayEntry {
+            tick: 3,
+            sequence: 0,
+            command: command.clone(),
+        });
+        log.entries.push(IslandReplayEntry {
+            tick: 3,
+            sequence: 2,
+            command,
+        });
+        std::fs::write(&path, serde_json::to_vec(&log).expect("serialize replay"))
+            .expect("write replay");
+        assert!(matches!(
+            IslandReplayLog::load(&path),
+            Err(IslandReplayError::InvalidSequence {
+                tick: 3,
+                expected: 1,
+                actual: 2
+            })
+        ));
+    }
+
+    #[test]
     fn replay_loader_refuses_invalid_utf8() {
         let dir = tempfile::tempdir().expect("temporary directory");
         let path = dir.path().join("invalid-utf8.json");
