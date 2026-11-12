@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Validate runner argument/environment contract without compiling the Rust workspace.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+cat > "$tmp/cargo" <<'CARGO'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ "$*" == 'test --offline --locked -p mk_engine --lib replay -- --test-threads=1' ]]
+[[ "$CARGO_BUILD_JOBS" == 1 && "$CARGO_INCREMENTAL" == 0 ]]
+[[ "${CARGO_PROFILE_DEV_DEBUG:-}" == "" ]]
+printf 'cargo contract passed\n'
+CARGO
+chmod +x "$tmp/cargo"
+PATH="$tmp:$PATH" REPLAY_TEST_TIMEOUT=5 REPLAY_REDUCED_DEBUG=0 bash scripts/test-replay-low-memory.sh | grep -q 'cargo contract passed'
+if PATH="$tmp:$PATH" REPLAY_REDUCED_DEBUG=invalid bash scripts/test-replay-low-memory.sh >"$tmp/out" 2>&1; then
+  echo 'Invalid debug mode unexpectedly accepted' >&2
+  exit 1
+fi
+grep -q 'REPLAY_REDUCED_DEBUG must be 0 or 1' "$tmp/out"
+echo 'runner contract tests passed'

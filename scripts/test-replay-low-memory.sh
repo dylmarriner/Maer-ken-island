@@ -18,4 +18,14 @@ if ! [[ "$test_timeout" =~ ^[1-9][0-9]*$ ]] || (( ${#test_timeout} > 8 )) || (( 
   printf 'REPLAY_TEST_TIMEOUT must be an integer between 1 and 86400 seconds\n' >&2
   exit 2
 fi
+# Explicitly validate the opt-in mode: a typo must not silently trigger a
+# different compilation profile or produce misleading performance evidence.
+if [[ "${REPLAY_REDUCED_DEBUG:-0}" != 0 && "${REPLAY_REDUCED_DEBUG:-0}" != 1 ]]; then
+  printf 'REPLAY_REDUCED_DEBUG must be 0 or 1\n' >&2
+  exit 2
+fi
+if ! command -v timeout >/dev/null 2>&1 || ! command -v cargo >/dev/null 2>&1; then
+  printf 'Replay runner requires timeout and cargo on PATH\n' >&2
+  exit 127
+fi
 timeout --signal=TERM --kill-after=15s "$test_timeout" cargo test --offline --locked -p mk_engine --lib replay -- --test-threads=1
