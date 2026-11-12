@@ -19,4 +19,15 @@ if PATH="$tmp:$PATH" REPLAY_REDUCED_DEBUG=invalid bash scripts/test-replay-low-m
   exit 1
 fi
 grep -q 'REPLAY_REDUCED_DEBUG must be 0 or 1' "$tmp/out"
+# Reduced-debug mode is explicitly opt-in and must reach Cargo.
+sed 's/\[\[ "${CARGO_PROFILE_DEV_DEBUG:-}" == "" \]\]/[[ "${CARGO_PROFILE_DEV_DEBUG:-}" == 0 ]]/' "$tmp/cargo" > "$tmp/cargo.debug"
+cp "$tmp/cargo.debug" "$tmp/cargo"
+chmod +x "$tmp/cargo"
+PATH="$tmp:$PATH" REPLAY_TEST_TIMEOUT=5 REPLAY_REDUCED_DEBUG=1 bash scripts/test-replay-low-memory.sh | grep -q 'cargo contract passed'
+# Reject timeout values beyond the documented bound before running Cargo.
+if PATH="$tmp:$PATH" REPLAY_TEST_TIMEOUT=86401 bash scripts/test-replay-low-memory.sh >"$tmp/out" 2>&1; then
+  echo 'Out-of-range timeout unexpectedly accepted' >&2
+  exit 1
+fi
+grep -q 'REPLAY_TEST_TIMEOUT must be an integer' "$tmp/out"
 echo 'runner contract tests passed'
