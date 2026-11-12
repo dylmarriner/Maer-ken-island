@@ -25,3 +25,6 @@
 - Actual REPLAY_TEST_TIMEOUT=90 bash scripts/test-replay-low-memory.sh PASSED: 16/16 mk_engine replay-filtered Rust tests, exit 0; prior 12-second attempt timed out after compilation, not a regression.
 - Cargo warns unsupported lints.cargo manifest keys. Full suite, replay-hash equality, PR/CI and architecture acceptance remain unverified.
 - Next: identify and run deterministic replay-hash equality tests, then review 52+ unpushed commits before safe push.
+
+## 2026-11-13 current iteration
+Maer-Ken Island: code dfff971 removes unsupported Cargo lint keys and restores valid inherited workspace.lints.rust table. Verified offline locked cargo metadata, git diff --check. Full Rust suite, replay hash equality, CI/PR and accumulated unpushed commits still pending. Next: deterministic replay hash integration test and broader Rust checks. No push.
