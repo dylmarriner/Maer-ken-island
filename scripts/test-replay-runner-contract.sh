@@ -92,4 +92,17 @@ if [[ "$failure_status" != 42 ]]; then
   echo "Expected Cargo failure exit 42, got $failure_status" >&2
   exit 1
 fi
+# Verify the timeout runner passes a literal numeric deadline and termination policy.
+# A fake timeout intercepts argv without launching Cargo or waiting 86400 seconds.
+cat > "$tmp/timeout" <<'FAKE_TIMEOUT'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ "$1" == '--signal=TERM' && "$2" == '--kill-after=15s' && "$3" == 86400 ]]
+shift 3
+[[ "$1" == cargo && "$2" == test ]]
+printf 'timeout invocation verified\n'
+FAKE_TIMEOUT
+chmod +x "$tmp/timeout"
+PATH="$tmp:$PATH" REPLAY_TEST_TIMEOUT=86400 REPLAY_REDUCED_DEBUG=0 bash scripts/test-replay-low-memory.sh >"$tmp/out" 2>&1
+grep -q 'timeout invocation verified' "$tmp/out"
 echo 'runner contract tests passed'
