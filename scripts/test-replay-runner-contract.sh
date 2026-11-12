@@ -30,4 +30,12 @@ if PATH="$tmp:$PATH" REPLAY_TEST_TIMEOUT=86401 bash scripts/test-replay-low-memo
   exit 1
 fi
 grep -q 'REPLAY_TEST_TIMEOUT must be an integer' "$tmp/out"
+# Zero, signed, and padded timeouts must fail before invoking Cargo.
+for invalid in 0 -1 +1 01 1s; do
+  if PATH="$tmp:$PATH" REPLAY_TEST_TIMEOUT="$invalid" bash scripts/test-replay-low-memory.sh >"$tmp/out" 2>&1; then
+    echo "Invalid timeout unexpectedly accepted: $invalid" >&2
+    exit 1
+  fi
+  grep -q 'REPLAY_TEST_TIMEOUT must be an integer' "$tmp/out"
+done
 echo 'runner contract tests passed'
