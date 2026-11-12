@@ -38,4 +38,18 @@ for invalid in 0 -1 +1 01 1s; do
   fi
   grep -q 'REPLAY_TEST_TIMEOUT must be an integer' "$tmp/out"
 done
+# Confirm timeout status is preserved rather than misreported as a successful replay.
+cat > "$tmp/cargo" <<'SLOW_CARGO'
+#!/usr/bin/env bash
+sleep 3
+SLOW_CARGO
+chmod +x "$tmp/cargo"
+set +e
+PATH="$tmp:$PATH" REPLAY_TEST_TIMEOUT=1 REPLAY_REDUCED_DEBUG=0 bash scripts/test-replay-low-memory.sh >"$tmp/out" 2>&1
+timeout_status=$?
+set -e
+if [[ "$timeout_status" != 124 ]]; then
+  echo "Expected replay timeout exit 124, got $timeout_status" >&2
+  exit 1
+fi
 echo 'runner contract tests passed'
