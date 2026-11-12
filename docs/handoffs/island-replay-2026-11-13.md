@@ -16,3 +16,4 @@
 - Verified: `bash scripts/test-replay-runner-contract.sh`, `bash -n` on both replay scripts, `git diff --check`.
 - Not verified: actual Rust replay test and replay-hash equality; prior bounded Cargo compilation timed out.
 - Next: use resource-capable builder to run offline locked Rust replay suite, compare deterministic hashes, review accumulated unpushed branch commits before push.
+\n## 2026-11-13 inherited resource limit iteration\n- Commit: 1ff591b; runner contract now asserts inherited CARGO_BUILD_JOBS=64 and CARGO_INCREMENTAL=1 are overridden to 1 and 0.\n- Evidence: bash -n both scripts, shell runner contract passed, git diff --check passed.\n- Real offline Rust replay execution remains unverified until bounded Cargo result is captured; deterministic replay hashes not yet proven.\n- Remote branch not pushed; accumulated commits need review.\n- Next: obtain successful offline locked mk_engine replay run and hash-equality evidence on resourced builder.\n
