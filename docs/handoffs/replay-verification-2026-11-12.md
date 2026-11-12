@@ -15,3 +15,9 @@ Branch: `test/replay-special-file-refusal-20261104`. Local changes are intention
 ## Blockers
 - Host reported 7.8 GiB swap nearly exhausted and repeated Cargo compilation timeouts. Avoid killing unrelated workloads or deleting build artifacts without approval.
 - Metadata timestamps are best-effort race detection, not cryptographic integrity against adversaries able to forge timestamps.
+
+## Follow-up (2026-11-12)
+- Job `c1af9c5ec6a3ffa5d432762831717004` returned `CARGO_EXIT:124`: mk_engine compilation timed out again; no runtime test passed.
+- Commit `2112ef8` adds a duplicate same-tick sequence loader regression. `cargo fmt --all -- --check` and `git diff --check` passed; runtime test remains blocked.
+- Local branch is 26 commits ahead of remote after the test commit. Do not push or merge until runtime and deterministic replay-hash checks pass.
+- Next: arrange a resource-capable isolated Rust build runner without deleting caches or interrupting unrelated processes, run the complete replay suite, inspect PR/CI, then push only verified commits.
