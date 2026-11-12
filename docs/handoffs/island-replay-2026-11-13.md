@@ -1,8 +1,8 @@
-# Maer-Ken Island replay verification, 2026-11-13
-- Branch: test/replay-special-file-refusal-20261104; code commit 20c4a5a.
-- Added runner contract cases for opt-in reduced-debug profile and 86400-second maximum timeout.
-- Evidence: bash -n and bash scripts/test-replay-runner-contract.sh passed; git diff --check passed.
-- REPLAY_TEST_TIMEOUT=25 bash scripts/test-replay-low-memory.sh returned 124 while compiling mk_engine; replay/hash equality NOT verified.
-- Branch 38 commits ahead of origin before this handoff; review all before pushing.
-- Next: run full replay suite on sufficiently resourced Rust builder, confirm hash equality and append-only invariants, then review PR/CI and publish validated changes.
-- No production mutations.
+# Maer-Ken Island replay handoff, 2026-11-13
+- Exact repository: dylmarriner/Maer-ken-island, branch test/replay-special-file-refusal-20261104.
+- Code commit 190f93b adds real timeout-exit propagation regression to bounded runner contract.
+- Verified: runner contract passed including exit 124 after one-second timeout; Bash syntax; git diff --check.
+- Rust replay suite and deterministic replay-hash equality NOT verified; previous Cargo builds timed out compiling mk_engine.
+- Branch 41 commits ahead before this handoff. Review accumulated changes before any push/merge.
+- Next: use sufficiently resourced Rust builder, execute offline locked replay suite and hash-equality checks, review PR/CI.
+- No live or destructive changes.
