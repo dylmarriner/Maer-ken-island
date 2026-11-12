@@ -30,4 +30,11 @@ if ! command -v timeout >/dev/null 2>&1 || ! command -v cargo >/dev/null 2>&1; t
   printf 'Replay runner requires timeout and cargo on PATH\n' >&2
   exit 127
 fi
-timeout --signal=TERM --kill-after=15s "$test_timeout" cargo test --offline --locked -p mk_engine --lib replay -- --test-threads=1
+# Capture the actual exit status while preserving set -e semantics.
+# A timeout is an infrastructure failure, never replay verification.
+status=0
+timeout --signal=TERM --kill-after=15s "$test_timeout" cargo test --offline --locked -p mk_engine --lib replay -- --test-threads=1 || status=$?
+if (( status == 124 )); then
+  printf 'Replay verification INCOMPLETE: Cargo exceeded %s seconds (exit 124). No replay/hash claim is valid.\n' "$test_timeout" >&2
+fi
+exit "$status"

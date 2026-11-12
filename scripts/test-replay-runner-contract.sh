@@ -74,6 +74,7 @@ set +e
 PATH="$tmp:$PATH" REPLAY_TEST_TIMEOUT=1 REPLAY_REDUCED_DEBUG=0 bash scripts/test-replay-low-memory.sh >"$tmp/out" 2>&1
 timeout_status=$?
 set -e
+grep -q 'Replay verification INCOMPLETE: Cargo exceeded 1 seconds' "$tmp/out"
 if [[ "$timeout_status" != 124 ]]; then
   echo "Expected replay timeout exit 124, got $timeout_status" >&2
   exit 1
