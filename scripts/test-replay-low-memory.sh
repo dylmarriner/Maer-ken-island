@@ -2,8 +2,10 @@
 # Low-memory, offline replay regression runner. Never clears caches or swap.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# Force bounded compilation even when inherited environment requests high parallelism.
 export CARGO_BUILD_JOBS=1
 export CARGO_INCREMENTAL=0
+# Keep compiler flags untouched to preserve cached fingerprints.
 # Preserve existing Cargo profile fingerprints by default to reuse compiled artifacts.
 # Set REPLAY_REDUCED_DEBUG=1 only for a fresh isolated build.
 if [[ "${REPLAY_REDUCED_DEBUG:-0}" == 1 ]]; then
