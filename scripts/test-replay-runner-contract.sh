@@ -38,6 +38,32 @@ for invalid in 0 -1 +1 01 1s; do
   fi
   grep -q 'REPLAY_TEST_TIMEOUT must be an integer' "$tmp/out"
 done
+# Boundary timeout values must remain accepted; the fake Cargo exits immediately.
+cat > "$tmp/cargo" <<'BOUNDARY_CARGO'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ "$*" == 'test --offline --locked -p mk_engine --lib replay -- --test-threads=1' ]]
+printf 'boundary accepted\n'
+BOUNDARY_CARGO
+chmod +x "$tmp/cargo"
+for valid in 1 86400; do
+  PATH="$tmp:$PATH" REPLAY_TEST_TIMEOUT="$valid" REPLAY_REDUCED_DEBUG=0 bash scripts/test-replay-low-memory.sh >"$tmp/out" 2>&1
+  grep -q 'boundary accepted' "$tmp/out"
+done
+# Cargo exit code 127 must remain distinguishable from timeout exit 124.
+cat > "$tmp/cargo" <<'MISSING_CARGO'
+#!/usr/bin/env bash
+exit 127
+MISSING_CARGO
+chmod +x "$tmp/cargo"
+set +e
+PATH="$tmp:$PATH" REPLAY_TEST_TIMEOUT=5 REPLAY_REDUCED_DEBUG=0 bash scripts/test-replay-low-memory.sh >"$tmp/out" 2>&1
+missing_status=$?
+set -e
+if [[ "$missing_status" != 127 ]]; then
+  echo "Expected Cargo failure 127, got $missing_status" >&2
+  exit 1
+fi
 # Confirm timeout status is preserved rather than misreported as a successful replay.
 cat > "$tmp/cargo" <<'SLOW_CARGO'
 #!/usr/bin/env bash
