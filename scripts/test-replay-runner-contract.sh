@@ -8,7 +8,7 @@ cat > "$tmp/cargo" <<'CARGO'
 #!/usr/bin/env bash
 set -euo pipefail
 [[ "$*" == 'test --offline --locked -p mk_engine --lib replay -- --test-threads=1' ]]
-[[ "$CARGO_BUILD_JOBS" == 1 && "$CARGO_INCREMENTAL" == 0 ]]
+[[ "$CARGO_BUILD_JOBS" == 1 && "$CARGO_INCREMENTAL" == 0 && "$CARGO_NET_OFFLINE" == true ]]
 [[ "${CARGO_PROFILE_DEV_DEBUG:-}" == "" ]]
 printf 'cargo contract passed\n'
 CARGO
@@ -110,11 +110,11 @@ grep -q 'timeout invocation verified' "$tmp/out"
 cat > "$tmp/cargo" <<'INHERITED_CARGO'
 #!/usr/bin/env bash
 set -euo pipefail
-[[ "$CARGO_BUILD_JOBS" == 1 && "$CARGO_INCREMENTAL" == 0 ]]
+[[ "$CARGO_BUILD_JOBS" == 1 && "$CARGO_INCREMENTAL" == 0 && "$CARGO_NET_OFFLINE" == true ]]
 printf 'inherited limits overridden\n'
 INHERITED_CARGO
 chmod +x "$tmp/cargo"
 rm -f "$tmp/timeout"
-PATH="$tmp:$PATH" CARGO_BUILD_JOBS=64 CARGO_INCREMENTAL=1 REPLAY_TEST_TIMEOUT=5 REPLAY_REDUCED_DEBUG=0 bash scripts/test-replay-low-memory.sh >"$tmp/out" 2>&1
+PATH="$tmp:$PATH" CARGO_BUILD_JOBS=64 CARGO_INCREMENTAL=1 CARGO_NET_OFFLINE=false REPLAY_TEST_TIMEOUT=5 REPLAY_REDUCED_DEBUG=0 bash scripts/test-replay-low-memory.sh >"$tmp/out" 2>&1
 grep -q 'inherited limits overridden' "$tmp/out"
 echo 'runner contract tests passed'

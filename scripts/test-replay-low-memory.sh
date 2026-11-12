@@ -5,6 +5,8 @@ cd "$(dirname "$0")/.."
 # Force bounded compilation even when inherited environment requests high parallelism.
 export CARGO_BUILD_JOBS=1
 export CARGO_INCREMENTAL=0
+# Enforce offline mode for subprocesses/build scripts as well as Cargo CLI.
+export CARGO_NET_OFFLINE=true
 # Keep compiler flags untouched to preserve cached fingerprints.
 # Preserve existing Cargo profile fingerprints by default to reuse compiled artifacts.
 # Set REPLAY_REDUCED_DEBUG=1 only for a fresh isolated build.
