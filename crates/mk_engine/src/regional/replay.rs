@@ -262,10 +262,9 @@ impl IslandReplayLog {
             return Err(IslandReplayError::Version(self.version));
         }
         // Never persist a log that this same build would reject when loading or replaying.
+        validate_scenario_digest(&self.scenario_digest)?;
         ordered_replay_entries(self.entries.iter())?;
         let text = serialize_replay_log(self, path, MAX_REPLAY_LOG_BYTES)?;
-        // Preserve the size error for oversized documents before inspecting their fields.
-        validate_scenario_digest(&self.scenario_digest)?;
 
         let mut candidate = None;
         for sequence in 0..128 {
