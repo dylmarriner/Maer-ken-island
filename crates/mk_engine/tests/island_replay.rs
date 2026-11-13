@@ -526,6 +526,21 @@ fn save_and_load_accept_shuffled_entries_with_contiguous_sequences() {
 }
 
 #[test]
+fn load_refuses_unknown_replay_version_before_replay() {
+    let mut log = two_command_log();
+    log.version = u32::MAX;
+
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("future-version.log.json");
+    std::fs::write(&path, serde_json::to_vec(&log).unwrap()).unwrap();
+
+    assert!(matches!(
+        IslandReplayLog::load(&path),
+        Err(IslandReplayError::Version(u32::MAX))
+    ));
+}
+
+#[test]
 fn load_refuses_noncanonical_scenario_digest() {
     let mut log = two_command_log();
     log.scenario_digest = "not-a-digest".to_string();
