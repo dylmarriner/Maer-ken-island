@@ -721,6 +721,15 @@ mod replay_serialization_tests {
     }
 
     #[test]
+    fn replay_save_rejects_invalid_digest_without_creating_file() {
+        let dir = tempfile::tempdir().expect("temporary directory");
+        let path = dir.path().join("invalid-digest.json");
+        let log = IslandReplayLog::new("not-a-valid-scenario-digest".to_string());
+        assert!(log.save(&path).is_err(), "invalid digest must be rejected");
+        assert!(!path.exists(), "invalid replay must not create a file");
+    }
+
+    #[test]
     fn replay_save_load_preserves_ordered_nonempty_history() {
         let dir = tempfile::tempdir().expect("temporary directory");
         let path = dir.path().join("nonempty-roundtrip.json");
