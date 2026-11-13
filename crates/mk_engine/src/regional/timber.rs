@@ -31,7 +31,7 @@
 //! costs its Compendium MET. Fuel burns as the vehicles move. A log in the
 //! store keeps its water: nothing here dries it (deviation D40).
 
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 
 use serde::{Deserialize, Serialize};
 
@@ -111,6 +111,14 @@ impl Log {
             && self.water_kg.is_finite()
             && self.water_kg >= 0.0
             && (self.dry_kg + self.water_kg).is_finite()
+            // A public/persisted log cannot have a zero identifier.
+            && self.id > 0
+            // Finite inputs may still overflow when the centre is projected
+            // to either endpoint. Reject such logs at the validation boundary.
+            && self.butt_m().0.is_finite()
+            && self.butt_m().1.is_finite()
+            && self.tip_m().0.is_finite()
+            && self.tip_m().1.is_finite()
     }
 
     /// The butt end (domain metres).
@@ -119,6 +127,15 @@ impl Log {
         (
             self.position_m.0 - half * self.heading_rad.cos(),
             self.position_m.1 - half * self.heading_rad.sin(),
+        )
+    }
+
+    /// The tip end (domain metres).
+    pub fn tip_m(&self) -> (f64, f64) {
+        let half = 0.5 * self.length_m;
+        (
+            self.position_m.0 + half * self.heading_rad.cos(),
+            self.position_m.1 + half * self.heading_rad.sin(),
         )
     }
 
@@ -147,6 +164,13 @@ impl Log {
         let equal_carbon_kgc = self.carbon_kgc / k;
         let equal_water_kg = self.water_kg / k;
         let butt = self.butt_m();
+        // Finite source fields can still overflow when projected into endpoints.
+        // Reject impossible geometry before allocating any pieces or IDs.
+        let tip = self.tip_m();
+        assert!(
+            butt.0.is_finite() && butt.1.is_finite() && tip.0.is_finite() && tip.1.is_finite(),
+            "cross-cut endpoints must be finite"
+        );
         let mut allocated_length = 0.0;
         let mut allocated_dry_kg = 0.0;
         let mut allocated_carbon_kgc = 0.0;
@@ -274,6 +298,15 @@ pub enum HaulAction {
         pieces: u32,
         first_id: u64,
     },
+    /// One founder owns the material cut; a second founder supplies the
+    /// other end of the saw and is charged separately by the life work loop.
+    CrossCutCrew {
+        log_id: u64,
+        pieces: u32,
+        first_id: u64,
+        partner_id: String,
+        partner_met: f64,
+    },
     /// Drive a road vehicle `km`, carrying `logs`.
     Drive {
         vehicle_id: u64,
@@ -367,23 +400,39 @@ impl HaulJob {
                     pieces,
                     first_id,
                 } => {
-                    *log_id > 0
+                    *log_id == self.log_id
                         && *pieces > 0
                         && *pieces <= MAX_CROSS_CUT_PIECES
                         && *first_id > 0
                         && first_id.checked_add(u64::from(*pieces)).is_some()
+                }
+                HaulAction::CrossCutCrew {
+                    log_id,
+                    pieces,
+                    first_id,
+                    partner_id,
+                    partner_met,
+                } => {
+                    *log_id == self.log_id
+                        && *pieces > 0
+                        && *pieces <= MAX_CROSS_CUT_PIECES
+                        && *first_id > 0
+                        && first_id.checked_add(u64::from(*pieces)).is_some()
+                        && !partner_id.trim().is_empty()
+                        && partner_met.is_finite()
+                        && *partner_met > 0.0
                 }
                 HaulAction::Drive {
                     vehicle_id,
                     km,
                     logs,
                 } => {
-                    *vehicle_id > 0 && km.is_finite() && *km >= 0.0 && logs.iter().all(|id| *id > 0)
+                    *vehicle_id > 0 && km.is_finite() && *km >= 0.0 && valid_manifest(logs)
                 }
                 HaulAction::Load { vehicle_id, logs } => {
-                    *vehicle_id > 0 && logs.iter().all(|id| *id > 0)
+                    *vehicle_id > 0 && !logs.is_empty() && valid_manifest(logs)
                 }
-                HaulAction::Unload { logs } => logs.iter().all(|id| *id > 0),
+                HaulAction::Unload { logs } => !logs.is_empty() && valid_manifest(logs),
                 HaulAction::CarryToStore { log_id } => *log_id > 0,
                 HaulAction::Track {
                     vehicle_id,
@@ -405,6 +454,18 @@ impl HaulJob {
 
         true
     }
+}
+
+/// Reject duplicate or zero log IDs in persisted vehicle manifests.
+/// Duplicate entries could otherwise debit or move the same timber twice.
+fn valid_manifest(logs: &[u64]) -> bool {
+    // A persisted manifest must not exceed the maximum pieces from one cross-cut.
+    // Reject before allocating a potentially unbounded duplicate-detection set.
+    if logs.len() > MAX_CROSS_CUT_PIECES as usize {
+        return false;
+    }
+    let mut seen = HashSet::with_capacity(logs.len());
+    logs.iter().all(|id| *id > 0 && seen.insert(*id))
 }
 
 /// The estate's places a haul runs between.
@@ -514,6 +575,23 @@ pub fn haul_plans_over(
     if !log.has_valid_physical_state() {
         return Err(LabourError::InvalidTimberLogState);
     }
+    let valid_ute = fleet.ute.is_none_or(|ute| {
+        ute.item_id > 0
+            && ute.litres.is_finite()
+            && ute.litres >= 0.0
+            && ute.litres_per_km.is_finite()
+            && ute.litres_per_km > 0.0
+    });
+    let valid_excavator = fleet.excavator.is_none_or(|excavator| {
+        excavator.item_id > 0
+            && excavator.litres.is_finite()
+            && excavator.litres >= 0.0
+            && excavator.litres_per_hour.is_finite()
+            && excavator.litres_per_hour > 0.0
+    });
+    if !valid_ute || !valid_excavator {
+        return Err(LabourError::InvalidVehicleState);
+    }
     let walk = |d: f64| labour.walking_time_s(body, d, 0.0, 0.0);
     let leg = |from: (f64, f64), to: (f64, f64), load_kg: f64| {
         labour.walking_time_s(body, distance_m(from, to), climb(from, to), load_kg)
@@ -542,6 +620,11 @@ pub fn haul_plans_over(
                     requested_pieces: pieces,
                     maximum_pieces: MAX_CROSS_CUT_PIECES,
                 });
+            }
+            // Reject an exhausted one-based ID range before cross_cut can panic
+            // or a later task can wrap its reserved piece identifiers.
+            if first_piece_id == 0 || first_piece_id.checked_add(u64::from(pieces)).is_none() {
+                return Err(LabourError::InvalidHaulJobState);
             }
             let split = log.cross_cut(pieces, first_piece_id);
             let largest_mass = split.iter().map(Log::green_kg).fold(0.0, f64::max);
@@ -781,6 +864,24 @@ mod tests {
     use super::*;
 
     #[test]
+    #[should_panic(expected = "cross-cut requires finite, positive physical state")]
+    fn cross_cut_rejects_finite_source_with_overflowed_endpoint() {
+        let log = Log {
+            id: 1,
+            position_m: (f64::MAX, 0.0),
+            heading_rad: std::f64::consts::PI,
+            length_m: 1.0e308,
+            diameter_m: 0.5,
+            dry_kg: 100.0,
+            carbon_kgc: 50.0,
+            water_kg: 50.0,
+            place: LogPlace::Ground,
+        };
+        assert!(!log.has_valid_physical_state());
+        let _ = log.cross_cut(2, 10);
+    }
+
+    #[test]
     fn a_walk_climbs_the_rises_along_it_and_going_down_is_free() {
         let flat = ascent_m(|_| 120.0, (0.0, 0.0), (500.0, 0.0), 5.0);
         assert_eq!(flat, 0.0);
@@ -986,6 +1087,128 @@ mod tests {
             assert!(
                 matches!(result, Err(LabourError::InvalidTimberLogState)),
                 "invalid source log must be rejected before cross-cut materialisation: {result:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn haul_planning_rejects_malformed_road_and_tracked_vehicle_state() {
+        let (labour, body) = (labour(), body());
+        let l = log();
+        let valid_ute = RoadVehicle {
+            item_id: 1,
+            litres: 100.0,
+            litres_per_km: 0.27,
+        };
+        let valid_excavator = TrackedMachine {
+            item_id: 2,
+            litres: 100.0,
+            litres_per_hour: 32.4,
+        };
+
+        let invalid_utes = [
+            RoadVehicle {
+                item_id: 0,
+                ..valid_ute
+            },
+            RoadVehicle {
+                litres: -1.0,
+                ..valid_ute
+            },
+            RoadVehicle {
+                litres: f64::NAN,
+                ..valid_ute
+            },
+            RoadVehicle {
+                litres: f64::INFINITY,
+                ..valid_ute
+            },
+            RoadVehicle {
+                litres_per_km: 0.0,
+                ..valid_ute
+            },
+            RoadVehicle {
+                litres_per_km: -0.1,
+                ..valid_ute
+            },
+            RoadVehicle {
+                litres_per_km: f64::NAN,
+                ..valid_ute
+            },
+            RoadVehicle {
+                litres_per_km: f64::INFINITY,
+                ..valid_ute
+            },
+        ];
+        for ute in invalid_utes {
+            let result = haul_plans(
+                &l,
+                (0.0, 0.0),
+                &body,
+                &labour,
+                &site(),
+                &Fleet {
+                    ute: Some(ute),
+                    excavator: None,
+                },
+                100,
+            );
+            assert!(
+                matches!(result, Err(LabourError::InvalidVehicleState)),
+                "malformed road vehicle must be rejected before planning: {result:?}"
+            );
+        }
+
+        let invalid_excavators = [
+            TrackedMachine {
+                item_id: 0,
+                ..valid_excavator
+            },
+            TrackedMachine {
+                litres: -1.0,
+                ..valid_excavator
+            },
+            TrackedMachine {
+                litres: f64::NAN,
+                ..valid_excavator
+            },
+            TrackedMachine {
+                litres: f64::INFINITY,
+                ..valid_excavator
+            },
+            TrackedMachine {
+                litres_per_hour: 0.0,
+                ..valid_excavator
+            },
+            TrackedMachine {
+                litres_per_hour: -0.1,
+                ..valid_excavator
+            },
+            TrackedMachine {
+                litres_per_hour: f64::NAN,
+                ..valid_excavator
+            },
+            TrackedMachine {
+                litres_per_hour: f64::INFINITY,
+                ..valid_excavator
+            },
+        ];
+        for excavator in invalid_excavators {
+            let result = haul_plans(
+                &l,
+                (0.0, 0.0),
+                &body,
+                &labour,
+                &site(),
+                &Fleet {
+                    ute: None,
+                    excavator: Some(excavator),
+                },
+                100,
+            );
+            assert!(
+                matches!(result, Err(LabourError::InvalidVehicleState)),
+                "malformed tracked vehicle must be rejected before planning: {result:?}"
             );
         }
     }
@@ -1216,6 +1439,126 @@ mod tests {
     }
 
     #[test]
+    fn physical_state_rejects_finite_coordinates_with_overflowing_endpoints() {
+        let mut source = log();
+        source.position_m = (f64::MAX, 0.0);
+        source.length_m = f64::MAX;
+        source.heading_rad = 0.0;
+        assert!(!source.has_valid_physical_state());
+        assert!(!source.tip_m().0.is_finite());
+    }
+
+    #[test]
+    fn persisted_haul_rejects_cross_cut_for_a_different_source_log() {
+        for crew in [false, true] {
+            let action = if crew {
+                HaulAction::CrossCutCrew {
+                    log_id: 99,
+                    pieces: 2,
+                    first_id: 100,
+                    partner_id: "partner".to_owned(),
+                    partner_met: 3.0,
+                }
+            } else {
+                HaulAction::CrossCut {
+                    log_id: 99,
+                    pieces: 2,
+                    first_id: 100,
+                }
+            };
+            let job = HaulJob {
+                log_id: 42,
+                method: HaulMethod::OnFoot,
+                tasks: VecDeque::from([HaulTask {
+                    action,
+                    duration_s: 60.0,
+                    met: 3.0,
+                    ends_at_m: (0.0, 0.0),
+                }]),
+                worked_s: 0.0,
+            };
+            assert!(!job.has_valid_persisted_state());
+        }
+    }
+
+    #[test]
+    fn persisted_haul_rejects_empty_load_and_unload_manifests() {
+        for action in [
+            HaulAction::Load { vehicle_id: 7, logs: vec![] },
+            HaulAction::Unload { logs: vec![] },
+        ] {
+            let job = HaulJob {
+                log_id: 42,
+                method: HaulMethod::Ute,
+                tasks: VecDeque::from([HaulTask {
+                    action,
+                    duration_s: 10.0,
+                    met: 2.0,
+                    ends_at_m: (0.0, 0.0),
+                }]),
+                worked_s: 0.0,
+            };
+            assert!(!job.has_valid_persisted_state());
+        }
+        // Empty return drives remain legitimate after unloading timber.
+        let return_drive = HaulJob {
+            log_id: 42,
+            method: HaulMethod::Ute,
+            tasks: VecDeque::from([HaulTask {
+                action: HaulAction::Drive { vehicle_id: 7, km: 1.0, logs: vec![] },
+                duration_s: 10.0,
+                met: 2.0,
+                ends_at_m: (0.0, 0.0),
+            }]),
+            worked_s: 0.0,
+        };
+        assert!(return_drive.has_valid_persisted_state());
+    }
+
+    #[test]
+    fn persisted_haul_rejects_duplicate_vehicle_manifest_ids() {
+        for action in [
+            HaulAction::Drive { vehicle_id: 7, km: 1.0, logs: vec![42, 42] },
+            HaulAction::Load { vehicle_id: 7, logs: vec![42, 42] },
+            HaulAction::Unload { logs: vec![42, 42] },
+        ] {
+            let job = HaulJob {
+                log_id: 42,
+                method: HaulMethod::Ute,
+                tasks: VecDeque::from([HaulTask {
+                    action,
+                    duration_s: 10.0,
+                    met: 2.0,
+                    ends_at_m: (0.0, 0.0),
+                }]),
+                worked_s: 0.0,
+            };
+            assert!(!job.has_valid_persisted_state());
+        }
+        assert!(valid_manifest(&[42, 43]));
+        assert!(!valid_manifest(&[0]));
+        assert!(valid_manifest(&(1..=MAX_CROSS_CUT_PIECES as u64).collect::<Vec<_>>()));
+        assert!(!valid_manifest(&(1..=MAX_CROSS_CUT_PIECES as u64 + 1).collect::<Vec<_>>()));
+    }
+
+    #[test]
+    fn haul_planner_rejects_exhausted_piece_ids_before_cross_cut() {
+        let (labour, body) = (labour(), body());
+        for first_id in [0, u64::MAX] {
+            let result = haul_plans(
+                &log(),
+                (0.0, 0.0),
+                &body,
+                &labour,
+                &site(),
+                &fleet(100.0, 0.0),
+                first_id,
+            );
+            assert!(matches!(result, Err(LabourError::InvalidHaulJobState)));
+        }
+    }
+
+    #[test]
     fn the_excavator_lifts_only_what_it_is_rated_for_and_only_with_fuel() {
         let (labour, body) = (labour(), body());
         let l = log();
@@ -1285,5 +1628,26 @@ mod tests {
         )
         .unwrap();
         assert_eq!(quickest(plans).unwrap().method, HaulMethod::OnFoot);
+    }
+
+    #[test]
+    fn persisted_zero_log_id_is_invalid_physical_state() {
+        let mut source = log();
+        assert!(source.has_valid_physical_state());
+        source.id = 0;
+        assert!(!source.has_valid_physical_state());
+    }
+
+    #[test]
+    fn shared_tip_projection_matches_cross_cut_source_geometry() {
+        let source = log();
+        let tip = source.tip_m();
+        let butt = source.butt_m();
+        let pieces = source.cross_cut(2, 100);
+        assert_eq!(pieces.len(), 2);
+        assert!(source.has_valid_physical_state());
+        assert!((pieces[0].butt_m().0 - butt.0).abs() < 1e-9);
+        assert!((pieces[1].tip_m().0 - tip.0).abs() < 1e-9);
+        assert!((pieces[1].tip_m().1 - tip.1).abs() < 1e-9);
     }
 }
