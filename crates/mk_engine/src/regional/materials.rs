@@ -80,6 +80,12 @@ pub const ALL_MATERIALS: [Material; 10] = [
     Material::Gold,
 ];
 
+/// Food amounts below one nanogram are numerical meal residuals, not a
+/// meaningful harvest. They may be below the next representable PlantFood
+/// stock increment; in that case a completed forage trip may return zero
+/// without debiting ecology or booking a material transfer.
+const NEGLIGIBLE_FORAGE_KG: f64 = 1.0e-12;
+
 /// What a kilogram of a material is made of.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Composition {
@@ -532,6 +538,27 @@ impl MaterialLedger {
         Ok(resulting_stock)
     }
 
+    fn checked_gather_stock_addition_result(
+        &self,
+        material: Material,
+        kg: f64,
+    ) -> Result<Option<f64>, MaterialError> {
+        let have = self.stock_kg(material);
+        Self::validate_source_value(material, have)?;
+        Self::validate_amount(material, kg)?;
+        match Self::checked_stock_addition_result(material, have, kg) {
+            Ok(resulting_stock) => Ok(Some(resulting_stock)),
+            Err(MaterialError::InvalidAmount { .. })
+                if material == Material::PlantFood && kg <= NEGLIGIBLE_FORAGE_KG =>
+            {
+                // The foraging caller still completes the trip and practices
+                // the skill, but no source, stock or flux is mutated.
+                Ok(None)
+            }
+            Err(error) => Err(error),
+        }
+    }
+
     fn validate_cell_area(area_m2: f64) -> Result<(), MaterialError> {
         if !area_m2.is_finite() || area_m2 <= 0.0 {
             return Err(MaterialError::InvalidCellArea { area_m2 });
@@ -642,17 +669,13 @@ impl MaterialLedger {
         if kg <= 0.0 {
             return Err(MaterialError::NothingToHarvest);
         }
-        let resulting_stock = self.stock_kg(material) + kg;
-        if !resulting_stock.is_finite() {
-            return Err(MaterialError::InvalidAmount {
-                material,
-                amount_kg: resulting_stock,
-            });
-        }
+        let Some(resulting_stock) = self.checked_gather_stock_addition_result(material, kg)? else {
+            return Ok(0.0);
+        };
         let kgc = kg * c.carbon_per_kg;
         let biomass = ecology.biomass_kgc_m2.get_mut(cell.0, cell.1);
         *biomass = (*biomass - kgc / cell_area_m2).max(0.0);
-        self.add(material, kg);
+        self.stock.insert(material, resulting_stock);
         flow(
             ledger,
             FluxKind::Carbon,
@@ -703,18 +726,16 @@ impl MaterialLedger {
         if kg <= 0.0 {
             return Err(MaterialError::NothingToHarvest);
         }
-        let resulting_stock = self.stock_kg(Material::PlantFood) + kg;
-        if !resulting_stock.is_finite() {
-            return Err(MaterialError::InvalidAmount {
-                material: Material::PlantFood,
-                amount_kg: resulting_stock,
-            });
-        }
+        let Some(resulting_stock) =
+            self.checked_gather_stock_addition_result(Material::PlantFood, kg)?
+        else {
+            return Ok(0.0);
+        };
         let kgc = kg * c.carbon_per_kg;
         edible.take(i, kgc / cell_area_m2);
         let biomass = ecology.biomass_kgc_m2.get_mut(cell.0, cell.1);
         *biomass = (*biomass - kgc / cell_area_m2).max(0.0);
-        self.add(Material::PlantFood, kg);
+        self.stock.insert(Material::PlantFood, resulting_stock);
         flow(
             ledger,
             FluxKind::Carbon,
@@ -751,13 +772,11 @@ impl MaterialLedger {
         if take <= 0.0 {
             return Err(MaterialError::DryCell);
         }
-        let resulting_stock = self.stock_kg(Material::Water) + take;
-        if !resulting_stock.is_finite() {
-            return Err(MaterialError::InvalidAmount {
-                material: Material::Water,
-                amount_kg: resulting_stock,
-            });
-        }
+        let resulting_stock = Self::checked_stock_addition_result(
+            Material::Water,
+            self.stock_kg(Material::Water),
+            take,
+        )?;
         let storage_mm = soil.storage_mm - take / cell_area_m2;
         hydrology.soil_water.set(
             cell.0,
@@ -767,7 +786,7 @@ impl MaterialLedger {
                 storage_mm,
             },
         );
-        self.add(Material::Water, take);
+        self.stock.insert(Material::Water, resulting_stock);
         flow(
             ledger,
             FluxKind::Water,
@@ -1104,14 +1123,9 @@ impl MaterialLedger {
             return Err(MaterialError::WrongMaterial(material));
         }
         Self::validate_amount(material, kg)?;
-        let resulting_stock = self.stock_kg(material) + kg;
-        if !resulting_stock.is_finite() {
-            return Err(MaterialError::InvalidAmount {
-                material,
-                amount_kg: resulting_stock,
-            });
-        }
-        self.add(material, kg);
+        let resulting_stock =
+            Self::checked_stock_addition_result(material, self.stock_kg(material), kg)?;
+        self.stock.insert(material, resulting_stock);
         flow(
             ledger,
             FluxKind::Carbon,
@@ -1135,6 +1149,12 @@ impl MaterialLedger {
         if population.count == 0 || meat_kg <= 0.0 {
             return Err(MaterialError::NoAnimals);
         }
+        Self::validate_amount(Material::Meat, meat_kg)?;
+        let resulting_stock = Self::checked_stock_addition_result(
+            Material::Meat,
+            self.stock_kg(Material::Meat),
+            meat_kg,
+        )?;
         let animals = meat_kg / (population.body_mass_kg * EDIBLE_FRACTION);
         population.fractional_deaths += animals;
         let deaths = (population.fractional_deaths.floor() as u64).min(population.count);
@@ -1142,7 +1162,7 @@ impl MaterialLedger {
         population.fractional_deaths -= deaths as f64;
         let total_c = animals * population.body_mass_kg * WHOLE_BODY_CARBON_FRACTION;
         let meat_c = meat_kg * composition(Material::Meat).carbon_per_kg;
-        self.add(Material::Meat, meat_kg);
+        self.stock.insert(Material::Meat, resulting_stock);
         flow(
             ledger,
             FluxKind::Carbon,
@@ -1199,9 +1219,22 @@ impl MaterialLedger {
         limestone_kg: f64,
         ledger: &mut Ledger,
     ) -> Result<f64, MaterialError> {
-        self.take(Material::Limestone, limestone_kg)?;
+        Self::validate_amount(Material::Limestone, limestone_kg)?;
+        Self::checked_withdrawal_result(
+            Material::Limestone,
+            self.stock_kg(Material::Limestone),
+            limestone_kg,
+        )?;
+        let quicklime_kg = limestone_kg * QUICKLIME_PER_LIMESTONE;
+        let resulting_quicklime_stock = Self::checked_stock_addition_result(
+            Material::Quicklime,
+            self.stock_kg(Material::Quicklime),
+            quicklime_kg,
+        )?;
         let kgc = limestone_kg * composition(Material::Limestone).carbon_per_kg;
-        self.add(Material::Quicklime, limestone_kg * QUICKLIME_PER_LIMESTONE);
+        self.take(Material::Limestone, limestone_kg)?;
+        self.stock
+            .insert(Material::Quicklime, resulting_quicklime_stock);
         flow(
             ledger,
             FluxKind::Carbon,
@@ -1226,13 +1259,21 @@ impl MaterialLedger {
         wood_kg: f64,
         ledger: &mut Ledger,
     ) -> Result<f64, MaterialError> {
-        self.take(Material::Wood, wood_kg)?;
+        Self::validate_amount(Material::Wood, wood_kg)?;
+        Self::checked_withdrawal_result(Material::Wood, self.stock_kg(Material::Wood), wood_kg)?;
         let wood = composition(Material::Wood);
         let dry = wood_kg * (1.0 - wood.water_per_kg);
         let char_kg = CHARCOAL_YIELD_BY_DRY_MASS * dry;
+        let resulting_charcoal_stock = Self::checked_stock_addition_result(
+            Material::Charcoal,
+            self.stock_kg(Material::Charcoal),
+            char_kg,
+        )?;
+        self.take(Material::Wood, wood_kg)?;
         let char_c = char_kg * composition(Material::Charcoal).carbon_per_kg;
         let released = wood_kg * wood.carbon_per_kg - char_c;
-        self.add(Material::Charcoal, char_kg);
+        self.stock
+            .insert(Material::Charcoal, resulting_charcoal_stock);
         flow(
             ledger,
             FluxKind::Carbon,
@@ -1453,13 +1494,11 @@ impl MaterialLedger {
         }
         // Check the destination stock before changing either hydrology or the
         // flux ledger. A finite source amount can still overflow existing stock.
-        let resulting_stock = self.stock_kg(Material::Water) + take;
-        if !resulting_stock.is_finite() {
-            return Err(MaterialError::InvalidAmount {
-                material: Material::Water,
-                amount_kg: resulting_stock,
-            });
-        }
+        let resulting_stock = Self::checked_stock_addition_result(
+            Material::Water,
+            self.stock_kg(Material::Water),
+            take,
+        )?;
         let from_standing = take.min(standing_kg);
         let from_river = take - from_standing;
         hydrology
@@ -1470,7 +1509,7 @@ impl MaterialLedger {
             c,
             runoff - from_river / (cell_area_m2 * RIVER_WITHDRAWAL_FRACTION),
         );
-        self.add(Material::Water, take);
+        self.stock.insert(Material::Water, resulting_stock);
         flow(
             ledger,
             FluxKind::Water,
