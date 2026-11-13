@@ -257,6 +257,10 @@ impl IslandReplayLog {
     /// Exclusive file creation matters even with a single simulation writer: a
     /// stale temp file or concurrent save must never be truncated before rename.
     pub fn save(&self, path: &Path) -> Result<(), IslandReplayError> {
+        // Saving an unsupported version would create a file this build cannot reload.
+        if self.version != REPLAY_LOG_VERSION {
+            return Err(IslandReplayError::Version(self.version));
+        }
         // Never persist a log that this same build would reject when loading or replaying.
         ordered_replay_entries(self.entries.iter())?;
         let text = serialize_replay_log(self, path, MAX_REPLAY_LOG_BYTES)?;
@@ -701,6 +705,19 @@ mod replay_serialization_tests {
             serde_json::to_value(&log).unwrap(),
             "saving and loading must preserve the replay envelope"
         );
+    }
+
+    #[test]
+    fn replay_save_rejects_unsupported_version_without_creating_file() {
+        let dir = tempfile::tempdir().expect("temporary directory");
+        let path = dir.path().join("unsupported-version.json");
+        let mut log = IslandReplayLog::new("a".repeat(64));
+        log.version = REPLAY_LOG_VERSION + 1;
+        assert!(matches!(
+            log.save(&path),
+            Err(IslandReplayError::Version(_))
+        ));
+        assert!(!path.exists(), "invalid replay must not create a file");
     }
 
     #[test]
