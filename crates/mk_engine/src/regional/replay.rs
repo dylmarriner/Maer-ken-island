@@ -721,6 +721,24 @@ mod replay_serialization_tests {
     }
 
     #[test]
+    fn replay_save_unsupported_version_preserves_existing_file() {
+        let dir = tempfile::tempdir().expect("temporary directory");
+        let path = dir.path().join("existing-version-replay.json");
+        let original = b"existing replay must remain untouched";
+        std::fs::write(&path, original).expect("seed existing replay");
+        let mut log = IslandReplayLog::new("a".repeat(64));
+        log.version = REPLAY_LOG_VERSION + 1;
+        assert!(matches!(
+            log.save(&path),
+            Err(IslandReplayError::Version(_))
+        ));
+        assert_eq!(
+            std::fs::read(&path).expect("read existing replay"),
+            original
+        );
+    }
+
+    #[test]
     fn replay_save_rejects_invalid_digest_without_creating_file() {
         let dir = tempfile::tempdir().expect("temporary directory");
         let path = dir.path().join("invalid-digest.json");
