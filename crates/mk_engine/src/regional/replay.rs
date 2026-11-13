@@ -704,6 +704,27 @@ mod replay_serialization_tests {
     }
 
     #[test]
+    fn replay_save_load_preserves_ordered_nonempty_history() {
+        let dir = tempfile::tempdir().expect("temporary directory");
+        let path = dir.path().join("nonempty-roundtrip.json");
+        let mut log = IslandReplayLog::new("b".repeat(64));
+        log.record(2, IslandCommand::Control(ControlCommand::Pause))
+            .expect("record first command");
+        log.record(2, IslandCommand::Control(ControlCommand::Pause))
+            .expect("record second command");
+        log.save(&path).expect("save replay");
+        let restored = IslandReplayLog::load(&path).expect("load saved replay");
+        assert_eq!(restored.entries.len(), 2);
+        assert_eq!(restored.entries[0].sequence, 0);
+        assert_eq!(restored.entries[1].sequence, 1);
+        assert_eq!(
+            serde_json::to_value(&restored).unwrap(),
+            serde_json::to_value(&log).unwrap(),
+            "nonempty replay must preserve commands, order and digest"
+        );
+    }
+
+    #[test]
     fn record_rejects_exhausted_sequence_without_mutating_history() {
         let mut log = IslandReplayLog::new("0".repeat(64));
         let command = IslandCommand::Control(ControlCommand::Pause);
