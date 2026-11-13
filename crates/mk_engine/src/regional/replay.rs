@@ -689,6 +689,21 @@ mod replay_serialization_tests {
     }
 
     #[test]
+    fn replay_save_load_preserves_empty_history_and_digest() {
+        let dir = tempfile::tempdir().expect("temporary directory");
+        let path = dir.path().join("roundtrip.json");
+        let log = IslandReplayLog::new("a".repeat(64));
+        log.save(&path).expect("save replay");
+        let restored = IslandReplayLog::load(&path).expect("load saved replay");
+        assert!(restored.entries.is_empty());
+        assert_eq!(
+            serde_json::to_value(&restored).unwrap(),
+            serde_json::to_value(&log).unwrap(),
+            "saving and loading must preserve the replay envelope"
+        );
+    }
+
+    #[test]
     fn record_rejects_exhausted_sequence_without_mutating_history() {
         let mut log = IslandReplayLog::new("0".repeat(64));
         let command = IslandCommand::Control(ControlCommand::Pause);
