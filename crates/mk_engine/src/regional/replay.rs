@@ -730,6 +730,23 @@ mod replay_serialization_tests {
     }
 
     #[test]
+    fn replay_save_invalid_digest_preserves_existing_file() {
+        let dir = tempfile::tempdir().expect("temporary directory");
+        let path = dir.path().join("existing-replay.json");
+        let original = b"existing replay must remain untouched";
+        std::fs::write(&path, original).expect("seed existing replay");
+        let log = IslandReplayLog::new("invalid-digest".to_string());
+        assert!(matches!(
+            log.save(&path),
+            Err(IslandReplayError::InvalidScenarioDigest)
+        ));
+        assert_eq!(
+            std::fs::read(&path).expect("read existing replay"),
+            original
+        );
+    }
+
+    #[test]
     fn replay_save_load_preserves_ordered_nonempty_history() {
         let dir = tempfile::tempdir().expect("temporary directory");
         let path = dir.path().join("nonempty-roundtrip.json");
