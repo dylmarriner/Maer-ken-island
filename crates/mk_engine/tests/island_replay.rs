@@ -152,6 +152,34 @@ fn replaying_a_log_reaches_the_island_the_run_reached() {
     );
 }
 
+/// Replaying the same persisted command history twice must produce identical
+/// canonical state hashes, independent of the first replay's allocations.
+#[test]
+fn persisted_replay_is_deterministic_across_independent_runs() {
+    let mut live = island();
+    let space = live
+        .placed
+        .layout
+        .spaces_outside_house()
+        .next()
+        .unwrap()
+        .id
+        .0;
+    live.advance(2 * STEP).unwrap();
+    live.apply_command(somebody("Replay Witness", space))
+        .unwrap();
+    live.advance(3 * STEP).unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("determinism.log.json");
+    live.replay_log().save(&path).unwrap();
+    let persisted = IslandReplayLog::load(&path).unwrap();
+    let first = replay_island(canon(), scenario(), &persisted, live.tick).unwrap();
+    let second = replay_island(canon(), scenario(), &persisted, live.tick).unwrap();
+    assert_eq!(first.state_digest(), second.state_digest());
+    assert_eq!(first.state_digest(), live.state_digest());
+    assert_eq!(first.tick, second.tick);
+}
+
 /// Control commands are recorded but move nothing, so a log with them and
 /// one without reach the same island.
 #[test]
