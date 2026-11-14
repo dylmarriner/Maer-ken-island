@@ -31,7 +31,7 @@ ureq = { version = "2", features = ["json"] }
 # Already in the tree through ureq; a snapshot of the island's grids is
 # mostly repeated numbers and compresses by better than ten to one.
 flate2 = "1"
-rusqlite = { version = "0.31", features = ["bundled"] }
+rusqlite = { version = "0.41", features = ["bundled"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 hex = "0.4"
