@@ -5626,16 +5626,22 @@ mod tests {
             water_kg: 0.0,
             place: timber::LogPlace::Ground,
         };
+        // Cross-cut accepts only registered logs with one-based IDs. Preview
+        // with the pending ID without mutating the not-yet-received source log.
+        let preview_log = timber::Log {
+            id: life.materials.next_log_id(),
+            ..source_log.clone()
+        };
         let tolerance = bed.abs().max(1.0) * f64::EPSILON * 4.0;
         assert!(
-            source_log
+            preview_log
                 .cross_cut(minimum_pieces, 100)
                 .iter()
                 .any(|piece| piece.length_m > bed + tolerance),
             "the fixture exposes the oversized conserved remainder"
         );
         assert!(
-            source_log
+            preview_log
                 .cross_cut(minimum_pieces + 1, 100)
                 .iter()
                 .all(|piece| piece.length_m <= bed + tolerance),

@@ -1,3 +1,8 @@
+## D40 exact-head CI correction — 15 November 2026
+
+- PR #136 exact-head workflow #43678835386 passed all listed CI jobs except fast Rust tests (905 passed, 2 failed). The two failures were test fixtures that used an unregistered zero-ID log in a cross-cut preview and expected an outdated panic message; physical validation was not relaxed.
+- Both fixed tests passed locally on AMD. See `docs/handoff/D40_EXACT_HEAD_FAST_TEST_CORRECTION_20261115.md`. The revised PR head still requires its own complete CI pass before merge.
+
 ## Integration verification status — 15 November 2026
 
 - PR #134 (material conservation) and PR #135 (atomic material ingestion) have merged into `main`; PR #137 patched bundled SQLite. Earlier draft/pending statements below are historical records, not the current merge state.

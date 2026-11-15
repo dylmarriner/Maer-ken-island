@@ -867,7 +867,7 @@ mod tests {
     use super::*;
 
     #[test]
-    #[should_panic(expected = "cross-cut requires finite, positive physical state")]
+    #[should_panic(expected = "cross-cut source log has invalid physical state")]
     fn cross_cut_rejects_finite_source_with_overflowed_endpoint() {
         let log = Log {
             id: 1,
