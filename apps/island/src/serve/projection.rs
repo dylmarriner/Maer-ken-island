@@ -144,6 +144,9 @@ pub struct IslandProjection {
     /// The household's food and water; `/api/food` serves it.
     #[serde(skip)]
     pub food: Arc<Food>,
+    /// The town and its actual payroll-bearing businesses. Served separately.
+    #[serde(skip)]
+    pub town: Arc<TownView>,
     /// The canonical state digest, and the tick it was taken at.
     ///
     /// Two islands showing the same digest at the same tick are the same
@@ -297,6 +300,9 @@ pub struct Terrain {
     pub npp_kgc_m2_yr: Vec<f64>,
     pub mean_temperature_c: Vec<f64>,
     pub annual_rain_mm: Vec<f64>,
+    /// Static, scenario-derived species/habitat view for marine cell inspection.
+    /// It is not simulation state and never participates in the state digest.
+    pub biota: Arc<mk_engine::regional::species::IslandBiota>,
 }
 
 impl Terrain {
@@ -314,6 +320,15 @@ impl Terrain {
                 )
             })
             .collect();
+        // Rebuild the same deterministic, read-only species projection from
+        // the scenario seed. IslandLife does not retain a second population.
+        let biota = Arc::new(mk_engine::regional::species::IslandBiota::survey(
+            life.canon.clone(),
+            &life.scenario.seed,
+            &life.domain,
+            &life.ecology,
+            &life.physical,
+        ));
         Self {
             domain: life.domain.clone(),
             elevation_m: life.physical.geophysics.elevation_m.clone(),
@@ -335,6 +350,7 @@ impl Terrain {
                 .iter()
                 .map(|(_, mm_day)| mm_day * EARTH_YEAR_DAYS)
                 .collect(),
+            biota,
         }
     }
 }
@@ -454,6 +470,16 @@ pub fn cell_of(terrain: &Terrain, row: usize, col: usize) -> Option<Cell> {
     // `lat_lon_at_m` answers in radians -- it is the function that put a
     // birth 0.716 degrees from the equator earlier in this branch.
     let (latitude, longitude) = terrain.domain.lat_lon_at_m(x_m, y_m);
+    let marine_nodes = terrain.biota.marine_aquatic_nodes(row * cols + col);
+    let marine_aquatic = if marine_nodes.is_empty() {
+        (None, None, None)
+    } else {
+        (
+            Some(marine_nodes.len()),
+            Some(marine_nodes.iter().map(|node| node.individuals).sum()),
+            Some(marine_nodes.iter().map(|node| node.biomass_t).sum()),
+        )
+    };
     Some(Cell {
         row,
         col,
@@ -475,6 +501,9 @@ pub fn cell_of(terrain: &Terrain, row: usize, col: usize) -> Option<Cell> {
         npp_kgc_m2_yr: terrain.npp_kgc_m2_yr.get(row * cols + col).copied(),
         mean_temperature_c: terrain.mean_temperature_c.get(row * cols + col).copied(),
         annual_rain_mm: terrain.annual_rain_mm.get(row * cols + col).copied(),
+        marine_aquatic_species: marine_aquatic.0,
+        marine_aquatic_individuals: marine_aquatic.1,
+        marine_aquatic_biomass_t: marine_aquatic.2,
     })
 }
 
@@ -531,6 +560,7 @@ impl IslandProjection {
             power: Arc::new(power(life)),
             timber: Arc::new(timber(life)),
             food: Arc::new(food(life)),
+            town: Arc::new(town(life)),
             // Current only if it was taken at this tick *and* nothing has
             // changed the island since: a command applies without moving
             // the clock, so the tick alone cannot tell (`run_island` clears
@@ -736,7 +766,7 @@ impl IslandProjection {
     pub fn timeline_now(life: &IslandLife) -> Arc<Vec<TimelineEntry>> {
         Arc::new(
             life.replay_log()
-                .entries
+                .entries()
                 .iter()
                 .map(|entry| TimelineEntry {
                     tick: entry.tick,
@@ -1093,6 +1123,98 @@ fn food(life: &IslandLife) -> Food {
         water_shortfalls: life.shortfalls.water,
         foraging: life.foraging.keys().cloned().collect(),
         fetching_water: life.water_trips.keys().cloned().collect(),
+    }
+}
+
+/// The town dashboard is a read-only projection of the simulation, not a
+/// separate roster. The founders' estate and the town never share residents.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct TownView {
+    /// False on an island where no town-sized hydro site could be founded.
+    pub founded: bool,
+    /// Medium-grid location of the town, when it exists.
+    pub cell: Option<(usize, usize)>,
+    /// Living registered townsfolk, whether currently at home or away.
+    pub residents: usize,
+    /// Living residents physically standing on the town's cell at this tick.
+    pub present: usize,
+    /// Town employers with real staff and real accrued hours.
+    pub enterprises: Vec<TownEmployer>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct TownEmployer {
+    pub name: String,
+    pub staff: usize,
+    /// Hours accrued since the last payroll run, not lifetime work.
+    pub unpaid_hours: f64,
+    pub payslips: usize,
+    /// The actual roster, rather than inferred positions or expected staff.
+    pub workers: Vec<TownWorker>,
+}
+
+/// A person currently on the town business's employment register. The
+/// amounts and hours come straight from the payroll ledger, not estimates.
+#[derive(Debug, Clone, Serialize)]
+pub struct TownWorker {
+    pub person: String,
+    pub hourly_cents: i64,
+    /// Hours worked since the last pay run, not total hours in their life.
+    pub hours_unpaid: f64,
+    /// Past earnings still owed, without counting hours yet to be paid.
+    pub wages_owed_cents: i64,
+}
+
+fn town(life: &IslandLife) -> TownView {
+    use mk_core::human::HumanStatus;
+    use mk_engine::regional::town::{HEALTH, SCHOOL};
+
+    let residents: Vec<_> = life
+        .humans
+        .registry
+        .iter()
+        .filter(|h| life.townsfolk.contains(h.agent_id()))
+        .filter(|h| matches!(h.profile.status, HumanStatus::Alive))
+        .collect();
+    let present = life.town_cell.map_or(0, |(row, col)| {
+        residents
+            .iter()
+            .filter(|h| h.position.row == row as i32 && h.position.col == col as i32)
+            .count()
+    });
+    let enterprises = life
+        .money
+        .as_ref()
+        .map(|money| {
+            money
+                .enterprises
+                .iter()
+                .filter(|e| e.name == HEALTH || e.name == SCHOOL)
+                .map(|e| TownEmployer {
+                    name: e.name.clone(),
+                    staff: e.staff.len(),
+                    unpaid_hours: e.staff.iter().map(|employee| employee.hours_unpaid).sum(),
+                    payslips: e.payslips.len(),
+                    workers: e
+                        .staff
+                        .iter()
+                        .map(|worker| TownWorker {
+                            person: worker.person.clone(),
+                            hourly_cents: worker.hourly_cents,
+                            hours_unpaid: worker.hours_unpaid,
+                            wages_owed_cents: worker.wages_owed,
+                        })
+                        .collect(),
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    TownView {
+        founded: life.town_cell.is_some(),
+        cell: life.town_cell,
+        residents: residents.len(),
+        present,
+        enterprises,
     }
 }
 

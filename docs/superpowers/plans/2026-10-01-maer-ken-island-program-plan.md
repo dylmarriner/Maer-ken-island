@@ -104,3 +104,8 @@ Population:
 - [ ] Run the benchmark command defined in Phase 5 and commit the baseline report under `benchmarks/`.
 - [ ] Update `UPSTREAM.md` with every imported path and island divergence introduced by the phases.
 - [ ] Tick the program complete only after all nine gates are green.
+
+
+### Phase 3 species-cache status (2026-11-06)
+
+The derived `IslandBiota` catalogue is read-only to external callers. Controlled replacement rebuilds marine membership and producer/grazer weights atomically, and survey/replacement reject duplicate species IDs before mutation. The checked marine projection validates cell bounds, shared cell area before the empty-habitat return, cached identity/metadata, abundance source, density, body mass and finite population/biomass conversion. These are derived-view invariants only: no retained simulation state, snapshot, event log, replay digest or material ledger changes.

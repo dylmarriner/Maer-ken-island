@@ -70,22 +70,77 @@ pub struct Cut {
     pub weight_fraction: f64,
 }
 
+/// Rounded assay yields are accepted within 0.01 percentage points of 100%.
+const ASSAY_YIELD_SUM_TOLERANCE_FRACTION: f64 = 0.0001;
+
+/// Reject invalid assay weights before they can be normalised into plausible-looking
+/// product fractions. The source reports percentages rounded to three decimals.
+fn validate_assay_yields(cuts: &[Cut]) -> Result<(), MissingReference> {
+    if cuts.is_empty() {
+        return Err(MissingReference(
+            "troll_atmospheric_cut_yields: assay contains no cuts".into(),
+        ));
+    }
+
+    let mut total = 0.0;
+    for cut in cuts {
+        if !cut.weight_fraction.is_finite()
+            || cut.weight_fraction < 0.0
+            || cut.weight_fraction > 1.0
+        {
+            return Err(MissingReference(format!(
+                "troll_atmospheric_cut_yields/{}: yield must be finite and between 0 and 100 wt%",
+                cut.label
+            )));
+        }
+        total += cut.weight_fraction;
+    }
+
+    if !total.is_finite() || (total - 1.0).abs() > ASSAY_YIELD_SUM_TOLERANCE_FRACTION {
+        return Err(MissingReference(format!(
+            "troll_atmospheric_cut_yields: weight yields sum to {:.6}%, expected 100% ± 0.01 percentage points",
+            total * 100.0
+        )));
+    }
+
+    Ok(())
+}
+
 /// The end temperature of an assay cut from its label: `IBP-C4` is the
 /// light gases; `a-b C` ends at `b`; `C5-65 C` at 65; `370 C-FBP` boils to
 /// the end.
-fn cut_end_c(label: &str) -> Option<f64> {
+fn cut_end_c(label: &str) -> Result<Option<f64>, String> {
+    let invalid = || format!("invalid refinery cut label: {label}");
     let head = label.split(" (").next().unwrap_or(label).trim();
-    if head.starts_with("IBP-C") {
-        return None;
+
+    // The assay's light-gas cut is the only valid cut without a numeric end point.
+    if head == "IBP-C4" {
+        return Ok(None);
     }
-    if head.ends_with("FBP") {
-        return Some(f64::INFINITY);
+
+    // The atmospheric residue is the only valid infinite-end cut.
+    if let Some(start) = head.strip_suffix(" C-FBP") {
+        let start = start.parse::<f64>().map_err(|_| invalid())?;
+        if !start.is_finite() || start < 0.0 {
+            return Err(invalid());
+        }
+        return Ok(Some(f64::INFINITY));
     }
-    let range = head.trim_end_matches('C').trim();
-    range
-        .rsplit('-')
-        .next()
-        .and_then(|end| end.trim().parse::<f64>().ok())
+
+    let range = head.strip_suffix(" C").ok_or_else(invalid)?;
+    let (start, end) = range.split_once('-').ok_or_else(invalid)?;
+    let start = start
+        .strip_prefix('C')
+        .unwrap_or(start)
+        .trim()
+        .parse::<f64>()
+        .map_err(|_| invalid())?;
+    let end = end.trim().parse::<f64>().map_err(|_| invalid())?;
+    if !start.is_finite() || !end.is_finite() || start < 0.0 || end <= start {
+        return Err(invalid());
+    }
+
+    Ok(Some(end))
 }
 
 /// The reference numbers the refinery runs on.
@@ -131,11 +186,12 @@ impl RefineryModel {
                     .ok_or_else(|| MissingReference(format!("cut {}", r.label)))?;
                 Ok(Cut {
                     label: r.label.clone(),
-                    end_c: cut_end_c(&r.label),
+                    end_c: cut_end_c(&r.label).map_err(MissingReference)?,
                     weight_fraction: weight / 100.0,
                 })
             })
             .collect::<Result<Vec<_>, MissingReference>>()?;
+        validate_assay_yields(&cuts)?;
         let ipcc = table("ipcc_ncv_and_carbon_content")?;
         let cell = |row: &str, column: &str| {
             ipcc.get(row, column)
@@ -285,9 +341,46 @@ mod tests {
 
     #[test]
     fn cut_labels_give_their_end_temperatures() {
-        assert_eq!(cut_end_c("IBP-C4 (C1-C4 gases incl. LPG range)"), None);
-        assert_eq!(cut_end_c("C5-65 C (light naphtha)"), Some(65.0));
-        assert_eq!(cut_end_c("150-200 C"), Some(200.0));
-        assert_eq!(cut_end_c("370 C-FBP (residue)"), Some(f64::INFINITY));
+        assert_eq!(
+            cut_end_c("IBP-C4 (C1-C4 gases incl. LPG range)").unwrap(),
+            None
+        );
+        assert_eq!(cut_end_c("C5-65 C (light naphtha)").unwrap(), Some(65.0));
+        assert_eq!(cut_end_c("150-200 C").unwrap(), Some(200.0));
+        assert_eq!(
+            cut_end_c("370 C-FBP (residue)").unwrap(),
+            Some(f64::INFINITY)
+        );
+    }
+
+    #[test]
+    fn unknown_or_malformed_cut_labels_are_rejected() {
+        for label in ["IBP-C5", "mystery cut", "100-50 C", "not-a-number C-FBP"] {
+            assert!(
+                cut_end_c(label).is_err(),
+                "accepted invalid cut label {label:?}"
+            );
+        }
+    }
+    #[test]
+    fn assay_yields_must_be_finite_nonnegative_and_close_to_one_hundred_percent() {
+        let cut = |label: &str, weight_fraction: f64| Cut {
+            label: label.into(),
+            end_c: Some(100.0),
+            weight_fraction,
+        };
+
+        assert!(validate_assay_yields(&[cut("a", 0.4), cut("b", 0.60001)]).is_ok());
+
+        let invalid = [
+            Vec::new(),
+            vec![cut("negative", -0.01), cut("positive", 1.01)],
+            vec![cut("not-finite", f64::NAN)],
+            vec![cut("underweight", 0.99)],
+            vec![cut("overweight", 1.01)],
+        ];
+        for cuts in invalid {
+            assert!(validate_assay_yields(&cuts).is_err(), "accepted {cuts:?}");
+        }
     }
 }

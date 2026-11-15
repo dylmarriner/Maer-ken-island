@@ -132,7 +132,7 @@ fn slow_what_phase_4_costs() {
         "steps, a command an hour  : {:?} total, {:.0} us/step  ({} recorded)",
         with_log,
         per_step_us(with_log, STEPS),
-        logged.replay_log().entries.len()
+        logged.replay_log().entries().len()
     );
 
     // 4. A whole island to disk and back (Task 3).

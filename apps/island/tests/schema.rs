@@ -233,3 +233,22 @@ fn a_control_request_is_the_json_the_dashboard_has_always_posted() {
         );
     }
 }
+
+#[test]
+fn older_cell_payloads_default_the_optional_marine_projection() {
+    let old_payload = serde_json::json!({
+        "row": 4,
+        "col": 7,
+        "latitude": -41.2,
+        "longitude": 174.5,
+        "land": false,
+        "elevation_m": -120.0,
+        "buildable": false
+    });
+
+    let cell: mk_island_api::Cell =
+        serde_json::from_value(old_payload).expect("an older backend cell remains readable");
+    assert_eq!(cell.marine_aquatic_species, None);
+    assert_eq!(cell.marine_aquatic_individuals, None);
+    assert_eq!(cell.marine_aquatic_biomass_t, None);
+}

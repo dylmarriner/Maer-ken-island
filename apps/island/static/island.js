@@ -13,8 +13,12 @@ import {
   el,
   emptyState,
   fillChrome,
+  handleMapCellClick,
   getImage,
   getJson,
+  readIfAvailable,
+  mediumCellCentre,
+  townWorkerRows,
   message,
   postJson,
   reportOffline,
@@ -26,6 +30,7 @@ const panels = {
   properties: document.getElementById("properties-panel"),
   economy: document.getElementById("economy-panel"),
   industry: document.getElementById("industry-panel"),
+  town: document.getElementById("town-panel"),
   power: document.getElementById("power-panel"),
   timber: document.getElementById("timber-panel"),
   food: document.getElementById("food-panel"),
@@ -35,6 +40,7 @@ const bodies = {
   properties: document.getElementById("properties"),
   economy: document.getElementById("economy"),
   industry: document.getElementById("industry"),
+  town: document.getElementById("town"),
   power: document.getElementById("power"),
   timber: document.getElementById("timber"),
   food: document.getElementById("food"),
@@ -44,6 +50,7 @@ const notes = {
   properties: document.getElementById("properties-note"),
   economy: document.getElementById("economy-note"),
   industry: document.getElementById("industry-note"),
+  town: document.getElementById("town-note"),
   power: document.getElementById("power-note"),
   timber: document.getElementById("timber-note"),
   food: document.getElementById("food-note"),
@@ -315,6 +322,70 @@ async function showIndustry() {
   panels.industry.hidden = false;
 }
 
+/** The town's residents and enterprise payroll, read from the same tick. */
+async function showTown() {
+  const response = await readIfAvailable(getJson, "/api/town");
+  if (response === null) {
+    setTownLocation(null);
+    // The frontend can be newer than the backend it is pointed at. A 404
+    // here means this particular view is unavailable, not that the island
+    // has stopped. Leave every other panel visible and polling normally.
+    notes.town.textContent = "This island backend does not provide the Town view yet.";
+    bodies.town.replaceChildren(
+      emptyState("Town view unavailable", "Update the island backend to see its town and workforce."),
+    );
+    panels.town.hidden = false;
+    return;
+  }
+  const { town: data, tick } = response;
+  setTownLocation(data.founded ? data.cell : null);
+  const parts = el("div");
+  if (!data.founded) {
+    notes.town.textContent =
+      "No town has been founded on this island. A suitable hydro site is required.";
+    parts.append(emptyState("No town yet", "The island has not founded a town at a suitable hydro site."));
+  } else {
+    notes.town.textContent =
+      `At medium-grid cell ${data.cell[0]}, ${data.cell[1]}.`;
+    parts.append(pair("Living residents", data.residents.toLocaleString()));
+    parts.append(pair("Residents present in town", data.present.toLocaleString()));
+    if (data.enterprises.length) {
+      parts.append(
+        table(
+          ["Enterprise", "Employed people", "Hours since last pay run", "Payslips issued"],
+          data.enterprises.map((e) => [
+            e.name,
+            e.staff.toLocaleString(),
+            qty(e.unpaid_hours),
+            e.payslips.toLocaleString(),
+          ]),
+        ),
+      );
+      const workers = townWorkerRows(data.enterprises);
+      if (workers.length) {
+        parts.append(el("h3", "Town workforce"));
+        parts.append(
+          table(
+            ["Person ID", "Employer", "Hourly pay", "Hours since last pay run", "Past wages owed"],
+            workers.map((worker) => [
+              worker.person,
+              worker.enterprise,
+              dollars(worker.hourly_cents),
+              qty(worker.hours_unpaid),
+              dollars(worker.wages_owed_cents),
+            ]),
+          ),
+        );
+      }
+    } else {
+      parts.append(emptyState("No businesses yet", "No town enterprises have been established."));
+    }
+  }
+  parts.append(el("p", `Current as of tick ${tick.toLocaleString()}.`, { class: "panel-note" }));
+  bodies.town.replaceChildren(parts);
+  panels.town.hidden = false;
+}
+
 async function showPower() {
   const { power: data, tick } = await getJson("/api/power");
   const parts = el("div");
@@ -463,6 +534,16 @@ let treeAgain = false;
 
 // What the map draws on top of the ground, refreshed by the poll loop.
 let mapWorld = null;
+// Town is not in /api/world: /api/town supplies its location if the backend
+// supports the feature. Null also means the island has no founded town.
+let townPoint = null;
+
+function setTownLocation(cell) {
+  townPoint = mediumCellCentre(cell, ground.cellM);
+  const button = document.getElementById("map-town");
+  if (button) button.disabled = townPoint === null;
+  if (view.ready) draw();
+}
 
 // How close you must be before asking for trees at all. Below this the
 // whole individually-modelled wood is a couple of pixels across, and four
@@ -692,6 +773,23 @@ function draw() {
     ctx.strokeRect(sx - side / 2, sy - side / 2, side, side);
   }
 
+  // A town is a place, not one of the estate's structures or its people.
+  // A cyan diamond distinguishes it from those marks at every zoom.
+  if (townPoint) {
+    const [tx, ty] = toScreen(canvas, townPoint[0], townPoint[1]);
+    ctx.fillStyle = "#25bdb3";
+    ctx.strokeStyle = "#063b42";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(tx, ty - 9);
+    ctx.lineTo(tx + 9, ty);
+    ctx.lineTo(tx, ty + 9);
+    ctx.lineTo(tx - 9, ty);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  }
+
   for (const s of lastStructures) {
     const [r, c] = s.cell;
     const [sx, sy] = toScreen(canvas, (c + 0.5) * ground.cellM, (r + 0.5) * ground.cellM);
@@ -805,6 +903,10 @@ function sayScale(canvas) {
     document.createTextNode(" in yellow, "),
     el("span", `${count(lastStructures.length, "structure", "structures")}`, { class: "map-key-structure" }),
     document.createTextNode(" in orange, the estate boxed in white."),
+    ...(townPoint
+      ? [document.createTextNode(" "), el("span", "The town", { class: "map-key-town" }),
+         document.createTextNode(" in turquoise.")]
+      : []),
   ];
   const where =
     treesShown &&
@@ -845,47 +947,23 @@ function sayScale(canvas) {
 const cellSelectionGate = createCellSelectionGate();
 
 async function onMapClick(event) {
-  const canvas = mapCanvas();
-  const out = document.getElementById("map-cell");
-  if (!view.ready) return;
-  const box = canvas.getBoundingClientRect();
-  const [x, y] = toMetres(canvas, event.clientX - box.left, event.clientY - box.top);
-  const col = Math.floor(x / ground.cellM);
-  const row = Math.floor(y / ground.cellM);
-  if (col < 0 || row < 0 || col >= ground.cols || row >= ground.rows) return;
   const selection = cellSelectionGate.begin();
-  try {
-    const data = await getJson(`/api/cell/${row}/${col}`);
-    if (!cellSelectionGate.isCurrent(selection)) return;
-    const c = data.cell;
-    out.replaceChildren(
-      el("p", `Row ${c.row}, column ${c.col} — ${c.latitude.toFixed(4)}°, ${c.longitude.toFixed(4)}°`, { class: "cell-where" }),
-      el(
-        "p",
-        c.land
-          ? `Land, ${c.elevation_m.toFixed(0)} m above sea level. ${c.buildable ? "A structure could stand here." : "Too steep to build on."}`
-          : `Sea, ${(-c.elevation_m).toFixed(0)} m deep. Nobody can be created here and nothing can be built.`,
-        { class: "cell-what" },
-      ),
-      ...cellEnvironmentDetails(c).map((detail) => el("p", detail, { class: "cell-what" })),
-    );
-    // The point of clicking. Before this the intervention form offered
-    // exactly one place -- the estate -- so the whole rest of the island
-    // was unreachable from the page. A clicked cell becomes a place, and
-    // is selected.
-    clickedPlace = {
-      label: `Clicked — cell ${c.row}, ${c.col}${c.land ? "" : " (sea)"}`,
-      latitude: c.latitude,
-      longitude: c.longitude,
-    };
-    if (!(await fillPlacesAndPeople(selection))) return;
-    if (!cellSelectionGate.isCurrent(selection)) return;
-    whereEl.value = String(places.findIndex((p) => p === clickedPlace));
-  } catch (error) {
-    if (cellSelectionGate.isCurrent(selection)) {
-      out.replaceChildren(el("p", explain(error), { class: "cell-what" }));
-    }
-  }
+  return handleMapCellClick(event, {
+    canvas: mapCanvas(),
+    output: document.getElementById("map-cell"),
+    viewReady: view.ready,
+    ground,
+    toMetres,
+    getJson,
+    setClickedPlace: (place) => { clickedPlace = place; },
+    fillPlacesAndPeople: () => fillPlacesAndPeople(selection),
+    getPlaces: () => places,
+    whereEl,
+    // Retain PR #68 latest-click-wins selection and local climate details
+    // alongside the current main marine-species inspector.
+    isCurrent: () => cellSelectionGate.isCurrent(selection),
+    detailsForCell: cellEnvironmentDetails,
+  });
 }
 
 // Zoom about the pointer rather than the centre, so the thing under the
@@ -974,6 +1052,12 @@ function wireMap() {
     const [r, c] = mapWorld.estate.cell;
     // Four kilometres across: the whole high-detail patch in frame.
     goTo((c + 0.5) * ground.cellM, (r + 0.5) * ground.cellM, 4000 / (canvas.clientWidth || 1));
+  });
+  document.getElementById("map-town").addEventListener("click", () => {
+    if (!townPoint) return;
+    // Eight medium cells across: enough context to see the town's river,
+    // unlike a close-up of one cell that fills the frame with one pixel.
+    goTo(townPoint[0], townPoint[1], 8 * ground.cellM / (canvas.clientWidth || 1));
   });
   document.getElementById("map-trees").addEventListener("click", () => {
     // Aimed at a stem that is actually there, not at the middle of the
@@ -1077,7 +1161,11 @@ async function showTimeline() {
 /// they hold was true once and is not now, and leaving a write form up for
 /// a stopped island invites an operator to act on it.
 function hidePanels() {
-  for (const id of ["intervene-panel", "map-panel", "properties-panel", "economy-panel", "industry-panel", "power-panel", "timber-panel", "food-panel", "timeline-panel"]) {
+  // A stopped or replaced island must not keep a previous town's marker.
+  townPoint = null;
+  const townButton = document.getElementById("map-town");
+  if (townButton) townButton.disabled = true;
+  for (const id of ["intervene-panel", "map-panel", "properties-panel", "economy-panel", "industry-panel", "town-panel", "power-panel", "timber-panel", "food-panel", "timeline-panel"]) {
     const panel = document.getElementById(id);
     if (panel) panel.hidden = true;
   }
@@ -1138,6 +1226,7 @@ async function load() {
       showProperties(),
       showEconomy(),
       showIndustry(),
+      showTown(),
       showPower(),
       showTimber(),
       showFood(),

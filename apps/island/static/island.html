@@ -94,6 +94,7 @@
       <button type="button" id="map-in">Zoom in</button>
       <button type="button" id="map-whole">Whole island</button>
       <button type="button" id="map-estate">To the estate</button>
+      <button type="button" id="map-town" disabled>To the town</button>
       <button type="button" id="map-trees">To the trees</button>
       <label for="map-layer">Showing</label>
       <select id="map-layer">
@@ -125,6 +126,11 @@
     <h2 id="industry-heading">Oil, fuel and money</h2>
     <p class="panel-note" id="industry-note"></p>
     <div id="industry"></div>
+  </section>
+  <section class="panel" aria-labelledby="town-heading" id="town-panel" hidden>
+    <h2 id="town-heading">The town</h2>
+    <p class="panel-note" id="town-note"></p>
+    <div id="town"></div>
   </section>
   <section class="panel" aria-labelledby="power-heading" id="power-panel" hidden>
     <h2 id="power-heading">Power, fuel and vehicles</h2>

@@ -48,6 +48,12 @@ fn cuts_are_products_by_the_fuel_specifications() {
     }
     let shares = m.distilled_fractions();
     assert!((shares.iter().sum::<f64>() - 1.0).abs() < 1e-12);
+    let assay_weight_total = m.cuts.iter().map(|cut| cut.weight_fraction).sum::<f64>();
+    assert!(
+        (assay_weight_total - 1.0).abs() <= 0.0001,
+        "rounded Troll assay weights total {:.6}%",
+        assay_weight_total * 100.0
+    );
 }
 
 #[test]

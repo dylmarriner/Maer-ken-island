@@ -1,6 +1,107 @@
+## Client and dashboard integration — 15 November 2026
+
+- PR #68 is being reconciled with current `main`: Rust client identity and authenticated request protections, People roster/inspector refresh and climate/map presentation are retained. Conflicts in CI, docs, JS and CSS were resolved without replacing newer marine cell projection or global CI resource guards. Two map-click regressions failed before the helper integration and passed after it. Local: 65 dashboard Node tests, 12 script Node tests, 9 Python script tests, 8 Rust client unit tests, 1 Rust doc test and strict client Clippy pass. See `docs/handoff/CLIENT_AND_DASHBOARD_RECONCILIATION_20261115.md`. Full exact-head CI required before merge.
+
+## Latest PR #134 engineering and verification status — 9 November 2026
+
+## Latest felled-log soil-depth underflow correction — 9 November 2026
+
+- The previous source-debit guard caught positive millimetre debits that rounded away against large soil-water storage, but a smaller conversion edge remained: positive subnormal kilograms can underflow to exactly zero when divided by cell area to obtain millimetres.
+- `receive_felled_log` now rejects `from_soil > 0 && removed_mm == 0` before the shared representable-debit check, log-ID allocation, hydrology, stock or flux mutation.
+- Regression: smallest positive binary64 subnormal log water with a cell area greater than 1 m²; rejection preserves soil storage, carbon/water stocks, next log ID, logs and flux entries.
+- Production commit: `0acf469543f519cf8c2f616eda5a3f8341bac8f8`; test commit: `ec352e3e84cef47f522429fa6cb013a680743896`; handoff: `398ee70ac1b4b1c3201e5d98122da3aa2cc3f6b3`.
+- Fresh exact-head CI is required. The prior workflow did not complete its required tests; no local Cargo pass is claimed while custom OpenCommander is rate-limited.
+- Next: verify the complete PR #135 matrix, then reconcile #134/#135 before merge; continue D40 saw cross-cut/ute transport and route modelling.
+
+## Latest exact-head formatting correction — 9 November 2026
+
+- Workflow [#42536830786](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42536830786) stopped at rustfmt on the felled-log soil-debit assignment; no Clippy or fast-test result was produced for that head.
+- Applied the exact rustfmt layout in `1b620f68811f1d5f7988ac677474c2b8143a5704`.
+- New exact-head workflow [#42536914812](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42536914812) is running. Dependency audit, repository scripts, web dashboard and computer service are green; the remaining acceptance jobs have not completed.
+- Handoff update: `8679d8b4323a4eea9693c78b7d22b865368c7e26`. PR #135 remains draft pending exact-head acceptance.
+
+## Latest felled-log soil-debit follow-up — 9 November 2026
+
+- Found a remaining binary64 conservation gap in `receive_felled_log`: the destination MaterialWater addition was preflighted, but the source soil-water subtraction was only checked for finiteness. A positive transfer could therefore disappear from a large finite soil reservoir while the material stock and flux ledger received it.
+- Reused `checked_source_debit_result` to require an exact positive source reduction before log-ID allocation or any hydrology/stock/ledger mutation.
+- Added a (2^{53}) mm soil-depth regression with an 8.2 kg log-water transfer; rejection must preserve soil storage, carbon/water stocks, next log ID, logs and flux entries.
+- Production commit: `8df094d717fabe6e4c6d1bb913a8e20a2654902f`; test commit: `72eb626e523a163fa343640235b64e2322c3527d`; handoff update: `383de3215cac92df2e256c8b2619e1e9eb387625`.
+- Exact-head PR #135 verification is required. No local Cargo pass is claimed while custom OpenCommander is returning HTTP 429.
+- Next: run formatting, Clippy, fast tests, desktop/backend and week/year reference packs on the new exact head; then reconcile #134/#135 and continue D40 saw cross-cut/ute transport.
+
+## Latest seasoning audit-closure follow-up — 9 November 2026
+
+- PR #135 follow-up found that `season_stored_logs` only required the rounded MaterialWater aggregate to decrease. That did not prove its actual post-removal stock delta matched the per-log water fluxes; binary64 rounding could turn a 1.5 kg transfer into a 2 kg aggregate change.
+- The Wood conversion also preflighted only that inventory increased, not that the resulting MaterialCarbon aggregate remained unchanged when logs moved into the Wood stock.
+- The preflight now predicts post-seasoning MaterialCarbon and MaterialWater using the same aggregation order as `stock_of`, and compares the predicted deltas with the audit contract before removing any log or appending any water flux.
+- Regressions: a 10 kg log seasoned into a (2^{53}) kg Wood stock would otherwise lose 0.5 kgC through rounding; three 0.5 kg-water logs seasoned against a (2^{53}) kg Water stock would otherwise change the aggregate by 2 kg while the ledger books 1.5 kg. Both cases must refuse without changing stocks, logs or flux entries.
+- No snapshot schema, append-only replay format, replay hash, RNG, tick cadence, scientific constant or reference pack was intentionally changed.
+- Exact-head CI is pending after these commits. No local Cargo result is claimed while custom OpenCommander is rate-limited.
+- Next: complete PR #135 formatting, Clippy, fast tests, desktop/backend and week/year acceptance; separately resolve PR #134's week-reference digest drift before merge.
+
+## Latest material-ingestion atomicity slice — 9 November 2026
+
+- New draft PR #135: [Preflight timber and roof-water material ingestion](https://github.com/dylmarriner/Maer-ken-island/pull/135), based on main `6b57ad96273c2320910f93902963bc8800974175`.
+- `receive_felled_wood`, `receive_felled_log`, `capture_roof_water` and `season_stored_logs` now validate destination/aggregate stock representability and preflight source-state changes before ID allocation, hydrology mutation, log removal or flux recording.
+- `season_stored_logs` aggregates the deterministic batch with compensation before the one Wood-stock preflight; it does not remove an earlier log if a later piece or aggregate debit is unrepresentable.
+- Regression tests cover rounded-away Wood, Water, felled-log carbon/water, atomic seasoning refusal, a successful roof-water audit, and two 1 kg logs aggregated into a representable 2 kg increment at a `2^53` kg stock.
+- Production commits: `1243825e28134e6f4791eb198a34a0798ca9b2b5`, `e1dd1ba995e1f3838ba0178a8d51c85e87eadeb7`, `6702aa3efa0935e9ff4650d00522337184eb4c9f`; test commits: `ea2136c0703b6f2c3476d1ffa9e7003ff854bbc5`, `aa026fc2a3c3c15315df4098d2ed729ef2cbbf01`; handoff: `docs/handoff/MATERIAL_INGESTION_ATOMICITY_20261109.md`.
+- Exact-head CI is pending. No local Cargo pass is claimed. Keep PR #135 draft until formatting, Clippy, fast tests, desktop/backend and required week/year acceptance are green.
+- No snapshot schema, append-only replay format, replay hash, RNG, tick cadence, scientific constant or reference pack was intentionally changed.
+- Next: complete PR #135 verification; separately resolve PR #134's week-reference digest drift before merge; then resume D40 saw-based log cross-cut/ute transport and D31 soil modelling.
+
+## Latest exact-head formatting correction — 9 November 2026
+
+- PR #133's withdrawal-representability work is merged to `main` as `6b57ad96273c2320910f93902963bc8800974175`; its exact-head workflow [#42512313757](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42512313757) passed the required fast, desktop/backend, dashboard, service, script, dependency and week/year reference-pack checks. Nightly slow tests were skipped by design.
+- PR #134 extends binary64 stock-addition preflight to biotic/edible gathering, soil/surface-water gathering, fossil extraction, hunting, calcining and charcoal conversion. Conversion inputs and outputs are both preflighted before either side mutates.
+- The week reference-pack run [#42523987454](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42523987454) reported actual digest `61ffaa6a559b5a8f503b7b6c707ca5f8cf634be9eebec64a1af6652706c2478a` versus the old pin `29ed53bd7769eb3025e70135bab8b7ea07718e26e7fca4cbf77ab379d62b7784`. Its physical assertions passed: 27,651 ledger audits, 167 hourly water audits, zero food/water shortfalls, 111 economy events, 200,000 estate trees, founder body-carbon targets and temperate-forest NPP 471 g C/m2/yr inside the 400-900 reference band. Sleep, eating, glycogen and water-intake checks passed; the independent year-weather reference pack passed. The only failure was the previous digest assertion.
+- The digest is re-pinned to the audited value in test commit `180d1c8f48247236511cf75b9cc04b2f5f4a1a1a`. The change records the intentional 1e-12 kg C post-meal remainder canonicalisation; no scientific constant, reference bound, RNG, tick cadence, snapshot schema or replay format changed.
+- The no-Result material-ingestion paths (`receive_felled_wood`, `receive_felled_log`, `capture_roof_water`, `season_stored_logs`) are tracked separately in draft PR #135. PR #134 no longer carries duplicate roof-water code/tests after scope-split commits `eaddfc8a0103795abe5808f0b9bf9906a4d8e8a0` and `9a79154a5f9d4f3f93908ae21d29ee9b436d2205`. PR #135 adds its own source-soil debit representability regression; its exact-head CI must pass independently.
+- Exact-head workflow [#42527890278](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42527890278) caught three rustfmt assertion-layout differences; Clippy and fast tests were skipped. Corrected in `f244ae616bd7202dfa1e50f27cd4c4e343337651`.
+- Follow-up workflow [#42527969583](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42527969583) was cancelled before the corrected head's required checks completed. It is not a pass. The handoff is updated at `6917d9b16176fd86c39770d0101016d890982fe2`.
+- Current PR #134 branch head at this register update requires fresh exact-head formatting, Clippy, fast tests, desktop/backend acceptance and week/year reference-pack verification. No local Cargo pass is claimed while custom OpenCommander is unavailable.
+- Pending no-Result ingestion paths remain in unmerged draft PR #135: `receive_felled_wood`, `receive_felled_log`, `capture_roof_water` and `season_stored_logs`. Their guards are not in `main` until PR #135 merges after its own exact-head acceptance; none is claimed complete on PR #134.
+- Next after PR #134 verification: D40 felled-log cross-cut for ute transport with the two-person saw, labour/energy accounting and route modelling; then D31 regional soil-nutrient modelling.
+
 # Work remaining
 
-Written 2026-10-13 against `main` at the merge of PR #6 (`05fd6e5`). This is the single list of
+## Latest engineering slice — 9 November 2026
+
+- PR #131 merged to `main` as `39af4d821920ac614bfa32c965b227ffec028de2`. Exact-head workflow [#42492412005](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42492412005) passed formatting, Clippy, fast Rust tests, desktop/backend acceptance, dashboard, computer service, scripts, dependency audit and week/year reference packs; nightly slow tests were skipped by design.
+- PR #132, [operator water-injection audit atomicity](https://github.com/dylmarriner/Maer-ken-island/pull/132), merged to `main` as `e6304cc4423cd09e03b61922d61c8b31bfabaccd`. Exact-head workflow [#42497043271](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42497043271) passed formatting, Clippy, fast Rust tests, desktop build/tests/render/input acceptance, installed backend, dashboard, computer service, repository scripts, dependency audit and week/year reference packs; nightly slow tests were skipped by design.
+- PR #133, [binary64 withdrawal representability](https://github.com/dylmarriner/Maer-ken-island/pull/133), now also rejects positive debits that round away against large stock **and** positive withdrawals accepted by the legacy availability tolerance when stock is actually zero. `craft` preflights all required debits before any mutation; the private debit boundary repeats the guard. Production commits: `0386e035da5dbd27d65fa4cc2ec9e73a3675e4f2`, `013573a3abfd172e53b5918a7498b306d4aaf66c`; regression commits: `067c254c627d90e2cb2529361f1cc26574791986`, `e2bb0e6a7d195dba2b6011ac1e900031642de792`.
+- Regression coverage includes a 1 kg debit from `f64::MAX` Wood and a 1e-13 kg debit from empty stock (inside the 1e-12 tolerance); both must reject without changing material/carbon stock or flux entries.
+- Handoff: `docs/handoff/MATERIAL_WITHDRAWAL_BINARY64_REPRESENTABILITY_20261109.md`. Workflow [#42502215055](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42502215055) began on the earlier head `fab74a37911b71bb2b0f8ac832f1eb2ae495270b`; it does not verify the subsequent zero-stock follow-up. Fresh exact-head CI is required. No local Cargo pass is claimed while OpenCommander is rate-limited.
+- No snapshot schema, append-only replay format, replay hash, RNG, tick cadence, scientific constant, reference pack or live simulation state changed.
+- Next: verify the updated PR #133 head, then resume D40's still-open saw cross-cut for ute transport and route modelling, followed by D31's sourced regional soil-nutrient model.
+
+## Previous engineering slice — 8 November 2026
+
+- Timber source-state, restored-ledger allocator and active-haul exclusivity hardening (PR #128) merged to `main` as `5ea337d5f5931f9349869b39f0f16e7edbcd31c6`. Exact-head workflow [#42461413038](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42461413038) passed formatting, Clippy, fast Rust tests, installed backend, desktop application, web dashboard, computer service, repository scripts, dependency audit and week/year reference-pack acceptance; nightly slow tests were skipped by design.
+
+- Material quantity and craft atomicity hardening is on `fix/material-amount-boundaries-20261108`: negative/non-finite withdrawals now fail before mutation; craft validates inputs/outputs and aggregates duplicate input requirements before any debit. Source commit `b3f644d8`, regression commit `2dad19f7`, handoff `docs/handoff/MATERIAL_AMOUNT_ATOMICITY_20261108.md`. Exact-head verification is pending; no local Cargo result is claimed because custom OpenCommander returned HTTP 429.
+
+
+Fishery landed-total atomicity and precision (PR #110) merged to `main` as `148ac98c95e58aac7b2065dd0cc68884790f4168`. Exact-head workflow [#42275024667](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42275024667) passed formatting, Clippy, fast Rust tests, desktop build/tests/rendering/input acceptance, installed backend, web dashboard, computer service, repository scripts, dependency audit and week/year reference-pack acceptance; nightly slow tests were skipped by design.
+
+Fishery biomass-remainder precision (PR #111) merged to `main` as `b41bb5cf24bddca5df2bc556612c5edfc8b91bde`. Exact-head workflow [#42292739398](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42292739398) passed formatting, Clippy, fast Rust tests, desktop, installed backend, dashboard, computer service, repository scripts, dependency audit and week/year reference-pack acceptance; nightly slow tests were skipped by design.
+
+Cumulative landed-increment precision follow-up (PR #114) merged to `main` as `78f30aacaa733fe46fe6571f0751e0e100ed9c34`. Exact-head workflow [#42300156071](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42300156071) passed formatting, Clippy, fast Rust tests, both week/year reference-pack acceptance tests, desktop build/tests/rendering/input/frame-cost acceptance, installed backend, dashboard, computer service, repository scripts and dependency audit; nightly slow tests were skipped by design.
+
+Low-biomass depensation intermediate-underflow fix (PR #115) merged to `main` as `718910afe9ac8dc2afd865c70f76184a04d3124e`. Exact-head workflow [#42307572454](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42307572454) passed formatting, Clippy, fast Rust tests, desktop, installed backend, dashboard, computer service, repository scripts, dependency audit and week/year reference-pack acceptance; nightly slow tests were skipped by design. The regression proves a representable subnormal `B/K` can still underflow at the subsequent `B × factor` intermediate while the final surplus remains representable; the log-space fallback now recovers that result. Fishery remains standalone pending sourced species-specific stock/effort data and owner-approved workforce integration.
+
+MSY binary64 boundary coverage (PR #116) merged to `main` as `e3e7a92dad458b125150f1c6e712345b71c56487`. Exact-head workflow [#42314570972](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42314570972) passed formatting, Clippy, fast Rust tests, desktop, installed backend, dashboard, computer service, repository scripts, dependency audit and week/year reference-pack acceptance; nightly slow tests were skipped by design. The regression exercises adjacent representable values around the 0.5 and 2/3 depensation transitions and checks the analytic target, reported MSY and actual surplus at that target.
+
+Subnormal intermediate precision follow-up (PR #117) merged to `main` as `6da6e254f75146a2b3feeae3b0dab7e67eaf089d`. Exact-head workflow [#42323586836](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42323586836) passed formatting, Clippy, fast Rust tests, desktop build/tests/rendering/input/frame-cost acceptance, installed backend, web dashboard, computer service, repository scripts, dependency audit and week/year reference-pack acceptance; nightly slow tests were skipped by design. It covers both a subnormal biomass-product intermediate and an independently subnormal `B/K` ratio whose rounding materially distorted a still-normal final surplus.
+
+Updated 2026-11-07 after PR #120 merged as `66bf099f36c567ab344fcc9b268a9a33a656011d` and PR #121 merged as `522aba3d860435c92a4938cf5ffba2b427941cd7`; both exact-head workflows passed their required checks. Fishery remains standalone pending sourced species-specific stock and effort data and owner-approved workforce integration.
+
+Replay file I/O budget (PR #123, 2026-11-08): replay import/export now has a 64 MiB file cap. Load checks regular-file metadata, rejects oversized inputs before parsing, and reads no more than limit + 1 bytes; save streams through a bounded writer and preserves the previous destination when serialization exceeds the limit. Regression coverage checks oversized-file rejection and writer bounds. Exact-head CI is pending after the latest handoff reconciliation. This does not close deterministic replay acceptance or the separate paused PRs #73–76.
+
+
+Reference-range and fishery numerical hardening (PR #109): merged to `main` as `0613dffca65a87e4db147300d9d57805a744ea07`. Exact-head workflow [#42257092937](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42257092937) passed formatting, Clippy, fast Rust tests, desktop build/tests/rendering/input acceptance, installed backend build/serve, web dashboard, computer service, repository scripts, dependency audit and week/year reference-pack acceptance. Nightly slow tests were skipped by design.
+
+Updated 2026-11-07 against `main` after PR #109 merged as `0613dffca65a87e4db147300d9d57805a744ea07` (fishery PRs #104–#105, #110, #111, #114 and #115, marine inspector PR #93, deep-time PRs #106–#107 and desktop marine inspector PR #108 are merged).
 what is not done, and for each item, **what it takes to do it**: the sources or data it needs,
 the decisions only the owner can make, the files it touches, the tests that prove it and when it
 counts as finished. Read [`HANDOFF.md`](HANDOFF.md) first for what exists.
@@ -42,14 +143,17 @@ this list holds the current state. The evidence for what is *done* is in
 | Living world | D9: actions take one tick | In part: felling, hauling, splitting, shed, panning, foraging and water trips timed, learned by practice (R11); Craft, Explore and social actions one tick | Cited durations per task |
 | Living world | D31: NPP ignores soil nutrients | Open | Regional soils model and data |
 | Runtime | Phase 4 Task 2b: deep-time spin-up | **Done** (2026-10-14) | — |
+| Runtime | Phase 4 Task 4 replay sequencing | Public in-memory logs allocate max+1 across reordered same-tick entries, reject `u64::MAX`, and `replay_island` rejects duplicate `(tick, sequence)` keys within the requested horizon before bootstrap; live `IslandLife` uses a runtime-only per-tick `BTreeMap`, absent from snapshots and digests | Exact-head formatting, Clippy, fast Rust tests, desktop/backend acceptance and week/year reference-pack tests; duplicate-key and partial-horizon regressions. Prior head `64c3b66a` failed only rustfmt; corrected head `5aea0f30` workflow #42362708042 is running |
+| Runtime | Reference range central values | Complete and merged in PR #109 (`0613dff`); exact-head workflow #42257092937 passed Rust format/Clippy/fast tests, desktop build/tests/render/input/frame-cost acceptance, installed backend, web dashboard, computer service, repository scripts, dependency audit and week/year reference-pack acceptance; nightly slow tests skipped by design | — |
+| Biosphere | Deep-time geographic-range drift, long-horizon growth, clock overflow and snapshot compatibility | Founding species ranges are capped at 1.0; finite `(0, 1]` ranges, finite non-negative duration, finite next clock and checked RNG step-index are preflighted before evolution state changes; persisted validation also rejects non-finite/negative recovery clocks and multipliers, out-of-domain adaptive-radiation values, invalid carrying capacities and malformed append-only extinction-event times; the clock, species vector and RNG are staged and committed only after all fallible evolution phases succeed, so a late mutation/drift error cannot leave a partial step; staging copies only per-step mutable state and excludes both append-only extinction and speciation histories; prior speciation history is borrowed read-only, and only new timestamps are staged and appended after success, avoiding per-tick copies of accumulated logs; full extinction/speciation history validation runs at snapshot boundaries, while the per-step validator checks only mutable live state and species, avoiding O(ticks × history) rescans; future speciation timestamps fail closed; the append-chronological history is checked at restore and cooldown uses the latest parent event, not its first; direct callers of `step_evolution_processes` must call full `validate` first after restore or external state mutation because the hot-path preflight deliberately excludes append-only histories; success and failure regressions prove the existing history is preserved, and a success-path parity tests compare emitted events and serialized evolution/species/RNG state against the ordered inner pipeline, including a seeded speciation event and committed parent `last_speciation_times`; environmental stress is rejected unless finite and within `[0, 1]` before staging, with byte-identical rollback regressions; keyed drift preserves fractions and logistic growth uses a stable decaying-exponential closed form. `WorldState` schema 1 validates both replay/file loads: valid schema-0 snapshots upgrade metadata only; invalid legacy ranges and future versions fail at load, never silently clamp; both restore paths also reject a stored derived-canon digest that does not match the validated canon; replay snapshots also reject an envelope tick that differs from the digested world-state tick; evolved schema-0 snapshots with speciation history and fractional species are rejected as unrecoverable mixed legacy state | Exact-head regression, legacy/current/future snapshot tests, deterministic hash baseline and week/year replay/reference acceptance for corrected output |
 | Industry | Phase 4b Task 1 remainder: reference tables | Done 2026-10-14 (nine packs); gaps listed in §4a | A few items (see §4a) |
 | Industry | Phase 4b Task 4: oil and gas field (D14, D19) | Fields, decline and carbon done 2026-10-14 (D58); in `IslandLife` with the diesel depot 2026-10-22; wells, blowouts and produced water 2026-10-23; rising water cut, spills open | Water-cut series; a blowout's spill volume |
 | Industry | Phase 4b Task 5: refinery, gas plant, fuel depot (D16) | Topping refinery done 2026-10-14; diesel depot 2026-10-22 (D58); gas plant 2026-10-23; reformer open | Reformate yield |
 | Industry | Phase 4b Task 6: jobs, trades, maintenance (D39) | Open | Upstream human-runtime change first |
 | Industry | Phase 4b Task 7: money, enterprises, payroll | Money, payroll and metered bills done 2026-10-18 (`regional/economy/`, D61, D62; `tests/island_economy.rs`). In `IslandLife` 2026-10-22 (`economy/island.rs`: deposits, Gem Petroleum selling the depot's diesel, monthly loans, closes, dividends, money audit); the petroleum business's staff and payslips, household bills, buying and selling homes open | Task 6 staff; upstream buying |
-| Industry | Phase 4b Task 7b: food and timber chains (forestry, sawmill, house framing, farm, livestock, food processing and fishery models 2026-10-23) | Models done; not yet on the map or wired into island life | Task 8 workforce: who works a farm, mill or salt works, chosen by the people themselves (R14), never assigned |
+| Industry | Phase 4b Task 7b: food and timber chains (forestry, sawmill, house framing, farm, livestock, food processing and fishery models 2026-10-23) | Models done; fishery preserves low-biomass surplus, computes the piecewise MSY peak, exposes its biomass target and read-only interval catch limit, preserves representable subnormal MSY, rejects unrepresentable cumulative landed increments (PR #110), unrepresentable cumulative rounding (PR #114), unrepresentable residual growth (PR #111), intermediate underflow (PR #115), adjacent binary64 MSY boundary drift (PR #116), and subnormal intermediate precision loss (PR #117), all merged and exact-head verified; PR #118 merged as `134082a1` and PR #119 merged as `9cc2b158`, both exact-head verified; PR #120 merged as `66bf099f36c567ab344fcc9b268a9a33a656011d` and exact-head workflow #42346006514 passed; PR #121 merged as `522aba3d860435c92a4938cf5ffba2b427941cd7` and exact-head workflow #42351378042 passed; still not on the map or wired into IslandLife | Task 8 workforce: who works a farm, mill or salt works, chosen by the people themselves (R14), never assigned |
 | Industry | Phase 4b Task 8: town and workforce | Founding households, the smallest practice and a staffed school done 2026-10-23 (`regional/town.rs`, D67); other enterprises' minimum staff, the town in `IslandLife`, homes and growth open | A sourced minimum staff for the oil, gas, power, bank and store businesses |
-| Industry | Phase 4b Task 9: dashboard pages, year acceptance | Industry (with payroll), Power, Timber and Food panels done 2026-10-23; Town page open (needs Task 8) | Tasks 4-8 |
+| Industry | Phase 4b Task 9: dashboard pages, year acceptance | Industry (with payroll), Power, Timber and Food panels done 2026-10-23; Town dashboard added 2026-11-02 (living residents, location, practice and school staffing and accrued hours from live projection); year acceptance remains | Tasks 4-8 |
 | Climate | D3 rest: sea/land breezes, katabatic winds | Open | A diurnal wind solver |
 | Climate | D25: SST season lags too long | Diagnosed 2026-10-14: 0.281 of the year against 0.18-0.21 observed | A prognostic marine boundary layer (with D29) |
 | Climate | D4: parametric weather systems | Open | Structural; large |
@@ -103,6 +207,7 @@ the log's last water is booked to the air at that moment rather than when the wo
   and two at one tree fell it at the pack's two-person crosscut time (`labour/productivity.json`, 8-25 min for
   30 cm; FAO Forest Harvesting Case Study 18 measured two-cutter crosscut crews at 1.11-1.99
   m³/h). Left: cross-cutting a log for the ute with the saw rather than the axe.
+  - 2026-11-08: public haul planning now rejects malformed source logs with a typed error before split materialisation; the two-person saw workflow for log cross-cutting remains open.
 - **Excavator rigging (done 2026-10-23, D40):** the CAT 330 has no grapple, so its operator
   slings each log by hand before the pick-up and frees it after the set-down, at Borz & Mititelu
   2022's measured hook and unhook times for hand-rigged winch logs (13.59 s and 9.30 s, 278 logs,
@@ -124,9 +229,17 @@ the log's last water is booked to the air at that moment rather than when the wo
 
 Done 2026-10-14 (`regional/species.rs`, D55): upstream's founding species placed on the island's
 habitats, plants and grazers as shares of the island's carbon fields, other guilds at upstream's
-density times the island's habitat area. **Left:** Earth-calibrated densities and a carbon pool
-for each consumer guild (realism R8, R10); serving the species to the map and the cell inspector (the 2026-11-01 read-only cell inspector now shows biome, annual climate and terrestrial NPP, **not species**);
-animal and fish resource nodes (done 2026-10-23, §2b).
+density times the island's habitat area. The catalogue is private; callers read through
+`species()` and replace through `replace_species_catalogue`, which rebuilds marine membership
+and producer/grazer weights atomically. Survey and replacement reject duplicate species IDs.
+The catalogue boundary rejects invalid marine abundance, non-finite/negative upstream density
+and non-finite/non-positive body mass before publication; the checked marine projection repeats
+those guards alongside cell bounds/area, stale identity/metadata and finite population/biomass
+conversion.
+**Left:** Earth-calibrated densities and a carbon pool for each consumer guild (realism R8, R10);
+serving the species to the map and the cell inspector; animal and fish resource nodes (done
+2026-10-23, §2b).
+The 2026-11-01 inspector already displays biome and annual climate, but not individual species.
 
 ### 2b. Phase 3 Task 2: every resource and material
 
@@ -153,6 +266,23 @@ animal and fish resource nodes (done 2026-10-23, §2b).
     any other animal at upstream's density over the cell), adding up to the species on the
     island; hunting and fishing them, and the fishery model on the sea's fish, are still to
     come, and the densities stay upstream's (D55).
+  - Marine biomass bridge (2026-11-06): `IslandBiota::marine_aquatic_nodes` projects the same
+    upstream head counts into tonnes per medium cell, with a conservation test against
+    `animal_nodes` and whole-island species populations. The browser map and desktop cell inspectors now
+    report the habitat's species count, individual count and live biomass, explicitly labelled
+    as an uncalibrated upstream-derived estimate and explicitly not harvestable stock or catch;
+    land and river cells are not assigned marine stock. The desktop inspector rejects negative
+    and non-finite projections before rendering. It is a read-only view, not a second population. Fishery harvest remains open: no
+    species-specific resilience class, unexploited carrying capacity or catch-per-unit-effort
+    source is attached to these upstream species.
+  - Browser inspector DOM regression (2026-11-06): `scripts/tests/marine_cell_inspector.test.mjs`
+    drives the same exported `handleMapCellClick` helper used by the island page and verifies
+    visible species, individual and biomass values, the uncalibrated/not-harvestable disclaimer,
+    omission of negative, non-finite or unsafe projections, and no request before the view is ready.
+  - Desktop inspector regression (2026-11-06): `apps/island_ui/src/inspectors.rs` rejects
+    negative and non-finite individual/biomass projections and shows the same not-harvestable
+    warning. Exact-head workflow #42226945535 passed the desktop build/render/input acceptance
+    and fast Rust suite; the merge into main is recorded at `42bf9cc`.
   - Salt (2026-10-23): `industry/salt_works.rs` makes solar salt at Dominion Salt's Lake
     Grassmere yield per hectare of production area (pack, 42.4-49.4 t/ha/yr); it ignores the
     rain that swings Grassmere's harvest from nil to 130,000 t, and no works is sited yet (a
@@ -406,8 +536,10 @@ trade, a 2-3 bedroom cottage's floor area (Task 6 and 7b); the Pukekohe growing 
   - `fishery.rs`: a stock in Schaefer surplus production with depensation below a quarter of
     unexploited biomass, `r` the middle of Froese et al. (2017) Table 2's prior for its FishBase
     resilience class; the catch is capped at the surplus, so the fishery never takes more than
-    grows. Not yet fed by the island's fish: their densities are upstream's (D55) and no species
-    carries a resilience class.
+    grows. The depensation calculation now preserves a finite positive surplus when `B / k`
+    underflows to zero but the equivalent `r B² / (k d)` remains representable. Not yet fed by
+    the island's fish: their densities are upstream's (D55) and no species carries a resilience
+    class.
   - The reference house's floor is a concrete slab on grade (thinkstep 2022 Table 2-2), so it has
     no floor timber. Its roof is "timber roof trusses (70x45mm SG8 H1.2 treated purlins)" over
     263 m², but the report gives the roof only as kg CO2e per m² (Table 6-7), not a timber volume.
@@ -506,6 +638,16 @@ dashboard; the desktop panels).
 | 6 | Done; the owner accepted the default targets on 2026-10-14: `island_bench` and `benchmarks/2026-10-08-regional-baseline.json` (12.9 simulated days per real minute headless against a default target of one, so no fallback profile), the allocation-bound test (`tests/island_allocation_bounds.rs`, `construction-counters`), and formal predictive processing measured at 0.9% of the human step (`tests/island_dead_compute.rs`), so keeping it running costs little. The plan's Task 6 status has the detail | Targets confirmed: headless one simulated day per real minute, real time with the UI open. Formal predictive processing: the owner decided on 2026-10-14 to wire it into decisions, and it is (2026-10-15, `UPSTREAM.md` production item 6): what its critic learned each action is worth steers `AutonomousMind::choose_action`, and its critic learns from the action actually taken |
 | 7 | The sync script is done (2026-10-14, `scripts/sync_maerken_upstream.py`, `UPSTREAM.md` § Sync procedure). The creator moved into `apps/island` (`island::population`) and `apps/island_humans` is retired. Pruning is the owner's call (the inventory recommends not to) | Engineering |
 | 8 | Final acceptance: every design criterion run and recorded | All of the above |
+
+**Replay-session reliability (2026-11-05):** the upstream-world `ReplaySession` latches the
+first failed step/hash/state comparison and refuses further replay or verification. The
+`stop_on_error=false` compatibility flag cannot skip a failed deterministic step. Over-budget and
+backward-target requests are rejected before mutation; the session remains usable after either
+preflight rejection. The backward-target change merged in PR #80 after exact-head fmt, Clippy, fast
+tests, desktop/backend checks and both week/year reference-pack acceptance passed. A follow-up
+(PR #81) makes the session's snapshot, current state, target, options and history fields private and
+exposes immutable accessors, so callers cannot bypass the replay session's single-writer invariant.
+Its exact-head workflow [#41928721548](https://github.com/dylmarriner/Maer-ken-island/actions/runs/41928721548) passed formatting, Clippy, fast Rust tests, both week/year reference-pack acceptance tests, desktop/render, installed backend, dashboard, computer service, repository scripts and dependency audit. PR #81 merged as `7af8bec18ddbada7ff6f537d73684d0b805dc329`. The nightly slow-test job was skipped by design; the required path-scoped week/year tests ran and passed. No island simulation constants, append-only island replay-log entries, snapshots or digest inputs changed.
 
 A GPU frame-rate figure for `island-ui` is measured (2026-10-15, RX 470, 1600×1000, release,
 without vsync): 255.6 frames/s on the island view and 508.9 on the estate, against 0.6 and 10.8
@@ -630,7 +772,7 @@ invertebrate densities, fire danger indices (see each report's "unsourced" secti
   push; the `dependency audit` CI job replaced it.
 - **Firecrawl credits ran out** on 2026-10-12. WebSearch and the TinyFish fetcher still work for
   sources; the container's own network blocks most hosts.
-- **Persist digests.** `WEEK_DIGEST` is `577e4215…540a`; the planetary topology pin is
+- **Persist digests.** `WEEK_DIGEST` is `61ffaa6a559b5a8f503b7b6c707ca5f8cf634be9eebec64a1af6652706c2478a`; the planetary topology pin is
   `e4ece246…73e2`. Any change that moves either is a behaviour change and must say so.
 
 
@@ -648,3 +790,120 @@ invertebrate densities, fire danger indices (see each report's "unsourced" secti
 - Regression tests failed before the change (missing roster-source helper), then **32/32** Node dashboard tests passed including three new source-isolation cases. JS syntax, Cargo formatting and Git diff checks passed on OpenCommander amd. No simulation, ledger, snapshot, seed, source pack or replay digest changed.
 - [ ] Exact-new-SHA CI green. [ ] Slow week/year replay hashes and water/carbon/material ledger acceptance. [ ] Sourced ecology/industry, autonomy and open owner decisions.
 - Next: confirm CI and run the capacity-safe slow simulation acceptance; then advance a sourced physics/industry milestone.
+### Fishery representable-surplus and interval-underflow follow-up (PR #118)
+
+PR #118 merged to `main` as `134082a1c1bbcea837acc58344572476e8b14f74`. Exact-head workflow [#42331600091](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42331600091) passed formatting, Clippy, fast Rust tests, desktop build/tests/rendering/input/frame-cost acceptance, installed backend, dashboard, computer service, repository scripts, dependency audit and week/year reference-pack acceptance; nightly slow tests were skipped by design.
+
+The non-depensated Schaefer path recovers a representable final surplus when `r * (1 - B/K)` underflows as an intermediate, and returns `UnrepresentableGrowth` when positive mathematical annual or interval growth is below binary64 range. Regressions cover log-space recovery, minimum-subnormal time steps and stock immutability. See `docs/handoff/FISHERY_INTERVAL_UNDERFLOW_20261107.md`.
+
+## Fishery zero-catch remainder representability (PR #119)
+
+PR #119 merged to `main` as `9cc2b15808c57bd5f61d305bca6122e79820c6bc`. Exact-head workflow [#42336338097](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42336338097) passed formatting, Clippy, fast Rust tests, desktop build/tests/rendering/input/frame-cost acceptance, installed backend, web dashboard, computer service, repository scripts, dependency audit and week/year reference-pack acceptance; nightly slow tests were skipped by design.
+
+The production guard now rejects every positive unharvested growth remainder that rounds away when added to existing biomass, including zero-catch steps. Full harvest remains valid because no unharvested remainder is expected. Regression `unharvested_growth_below_stock_ulp_is_rejected_without_mutation` verifies a positive ~4e-200 interval increment against 1e-100 biomass, the typed error and unchanged stock. See `docs/handoff/FISHERY_ZERO_CATCH_REMAINDER_20261107.md`.
+
+## Fishery MSY diagnostic representability (PR #120)
+
+PR #120 is rebased onto `main` after #119 merged. The production change adds `UnrepresentableMsy` and `UnrepresentableMsyBiomassTarget` when mathematically positive MSY or peak biomass rounds to zero. If the fast MSY path rounds to zero, `msy_t()` multiplies the three 53-bit significands exactly and compares the product with 2^-1075; only a product strictly above half the least subnormal becomes one subnormal unit, while an exact tie rounds to even zero. A genuine zero selected growth rate remains valid, and representable subnormal targets remain accepted. Regression `positive_but_unrepresentable_msy_diagnostics_fail_closed` covers unrepresentable targets; `msy_recovers_exactly_representable_subnormal_results_after_double_rounding` covers three positive cases, and `msy_exact_half_subnormal_ties_to_even_zero` pins the tie rule.
+
+Code commit: `1d7d9789`; checklist reconciliation: `6c786636`; canonical status reconciliation: `46785b65`; rebased handoff: `23ed51ef`. The PR branch now points to current `main` after #119 merged. Exact-head CI is required on the final reconciled PR head; do not merge while fast Rust tests or any acceptance jobs remain pending. Fishery remains standalone pending sourced species-specific stock/effort data and owner-approved workforce integration.
+
+## Fishery biomass-increment precision (PR #121, stacked on PR #120)
+
+The next fishery material-ledger gap is a positive unharvested growth increment that rounds to the wrong non-zero biomass delta. The existing #119 guard catches increments that disappear entirely, but at large stored biomass a value such as `2^53 + 3` rounds to `2^53 + 4`; a five-tonne increment can round down to four tonnes. The new `BiomassIncrementUnrepresentable` guard compares the stored biomass delta with the requested unharvested increment using the same 1e-12 relative tolerance already used for cumulative landed mass. Genuine zero growth, full harvest, and ordinary floating-point accumulation remain valid.
+
+Regression `biomass_increment_rounded_up_or_down_is_rejected_without_mutation` pins both upward and downward cases and asserts that failed steps leave the entire stock unchanged. PR #121 is stacked on the review-corrected PR #120 branch so the MSY diagnostic work remains an explicit prerequisite; merge #120 first, then rebase and rerun #121 on current main. Exact-head Rust, Clippy, desktop/backend and reference-pack checks are required before merge. Fishery remains standalone pending sourced species-specific stock/effort data and owner-approved workforce integration.
+
+
+## Replay sequence acceptance follow-up — 7 November 2026
+
+- [x] Preserve sparse imported sequence identifiers in replay output.
+- [x] Reject backwards per-tick identifiers before command mutation.
+- [x] Regression for shuffled sequence identifiers 12 and 7.
+- [ ] Finish exact-head PR #123 CI after the latest code/test commits.
+- [ ] Obtain final review and merge PR #123 only after all required checks are green.
+
+
+## Timber cross-cut conservation and reservation rebase — 8 November 2026
+
+- [x] Port exact binary64 remainder allocation for length, dry mass, carbon and water onto current main.
+- [x] Derive piece centres from accumulated conserved length.
+- [x] Preserve the replay-compatible empty-ledger Debug representation while including non-empty pending reservation IDs.
+- [x] Enforce valid finite physical state before log ingress or cross-cut materialisation.
+- [x] Reject zero, overflowing, occupied, unreserved and oversized piece-ID ranges before mutating the ledger.
+- [x] Make haul planning an immutable preview and reserve the exact range only after founder acceptance.
+- [x] Add regressions for bit-identical material totals, ID reservation boundaries, invalid state, zero/oversized cuts and declined-haul allocator preservation.
+- [ ] Run exact-head `cargo fmt`, Clippy, fast Rust tests, desktop/backend acceptance and week/year reference packs on the rebased head.
+- [ ] Reconcile review threads and merge only after all required exact-head checks pass.
+
+Evidence: `docs/handoff/TIMBER_CROSS_CUT_REBASE_20261108.md`.
+
+
+### Fresh-main timber rebase CI — 8 November 2026
+
+- PR #127 is the current integration branch after replay PR #123 merged to main; original PR #124 remains draft and must not be merged.
+- Current handoff: `docs/handoff/TIMBER_CROSS_CUT_REBASE_20261108.md`.
+- Exact-head workflow #42431547467: formatting and Clippy passed; fast Rust tests, desktop, installed backend and week/year reference packs were still running at the latest inspection. Dashboard, dependency audit, computer service and repository scripts passed. Nightly slow tests were skipped by design.
+- Re-run all required exact-head checks after the latest handoff-only commit; do not treat predecessor-head results as current.
+
+- Material amount PR #129 first exact-head workflow [#42464939304](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42464939304) checked out merge ref `d6c9ad45` and failed at `cargo fmt --all -- --check` on the compact `InvalidAmount` enum variant layout. No Clippy or fast-test result was reached. Exact rustfmt layout was applied in `fb866220`; fresh exact-head verification is required.
+- PR #129 regression coverage also verifies that two duplicate 2 kg + 3 kg gold inputs succeed against 6 kg stock when returned as 5 kg output, preserving the final inventory. The test change is included in the final exact-head run.
+- PR #129 also applies the amount guard to `bank_mined`, preventing negative clamping and non-finite mineral stock from bypassing `take`. The only simulation call site supplies mined `work.product_kg`; regression coverage checks negative and infinite inputs leave existing inventory unchanged.
+
+
+## Material stock overflow follow-up — 8 November 2026
+
+PR #129 now also preflights resulting stock totals, not only individual finite/non-negative inputs. `bank_mined` rejects a finite deposit that would overflow existing inventory. `craft` simulates post-debit output additions in their original order and rejects overflow before any debit/output mutation. Regressions cover an overflowing second mined deposit, craft output overflow against existing stock, and duplicate outputs whose finite quantities overflow when combined. Exact-head CI must be rerun for the new head; no local Cargo result is claimed.
+
+
+- PR #129 exact-head workflow [#42469507804](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42469507804) found one rustfmt-only layout difference in the new stock-overflow test. Applied the formatter's requested single-line call form; Clippy and fast tests were skipped by the failed format gate. Fresh exact-head verification is required.
+
+
+## Material source-inflow boundary follow-up — 8 November 2026
+
+- PR #129 now validates `gather_fossil` inputs and resulting stock before any stock/flux mutation.
+- PR #129 now validates `gather_water` input and destination-stock capacity before changing hydrology or flux records.
+- Regression tests cover negative, NaN, infinity, fossil-stock overflow, water-stock overflow and unchanged source-cell water on refusal.
+- Source commit: `b06169fc6c47bc52a2ffb2917e8b98a3be7afcf1`; tests: `00ec798a4fad3b110009195e911a0a30b68a0371`; handoff follows.
+- Exact-head CI must complete for the latest PR head; no local Cargo test result is claimed.
+
+
+### Latest exact-head CI correction — 9 November 2026
+
+- PR #131 exact-head workflow [#42488473527](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42488473527) passed Rust formatting, then Clippy failed on two ignored `Result` values in the overflow-test fixtures after `MaterialLedger::inject` became fallible.
+- Corrected both fixtures to assert that finite maximum-sized Wood and Water seed injections succeed and return the requested stock quantity.
+- Test commit: `08b9278ace557ccc622de60119f1209145ce263f`.
+- Fast tests were skipped on the failed head; fresh exact-head formatting, Clippy, fast tests, desktop/backend and week/year reference-pack checks remain required.
+
+
+### Follow-up rustfmt correction — 9 November 2026
+
+- Fresh workflow [#42491631214](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42491631214) stopped at formatting after the ignored-Result correction; rustfmt required both `inject(...).expect(...)` chains to wrap across method-call lines.
+- Exact formatter output committed as `3987778c8dac1a8fdbe47d9aa39c3c58a1b91a91`.
+- Formatting, Clippy and fast tests must be reverified on the new exact head.
+
+
+### Rounded-away positive injection guard — 9 November 2026
+
+- Found a binary64 conservation edge case: a finite positive material injection can round away when added to an already-large stock (for example, `f64::MAX + 1.0 == f64::MAX)), while the flux ledger would still record the inflow.
+- `MaterialLedger::inject` now rejects positive increments unless the resulting stock is strictly greater than the previous stock, before inventory or ledger mutation.
+- Regression tests cover both Wood and Water at `f64::MAX`, asserting typed rejection and unchanged stock/flux entries.
+- Commits: production `a27d9af74d7a74d06e6cd776245e64f4e2513c16`; tests `534ad3279a8fe916d6d6bfd7d50e42ccde7413ae`.
+- Fresh exact-head CI is required; no local Cargo result is claimed.
+
+
+## Latest PR #134 verification correction — 9 November 2026
+
+- Exact-head workflow [#42528864382](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42528864382) passed formatting and Clippy; the fast suite failed only because `docs/TESTING.md` still published the old week digest after the audited `WEEK_DIGEST` pin changed.
+- Updated `docs/TESTING.md`, `docs/handoff/STATE_OF_THE_ISLAND.md` and `HANDOFF.md` to the audited `61ffaa6a559b5a8f503b7b6c707ca5f8cf634be9eebec64a1af6652706c2478a` value.
+- Documentation commits: 05db67f4ec4aef300bc8181132ce9eab0e46c85e, 8ce576797ecc7b46f3bb19e1ffa3ce0b1763594d, 056eedc65aa61150305fadaaa92e7f7a9344eb6d. Handoff commit: 0b64c42b39d3dd6f2b7e05d6d5084e710afb86d1.
+- Fresh exact-head fast tests and full acceptance remain required. PR #134 must not be merged on the predecessor run.
+- The no-Result ingestion guards for `receive_felled_wood`, `receive_felled_log`, `capture_roof_water` and `season_stored_logs` are in separate draft PR #135; keep that work independently verified.
+
+## Latest PR #135 fast-test correction — 9 November 2026
+
+- Exact-head workflow [#42528709057](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42528709057) passed formatting and Clippy; one seasoning aggregation test failed because its audit baseline began after setup flows while the close step included the historical setup ledger.
+- Corrected the regression to audit only a fresh ledger containing the seasoning operation. Production code was not changed by this correction.
+- Test commit: `e9aeb11d3d168aa54ee8751245c4e06289ebec1d`; handoff update: `497b6a04d910e1b7e434466f28c0089d9b5e0349`.
+- PR #135 remains draft. Run exact-head formatting, Clippy, fast tests, desktop/backend and week/year reference-pack acceptance before review/merge.
+- The remaining no-Result ingestion paths are tracked in PR #135: `receive_felled_wood`, `receive_felled_log`, `capture_roof_water` and `season_stored_logs`.

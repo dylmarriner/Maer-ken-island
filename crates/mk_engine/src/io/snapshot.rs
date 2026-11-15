@@ -1,4 +1,4 @@
-use crate::world_integration::WorldState;
+use crate::world_integration::{WorldState, WORLD_STATE_SNAPSHOT_SCHEMA_VERSION};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
@@ -57,6 +57,12 @@ const DIGEST_LEN: usize = 32;
 /// values represented by `serde_json::Value`, which bincode cannot restore
 /// because it does not implement `deserialize_any`.
 pub fn save_snapshot(state: &WorldState, path: &Path) -> Result<(), SnapshotError> {
+    if state.snapshot_schema_version != WORLD_STATE_SNAPSHOT_SCHEMA_VERSION {
+        return Err(SnapshotError::SerializeError(format!(
+            "world state schema version {} is not current; expected {}",
+            state.snapshot_schema_version, WORLD_STATE_SNAPSHOT_SCHEMA_VERSION
+        )));
+    }
     let state_bytes =
         serde_json::to_vec(state).map_err(|e| SnapshotError::SerializeError(e.to_string()))?;
 
@@ -102,14 +108,19 @@ pub fn load_snapshot(path: &Path) -> Result<(SnapshotHeader, WorldState), Snapsh
         .map_err(|e| SnapshotError::SerializeError(e.to_string()))?;
     let stored_canon_digest = state.canon_derived.canon_digest;
     mk_core::canon::validator::validate_canon(&state.canon).map_err(SnapshotError::InvalidCanon)?;
+    state
+        .validate_snapshot_schema()
+        .map_err(SnapshotError::SerializeError)?;
 
-    // JSON numeric normalization can produce a byte-level digest difference
-    // after a load even when the canon values are semantically unchanged.
-    // Recompute all derived values from the loaded canon so the restored
-    // state cannot retain stale derived data. The outer BLAKE3 digest above
-    // still protects the persisted payload from accidental or unauthorised
-    // modification.
-    state.canon_derived = std::sync::Arc::new(mk_core::canon::CanonDerived::from(&state.canon));
+    // Recompute derived values from the persisted canon, but do not silently
+    // repair a snapshot whose stored digest claims a different canon. The
+    // outer payload digest proves byte integrity; this check proves that the
+    // inner canon identity agrees with the physical parameters being restored.
+    let recomputed_canon_derived = mk_core::canon::CanonDerived::from(&state.canon);
+    if stored_canon_digest != recomputed_canon_derived.canon_digest {
+        return Err(SnapshotError::CanonMismatch);
+    }
+    state.canon_derived = std::sync::Arc::new(recomputed_canon_derived);
 
     let header = SnapshotHeader {
         canon_digest: stored_canon_digest,
@@ -156,6 +167,158 @@ mod tests {
         assert_eq!(header.tick, world.tick);
         assert_eq!(loaded.tick, world.tick);
         assert_eq!(header.canon_digest, world.canon_derived.canon_digest);
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    fn write_legacy_snapshot(path: &Path, invalid_geographic_range: bool) {
+        let world = test_world();
+        let mut value = serde_json::to_value(&world).expect("world state JSON");
+        value
+            .as_object_mut()
+            .expect("world state object")
+            .remove("snapshot_schema_version");
+        if invalid_geographic_range {
+            let species = value["biosphere_state"]["species"]
+                .as_array_mut()
+                .expect("persisted founding species");
+            let species_43 = species
+                .iter_mut()
+                .find(|species| species["species_id"].as_u64() == Some(43))
+                .expect("species 43");
+            species_43["geographic_range"] = serde_json::json!(1.0175);
+        }
+        let state_bytes = serde_json::to_vec(&value).expect("legacy state JSON");
+        let digest = blake3::hash(&state_bytes);
+        let mut bytes = Vec::with_capacity(DIGEST_LEN + state_bytes.len());
+        bytes.extend_from_slice(digest.as_bytes());
+        bytes.extend_from_slice(&state_bytes);
+        std::fs::write(path, bytes).expect("legacy snapshot file");
+    }
+
+    fn write_legacy_mixed_speciation_snapshot(path: &Path) {
+        let world = test_world();
+        let mut value = serde_json::to_value(&world).expect("world state JSON");
+        value
+            .as_object_mut()
+            .expect("world state object")
+            .remove("snapshot_schema_version");
+        let species = value["biosphere_state"]["species"]
+            .as_array_mut()
+            .expect("persisted founding species");
+        for entry in species.iter_mut() {
+            entry["geographic_range"] = serde_json::json!(1.0);
+        }
+        let parent = species
+            .iter()
+            .find(|entry| entry["species_id"].as_u64() == Some(43))
+            .expect("speciation parent")
+            .clone();
+        let child_id = species
+            .iter()
+            .filter_map(|entry| entry["species_id"].as_u64())
+            .max()
+            .expect("founding species id")
+            + 1;
+        let mut child = parent;
+        child["species_id"] = serde_json::json!(child_id);
+        child["species_name"] = serde_json::json!("Legacy speciation child");
+        child["geographic_range"] = serde_json::json!(0.5);
+        species.push(child);
+        value["deep_time"]["step_index"] = serde_json::json!(1);
+        value["deep_time"]["current_time_years"] = serde_json::json!(1.0);
+        value["deep_time"]["last_speciation_times"] = serde_json::json!([[43, 0.0]]);
+
+        let state_bytes = serde_json::to_vec(&value).expect("legacy state JSON");
+        let digest = blake3::hash(&state_bytes);
+        let mut bytes = Vec::with_capacity(DIGEST_LEN + state_bytes.len());
+        bytes.extend_from_slice(digest.as_bytes());
+        bytes.extend_from_slice(&state_bytes);
+        std::fs::write(path, bytes).expect("mixed legacy snapshot file");
+    }
+
+    #[test]
+    fn valid_legacy_file_snapshot_upgrades_schema_without_state_rewrite() {
+        let dir =
+            std::env::temp_dir().join(format!("mk_snapshot_legacy_valid_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("state.bin");
+        write_legacy_snapshot(&path, false);
+
+        let (_, loaded) = load_snapshot(&path).expect("valid legacy snapshot");
+        assert_eq!(
+            loaded.snapshot_schema_version,
+            WORLD_STATE_SNAPSHOT_SCHEMA_VERSION
+        );
+        assert!(loaded.biosphere_state.species.iter().all(|species| species
+            .geographic_range
+            .is_finite()
+            && species.geographic_range > 0.0
+            && species.geographic_range <= 1.0));
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn file_snapshot_with_mismatched_canon_digest_is_rejected() {
+        let dir =
+            std::env::temp_dir().join(format!("mk_snapshot_canon_digest_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("state.bin");
+
+        let world = test_world();
+        let mut value = serde_json::to_value(&world).expect("world state JSON");
+        value["canon_derived"]["canon_digest"] =
+            serde_json::to_value([0u8; 32]).expect("zero canon digest");
+        let state_bytes = serde_json::to_vec(&value).expect("snapshot JSON");
+        let digest = blake3::hash(&state_bytes);
+        let mut bytes = Vec::with_capacity(DIGEST_LEN + state_bytes.len());
+        bytes.extend_from_slice(digest.as_bytes());
+        bytes.extend_from_slice(&state_bytes);
+        std::fs::write(&path, bytes).expect("mismatched snapshot file");
+
+        assert!(matches!(
+            load_snapshot(&path),
+            Err(SnapshotError::CanonMismatch)
+        ));
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn mixed_speciation_legacy_file_snapshot_is_rejected_at_load() {
+        let dir =
+            std::env::temp_dir().join(format!("mk_snapshot_legacy_mixed_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("state.bin");
+        write_legacy_mixed_speciation_snapshot(&path);
+
+        let error = load_snapshot(&path).expect_err("ambiguous mixed legacy ranges");
+        assert!(
+            matches!(error, SnapshotError::SerializeError(ref message)
+                if message.contains("legacy snapshot schema 0 is incompatible")
+                    && message.contains("lossless migration is impossible")),
+            "unexpected error: {error}"
+        );
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn invalid_legacy_file_snapshot_is_rejected_at_load() {
+        let dir =
+            std::env::temp_dir().join(format!("mk_snapshot_legacy_invalid_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("state.bin");
+        write_legacy_snapshot(&path, true);
+
+        let error = load_snapshot(&path).expect_err("invalid legacy range");
+        assert!(
+            matches!(error, SnapshotError::SerializeError(ref message)
+                if message.contains("legacy snapshot schema 0 is incompatible")
+                    && message.contains("Species 43")),
+            "unexpected error: {error}"
+        );
 
         std::fs::remove_dir_all(&dir).ok();
     }

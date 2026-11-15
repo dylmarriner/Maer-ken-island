@@ -44,6 +44,37 @@ export function roundTo(value, places) {
     : "—";
 }
 
+/** Centre of a regional medium-grid cell, in domain metres (east, north).
+ * Invalid or absent positions must never paint a fictional marker.
+ */
+export function mediumCellCentre(cell, cellSizeM) {
+  if (!Array.isArray(cell) || cell.length !== 2 ||
+      !cell.every((n) => Number.isSafeInteger(n) && n >= 0) ||
+      !Number.isFinite(cellSizeM) || cellSizeM <= 0) return null;
+  const [row, col] = cell;
+  return [(col + 0.5) * cellSizeM, (row + 0.5) * cellSizeM];
+}
+
+/** Detailed employment from the town's actual enterprise rosters.
+ * Missing fields on an older backend must not create fictional workers.
+ * A stable order makes the panel easier to scan between live updates.
+ */
+export function townWorkerRows(enterprises) {
+  return enterprises
+    .flatMap((enterprise) =>
+      (enterprise.workers || []).map((worker) => ({
+        enterprise: enterprise.name,
+        person: worker.person,
+        hourly_cents: worker.hourly_cents,
+        hours_unpaid: worker.hours_unpaid,
+        wages_owed_cents: worker.wages_owed_cents,
+      })),
+    )
+    .sort((a, b) =>
+      a.enterprise.localeCompare(b.enterprise) || a.person.localeCompare(b.person),
+    );
+}
+
 /** A sentence a person can act on, whatever the fetch failure was. */
 export function explain(error) {
   const message = error && error.message ? error.message : String(error);
@@ -51,6 +82,87 @@ export function explain(error) {
     return "The island server did not answer. It may have stopped.";
   }
   return message;
+}
+
+/**
+ * Read and render the cell selected on the island map.
+ *
+ * Dependencies are injected so the exact click path can be exercised by the
+ * dashboard's Node test suite without a browser or a second implementation.
+ */
+export async function handleMapCellClick(event, {
+  canvas,
+  output,
+  viewReady,
+  ground,
+  toMetres,
+  getJson,
+  setClickedPlace,
+  fillPlacesAndPeople,
+  getPlaces,
+  whereEl,
+  isCurrent = () => true,
+  detailsForCell = () => [],
+}) {
+  if (!viewReady) return;
+  const box = canvas.getBoundingClientRect();
+  const [x, y] = toMetres(canvas, event.clientX - box.left, event.clientY - box.top);
+  const col = Math.floor(x / ground.cellM);
+  const row = Math.floor(y / ground.cellM);
+  if (col < 0 || row < 0 || col >= ground.cols || row >= ground.rows) return;
+  try {
+    const data = await getJson(`/api/cell/${row}/${col}`);
+    // A slower earlier request must not replace a more recent map selection.
+    if (!isCurrent()) return;
+    const c = data.cell;
+    const details = [
+      el("p", `Row ${c.row}, column ${c.col} — ${c.latitude.toFixed(4)}°, ${c.longitude.toFixed(4)}°`, { class: "cell-where" }),
+      el(
+        "p",
+        c.land
+          ? `Land, ${c.elevation_m.toFixed(0)} m above sea level. ${c.buildable ? "A structure could stand here." : "Too steep to build on."}`
+          : `Sea, ${(-c.elevation_m).toFixed(0)} m deep. Nobody can be created here and nothing can be built.`,
+        { class: "cell-what" },
+      ),
+    ];
+    for (const detail of detailsForCell(c)) {
+      details.push(el("p", detail, { class: "cell-what" }));
+    }
+    const marineProjectionAvailable =
+      Number.isSafeInteger(c.marine_aquatic_species) &&
+      c.marine_aquatic_species >= 0 &&
+      Number.isFinite(c.marine_aquatic_individuals) &&
+      c.marine_aquatic_individuals >= 0 &&
+      Number.isFinite(c.marine_aquatic_biomass_t) &&
+      c.marine_aquatic_biomass_t >= 0;
+    if (marineProjectionAvailable) {
+      details.push(
+        el(
+          "p",
+          `${c.marine_aquatic_species.toLocaleString()} marine aquatic species; ` +
+            `${c.marine_aquatic_individuals.toLocaleString(undefined, { maximumSignificantDigits: 4 })} ` +
+            `upstream-derived individuals; ` +
+            `${c.marine_aquatic_biomass_t.toLocaleString(undefined, { maximumSignificantDigits: 4 })} t live biomass. ` +
+            "Uncalibrated upstream estimate; not harvestable stock or catch.",
+          { class: "cell-marine" },
+        ),
+      );
+    }
+    output.replaceChildren(...details);
+    const clickedPlace = {
+      label: `Clicked — cell ${c.row}, ${c.col}${c.land ? "" : " (sea)"}`,
+      latitude: c.latitude,
+      longitude: c.longitude,
+    };
+    setClickedPlace(clickedPlace);
+    await fillPlacesAndPeople();
+    if (!isCurrent()) return;
+    whereEl.value = String(getPlaces().findIndex((p) => p === clickedPlace));
+  } catch (error) {
+    if (isCurrent()) {
+      output.replaceChildren(el("p", explain(error), { class: "cell-what" }));
+    }
+  }
 }
 
 /* ------------------------------------------------------------------ *\
@@ -216,6 +328,21 @@ export async function getJson(path, { signal } = {}) {
     throw failed;
   }
   return response.json();
+}
+
+/** Read an endpoint added by a newer island backend.
+ *
+ * A dashboard can be served from a separate host and pointed at an older
+ * backend. Missing optional views should not make a running world look dead.
+ * Other failures (including auth and network errors) remain real errors.
+ */
+export async function readIfAvailable(fetcher, path) {
+  try {
+    return await fetcher(path);
+  } catch (error) {
+    if (error && error.status === 404) return null;
+    throw error;
+  }
 }
 
 export async function postJson(path, body, token) {

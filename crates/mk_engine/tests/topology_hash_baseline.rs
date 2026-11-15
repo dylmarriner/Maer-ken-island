@@ -19,8 +19,13 @@ use mk_engine::world_integration::WorldState;
 /// physiques and human wills became part of the hashed simulation state.
 /// The previous pre-reconciliation hash was
 /// e4ece246a21e726f63f1f5561eb3c2a039f8d38c1b503f1647395f6864ba73e2.
+/// Re-pinned (2026-11-06) after the founding-species generator began capping
+/// geographic range at one planetary surface. Species 43 previously started
+/// at 1.0175; correcting that invalid physical state intentionally changes the
+/// default world's deterministic hash chain. Exact-head CI measured the new
+/// ten-step hash below after all other fast tests passed.
 /// Future changes must still explain any divergence from the new baseline.
-const EXPECTED: &str = "bd75bc7db962d4bbc97b03d4612fa7d23042c27a9035f4ad89269eaf3b966285";
+const EXPECTED: &str = "66d0b56023d72ff7079eb74499820dbfd31a0f44ecbddbd69e493fa320e0bdfe";
 
 #[test]
 fn ten_planetary_steps_hash_after_island_reconciliation() {
