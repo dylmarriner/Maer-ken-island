@@ -71,18 +71,59 @@ pub fn read(reply: &serde_json::Value) -> Result<Person, String> {
         .ok_or("this backend serves no sections for a person")?;
     let sections: Vec<Section> = serde_json::from_value(sections.clone())
         .map_err(|e| format!("the person's sections could not be read: {e}"))?;
+    let mut section_ids = std::collections::HashSet::new();
+    for section in &sections {
+        if section.id.trim().is_empty() || !section_ids.insert(section.id.as_str()) {
+            return Err("person sections have an empty or duplicate id".to_string());
+        }
+        for reading in &section.readings {
+            if let Some(meter) = reading.meter {
+                if !meter.is_finite() || !(0.0..=1.0).contains(&meter) {
+                    return Err(format!("invalid meter in section {}", section.id));
+                }
+            }
+        }
+    }
     if sections.is_empty() {
         return Err("this backend served a person with no sections".to_string());
     }
-    let whereabouts = reply
+    // A malformed live location is a wire-contract error, not offline state.
+    let whereabouts: Option<Whereabouts> = reply
         .get("where")
         .filter(|w| !w.is_null())
-        .and_then(|w| serde_json::from_value(w.clone()).ok());
+        .map(|w| {
+            serde_json::from_value(w.clone())
+                .map_err(|e| format!("the person's whereabouts could not be read: {e}"))
+        })
+        .transpose()?;
+    if let Some(ref location) = whereabouts {
+        if location
+            .body_carbon_kg
+            .is_some_and(|kg| !kg.is_finite() || kg < 0.0)
+        {
+            return Err("invalid whereabouts body_carbon_kg".to_string());
+        }
+    }
+    // Present-but-invalid clocks must not silently look like absent clocks.
+    let read_tick = |key: &str| -> Result<Option<u64>, String> {
+        match reply.get(key) {
+            None | Some(serde_json::Value::Null) => Ok(None),
+            Some(value) => value
+                .as_u64()
+                .map(Some)
+                .ok_or_else(|| format!("invalid {key}: expected a nonnegative integer")),
+        }
+    };
+    let records_at_tick = read_tick("records_at_tick")?;
+    let tick = read_tick("tick")?;
+    if matches!((records_at_tick, tick), (Some(record), Some(now)) if record > now) {
+        return Err("records_at_tick exceeds island tick".to_string());
+    }
     Ok(Person {
         sections,
         whereabouts,
-        records_at_tick: reply.get("records_at_tick").and_then(|t| t.as_u64()),
-        tick: reply.get("tick").and_then(|t| t.as_u64()),
+        records_at_tick,
+        tick,
     })
 }
 
@@ -130,6 +171,25 @@ mod tests {
     }
 
     #[test]
+    fn duplicate_and_empty_section_ids_are_rejected() {
+        let mut duplicate = reply();
+        duplicate["sections"][1]["id"] = serde_json::json!("needs");
+        assert!(read(&duplicate).unwrap_err().contains("duplicate id"));
+        let mut empty = reply();
+        empty["sections"][0]["id"] = serde_json::json!("  ");
+        assert!(read(&empty).unwrap_err().contains("empty or duplicate id"));
+    }
+
+    #[test]
+    fn future_record_ticks_are_rejected_instead_of_appearing_fresh() {
+        let mut payload = reply();
+        payload["records_at_tick"] = serde_json::json!(151);
+        assert!(read(&payload)
+            .unwrap_err()
+            .contains("records_at_tick exceeds island tick"));
+    }
+
+    #[test]
     fn the_sections_are_the_backends_in_its_order_and_its_words() {
         let person = read(&reply()).unwrap();
         let titles: Vec<&str> = person.sections.iter().map(|s| s.title.as_str()).collect();
@@ -152,6 +212,45 @@ mod tests {
         let mut stored = reply();
         stored["where"] = serde_json::Value::Null;
         assert_eq!(read(&stored).unwrap().whereabouts, None);
+    }
+
+    #[test]
+    fn malformed_live_whereabouts_are_rejected_not_shown_as_offline() {
+        let mut corrupt = reply();
+        corrupt["where"] = serde_json::json!({"asleep": "not a boolean"});
+        assert!(read(&corrupt).unwrap_err().contains("whereabouts"));
+    }
+
+    #[test]
+    fn invalid_live_carbon_is_a_wire_error() {
+        let mut corrupt = reply();
+        corrupt["where"] = serde_json::json!({"asleep": false, "body_carbon_kg": "unknown"});
+        assert!(read(&corrupt).unwrap_err().contains("whereabouts"));
+    }
+
+    #[test]
+    fn malformed_tick_fields_are_rejected_instead_of_hidden() {
+        for (field, invalid) in [
+            ("tick", serde_json::json!(-1)),
+            ("records_at_tick", serde_json::json!("120")),
+            ("tick", serde_json::json!(1.5)),
+        ] {
+            let mut corrupt = reply();
+            corrupt[field] = invalid;
+            assert!(read(&corrupt).unwrap_err().contains(field));
+        }
+    }
+
+    #[test]
+    fn invalid_meters_and_negative_carbon_are_rejected() {
+        for invalid in [serde_json::json!(-0.1), serde_json::json!(1.01)] {
+            let mut corrupt = reply();
+            corrupt["sections"][0]["fields"][0]["meter"] = invalid;
+            assert!(read(&corrupt).unwrap_err().contains("meter"));
+        }
+        let mut corrupt = reply();
+        corrupt["where"]["body_carbon_kg"] = serde_json::json!(-0.5);
+        assert!(read(&corrupt).unwrap_err().contains("body_carbon_kg"));
     }
 
     #[test]

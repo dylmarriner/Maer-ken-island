@@ -235,6 +235,10 @@ jobs:
             node --check "/tmp/$(basename "$file" .js).mjs"
             echo "ok $file"
           done
+          node --check apps/island/static/cell-details.mjs
+          node --check apps/island/static/app.js
+      - name: Cell inspector presentation regressions
+        run: node --test apps/island/tests/*.test.mjs
       - name: Optional dashboard endpoints remain compatible with older backends
         run: node --test scripts/tests/town_compat.test.mjs
       - name: Town map uses domain coordinates and refuses invalid points

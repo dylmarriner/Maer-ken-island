@@ -36,6 +36,7 @@ use mk_island_api::{
     CreatorOptions, Economy, InterventionRequest, Outcome, Property, Refusal, ServerVersion,
     Terrain, TimelineEntry, Trees, World,
 };
+use std::io::Read;
 use std::time::Duration;
 
 /// How long to wait for the backend before calling it unreachable.
@@ -44,6 +45,31 @@ use std::time::Duration;
 /// the terrain: 5.8 MB on the real island, which is a second or two on a
 /// slow link and should not be mistaken for a dead server.
 const TIMEOUT: Duration = Duration::from_secs(30);
+
+// The backend is a network peer, not an unbounded allocation source.
+// Terrain is ~5.8 MiB today; keep ample headroom for larger maps.
+const MAX_JSON_BYTES: u64 = 16 * 1024 * 1024;
+const MAX_BINARY_BYTES: u64 = 64 * 1024 * 1024;
+const MAX_ERROR_BYTES: u64 = 16 * 1024;
+
+/// Read at most max + 1 bytes to detect an oversized response without
+/// trusting Content-Length (which can be absent or false).
+fn read_limited(reader: impl Read, max: u64) -> std::io::Result<Vec<u8>> {
+    let mut bytes = Vec::new();
+    reader.take(max + 1).read_to_end(&mut bytes)?;
+    if bytes.len() as u64 > max {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "response exceeds client size limit",
+        ));
+    }
+    Ok(bytes)
+}
+
+fn read_text_limited(reader: impl Read, max: u64) -> Result<String, String> {
+    let bytes = read_limited(reader, max).map_err(|err| err.to_string())?;
+    String::from_utf8(bytes).map_err(|err| err.to_string())
+}
 
 /// A backend, and how to reach it.
 #[derive(Clone)]
@@ -56,8 +82,15 @@ pub struct IslandClient {
 impl std::fmt::Debug for IslandClient {
     /// Written by hand so a token never reaches a log through a `{:?}`.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Invalid origins can contain user-supplied passwords. Never print
+        // them, even in a Debug log produced before the first request.
+        let safe_base = if self.validate_base().is_ok() {
+            self.base.as_str()
+        } else {
+            "<invalid origin>"
+        };
         f.debug_struct("IslandClient")
-            .field("base", &self.base)
+            .field("base", &safe_base)
             .field("token", &self.token.as_ref().map(|_| "<set>"))
             .finish()
     }
@@ -74,6 +107,9 @@ impl IslandClient {
             token: token.filter(|t| !t.trim().is_empty()),
             agent: ureq::AgentBuilder::new()
                 .timeout(TIMEOUT)
+                // A backend must not redirect requests carrying an owner token
+                // to another origin (or silently move reads/writes elsewhere).
+                .redirects(0)
                 .user_agent(concat!("mk_island_client/", env!("CARGO_PKG_VERSION")))
                 .build(),
         }
@@ -162,7 +198,12 @@ impl IslandClient {
     /// it, and would be wrong the first time upstream changed a field. A
     /// frontend reads the parts it shows.
     pub fn human(&self, agent_id: &str) -> Result<serde_json::Value, ClientError> {
-        self.json(&format!("/api/world/humans/{agent_id}"))
+        // IDs are URL path segments, not caller-supplied paths or queries.
+        // Reject reserved delimiters instead of accidentally requesting another endpoint.
+        let path = human_path(agent_id).ok_or_else(|| ClientError::InvalidRequest {
+            reason: "invalid human identifier: expected ASCII letters, digits, '-' or '_'".into(),
+        })?;
+        self.json(&path)
     }
 
     /// What a creation form may offer: the lists and limits the creator
@@ -215,6 +256,14 @@ impl IslandClient {
         y1: f64,
         cap: usize,
     ) -> Result<Trees, ClientError> {
+        // A non-finite coordinate is not a geographic box and must never
+        // become a network request (or a confusing server-side parse error).
+        // Reversed bounds and cap=0 are valid server requests.
+        if ![x0, y0, x1, y1].iter().all(|value| value.is_finite()) {
+            return Err(ClientError::InvalidRequest {
+                reason: "tree box coordinates must be finite".into(),
+            });
+        }
         self.field(
             &format!("/api/trees?x0={x0}&y0={y0}&x1={x1}&y1={y1}&cap={cap}"),
             "trees",
@@ -276,18 +325,12 @@ impl IslandClient {
 
     /// Create somebody in the world.
     pub fn create_human(&self, request: &CreateHumanRequest) -> Result<Accepted, ClientError> {
-        self.post(
-            "/api/world/humans",
-            &serde_json::to_value(request).unwrap_or_default(),
-        )
+        self.post_serialized("/api/world/humans", request)
     }
 
     /// Pause, resume, step, snapshot or change the speed.
     pub fn control(&self, request: &ControlRequest) -> Result<Accepted, ClientError> {
-        self.post(
-            "/api/control",
-            &serde_json::to_value(request).unwrap_or_default(),
-        )
+        self.post_serialized("/api/control", request)
     }
 
     /// Intervene in the island. Many interventions are refused by name and
@@ -303,6 +346,32 @@ impl IslandClient {
     }
 
     // ---- the plumbing ----
+
+    /// Reject malformed or ambiguous backend addresses before any request.
+    /// An origin must not smuggle credentials, a path, query or fragment into
+    /// the URL to which an owner bearer token is attached.
+    fn validate_base(&self) -> Result<(), ClientError> {
+        let invalid = || {
+            ClientError::InvalidRequest {
+            reason: "backend address must be an HTTP(S) origin without credentials, path, query or fragment".into(),
+        }
+        };
+        if self.base.trim() != self.base || self.base.contains('\\') {
+            return Err(invalid());
+        }
+        let parsed = url::Url::parse(&self.base).map_err(|_| invalid())?;
+        if !matches!(parsed.scheme(), "http" | "https")
+            || parsed.host().is_none()
+            || !parsed.username().is_empty()
+            || parsed.password().is_some()
+            || parsed.path() != "/"
+            || parsed.query().is_some()
+            || parsed.fragment().is_some()
+        {
+            return Err(invalid());
+        }
+        Ok(())
+    }
 
     fn url(&self, path: &str) -> String {
         format!("{}{path}", self.base)
@@ -351,43 +420,57 @@ impl IslandClient {
     }
 
     fn text(&self, path: &str) -> Result<String, ClientError> {
-        match self.request("GET", path).call() {
-            Ok(response) => response
-                .into_string()
-                .map_err(|err| ClientError::Malformed {
-                    url: self.url(path),
-                    reason: err.to_string(),
-                }),
-            Err(err) => Err(self.failure(path, err)),
-        }
-    }
-
-    fn bytes(&self, path: &str) -> Result<Vec<u8>, ClientError> {
+        self.validate_base()?;
         match self.request("GET", path).call() {
             Ok(response) => {
-                let mut buffer = Vec::new();
-                std::io::Read::read_to_end(&mut response.into_reader(), &mut buffer).map_err(
-                    |err| ClientError::Malformed {
+                read_text_limited(response.into_reader(), MAX_JSON_BYTES).map_err(|reason| {
+                    ClientError::Malformed {
                         url: self.url(path),
-                        reason: err.to_string(),
-                    },
-                )?;
-                Ok(buffer)
+                        reason,
+                    }
+                })
             }
             Err(err) => Err(self.failure(path, err)),
         }
     }
 
+    fn bytes(&self, path: &str) -> Result<Vec<u8>, ClientError> {
+        self.validate_base()?;
+        match self.request("GET", path).call() {
+            Ok(response) => read_limited(response.into_reader(), MAX_BINARY_BYTES).map_err(|err| {
+                ClientError::Malformed {
+                    url: self.url(path),
+                    reason: err.to_string(),
+                }
+            }),
+            Err(err) => Err(self.failure(path, err)),
+        }
+    }
+
+    /// Serialize a command before touching the network. Sending JSON null on a
+    /// serialization failure would enqueue a different command from the one requested.
+    fn post_serialized<T: serde::Serialize>(
+        &self,
+        path: &str,
+        request: &T,
+    ) -> Result<Accepted, ClientError> {
+        let body = serde_json::to_value(request).map_err(|err| ClientError::InvalidRequest {
+            reason: format!("could not serialize {path}: {err}"),
+        })?;
+        self.post(path, &body)
+    }
+
     fn post(&self, path: &str, body: &serde_json::Value) -> Result<Accepted, ClientError> {
+        self.validate_base()?;
         match self.request("POST", path).send_json(body.clone()) {
             Ok(response) => {
                 let url = self.url(path);
-                let text = response
-                    .into_string()
-                    .map_err(|err| ClientError::Malformed {
+                let text = read_text_limited(response.into_reader(), MAX_JSON_BYTES).map_err(
+                    |reason| ClientError::Malformed {
                         url: url.clone(),
-                        reason: err.to_string(),
-                    })?;
+                        reason,
+                    },
+                )?;
                 serde_json::from_str(&text).map_err(|err| ClientError::Malformed {
                     url,
                     reason: err.to_string(),
@@ -409,7 +492,7 @@ impl IslandClient {
                 // empty string and then report it as "not the island's
                 // JSON: ", with nothing after the colon -- a message that
                 // blames the wrong thing and shows no evidence for it.
-                let body = match response.into_string() {
+                let body = match read_text_limited(response.into_reader(), MAX_ERROR_BYTES) {
                     Ok(body) => body,
                     Err(e) => {
                         return ClientError::Refused {
@@ -458,5 +541,175 @@ impl IslandClient {
                 reason: transport.to_string(),
             },
         }
+    }
+}
+
+/// Construct exactly one human resource path, without query or path traversal.
+fn human_path(agent_id: &str) -> Option<String> {
+    if agent_id.is_empty()
+        || !agent_id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
+    {
+        return None;
+    }
+    Some(format!("/api/world/humans/{agent_id}"))
+}
+
+#[cfg(test)]
+mod response_limits_tests {
+    use super::{read_limited, read_text_limited};
+    use std::io::Cursor;
+
+    #[test]
+    fn accepts_exact_boundary_and_rejects_one_extra_byte() {
+        assert_eq!(read_limited(Cursor::new(b"abcd"), 4).unwrap(), b"abcd");
+        let error = read_limited(Cursor::new(b"abcde"), 4).unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
+        assert!(error.to_string().contains("size limit"));
+    }
+
+    #[test]
+    fn detects_invalid_utf8_without_lossy_replacement() {
+        assert!(read_text_limited(Cursor::new(b"ok"), 2).is_ok());
+        assert!(read_text_limited(Cursor::new([0xff]), 2).is_err());
+        assert!(read_text_limited(Cursor::new(b"oversized"), 4).is_err());
+    }
+}
+
+#[cfg(test)]
+mod human_id_tests {
+    use super::{human_path, ClientError, IslandClient};
+
+    #[test]
+    fn canonical_human_ids_remain_addressable() {
+        assert_eq!(
+            human_path("HUM-000001").as_deref(),
+            Some("/api/world/humans/HUM-000001")
+        );
+        assert_eq!(
+            human_path("Gem_K2").as_deref(),
+            Some("/api/world/humans/Gem_K2")
+        );
+    }
+
+    #[test]
+    fn path_and_query_injection_is_rejected_before_network_access() {
+        let client = IslandClient::new("http://127.0.0.1:1", None);
+        for id in [
+            "",
+            ".",
+            "..",
+            "../control",
+            "HUM/000001",
+            "HUM%2F000001",
+            "HUM-000001?token=x",
+            "HUM-000001#fragment",
+            "HUM 000001",
+            "HUM-ø",
+        ] {
+            assert!(human_path(id).is_none(), "{id}");
+            assert!(
+                matches!(client.human(id), Err(ClientError::InvalidRequest { .. })),
+                "{id}"
+            );
+        }
+    }
+
+    #[test]
+    fn non_finite_tree_box_is_rejected_locally_without_retry() {
+        let client = IslandClient::new("http://127.0.0.1:1", None);
+        for value in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            for axis in 0..4 {
+                let mut coords = [0.0, 0.0, 10.0, 10.0];
+                coords[axis] = value;
+                let err = client
+                    .trees_in(coords[0], coords[1], coords[2], coords[3], 100)
+                    .expect_err("invalid coordinates must be rejected before HTTP");
+                assert!(matches!(err, ClientError::InvalidRequest { .. }), "{err:?}");
+                assert!(!err.worth_retrying());
+            }
+        }
+    }
+
+    #[test]
+    fn invalid_backend_origins_are_rejected_locally_without_leaking_credentials() {
+        for base in [
+            "http://user:secret@127.0.0.1:1",
+            "http://127.0.0.1:1/production",
+            "http://127.0.0.1:1?target=production",
+            "http://127.0.0.1:1#fragment",
+            "file:///tmp/island",
+            "http:///",
+        ] {
+            let client = IslandClient::new(base, Some("owner-token".into()));
+            let err = client
+                .version()
+                .expect_err("unsafe origin must not be contacted");
+            assert!(
+                matches!(err, ClientError::InvalidRequest { .. }),
+                "{base}: {err:?}"
+            );
+            assert!(!err.to_string().contains("secret"));
+            assert!(!err.to_string().contains("owner-token"));
+            let debug = format!("{client:?}");
+            assert!(
+                !debug.contains("secret"),
+                "unsafe base leaked through Debug"
+            );
+            assert!(!debug.contains("owner-token"), "token leaked through Debug");
+            assert!(!err.worth_retrying());
+        }
+    }
+
+    #[test]
+    fn redirect_does_not_forward_a_request_or_bearer_token() {
+        use std::io::{Read, Write};
+        use std::net::TcpListener;
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("local test listener");
+        let port = listener.local_addr().expect("listener address").port();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("local request");
+            let mut request = [0u8; 2048];
+            let count = stream.read(&mut request).expect("read request");
+            let headers = String::from_utf8_lossy(&request[..count]);
+            assert!(headers.contains("Bearer local-test-token"));
+            stream
+                .write_all(
+                    b"HTTP/1.1 302 Found\r\nLocation: http://127.0.0.1:1/api/version\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                )
+                .expect("write redirect");
+        });
+
+        let client = IslandClient::new(
+            &format!("http://127.0.0.1:{port}"),
+            Some("local-test-token".into()),
+        );
+        let err = client.version().expect_err("redirect must not be followed");
+        // Following the redirect would produce Unreachable from port 1.
+        assert!(!matches!(err, ClientError::Unreachable { .. }), "{err:?}");
+        server.join().expect("redirect server completed");
+    }
+
+    #[test]
+    fn failed_command_serialization_is_not_sent_as_null() {
+        struct CannotSerialize;
+
+        impl serde::Serialize for CannotSerialize {
+            fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: serde::Serializer,
+            {
+                Err(serde::ser::Error::custom("intentional failure"))
+            }
+        }
+
+        let client = IslandClient::new("http://127.0.0.1:1", None);
+        let err = client
+            .post_serialized("/api/control", &CannotSerialize)
+            .expect_err("a serialization failure must not become an HTTP request");
+        assert!(matches!(err, ClientError::InvalidRequest { .. }), "{err:?}");
+        assert!(!err.worth_retrying());
     }
 }

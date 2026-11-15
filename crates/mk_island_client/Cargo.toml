@@ -14,6 +14,8 @@ serde_json = { workspace = true }
 # to do it. `gzip` is in ureq's defaults and is what makes the 5.8 MB
 # terrain download a few hundred kilobytes.
 ureq = { workspace = true }
+# Parse and validate the backend origin before sending an owner token.
+url = "2"
 
 
 [lints]

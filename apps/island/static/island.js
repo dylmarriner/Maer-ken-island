@@ -24,6 +24,7 @@ import {
   reportOffline,
   storedToken,
 } from "/static/app.js";
+import { cellEnvironmentDetails, createCellSelectionGate } from "/static/cell-details.mjs";
 
 const panels = {
   properties: document.getElementById("properties-panel"),
@@ -943,7 +944,10 @@ function sayScale(canvas) {
   key.replaceChildren(...bits);
 }
 
+const cellSelectionGate = createCellSelectionGate();
+
 async function onMapClick(event) {
+  const selection = cellSelectionGate.begin();
   return handleMapCellClick(event, {
     canvas: mapCanvas(),
     output: document.getElementById("map-cell"),
@@ -952,9 +956,13 @@ async function onMapClick(event) {
     toMetres,
     getJson,
     setClickedPlace: (place) => { clickedPlace = place; },
-    fillPlacesAndPeople,
+    fillPlacesAndPeople: () => fillPlacesAndPeople(selection),
     getPlaces: () => places,
     whereEl,
+    // Retain PR #68 latest-click-wins selection and local climate details
+    // alongside the current main marine-species inspector.
+    isCurrent: () => cellSelectionGate.isCurrent(selection),
+    detailsForCell: cellEnvironmentDetails,
   });
 }
 
@@ -1399,8 +1407,9 @@ function fillSelect(select, options) {
 /// select that reset its own selection on refresh.
 let clickedPlace = null;
 
-async function fillPlacesAndPeople() {
+async function fillPlacesAndPeople(selection = null) {
   const world = await getJson("/api/world");
+  if (selection !== null && !cellSelectionGate.isCurrent(selection)) return false;
   places = [
     {
       label: `The estate — cell ${world.estate.cell[0]}, ${world.estate.cell[1]}`,
@@ -1417,6 +1426,7 @@ async function fillPlacesAndPeople() {
     personEl,
     world.people.map((p) => ({ value: p.agent_id, label: p.agent_id })),
   );
+  return true;
 }
 
 /// Poll a queued command until the island has answered it.

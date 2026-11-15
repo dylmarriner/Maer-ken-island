@@ -138,3 +138,48 @@ test("map clicks before the view is ready do not request or render a cell", asyn
     assert.deepEqual(fixture.output.children, []);
   });
 });
+
+test("later map click wins even when an older cell fetch completes last", async () => {
+  await withDocument(async () => {
+    const firstCell = { row: 2, col: 3, latitude: -41, longitude: 174, land: true, elevation_m: 12, buildable: true };
+    const secondCell = { row: 5, col: 6, latitude: -42, longitude: 175, land: true, elevation_m: 15, buildable: true };
+    const fixture = clickFixture(firstCell);
+    let resolveFirst;
+    let requests = 0;
+    fixture.dependencies.getJson = () => {
+      requests += 1;
+      if (requests === 1) return new Promise((resolve) => { resolveFirst = resolve; });
+      return Promise.resolve({ cell: secondCell });
+    };
+    let current = 1;
+    const first = handleMapCellClick({ clientX: 40, clientY: 32 }, {
+      ...fixture.dependencies, isCurrent: () => current === 1,
+    });
+    current = 2;
+    await handleMapCellClick({ clientX: 40, clientY: 32 }, {
+      ...fixture.dependencies, isCurrent: () => current === 2,
+    });
+    resolveFirst({ cell: firstCell });
+    await first;
+    assert.equal(requests, 2);
+    assert.equal(fixture.clickedPlace.latitude, secondCell.latitude);
+    assert.ok(fixture.output.children[0].textContent.includes("Row 5"));
+    assert.equal(fixture.whereEl.value, "0");
+  });
+});
+
+test("map cell details include valid land climate alongside marine projections", async () => {
+  await withDocument(async () => {
+    const fixture = clickFixture({
+      row: 1, col: 1, latitude: -41, longitude: 174,
+      land: true, elevation_m: 100, buildable: true,
+      marine_aquatic_species: 2, marine_aquatic_individuals: 300,
+      marine_aquatic_biomass_t: 1.5,
+    });
+    fixture.dependencies.detailsForCell = () => ["Biome: TemperateForest", "Annual precipitation: 1200 mm/year"];
+    await handleMapCellClick({ clientX: 40, clientY: 32 }, fixture.dependencies);
+    assert.equal(fixture.output.children.length, 5);
+    assert.ok(fixture.output.children.some((child) => child.textContent.includes("Biome: TemperateForest")));
+    assert.ok(fixture.output.children.some((child) => child.attributes.class === "cell-marine"));
+  });
+});

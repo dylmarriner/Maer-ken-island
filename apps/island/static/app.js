@@ -101,6 +101,8 @@ export async function handleMapCellClick(event, {
   fillPlacesAndPeople,
   getPlaces,
   whereEl,
+  isCurrent = () => true,
+  detailsForCell = () => [],
 }) {
   if (!viewReady) return;
   const box = canvas.getBoundingClientRect();
@@ -110,6 +112,8 @@ export async function handleMapCellClick(event, {
   if (col < 0 || row < 0 || col >= ground.cols || row >= ground.rows) return;
   try {
     const data = await getJson(`/api/cell/${row}/${col}`);
+    // A slower earlier request must not replace a more recent map selection.
+    if (!isCurrent()) return;
     const c = data.cell;
     const details = [
       el("p", `Row ${c.row}, column ${c.col} — ${c.latitude.toFixed(4)}°, ${c.longitude.toFixed(4)}°`, { class: "cell-where" }),
@@ -121,6 +125,9 @@ export async function handleMapCellClick(event, {
         { class: "cell-what" },
       ),
     ];
+    for (const detail of detailsForCell(c)) {
+      details.push(el("p", detail, { class: "cell-what" }));
+    }
     const marineProjectionAvailable =
       Number.isSafeInteger(c.marine_aquatic_species) &&
       c.marine_aquatic_species >= 0 &&
@@ -149,9 +156,12 @@ export async function handleMapCellClick(event, {
     };
     setClickedPlace(clickedPlace);
     await fillPlacesAndPeople();
+    if (!isCurrent()) return;
     whereEl.value = String(getPlaces().findIndex((p) => p === clickedPlace));
   } catch (error) {
-    output.replaceChildren(el("p", explain(error), { class: "cell-what" }));
+    if (isCurrent()) {
+      output.replaceChildren(el("p", explain(error), { class: "cell-what" }));
+    }
   }
 }
 
@@ -197,10 +207,27 @@ function remember(key, value) {
   }
 }
 
-/** Trim a backend address to scheme, host and port. */
+/** Accept only an HTTP(S) origin, never a path, credentials or a query.
+ * A ?backend= link is untrusted input, and may not redirect an existing
+ * control token to a different server. */
 export function tidyBackend(value) {
-  const trimmed = String(value || "").trim().replace(/\/+$/, "");
-  return trimmed;
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  if (raw.includes("\\") || raw.includes("?") || raw.includes("#")) {
+    throw new Error("Backend address must be a bare HTTP(S) origin.");
+  }
+  let parsed;
+  try {
+    parsed = new URL(raw);
+  } catch (_) {
+    throw new Error("Backend address must be a bare HTTP(S) origin.");
+  }
+  if (!["http:", "https:"].includes(parsed.protocol) ||
+      !parsed.hostname || parsed.username || parsed.password ||
+      parsed.pathname !== "/") {
+    throw new Error("Backend address must be a bare HTTP(S) origin.");
+  }
+  return parsed.origin;
 }
 
 let backendOverride = null;
@@ -215,8 +242,15 @@ export function backend() {
     return tidy;
   }
   const stored = remembered(BACKEND_KEY);
-  if (stored) return stored;
+  // Local storage is mutable by other scripts; never trust a cached origin.
+  if (stored) return tidyBackend(stored);
   return tidyBackend(window.ISLAND_BACKEND || "");
+}
+
+/** A token shown for island A must never silently be saved for island B.
+ * Only a token explicitly edited for the destination may cross the switch. */
+export function tokenForBackendSwitch(previousOrigin, nextOrigin, visibleToken, edited) {
+  return previousOrigin === nextOrigin || edited ? visibleToken.trim() : "";
 }
 
 /** Point this browser at another island. `""` means the page's own host. */
@@ -232,9 +266,31 @@ export function backendIsElsewhere() {
   return base !== "" && base !== location.origin;
 }
 
-/** The full address of one API path. */
+/** The full address of an island API path.
+ * Reject absolute, scheme-relative and traversal paths before attaching a
+ * bearer token. Some paths are assembled from server-provided identifiers. */
 export function apiUrl(path) {
-  return backend() + path;
+  if (typeof path !== "string" || !path.startsWith("/api/") ||
+      path.includes("\\") || path.includes("#")) {
+    throw new Error("Island API path must stay on this backend.");
+  }
+  // URL() silently removes dot segments (including percent-encoded ones)
+  // and ASCII newlines. That can turn a record URL into another privileged
+  // /api/ endpoint while still passing the origin and /api/ prefix checks.
+  // Reject non-canonical caller paths before resolving or attaching a token.
+  const rawPath = path.split("?")[0];
+  if (/[\x00-\x1f\x7f]/.test(path) ||
+      /(?:^|\/)(?:\.|%2e){1,2}(?=\/|$)/i.test(rawPath)) {
+    throw new Error("Island API path must stay on this backend.");
+  }
+  const base = backend();
+  const expectedOrigin = base || location.origin;
+  const resolved = new URL(path, expectedOrigin);
+  if (resolved.origin !== expectedOrigin || !resolved.pathname.startsWith("/api/")) {
+    throw new Error("Island API path must stay on this backend.");
+  }
+  // Preserve relative URLs when the dashboard and API share a host.
+  return base ? resolved.href : path;
 }
 
 /** The headers every request carries, token included when there is one. */
@@ -249,9 +305,9 @@ function headersFor(extra) {
   return headers;
 }
 
-export async function getJson(path) {
+export async function getJson(path, { signal } = {}) {
   const url = apiUrl(path);
-  const response = await fetch(url, { headers: headersFor() });
+  const response = await fetch(url, { headers: headersFor(), redirect: "error", cache: "no-store", signal });
   if (!response.ok) {
     // The code travels with the error. Without it a caller could only match
     // on the message, and `island.js` had a `error.status === 404` branch
@@ -296,6 +352,7 @@ export async function postJson(path, body, token) {
   if (token) headers.authorization = "Bearer " + token;
   const response = await fetch(apiUrl(path), {
     method: "POST",
+    redirect: "error",
     headers,
     body: JSON.stringify(body),
   });
@@ -313,7 +370,7 @@ export async function postJson(path, body, token) {
  *
  * The caller revokes the URL when it is done with it. */
 export async function getImage(path) {
-  const response = await fetch(apiUrl(path), { headers: headersFor({ accept: "image/png" }) });
+  const response = await fetch(apiUrl(path), { headers: headersFor({ accept: "image/png" }), redirect: "error" });
   if (!response.ok) {
     const failed = new Error(`The server answered ${response.status} for ${path}.`);
     failed.status = response.status;
@@ -330,10 +387,19 @@ export async function getImage(path) {
  * with `ISLAND_CONTROL_TOKEN` every pause, every speed change and every
  * intervention came back 401 with nothing on screen explaining why. */
 export const TOKEN_KEY = "island-control-token";
+export const TOKEN_ORIGIN_KEY = "island-control-token-origin";
+
+// A token belongs to one backend origin. Never forward a token saved for
+// island A to island B, including when B came from an untrusted ?backend= link.
+// Legacy unscoped tokens are intentionally not sent until re-entered.
+function currentBackendOrigin() {
+  return backend() || location.origin;
+}
 
 export function storedToken() {
   try {
-    return sessionStorage.getItem(TOKEN_KEY) || "";
+    const token = sessionStorage.getItem(TOKEN_KEY) || "";
+    return sessionStorage.getItem(TOKEN_ORIGIN_KEY) === currentBackendOrigin() ? token : "";
   } catch (_) {
     return "";
   }
@@ -341,8 +407,13 @@ export function storedToken() {
 
 export function rememberToken(token) {
   try {
-    if (token) sessionStorage.setItem(TOKEN_KEY, token);
-    else sessionStorage.removeItem(TOKEN_KEY);
+    if (token) {
+      sessionStorage.setItem(TOKEN_ORIGIN_KEY, currentBackendOrigin());
+      sessionStorage.setItem(TOKEN_KEY, token);
+    } else {
+      sessionStorage.removeItem(TOKEN_KEY);
+      sessionStorage.removeItem(TOKEN_ORIGIN_KEY);
+    }
   } catch (_) {
     // A browser with storage switched off still works; the token just has
     // to be typed again next time.
@@ -445,10 +516,13 @@ export function mountServerChrome() {
     token,
     el(
       "p",
-      "Sent with every request. The control token reads and writes; a read token only reads. It is kept in this browser and never sent anywhere but the island above.",
+      "Sent with every request. The control token reads and writes; a read token only reads. When changing islands, enter the new island's token again; the old token is not copied.",
       { class: "hint" },
     ),
   );
+  const originalOrigin = currentBackendOrigin();
+  let tokenEdited = false;
+  token.addEventListener("input", () => { tokenEdited = true; });
   const save = el("button", "Connect", { type: "submit", class: "primary" });
   form.append(save);
   host.append(form);
@@ -458,10 +532,25 @@ export function mountServerChrome() {
     if (!form.hidden) url.focus();
   });
 
+  url.addEventListener("input", () => url.setCustomValidity(""));
   form.addEventListener("submit", (event) => {
     event.preventDefault();
-    setBackend(url.value);
-    rememberToken(token.value.trim());
+    let target;
+    try {
+      target = tidyBackend(url.value);
+      url.setCustomValidity("");
+    } catch (error) {
+      url.setCustomValidity(error.message);
+      url.reportValidity();
+      return;
+    }
+    // The password field initially contains the previous island's token.
+    // Changing only the backend URL must not rebind that secret to a new host.
+    const nextToken = tokenForBackendSwitch(
+      originalOrigin, target || location.origin, token.value, tokenEdited,
+    );
+    setBackend(target);
+    rememberToken(nextToken);
     // A reload rather than a re-fetch: every page holds state built from
     // one island -- a selected person, a map view, a roster -- and
     // carrying that across to a different island would show one island's

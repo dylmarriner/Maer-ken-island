@@ -2,11 +2,11 @@
 //! can act on.
 //!
 //! The distinction that matters is not HTTP's. A frontend needs to tell
-//! apart four things, because the person in front of it does something
-//! different about each: the backend is not there, the backend is there
-//! and said no, the backend is there and is a different version, and the
-//! backend answered something this client could not read. A bare status
-//! code tells none of them apart.
+//! apart five things, because the person in front of it does something
+//! different about each: the backend is unreachable, the backend refused,
+//! the backend is incompatible, the backend sent an unreadable response,
+//! or a local command could not be serialized at all. A bare status code
+//! tells none of them apart.
 
 use mk_island_api::Refusal;
 
@@ -28,6 +28,9 @@ pub enum ClientError {
     NoIsland { what: String },
     /// This client and that server do not speak the same schema.
     Incompatible(String),
+    /// A command could not be encoded locally. Never replace it with JSON null
+    /// or send a different command to the island.
+    InvalidRequest { reason: String },
     /// It answered something this client could not read. A proxy serving
     /// an error page, a truncated download, a field that changed shape.
     Malformed { url: String, reason: String },
@@ -65,6 +68,9 @@ impl std::fmt::Display for ClientError {
                  without --scenario: it keeps a stored population and nothing more."
             ),
             ClientError::Incompatible(reason) => write!(f, "{reason}"),
+            ClientError::InvalidRequest { reason } => {
+                write!(f, "The island command could not be prepared: {reason}")
+            }
             ClientError::Malformed { url, reason } => write!(
                 f,
                 "The answer from {url} was not what this client reads: {reason}. That usually \

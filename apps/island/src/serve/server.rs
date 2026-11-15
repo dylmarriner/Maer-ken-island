@@ -42,11 +42,16 @@ pub const HAIR_COLORS: [&str; 6] = ["Black", "Brown", "Blonde", "Red", "Gray", "
 pub const EYE_COLORS: [&str; 6] = ["Brown", "Blue", "Green", "Hazel", "Gray", "Amber"];
 pub const SKIN_TONES: [&str; 5] = ["Fair", "Light", "Medium", "Olive", "Dark"];
 
-fn json(
-    status: StatusCode,
-    body: &serde_json::Value,
-) -> warp::reply::WithStatus<warp::reply::Json> {
-    warp::reply::with_status(warp::reply::json(body), status)
+type JsonReply = warp::reply::WithHeader<warp::reply::WithStatus<warp::reply::Json>>;
+
+fn json(status: StatusCode, body: &serde_json::Value) -> JsonReply {
+    // Every JSON API response is live state, a human record, or a command
+    // outcome. Neither browser caches nor shared proxies may retain it.
+    warp::reply::with_header(
+        warp::reply::with_status(warp::reply::json(body), status),
+        "cache-control",
+        "no-store",
+    )
 }
 
 /// Take the population lock, surviving a poisoned mutex. A panic in one
@@ -278,7 +283,7 @@ pub fn options() -> serde_json::Value {
 /// `writes_mode` is for, and why it has to be the same word everywhere.
 ///
 /// `what` completes "This dashboard is not allowed to ...".
-fn may_not_write(auth: &ControlAuth, what: &str) -> warp::reply::WithStatus<warp::reply::Json> {
+fn may_not_write(auth: &ControlAuth, what: &str) -> JsonReply {
     json(
         StatusCode::UNAUTHORIZED,
         &serde_json::json!({
