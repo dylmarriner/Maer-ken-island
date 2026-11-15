@@ -1634,6 +1634,34 @@ fn plant_food_is_only_the_forests_fruit_and_seed_and_grassland_feeds_nobody() {
 }
 
 #[test]
+fn receiving_a_valid_unallocated_log_assigns_a_real_id_and_books_material() {
+    let b = base();
+    let cell = b.forest_cell;
+    let area = b.domain.cell_area_m2(M);
+    let mut hydrology = HydrologyState::new(&b.domain.storage_spec(M), 0.5);
+    let mut materials = MaterialLedger::new();
+    let mut ledger = Ledger::new();
+    let audit = Audit::start(&materials);
+    let log = Log {
+        id: 0, // Newly felled logs have no ledger ID until receipt.
+        position_m: (0.0, 0.0),
+        heading_rad: 0.0,
+        length_m: 2.0,
+        diameter_m: 0.2,
+        dry_kg: 10.0,
+        carbon_kgc: 5.0,
+        water_kg: 8.2,
+        place: LogPlace::Ground,
+    };
+    let id = materials.receive_felled_log(log, &mut hydrology, cell, area, &mut ledger);
+    assert_eq!(id, 1);
+    assert_eq!(materials.log(id).expect("received log").id, id);
+    assert_eq!(materials.next_log_id(), id + 1);
+    assert_eq!(materials.logs().count(), 1);
+    audit.close(&materials, &ledger);
+}
+
+#[test]
 fn receiving_zero_dry_mass_log_fails_before_allocating_or_booking_material() {
     use std::panic::{catch_unwind, AssertUnwindSafe};
 
