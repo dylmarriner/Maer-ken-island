@@ -140,6 +140,22 @@ pub fn cell_lines(cell: &Cell) -> Vec<String> {
             npp * 1_000.0
         ));
     }
+    if let (Some(species), Some(individuals), Some(biomass_t)) = (
+        cell.marine_aquatic_species,
+        cell.marine_aquatic_individuals,
+        cell.marine_aquatic_biomass_t,
+    ) {
+        if individuals.is_finite()
+            && individuals >= 0.0
+            && biomass_t.is_finite()
+            && biomass_t >= 0.0
+        {
+            lines.push(format!(
+                "Marine life: {species} species, {individuals:.0} individuals, {biomass_t:.3} t live biomass"
+            ));
+            lines.push("Uncalibrated upstream estimate; not harvestable stock or catch.".into());
+        }
+    }
     lines
 }
 
@@ -184,6 +200,26 @@ mod tests {
             cell_size_m: 2_000.0,
             elevation_m: vec![10.0; rows * cols],
             land: vec![true; rows * cols],
+        }
+    }
+
+    /// A complete backend cell fixture for marine inspector display regressions.
+    fn sample_cell() -> Cell {
+        Cell {
+            row: 3,
+            col: 7,
+            latitude: -41.2,
+            longitude: 174.5,
+            land: true,
+            elevation_m: 312.4,
+            buildable: true,
+            biome: None,
+            npp_kgc_m2_yr: None,
+            mean_temperature_c: None,
+            annual_rain_mm: None,
+            marine_aquatic_species: None,
+            marine_aquatic_individuals: None,
+            marine_aquatic_biomass_t: None,
         }
     }
 
@@ -252,20 +288,36 @@ mod tests {
     }
 
     #[test]
+    fn marine_projection_requires_finite_non_negative_measurements_and_keeps_its_warning() {
+        let disclaimer = "Uncalibrated upstream estimate; not harvestable stock or catch.";
+        for (individuals, biomass_t) in [
+            (f64::NAN, 7.25),
+            (f64::INFINITY, 7.25),
+            (-1.0, 7.25),
+            (12_500.0, f64::NAN),
+            (12_500.0, f64::INFINITY),
+            (12_500.0, -0.1),
+        ] {
+            let mut cell = sample_cell();
+            cell.marine_aquatic_species = Some(4);
+            cell.marine_aquatic_individuals = Some(individuals);
+            cell.marine_aquatic_biomass_t = Some(biomass_t);
+            let lines = cell_lines(&cell);
+            assert!(!lines.iter().any(|line| line.starts_with("Marine life:")));
+            assert!(!lines.iter().any(|line| line.as_str() == disclaimer));
+        }
+
+        let mut partial = sample_cell();
+        partial.marine_aquatic_species = Some(4);
+        partial.marine_aquatic_individuals = Some(12_500.0);
+        assert!(!cell_lines(&partial)
+            .iter()
+            .any(|line| line.starts_with("Marine life:")));
+    }
+
+    #[test]
     fn a_cell_says_only_what_the_backend_sent() {
-        let mut cell = Cell {
-            row: 3,
-            col: 7,
-            latitude: -41.2,
-            longitude: 174.5,
-            land: true,
-            elevation_m: 312.4,
-            buildable: true,
-            biome: None,
-            npp_kgc_m2_yr: None,
-            mean_temperature_c: None,
-            annual_rain_mm: None,
-        };
+        let mut cell = sample_cell();
         let old = cell_lines(&cell);
         assert_eq!(old.len(), 3);
         assert_eq!(old[2], "Land, 312 m up, buildable");
@@ -273,9 +325,20 @@ mod tests {
         cell.mean_temperature_c = Some(11.84);
         cell.annual_rain_mm = Some(1_234.0);
         cell.npp_kgc_m2_yr = Some(0.567);
+        cell.marine_aquatic_species = Some(4);
+        cell.marine_aquatic_individuals = Some(12_500.0);
+        cell.marine_aquatic_biomass_t = Some(7.25);
         let new = cell_lines(&cell);
         assert_eq!(new[3], "Temperate forest");
         assert_eq!(new[4], "Climate: 11.8 °C mean, 1234 mm of rain a year");
         assert_eq!(new[5], "Plants grow 567 g C per m² a year");
+        assert_eq!(
+            new[6],
+            "Marine life: 4 species, 12500 individuals, 7.250 t live biomass"
+        );
+        assert_eq!(
+            new[7],
+            "Uncalibrated upstream estimate; not harvestable stock or catch."
+        );
     }
 }

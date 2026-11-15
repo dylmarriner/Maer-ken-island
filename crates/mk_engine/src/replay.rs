@@ -10,14 +10,17 @@ use std::collections::HashMap;
 use std::fmt;
 use tracing::warn;
 
+/// Default per-session replay budget: enough for a year at a 60-second cadence.
+pub const DEFAULT_MAX_REPLAY_TICKS: u64 = 600_000;
+
 /// Replay session for deterministic simulation replay
 #[derive(Debug, Clone)]
 pub struct ReplaySession {
     /// Initial snapshot
-    pub initial_snapshot: WorldSnapshot,
+    initial_snapshot: WorldSnapshot,
 
     /// Current replay state
-    pub current_state: WorldState,
+    current_state: WorldState,
 
     /// Independent copy of the initial state, stepped in lockstep with
     /// `current_state`. Two independently-stepped copies of the same
@@ -29,13 +32,17 @@ pub struct ReplaySession {
     shadow_state: WorldState,
 
     /// Target tick to replay to
-    pub target_tick: Tick,
+    target_tick: Tick,
 
     /// Replay options
-    pub options: ReplayOptions,
+    options: ReplayOptions,
 
     /// Replay history for verification
-    pub history: Vec<ReplayEntry>,
+    history: Vec<ReplayEntry>,
+
+    /// First failed step, latched so a partially advanced or divergent session cannot
+    /// later be reported as a successful replay.
+    failure: Option<ReplayError>,
 }
 
 /// Replay options
@@ -44,10 +51,11 @@ pub struct ReplayOptions {
     /// Verify hash at each step
     pub verify_hashes: bool,
 
-    /// Stop on first error
+    /// Compatibility policy flag. Step failures always stop and poison the session:
+    /// skipping one would make deterministic state and replay history unverifiable.
     pub stop_on_error: bool,
 
-    /// Maximum ticks to replay (0 = unlimited)
+    /// Maximum ticks to replay. Zero explicitly opts out of the execution bound.
     pub max_ticks: u64,
 
     /// Capture detailed metrics
@@ -59,7 +67,7 @@ impl Default for ReplayOptions {
         Self {
             verify_hashes: true,
             stop_on_error: true,
-            max_ticks: 0,
+            max_ticks: DEFAULT_MAX_REPLAY_TICKS,
             capture_metrics: true,
         }
     }
@@ -98,6 +106,7 @@ impl ReplaySession {
             target_tick: snapshot.tick,
             options,
             history: Vec::new(),
+            failure: None,
         })
     }
 
@@ -122,27 +131,74 @@ impl ReplaySession {
             target_tick,
             options,
             history: Vec::new(),
+            failure: None,
         })
+    }
+
+    /// Borrow the immutable snapshot from which this replay session started.
+    pub fn initial_snapshot(&self) -> &WorldSnapshot {
+        &self.initial_snapshot
+    }
+
+    /// Borrow the current replay state without allowing callers to mutate it.
+    ///
+    /// The session is the sole writer of both the primary and shadow states;
+    /// callers that need to advance it must use `replay_to`.
+    pub fn current_state(&self) -> &WorldState {
+        &self.current_state
+    }
+
+    /// Return the last accepted replay target.
+    pub fn target_tick(&self) -> Tick {
+        self.target_tick
+    }
+
+    /// Borrow the immutable replay options selected when the session was created.
+    pub fn options(&self) -> &ReplayOptions {
+        &self.options
+    }
+
+    /// Borrow successful replay history without exposing a mutable collection.
+    pub fn history(&self) -> &[ReplayEntry] {
+        &self.history
     }
 
     /// Replay to a specific tick
     pub fn replay_to(&mut self, target_tick: Tick) -> Result<(), ReplayError> {
-        self.target_tick = target_tick;
+        if let Some(error) = &self.failure {
+            return Err(error.clone());
+        }
 
         let start_tick = self.current_state.tick;
+        // ReplaySession advances a live state; it cannot rewind to an earlier tick.
+        // Reject this before changing target metadata so callers can safely retry forward.
+        if target_tick < start_tick {
+            return Err(ReplayError::TargetBeforeCurrentTick);
+        }
+
         let ticks_to_replay = target_tick.saturating_sub(start_tick);
 
         if self.options.max_ticks > 0 && ticks_to_replay > self.options.max_ticks {
             return Err(ReplayError::MaxTicksExceeded);
         }
 
+        // A rejected request must not mutate even the session's target metadata.
+        self.target_tick = target_tick;
+
         while self.current_state.tick < target_tick {
-            if let Err(e) = self.step_replay() {
-                if self.options.stop_on_error {
-                    return Err(e);
+            if let Err(error) = self.step_replay() {
+                // A failed step may already have advanced one state, failed the shadow
+                // step, or exposed a hash/state mismatch. There is no safe tick to skip:
+                // continuing can turn a corrupt replay into an apparent success.
+                self.failure = Some(error.clone());
+                if !self.options.stop_on_error {
+                    warn!(
+                        tick = self.current_state.tick,
+                        error = %error,
+                        "Replay step failed; session is poisoned and cannot safely continue"
+                    );
                 }
-                // Log error and continue if not stopping on error
-                warn!(tick = self.current_state.tick, error = %e, "Replay error, continuing");
+                return Err(error);
             }
         }
 
@@ -205,6 +261,10 @@ impl ReplaySession {
 
     /// Verify replay integrity
     pub fn verify(&self) -> Result<(), ReplayError> {
+        if let Some(error) = &self.failure {
+            return Err(error.clone());
+        }
+
         // Verify final state
         self.current_state
             .validate()
@@ -246,10 +306,12 @@ impl ReplaySession {
             .filter(|e| matches!(e.status, ReplayStatus::Success))
             .count();
 
-        let failed_steps = self.history.len() - successful_steps;
+        let failed_attempts = if self.failure.is_some() { 1 } else { 0 };
+        let failed_steps = self.history.len() - successful_steps + failed_attempts;
+        let total_steps = self.history.len() + failed_attempts;
 
         ReplayStatistics {
-            total_steps: self.history.len(),
+            total_steps,
             successful_steps,
             failed_steps,
             start_tick: self.initial_snapshot.tick,
@@ -279,6 +341,9 @@ pub enum ReplayError {
     ValidationError(String),
     IntegrityError(String),
     MaxTicksExceeded,
+    TargetBeforeCurrentTick,
+    DuplicateSessionName(String),
+    InvalidSessionName,
 }
 
 impl fmt::Display for ReplayError {
@@ -290,6 +355,13 @@ impl fmt::Display for ReplayError {
             ReplayError::ValidationError(msg) => write!(f, "Validation error: {}", msg),
             ReplayError::IntegrityError(msg) => write!(f, "Integrity error: {}", msg),
             ReplayError::MaxTicksExceeded => write!(f, "Max ticks exceeded"),
+            ReplayError::TargetBeforeCurrentTick => {
+                write!(f, "Target tick precedes current replay state")
+            }
+            ReplayError::DuplicateSessionName(name) => {
+                write!(f, "Replay session already exists: {}", name)
+            }
+            ReplayError::InvalidSessionName => write!(f, "Replay session name must not be empty"),
         }
     }
 }
@@ -308,9 +380,22 @@ impl ReplayManager {
         }
     }
 
-    /// Add a replay session
-    pub fn add_session(&mut self, name: String, session: ReplaySession) {
+    /// Add a replay session without replacing an existing session of the same name.
+    ///
+    /// Session names are stable identifiers within a manager. They must be non-empty,
+    /// already trimmed, and free of control characters; internal spaces remain valid.
+    /// A duplicate is rejected before the existing session or its replay state can be replaced.
+    pub fn add_session(&mut self, name: String, session: ReplaySession) -> Result<(), ReplayError> {
+        if name.trim().is_empty() || name.trim() != name || name.chars().any(char::is_control) {
+            return Err(ReplayError::InvalidSessionName);
+        }
+
+        if self.sessions.contains_key(&name) {
+            return Err(ReplayError::DuplicateSessionName(name));
+        }
+
         self.sessions.insert(name, session);
+        Ok(())
     }
 
     /// Get a replay session
@@ -328,14 +413,252 @@ impl ReplayManager {
         self.sessions.remove(name)
     }
 
-    /// List all session names
+    /// Return session names in lexicographic order, independent of `HashMap` iteration order.
     pub fn list_sessions(&self) -> Vec<String> {
-        self.sessions.keys().cloned().collect()
+        let mut names = self.sessions.keys().cloned().collect::<Vec<_>>();
+        names.sort_unstable();
+        names
     }
 }
 
 impl Default for ReplayManager {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        ReplayError, ReplayManager, ReplayOptions, ReplaySession, DEFAULT_MAX_REPLAY_TICKS,
+    };
+    use crate::world_integration::WorldState;
+    use mk_core::canon::CanonLocked;
+    use std::sync::Arc;
+
+    #[test]
+    fn default_replay_budget_rejects_an_overlong_horizon_before_stepping() {
+        // ReplaySession wraps the upstream planetary WorldState, whose canon
+        // is intentionally distinct from the island-world canon fixture.
+        // Keep this test on the same valid canon used by other upstream-world
+        // construction tests instead of passing fixtures/island/canon.json.
+        let state = WorldState::new(Arc::new(CanonLocked::default()), [0x5a; 32]);
+        let mut session =
+            ReplaySession::from_world_state(state, ReplayOptions::default()).expect("session");
+        let start_tick = session.current_state.tick;
+        let initial_target = session.target_tick;
+        let target_tick = start_tick + DEFAULT_MAX_REPLAY_TICKS + 1;
+
+        assert!(matches!(
+            session.replay_to(target_tick),
+            Err(ReplayError::MaxTicksExceeded)
+        ));
+        assert_eq!(session.current_state.tick, start_tick);
+        assert_eq!(session.target_tick, initial_target);
+        assert!(session.history.is_empty());
+
+        // A rejected budget request is preflight-only, not a poisoned session.
+        session.replay_to(start_tick + 1).expect("smaller retry");
+        assert_eq!(session.current_state.tick, start_tick + 1);
+        assert_eq!(session.history.len(), 1);
+    }
+
+    #[test]
+    fn public_session_accessors_expose_only_read_only_state_views() {
+        let state = WorldState::new(Arc::new(CanonLocked::default()), [0x5a; 32]);
+        let session =
+            ReplaySession::from_world_state(state, ReplayOptions::default()).expect("session");
+
+        assert_eq!(
+            session.initial_snapshot().tick,
+            session.current_state().tick
+        );
+        assert_eq!(session.target_tick(), session.current_state().tick);
+        assert_eq!(session.options().max_ticks, DEFAULT_MAX_REPLAY_TICKS);
+        assert!(session.history().is_empty());
+    }
+
+    #[test]
+    fn backward_target_is_rejected_without_mutating_or_poisoning_session() {
+        let state = WorldState::new(Arc::new(CanonLocked::default()), [0x5a; 32]);
+        let mut session =
+            ReplaySession::from_world_state(state, ReplayOptions::default()).expect("session");
+        let initial_tick = session.current_state.tick;
+
+        session
+            .replay_to(initial_tick + 1)
+            .expect("initial forward replay");
+        let advanced_tick = session.current_state.tick;
+        let accepted_target = session.target_tick;
+        let history_len = session.history.len();
+
+        assert!(matches!(
+            session.replay_to(initial_tick),
+            Err(ReplayError::TargetBeforeCurrentTick)
+        ));
+        assert_eq!(session.current_state.tick, advanced_tick);
+        assert_eq!(session.target_tick, accepted_target);
+        assert_eq!(session.history.len(), history_len);
+        session
+            .verify()
+            .expect("rejected rewind leaves replay valid");
+
+        // A backward request is a preflight rejection, not an integrity failure.
+        session
+            .replay_to(advanced_tick + 1)
+            .expect("forward replay remains available");
+        assert_eq!(session.current_state.tick, advanced_tick + 1);
+    }
+
+    #[test]
+    fn integrity_failure_poison_session_even_when_stop_on_error_is_disabled() {
+        let state = WorldState::new(Arc::new(CanonLocked::default()), [0x5a; 32]);
+        let mut session = ReplaySession::from_world_state(
+            state,
+            ReplayOptions {
+                stop_on_error: false,
+                ..ReplayOptions::default()
+            },
+        )
+        .expect("session");
+        let start_tick = session.current_state.tick;
+
+        // Deliberately corrupt only the independent verification copy. Both worlds
+        // still step, but their hash chains cannot agree.
+        session.shadow_state.hash_chain.current[0] ^= 0x01;
+        let target_tick = start_tick + 2;
+
+        assert!(matches!(
+            session.replay_to(target_tick),
+            Err(ReplayError::HashMismatch)
+        ));
+        assert_eq!(session.current_state.tick, start_tick + 1);
+        assert!(session.history.is_empty());
+
+        let statistics = session.get_statistics();
+        assert_eq!(statistics.total_steps, 1);
+        assert_eq!(statistics.successful_steps, 0);
+        assert_eq!(statistics.failed_steps, 1);
+
+        // The first integrity failure is sticky: a second call cannot advance the
+        // partially advanced session or turn the failed replay into Ok(()).
+        let failed_tick = session.current_state.tick;
+        assert!(matches!(
+            session.replay_to(target_tick),
+            Err(ReplayError::HashMismatch)
+        ));
+        assert_eq!(session.current_state.tick, failed_tick);
+        assert!(matches!(session.verify(), Err(ReplayError::HashMismatch)));
+    }
+
+    /// Ensures session listing is stable when sessions are inserted out of sort order.
+    #[test]
+    fn replay_manager_lists_session_names_in_deterministic_order() {
+        let mut manager = ReplayManager::new();
+
+        for name in ["zeta", "alpha", "middle"] {
+            let state = WorldState::new(Arc::new(CanonLocked::default()), [0x5a; 32]);
+            let session =
+                ReplaySession::from_world_state(state, ReplayOptions::default()).expect("session");
+            manager
+                .add_session(name.to_owned(), session)
+                .expect("unique session name");
+        }
+
+        assert_eq!(
+            manager.list_sessions(),
+            vec!["alpha".to_owned(), "middle".to_owned(), "zeta".to_owned()]
+        );
+    }
+
+    #[test]
+    fn replay_manager_rejects_blank_session_names_without_mutating_manager() {
+        let mut manager = ReplayManager::new();
+        let state = WorldState::new(Arc::new(CanonLocked::default()), [0x5a; 32]);
+        let session =
+            ReplaySession::from_world_state(state, ReplayOptions::default()).expect("session");
+
+        assert!(matches!(
+            manager.add_session(" \t\n".to_owned(), session),
+            Err(ReplayError::InvalidSessionName)
+        ));
+        assert!(manager.list_sessions().is_empty());
+    }
+
+    /// Rejects padded and control-character identifiers without inserting partial state.
+    #[test]
+    fn replay_manager_rejects_noncanonical_session_names_without_mutating_manager() {
+        for invalid_name in [" primary", "primary ", "primary\nname", "primary\0"] {
+            let mut manager = ReplayManager::new();
+            let state = WorldState::new(Arc::new(CanonLocked::default()), [0x5a; 32]);
+            let session =
+                ReplaySession::from_world_state(state, ReplayOptions::default()).expect("session");
+
+            assert!(
+                matches!(
+                    manager.add_session(invalid_name.to_owned(), session),
+                    Err(ReplayError::InvalidSessionName)
+                ),
+                "accepted invalid session name {invalid_name:?}"
+            );
+            assert!(manager.list_sessions().is_empty());
+        }
+    }
+
+    /// Keeps ordinary human-readable names with internal spaces valid.
+    #[test]
+    fn replay_manager_allows_internal_spaces_in_session_names() {
+        let mut manager = ReplayManager::new();
+        let state = WorldState::new(Arc::new(CanonLocked::default()), [0x5a; 32]);
+        let session =
+            ReplaySession::from_world_state(state, ReplayOptions::default()).expect("session");
+
+        manager
+            .add_session("north ridge".to_owned(), session)
+            .expect("internal spaces are valid");
+        assert_eq!(manager.list_sessions(), vec!["north ridge".to_owned()]);
+    }
+
+    #[test]
+    fn replay_manager_rejects_duplicate_names_without_replacing_existing_session() {
+        let mut manager = ReplayManager::new();
+        let state = WorldState::new(Arc::new(CanonLocked::default()), [0x5a; 32]);
+        let mut existing = ReplaySession::from_world_state(state, ReplayOptions::default())
+            .expect("existing session");
+        let initial_tick = existing.current_state().tick;
+        existing
+            .replay_to(initial_tick + 1)
+            .expect("advance existing session before insertion");
+        manager
+            .add_session("primary".to_owned(), existing)
+            .expect("first session name is unique");
+
+        let replacement_state = WorldState::new(Arc::new(CanonLocked::default()), [0x6b; 32]);
+        let replacement =
+            ReplaySession::from_world_state(replacement_state, ReplayOptions::default())
+                .expect("replacement session");
+
+        assert!(matches!(
+            manager.add_session("primary".to_owned(), replacement),
+            Err(ReplayError::DuplicateSessionName(ref name)) if name == "primary"
+        ));
+        let retained = manager
+            .get_session("primary")
+            .expect("original session remains");
+        assert_eq!(retained.current_state().tick, initial_tick + 1);
+        assert_eq!(manager.list_sessions(), vec!["primary".to_owned()]);
+    }
+
+    #[test]
+    fn unlimited_replay_is_an_explicit_override() {
+        assert_eq!(ReplayOptions::default().max_ticks, DEFAULT_MAX_REPLAY_TICKS);
+        assert_eq!(
+            ReplayOptions {
+                max_ticks: 0,
+                ..ReplayOptions::default()
+            }
+            .max_ticks,
+            0
+        );
     }
 }

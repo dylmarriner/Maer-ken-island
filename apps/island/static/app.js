@@ -84,6 +84,77 @@ export function explain(error) {
   return message;
 }
 
+/**
+ * Read and render the cell selected on the island map.
+ *
+ * Dependencies are injected so the exact click path can be exercised by the
+ * dashboard's Node test suite without a browser or a second implementation.
+ */
+export async function handleMapCellClick(event, {
+  canvas,
+  output,
+  viewReady,
+  ground,
+  toMetres,
+  getJson,
+  setClickedPlace,
+  fillPlacesAndPeople,
+  getPlaces,
+  whereEl,
+}) {
+  if (!viewReady) return;
+  const box = canvas.getBoundingClientRect();
+  const [x, y] = toMetres(canvas, event.clientX - box.left, event.clientY - box.top);
+  const col = Math.floor(x / ground.cellM);
+  const row = Math.floor(y / ground.cellM);
+  if (col < 0 || row < 0 || col >= ground.cols || row >= ground.rows) return;
+  try {
+    const data = await getJson(`/api/cell/${row}/${col}`);
+    const c = data.cell;
+    const details = [
+      el("p", `Row ${c.row}, column ${c.col} — ${c.latitude.toFixed(4)}°, ${c.longitude.toFixed(4)}°`, { class: "cell-where" }),
+      el(
+        "p",
+        c.land
+          ? `Land, ${c.elevation_m.toFixed(0)} m above sea level. ${c.buildable ? "A structure could stand here." : "Too steep to build on."}`
+          : `Sea, ${(-c.elevation_m).toFixed(0)} m deep. Nobody can be created here and nothing can be built.`,
+        { class: "cell-what" },
+      ),
+    ];
+    const marineProjectionAvailable =
+      Number.isSafeInteger(c.marine_aquatic_species) &&
+      c.marine_aquatic_species >= 0 &&
+      Number.isFinite(c.marine_aquatic_individuals) &&
+      c.marine_aquatic_individuals >= 0 &&
+      Number.isFinite(c.marine_aquatic_biomass_t) &&
+      c.marine_aquatic_biomass_t >= 0;
+    if (marineProjectionAvailable) {
+      details.push(
+        el(
+          "p",
+          `${c.marine_aquatic_species.toLocaleString()} marine aquatic species; ` +
+            `${c.marine_aquatic_individuals.toLocaleString(undefined, { maximumSignificantDigits: 4 })} ` +
+            `upstream-derived individuals; ` +
+            `${c.marine_aquatic_biomass_t.toLocaleString(undefined, { maximumSignificantDigits: 4 })} t live biomass. ` +
+            "Uncalibrated upstream estimate; not harvestable stock or catch.",
+          { class: "cell-marine" },
+        ),
+      );
+    }
+    output.replaceChildren(...details);
+    const clickedPlace = {
+      label: `Clicked — cell ${c.row}, ${c.col}${c.land ? "" : " (sea)"}`,
+      latitude: c.latitude,
+      longitude: c.longitude,
+    };
+    setClickedPlace(clickedPlace);
+    await fillPlacesAndPeople();
+    whereEl.value = String(getPlaces().findIndex((p) => p === clickedPlace));
+  } catch (error) {
+    output.replaceChildren(el("p", explain(error), { class: "cell-what" }));
+  }
+}
+
 /* ------------------------------------------------------------------ *\
  * Which island this page is looking at.
  *

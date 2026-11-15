@@ -18,7 +18,7 @@ const DAY: u64 = 86_400;
 
 /// The canonical state digest after one simulated week from the default
 /// scenario (`fixtures/island/default_scenario.json`), identical across
-/// processes. Changing any Phase 1-3 behaviour changes it: update it
+/// processes. Any change to state represented in IslandLife's digest changes it: update it
 /// deliberately, in the commit that changes the behaviour.
 ///
 /// Last changed by giving a spoken sentence a capital letter: most of
@@ -192,7 +192,32 @@ const DAY: u64 = 86_400;
 /// closed (the chain's hourly audits added), no food or water shortfalls,
 /// body carbon 12.9 of 13.0 and 10.4 of 10.4 kg, eating 48 and 44 minutes a
 /// day, asleep at home 40 of 56 and 40 of 55 hours.
-const WEEK_DIGEST: &str = "c32897c47a10fcb5fed2671df781949b3d924cdd9ed1a62103127cf552647054";
+/// Re-pinned on 2026-11-05 after the town/economy state was integrated into
+/// IslandLife (PR #66) and the 2026-10-29 fitness, genome and free-will
+/// integration changed the founders' complete state. Exact-head release
+/// acceptance run #41861164760 produced this digest after every assertion
+/// before the final digest comparison passed: 27,597 ledger audits (167
+/// hourly water audits), zero food or water shortfalls, 112 economy events,
+/// 200,000 estate-patch trees, Gem-D body carbon 13.0/13.0 kg, Gem-K 10.4/10.4
+/// kg, and temperate-forest NPP 471 g C/m2/yr against the pack's 400-900.
+/// The independent year-weather reference-pack test passed in the same run.
+/// The previous pin predates D40's sub-nanogram meal-balance
+/// canonicalisation in PR #134. After a completed meal, a residual owed
+/// carbon balance at or below 1e-12 kg C is now stored as exactly zero rather
+/// than preserving a positive binary64 subtraction remainder that cannot
+/// produce a representable transfer. Exact-head workflow #42523987454
+/// produced this digest after all physical acceptance assertions passed:
+/// 27,651 ledger audits (167 hourly water audits), zero food and water
+/// shortfalls, 111 economy events, 200,000 estate-patch trees, Gem-D body
+/// carbon 13.0/13.0 kg, Gem-K 10.4/10.4 kg, and temperate-forest NPP
+/// 471 g C/m2/yr within the ecology pack's 400-900. Gem-D slept at home
+/// 40 of 56 hours and Gem-K 30 of 52; their daily drinks were 2.47 L and
+/// 1.73 L, both inside the existing 0.5-1.5 adequate-intake band. The
+/// independent year-weather reference-pack test passed. The only failed
+/// assertion was the old digest pin; this re-pin records the intentional
+/// canonical state change without changing a scientific constant or
+/// relaxing a physical acceptance bound.
+const WEEK_DIGEST: &str = "61ffaa6a559b5a8f503b7b6c707ca5f8cf634be9eebec64a1af6652706c2478a";
 
 fn repo(path: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -524,6 +549,7 @@ fn slow_a_week_on_the_island_matches_the_reference_packs() {
             "{id} drank {drunk:.2} L a day"
         );
     }
+    assert_eq!(w.shortfalls.food, 0, "the founders found food every time");
     assert_eq!(w.shortfalls.water, 0, "the founders found water every time");
     assert_eq!(deferred_digest, WEEK_DIGEST);
 }
