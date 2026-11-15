@@ -573,6 +573,34 @@ impl MaterialLedger {
         Ok(())
     }
 
+    /// Validate a source-reservoir debit and return its exact remaining quantity.
+    ///
+    /// A finite debit can disappear when subtracted from a much larger finite
+    /// source. Never book an inflow to material stock unless the source itself
+    /// decreases by the amount represented by the transfer.
+    fn checked_source_debit_result(
+        m: Material,
+        have: f64,
+        debit: f64,
+    ) -> Result<f64, MaterialError> {
+        Self::validate_source_value(m, have)?;
+        Self::validate_amount(m, debit)?;
+        if have < debit {
+            return Err(MaterialError::InvalidSourceState {
+                material: m,
+                value: debit,
+            });
+        }
+        let remaining = have - debit;
+        if !remaining.is_finite() || remaining < 0.0 || (debit > 0.0 && remaining >= have) {
+            return Err(MaterialError::InvalidSourceState {
+                material: m,
+                value: remaining,
+            });
+        }
+        Ok(remaining)
+    }
+
     fn add(&mut self, m: Material, kg: f64) {
         *self.stock.entry(m).or_insert(0.0) += kg;
     }
@@ -809,13 +837,48 @@ impl MaterialLedger {
         cell_area_m2: f64,
         ledger: &mut Ledger,
     ) -> f64 {
+        Self::validate_amount(Material::Water, kg)
+            .expect("roof-water capture requires a finite non-negative amount");
+        Self::validate_cell_area(cell_area_m2)
+            .expect("roof-water capture requires a finite positive cell area");
         let soil = *hydrology.soil_water.get(cell.0, cell.1);
-        let take = kg.max(0.0).min(soil.storage_mm.max(0.0) * cell_area_m2);
+        Self::validate_source_value(Material::Water, soil.storage_mm)
+            .expect("roof-water capture requires valid soil-water storage");
+        let available = soil.storage_mm * cell_area_m2;
+        assert!(
+            available.is_finite(),
+            "roof-water availability must remain finite"
+        );
+        let take = kg.min(available);
         if take <= 0.0 {
             return 0.0;
         }
-        set_soil_storage(hydrology, cell, soil.storage_mm - take / cell_area_m2);
-        self.add(Material::Water, take);
+
+        let removed_mm = take / cell_area_m2;
+        let remaining_soil_mm = soil.storage_mm - removed_mm;
+        assert!(
+            removed_mm.is_finite()
+                && removed_mm > 0.0
+                && remaining_soil_mm.is_finite()
+                && remaining_soil_mm >= 0.0
+                && remaining_soil_mm < soil.storage_mm,
+            "roof-water source debit must remain representable in soil storage"
+        );
+        let resulting_stock = Self::checked_stock_addition_result(
+            Material::Water,
+            self.stock_kg(Material::Water),
+            take,
+        )
+        .expect("captured roof water must increase the water inventory representably");
+        let _resulting_water = Self::checked_stock_addition_result(
+            Material::Water,
+            self.stock_of(Reservoir::MaterialWater),
+            take,
+        )
+        .expect("captured roof water must increase the audited material-water stock");
+
+        set_soil_storage(hydrology, cell, remaining_soil_mm);
+        self.stock.insert(Material::Water, resulting_stock);
         flow(
             ledger,
             FluxKind::Water,
@@ -860,9 +923,27 @@ impl MaterialLedger {
     /// and the brash and roots went to detritus there. Returns the kg of
     /// wood added.
     pub fn receive_felled_wood(&mut self, usable_carbon_kgc: f64, ledger: &mut Ledger) -> f64 {
-        let kgc = usable_carbon_kgc.max(0.0);
+        assert!(
+            usable_carbon_kgc.is_finite() && usable_carbon_kgc >= 0.0,
+            "felled wood must carry finite, non-negative carbon"
+        );
+        let kgc = usable_carbon_kgc;
         let kg = kgc / composition(Material::Wood).carbon_per_kg;
-        self.add(Material::Wood, kg);
+        assert!(
+            kgc == 0.0 || kg > 0.0,
+            "positive felled-wood carbon must remain representable as wood mass"
+        );
+        let resulting_stock =
+            Self::checked_stock_addition_result(Material::Wood, self.stock_kg(Material::Wood), kg)
+                .expect("felled wood must increase the wood inventory representably");
+        let _resulting_carbon = Self::checked_stock_addition_result(
+            Material::Wood,
+            self.stock_of(Reservoir::MaterialCarbon),
+            kgc,
+        )
+        .expect("felled wood carbon must increase the audited material-carbon stock");
+
+        self.stock.insert(Material::Wood, resulting_stock);
         flow(
             ledger,
             FluxKind::Carbon,
@@ -892,6 +973,46 @@ impl MaterialLedger {
             log.has_valid_physical_state(),
             "cannot receive a felled log with invalid physical state"
         );
+        Self::validate_cell_area(cell_area_m2)
+            .expect("felled-log receipt requires a finite positive cell area");
+        let water = log.water_kg;
+        let soil = *hydrology.soil_water.get(cell.0, cell.1);
+        Self::validate_source_value(Material::Water, soil.storage_mm)
+            .expect("felled-log receipt requires valid soil-water storage");
+        let available_soil_water_kg = soil.storage_mm * cell_area_m2;
+        assert!(
+            available_soil_water_kg.is_finite(),
+            "felled-log soil-water availability must remain finite"
+        );
+        let from_soil = water.min(available_soil_water_kg);
+        let removed_mm = from_soil / cell_area_m2;
+        assert!(
+            removed_mm.is_finite(),
+            "felled-log soil-water debit must remain finite"
+        );
+        assert!(
+            from_soil == 0.0 || removed_mm > 0.0,
+            "positive felled-log soil-water transfer must have a representable source depth"
+        );
+        let remaining_soil_mm =
+            Self::checked_source_debit_result(Material::Water, soil.storage_mm, removed_mm)
+                .expect("felled-log soil-water debit must decrease source storage representably");
+
+        let _resulting_carbon = Self::checked_stock_addition_result(
+            Material::Wood,
+            self.stock_of(Reservoir::MaterialCarbon),
+            log.carbon_kgc,
+        )
+        .expect("felled-log carbon must increase the audited material-carbon stock");
+        let _resulting_water = Self::checked_stock_addition_result(
+            Material::Water,
+            self.stock_of(Reservoir::MaterialWater),
+            water,
+        )
+        .expect("felled-log water must increase the audited material-water stock");
+
+        // All physical and aggregate-stock checks precede ID allocation,
+        // hydrology mutation and append-only flux recording.
         log.id = self.allocate_log_id();
         flow(
             ledger,
@@ -900,10 +1021,7 @@ impl MaterialLedger {
             Reservoir::MaterialCarbon,
             log.carbon_kgc,
         );
-        let water = log.water_kg.max(0.0);
-        let held = hydrology.soil_water.get(cell.0, cell.1).storage_mm.max(0.0);
-        let from_soil = water.min(held * cell_area_m2);
-        set_soil_storage(hydrology, cell, held - from_soil / cell_area_m2);
+        set_soil_storage(hydrology, cell, remaining_soil_mm);
         flow(
             ledger,
             FluxKind::Water,
@@ -1055,11 +1173,146 @@ impl MaterialLedger {
             .filter(|l| l.dry_kg > 0.0 && l.moisture_content() <= threshold)
             .map(|l| l.id)
             .collect();
-        let mut added = 0.0;
-        for id in seasoned {
-            let log = self.logs.remove(&id).expect("listed above");
+        if seasoned.is_empty() {
+            return 0.0;
+        }
+
+        // Preflight the complete deterministic batch before removing any log.
+        // Summing one log at a time into the live stock can silently lose an
+        // individual piece when the existing Wood inventory is much larger.
+        let mut total_kg = 0.0;
+        let mut compensation_kg = 0.0;
+        let mut total_water_kg = 0.0;
+        let mut compensation_water_kg = 0.0;
+        for id in &seasoned {
+            let log = self.logs.get(id).expect("seasoned id was collected above");
+            assert!(
+                log.has_valid_physical_state(),
+                "cannot season a log with invalid physical state"
+            );
             let kg = log.carbon_kgc / composition(Material::Wood).carbon_per_kg;
-            self.add(Material::Wood, kg);
+            assert!(
+                kg.is_finite() && (log.carbon_kgc == 0.0 || kg > 0.0),
+                "seasoned-log carbon must remain representable as wood mass"
+            );
+            let next_kg = total_kg + kg;
+            compensation_kg += if total_kg >= kg {
+                (total_kg - next_kg) + kg
+            } else {
+                (kg - next_kg) + total_kg
+            };
+            assert!(
+                next_kg.is_finite() && compensation_kg.is_finite(),
+                "seasoned-log wood batch must remain finite"
+            );
+            total_kg = next_kg;
+
+            let next_water = total_water_kg + log.water_kg;
+            compensation_water_kg += if total_water_kg >= log.water_kg {
+                (total_water_kg - next_water) + log.water_kg
+            } else {
+                (log.water_kg - next_water) + total_water_kg
+            };
+            assert!(
+                next_water.is_finite() && compensation_water_kg.is_finite(),
+                "seasoned-log water batch must remain finite"
+            );
+            total_water_kg = next_water;
+        }
+        let summed_kg = total_kg;
+        let summed_water_kg = total_water_kg;
+        let total_kg = summed_kg + compensation_kg;
+        let total_water_kg = summed_water_kg + compensation_water_kg;
+        // Neumaier's correction can be positive or negative. A negative
+        // correction may round back to the naive sum, which is still the
+        // correctly rounded binary64 batch total; its sign is not a failure.
+        assert!(
+            total_kg.is_finite() && total_kg > 0.0,
+            "seasoned-log wood batch must remain a positive finite quantity"
+        );
+        assert!(
+            total_water_kg.is_finite() && total_water_kg >= 0.0,
+            "seasoned-log water batch must remain a finite non-negative quantity"
+        );
+
+        let resulting_wood = Self::checked_stock_addition_result(
+            Material::Wood,
+            self.stock_kg(Material::Wood),
+            total_kg,
+        )
+        .expect("seasoned logs must increase the wood inventory representably");
+        // Predict the exact post-operation aggregates in the same iteration
+        // order used by stock_of. A mere decrease is insufficient: at large
+        // binary64 stocks, removing 1.5 kg can change the rounded aggregate by
+        // 2 kg, which would not match the per-log flux entries.
+        let remaining_log_carbon = self
+            .logs
+            .iter()
+            .filter(|(id, _)| seasoned.binary_search(*id).is_err())
+            .map(|(_, log)| log.carbon_kgc)
+            .sum::<f64>();
+        let remaining_log_water = self
+            .logs
+            .iter()
+            .filter(|(id, _)| seasoned.binary_search(*id).is_err())
+            .map(|(_, log)| log.water_kg)
+            .sum::<f64>();
+
+        let mut resulting_material_stock = self.stock.clone();
+        resulting_material_stock.insert(Material::Wood, resulting_wood);
+        let carbon_after = resulting_material_stock
+            .iter()
+            .map(|(material, kg)| kg * composition(*material).carbon_per_kg)
+            .sum::<f64>()
+            + self
+                .structures
+                .values()
+                .map(|structure| structure.kg * composition(structure.material).carbon_per_kg)
+                .sum::<f64>()
+            + remaining_log_carbon;
+        let carbon_before = self.stock_of(Reservoir::MaterialCarbon);
+        let carbon_delta = carbon_after - carbon_before;
+        let carbon_tolerance = 1e-9 * (1.0 + carbon_delta.abs());
+        assert!(
+            carbon_after.is_finite()
+                && carbon_delta.is_finite()
+                && carbon_delta.abs() <= carbon_tolerance,
+            "seasoning must preserve the audited material-carbon stock"
+        );
+
+        let body_water = self.bodies.values().map(|body| body.water_kg).sum::<f64>();
+        let water_before = self.stock_of(Reservoir::MaterialWater);
+        let water_after = self.stock_kg(Material::Water) + body_water + remaining_log_water;
+        let water_delta = water_after - water_before;
+        // life::net sums the one water flux per seasoned log in id order.
+        // Match that same simple sum when preflighting the audit boundary.
+        let booked_water = seasoned
+            .iter()
+            .map(|id| {
+                self.logs
+                    .get(id)
+                    .expect("seasoned id remains present")
+                    .water_kg
+            })
+            .sum::<f64>();
+        let water_residual = water_delta + booked_water;
+        let water_tolerance = 1e-9 * (1.0 + water_delta.abs());
+        assert!(
+            water_after.is_finite()
+                && water_after >= 0.0
+                && (total_water_kg == 0.0 || water_after < water_before)
+                && water_delta.is_finite()
+                && booked_water.is_finite()
+                && water_residual.is_finite()
+                && water_residual.abs() <= water_tolerance,
+            "seasoned-log water removal must match the audited material-water flux"
+        );
+
+        for id in seasoned {
+            let log = self
+                .logs
+                .remove(&id)
+                .expect("preflighted log remains present");
             flow(
                 ledger,
                 FluxKind::Water,
@@ -1067,9 +1320,9 @@ impl MaterialLedger {
                 Reservoir::Atmosphere,
                 log.water_kg,
             );
-            added += kg;
         }
-        added
+        self.stock.insert(Material::Wood, resulting_wood);
+        total_kg
     }
 
     /// Cross-cut log `id` into `pieces` with ids from `first_id`: the log
@@ -1492,23 +1745,38 @@ impl MaterialLedger {
         if take <= 0.0 {
             return Err(MaterialError::DryCell);
         }
-        // Check the destination stock before changing either hydrology or the
-        // flux ledger. A finite source amount can still overflow existing stock.
+        // Split the transfer deterministically, then preflight both source
+        // reservoirs and the destination inventory before mutating any of them.
+        let from_standing = take.min(standing_kg);
+        let from_river = take - from_standing;
+        let river_area_factor = cell_area_m2 * RIVER_WITHDRAWAL_FRACTION;
+        if !river_area_factor.is_finite() || river_area_factor <= 0.0 {
+            return Err(MaterialError::InvalidCellArea {
+                area_m2: cell_area_m2,
+            });
+        }
+        let standing_debit = from_standing / cell_area_m2;
+        let river_debit = from_river / river_area_factor;
+        if (from_standing > 0.0 && standing_debit == 0.0)
+            || (from_river > 0.0 && river_debit == 0.0)
+        {
+            return Err(MaterialError::InvalidSourceState {
+                material: Material::Water,
+                value: 0.0,
+            });
+        }
+        let remaining_surface =
+            Self::checked_source_debit_result(Material::Water, surface_water, standing_debit)?;
+        let remaining_runoff =
+            Self::checked_source_debit_result(Material::Water, runoff, river_debit)?;
         let resulting_stock = Self::checked_stock_addition_result(
             Material::Water,
             self.stock_kg(Material::Water),
             take,
         )?;
-        let from_standing = take.min(standing_kg);
-        let from_river = take - from_standing;
-        hydrology
-            .surface_water
-            .set(r, c, surface_water - from_standing / cell_area_m2);
-        hydrology.runoff.set(
-            r,
-            c,
-            runoff - from_river / (cell_area_m2 * RIVER_WITHDRAWAL_FRACTION),
-        );
+
+        hydrology.surface_water.set(r, c, remaining_surface);
+        hydrology.runoff.set(r, c, remaining_runoff);
         self.stock.insert(Material::Water, resulting_stock);
         flow(
             ledger,
