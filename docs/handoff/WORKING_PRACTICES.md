@@ -35,11 +35,23 @@ checks the founders' week against the reference packs, **then** compares the fin
 with `WEEK_DIGEST`. Any change to physics, life or serialized state moves the digest.
 
 1. Run it: `cargo test --release -p mk_engine --test island_life_acceptance -- --ignored --nocapture`.
-2. Read every printed audit: every audit closed (20,580 in the week as of 2026-10-14: the household water, meal and gas stove audits run each substep, and a meal lands when its gathering ends), no food or water shortfall, body carbon at 1.00x,
-   eating about 43-47 min/day, drinking 1.4-1.8 L/day, forest NPP inside the reference range,
-   intimacy about 65/yr in the four-week test.
+2. Read every printed audit against the assertions in the current test; do not reuse the
+   2026-10-14 measurements above as acceptance thresholds. On exact-head run #41861164760:
+   27,597 ledger audits closed (167 hourly water audits), no food or water shortfalls,
+   Gem-D body carbon 13.0/13.0 kg and Gem-K 10.4/10.4 kg, eating 44 and 39 min/day
+   (inside the test's 0.5-2.0x American Time Use Survey band), drinking 2.49 and 1.72 L/day
+   (inside the test's 0.5-1.5x IOM adequate-intake band after food water), and temperate-forest
+   NPP 471 g C/m2/yr against the reference range 400-900. The independent year-weather
+   reference-pack test passed in the same run. The only failure was the stale week digest pin.
 3. Only if every deferred assertion passed and the movement is explained by your change, copy the
    new digest into `WEEK_DIGEST`.
+
+   On the petroleum offtake-cap correction, exact-head run [#41990556526](https://github.com/dylmarriner/Maer-ken-island/actions/runs/41990556526)
+   produced `29ed53bd7769eb3025e70135bab8b7ea07718e26e7fca4cbf77ab379d62b7784`. Every week assertion before the final digest comparison passed,
+   and the independent year-weather reference-pack test passed. The movement from
+   `bc8706aca29525e6bd75d27d94678a56cbd97a717aa4553ac8a15a2a64c7a076` is explained by the corrected finite-cap calculation in
+   `regional/industry/petroleum.rs`: it changes the exact floating-point production state.
+   This is an intentional behavior change, not a reference-pack or snapshot-format edit.
 
 `topology_hash_baseline.rs` pins the planetary engine. Island work should never move it.
 

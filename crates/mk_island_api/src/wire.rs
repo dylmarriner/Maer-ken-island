@@ -389,6 +389,16 @@ pub struct Cell {
     /// And its annual rain from the same climatology (mm per year).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub annual_rain_mm: Option<f64>,
+    /// Count of marine aquatic species whose upstream-derived habitat includes this cell.
+    /// This is a read-only, uncalibrated projection, not a fishery stock.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub marine_aquatic_species: Option<usize>,
+    /// Sum of upstream-derived marine individuals represented in this cell.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub marine_aquatic_individuals: Option<f64>,
+    /// Sum of their live body mass in tonnes, using upstream representative body masses.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub marine_aquatic_biomass_t: Option<f64>,
 }
 
 /// A rectangle on the estate patch, in domain metres: west, south, east,

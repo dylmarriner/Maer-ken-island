@@ -64,6 +64,7 @@ pub struct Species {
     pub ecological_niche: String,
     pub representative_genome: Genome,
     pub population_size: u64,
+    /// Fraction of planetary surface occupied by this species' geographic range, in `(0, 1]`.
     pub geographic_range: f64,
     pub evolutionary_pressures: Vec<EvolutionaryPressure>,
 }

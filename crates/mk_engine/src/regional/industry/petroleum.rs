@@ -342,15 +342,26 @@ impl PetroleumField {
         model: &PetroleumModel,
         ledger: &mut Ledger,
     ) -> Production {
-        if dt_years.is_nan() || dt_years <= 0.0 {
+        // Infinite elapsed time would otherwise drain the entire remaining field in one step.
+        // NaN and negative offtake caps are invalid rather than zero-production requests.
+        if !dt_years.is_finite() || dt_years <= 0.0 || max_oil_m3.is_nan() || max_oil_m3 < 0.0 {
             return Production::default();
         }
+        // A negative cap is invalid; positive infinity remains the unbounded
+        // cap used by `produce`. Normalise negative zero to ordinary zero.
+        let max_oil_m3 = max_oil_m3.max(0.0);
+        let remaining_oil_m3 = self.remaining_oil_m3();
         let mut share = 1.0 - (-model.decline_per_year * dt_years).exp();
-        let potential = self.remaining_oil_m3() * share;
-        if potential > max_oil_m3.max(0.0) && potential > 0.0 {
-            share *= max_oil_m3.max(0.0) / potential;
-        }
-        let oil_m3 = self.remaining_oil_m3() * share;
+        let potential = remaining_oil_m3 * share;
+        let oil_m3 = if potential > max_oil_m3 && potential > 0.0 {
+            // Return the cap itself rather than multiplying a scaled share back
+            // by the reserve: floating-point rounding can otherwise exceed it
+            // by one ULP.
+            share = max_oil_m3 / remaining_oil_m3;
+            max_oil_m3
+        } else {
+            potential
+        };
         let gas_gj = self.remaining_gas_gj() * share;
         let leaked_gj = gas_gj * model.methane_loss_fraction;
         let kept_gj = gas_gj - leaked_gj;
@@ -396,6 +407,12 @@ impl PetroleumField {
     /// sum passes a whole number, so the count is deterministic and its
     /// long-run rate is the record's.
     pub fn drill_for(&mut self, bbl_per_day: f64, dt_years: f64, model: &PetroleumModel) {
+        // A zero-duration call may legitimately drill wells, but non-finite or negative
+        // rates/intervals must never poison the cumulative blowout expectation.
+        if !bbl_per_day.is_finite() || bbl_per_day < 0.0 || !dt_years.is_finite() || dt_years < 0.0
+        {
+            return;
+        }
         if model.well_bbl_per_day > 0.0 && bbl_per_day > 0.0 {
             let needed = (bbl_per_day / model.well_bbl_per_day).ceil() as u32;
             if needed > self.wells {
