@@ -604,6 +604,40 @@ fn saving_uses_a_fresh_temporary_path_without_clobbering_existing_files() {
     assert_eq!(loaded.entries()[0].sequence, 0);
 }
 
+/// A replay import may be supplied by an external tool; a symlink must not
+/// silently redirect the reader to an unrelated file, even if it contains JSON.
+#[cfg(unix)]
+#[test]
+fn replay_file_security_refuses_symlinked_log_source() {
+    use std::os::unix::fs::symlink;
+
+    let dir = tempfile::tempdir().unwrap();
+    let real = dir.path().join("real.json");
+    let link = dir.path().join("redirect.json");
+    IslandReplayLog::new("scenario".into()).save(&real).unwrap();
+    symlink(&real, &link).unwrap();
+
+    assert!(
+        IslandReplayLog::load(&link).is_err(),
+        "a symlink must not be followed as a replay input"
+    );
+    assert!(IslandReplayLog::load(&real).is_ok());
+}
+
+/// Save files are potentially sensitive and must not be world- or group-readable.
+#[cfg(unix)]
+#[test]
+fn replay_file_security_saves_owner_only_permissions() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("private.json");
+    IslandReplayLog::new("scenario".into()).save(&path).unwrap();
+    let permissions = std::fs::metadata(&path).unwrap().permissions().mode();
+    assert_eq!(permissions & 0o077, 0, "saved replay must be owner-only");
+    assert_eq!(permissions & 0o600, 0o600, "owner may read and write");
+}
+
 /// A log whose entries have been shuffled still reproduces the run.
 ///
 /// A record that had been reordered in transit should reproduce the island

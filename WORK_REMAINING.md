@@ -1,3 +1,7 @@
+## Replay security integration — 15 November 2026
+
+- PR #73 was reconciled against `main` without restoring the older incompatible replay parser or contiguous sequence rules. The existing 64 MiB bound, duplicate-position checks and sparse sequence semantics are retained. Unix replay load now rejects symlinks and verifies the opened descriptor; saved replay files are created owner-only (0600). The two new regression tests failed before the fix and passed after it. All 21 `island_replay` tests and 3 CI-profile script tests pass locally on AMD. See `docs/handoff/REPLAY_SECURITY_RECONCILIATION_20261115.md`; merge only after exact-head CI passes.
+
 ## D40 exact-head CI correction — 15 November 2026
 
 - PR #136 exact-head workflow #43678835386 passed all listed CI jobs except fast Rust tests (905 passed, 2 failed). The two failures were test fixtures that used an unregistered zero-ID log in a cross-cut preview and expected an outdated panic message; physical validation was not relaxed.
