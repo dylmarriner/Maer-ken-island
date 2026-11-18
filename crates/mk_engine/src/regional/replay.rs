@@ -16,6 +16,9 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+#[cfg(unix)]
+use std::os::unix::fs::OpenOptionsExt;
+
 use mk_core::canon::CanonLocked;
 use mk_island::IslandScenario;
 use serde::{Deserialize, Serialize};
@@ -41,7 +44,13 @@ fn create_replay_temp(path: &Path) -> std::io::Result<(PathBuf, File)> {
 
     for sequence in 0..MAX_ATTEMPTS {
         let temp = path.with_extension(format!("tmp-{process_id}-{sequence}"));
-        match OpenOptions::new().write(true).create_new(true).open(&temp) {
+        let mut options = OpenOptions::new();
+        options.write(true).create_new(true);
+        // A replay may contain private world or human data; do not rely on the
+        // process umask to prevent disclosure to other local users.
+        #[cfg(unix)]
+        options.mode(0o600);
+        match options.open(&temp) {
             Ok(file) => return Ok((temp, file)),
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
             Err(error) => return Err(error),
@@ -211,9 +220,11 @@ impl IslandReplayLog {
 
     /// Read a log from a regular file, refusing inputs larger than the offline budget.
     pub fn load(path: &Path) -> Result<Self, IslandReplayError> {
-        let metadata = std::fs::metadata(path)
+        // Reject symlinks before opening. On Unix O_NOFOLLOW below also closes
+        // the replacement race between checking the path and opening it.
+        let metadata = std::fs::symlink_metadata(path)
             .map_err(|e| IslandReplayError::Io(path.display().to_string(), e))?;
-        if !metadata.is_file() {
+        if !metadata.file_type().is_file() {
             return Err(IslandReplayError::Io(
                 path.display().to_string(),
                 std::io::Error::new(
@@ -229,8 +240,28 @@ impl IslandReplayLog {
             });
         }
 
-        let file =
-            File::open(path).map_err(|e| IslandReplayError::Io(path.display().to_string(), e))?;
+        let mut options = OpenOptions::new();
+        options.read(true);
+        #[cfg(unix)]
+        options.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
+        let file = options
+            .open(path)
+            .map_err(|e| IslandReplayError::Io(path.display().to_string(), e))?;
+        // Check the opened handle too: the file could have been replaced
+        // between the path-level inspection and open, including by a FIFO.
+        if !file
+            .metadata()
+            .map_err(|e| IslandReplayError::Io(path.display().to_string(), e))?
+            .is_file()
+        {
+            return Err(IslandReplayError::Io(
+                path.display().to_string(),
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "replay source must be a regular file",
+                ),
+            ));
+        }
         let mut bytes = Vec::new();
         file.take(MAX_REPLAY_LOG_BYTES + 1)
             .read_to_end(&mut bytes)
