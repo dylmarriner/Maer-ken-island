@@ -9,7 +9,7 @@
 
 ## 2026-11-13 additional engineering iteration
 - Commit: 99fed95
-- Verification: Runner contract passes, Bash syntax and whitespace pass; timeout boundaries 1/86400 and Cargo exit 127 covered. Actual offline Rust replay/hash equality still unverified due compilation timeout. Next: use adequate builder and run cargo replay test, inspect 44 local commits before push. 
+- Verification: Runner contract passes, Bash syntax and whitespace pass; timeout boundaries 1/86400 and Cargo exit 127 covered. Actual offline Rust replay/hash equality still unverified due compilation timeout. Next: use adequate builder and run cargo replay test, inspect 44 local commits before push.
 
 ### 2026-11-13 additional iteration
 - Commit `266bf1f`: shell contract now verifies exact timeout termination policy and 86400-second deadline forwarding.

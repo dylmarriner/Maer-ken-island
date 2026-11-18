@@ -128,6 +128,21 @@ pub enum ReferenceValue {
     Table(ReferenceTable),
 }
 
+/// Compute a correctly rounded midpoint without overflowing for finite endpoints.
+///
+/// When both endpoints are at most half the largest finite value, their sum
+/// cannot overflow and is formed before halving so subnormal ties are retained.
+/// Otherwise each endpoint is halved before addition. This avoids both an
+/// overflowing sum and the double-rounding error of halving a rounded difference.
+fn range_midpoint(min: f64, max: f64) -> f64 {
+    let half_max = f64::MAX * 0.5;
+    if min.abs() <= half_max && max.abs() <= half_max {
+        (min + max) * 0.5
+    } else {
+        min * 0.5 + max * 0.5
+    }
+}
+
 /// One reference value.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ReferenceItem {
@@ -165,7 +180,7 @@ impl ReferenceItem {
         match self.value {
             ReferenceValue::Point(v) => Some(v),
             ReferenceValue::Range { min, max, typical } => {
-                Some(typical.unwrap_or(0.5 * (min + max)))
+                Some(typical.unwrap_or(range_midpoint(min, max)))
             }
             ReferenceValue::Table(_) => None,
         }
