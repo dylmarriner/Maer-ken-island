@@ -18,7 +18,7 @@ use mk_engine::regional::interventions::{
     action_name, refusal, IslandApplied, IslandDirective, IslandInterventionError,
 };
 use mk_engine::regional::life::IslandLife;
-use mk_engine::regional::materials::Material;
+use mk_engine::regional::materials::{Material, MaterialError};
 use mk_engine::regional::replay::{replay_island, IslandReplayLog};
 use mk_interventions::{
     BiomassType, ClimateParameter, DisturbanceType, EnergyType, HumanSpawnProfile,
@@ -94,6 +94,20 @@ fn a_sea_cell(life: &IslandLife) -> (usize, usize) {
         .flat_map(|row| (cols / 4..cols * 3 / 4).map(move |col| (row, col)))
         .find(|(row, col)| !*life.physical.geophysics.land_mask.get(*row, *col))
         .expect("the island has sea inside its middle half")
+}
+
+fn biomass_bits(life: &IslandLife) -> Vec<u64> {
+    let (rows, cols) = (
+        life.domain.rows(DomainLevel::Medium),
+        life.domain.cols(DomainLevel::Medium),
+    );
+    let mut bits = Vec::with_capacity(rows * cols);
+    for row in 0..rows {
+        for col in 0..cols {
+            bits.push(life.ecology.biomass_kgc_m2.get(row, col).to_bits());
+        }
+    }
+    bits
 }
 
 fn a_profile(name: &str) -> HumanSpawnProfile {
@@ -461,7 +475,19 @@ fn producer_carbon_lands_on_land_and_not_in_the_sea() {
         amount: 1_000_000.0,
         region: Region::new(at(&life, row, col), 2.0),
     };
-    life.intervene(&action).expect("producers are a field here");
+    let summary = life
+        .intervene(&action)
+        .expect("producers are a field here")
+        .summary();
+    assert!(
+        !summary.contains(char::from(92)),
+        "summary should not contain a literal backslash: {summary}"
+    );
+    assert_eq!(
+        summary.lines().count(),
+        1,
+        "summary should be a single line: {summary}"
+    );
 
     assert!(
         *life.ecology.biomass_kgc_m2.get(row, col) > before_land,
@@ -472,6 +498,101 @@ fn producer_carbon_lands_on_land_and_not_in_the_sea() {
         before_sea,
         "the sea carries no producer carbon and should not be given any"
     );
+}
+
+#[test]
+fn producer_carbon_injection_rejects_invalid_amounts_without_mutation_or_replay_entries() {
+    let mut life = island();
+    let (row, col) = a_land_cell(&life);
+    let region = Region::new(at(&life, row, col), 2.0);
+    let before_biomass = biomass_bits(&life);
+    let before_ledger = life.physical.ledger.entries().len();
+    let before_log = life.replay_log().entries().len();
+
+    for amount in [-1.0, f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+        let action = InterventionAction::InjectBiomass {
+            biomass_type: BiomassType::Producers,
+            amount,
+            region: region.clone(),
+        };
+        match life.apply_command(IslandCommand::Intervention(Box::new(action))) {
+            Err(CommandError::Intervention(IslandInterventionError::Validation(_))) => {}
+            other => panic!(
+                "invalid producer-carbon amount must be refused before mutation, got {other:?}"
+            ),
+        }
+        assert_eq!(biomass_bits(&life), before_biomass);
+        assert_eq!(life.physical.ledger.entries().len(), before_ledger);
+        assert_eq!(life.replay_log().entries().len(), before_log);
+    }
+}
+
+#[test]
+fn producer_carbon_injection_preflights_corrupt_and_unrepresentable_cells_atomically() {
+    for invalid in [-1.0, f64::NAN, f64::INFINITY, f64::MAX] {
+        let mut life = island();
+        let (row, col) = a_land_cell(&life);
+        life.ecology.biomass_kgc_m2.set(row, col, invalid);
+        let region = Region::new(at(&life, row, col), 2.0);
+        let before_biomass = biomass_bits(&life);
+        let before_ledger = life.physical.ledger.entries().len();
+        let before_log = life.replay_log().entries().len();
+        let action = InterventionAction::InjectBiomass {
+            biomass_type: BiomassType::Producers,
+            amount: 1_000_000.0,
+            region,
+        };
+
+        match life.apply_command(IslandCommand::Intervention(Box::new(action))) {
+            Err(CommandError::Intervention(
+                IslandInterventionError::InvalidProducerInjection { .. },
+            )) => {}
+            other => {
+                panic!("invalid producer source state must be refused atomically, got {other:?}")
+            }
+        }
+        assert_eq!(biomass_bits(&life), before_biomass);
+        assert_eq!(life.physical.ledger.entries().len(), before_ledger);
+        assert_eq!(life.replay_log().entries().len(), before_log);
+    }
+}
+
+#[test]
+fn rejected_operator_water_injection_does_not_close_audit_or_enter_replay_log() {
+    let mut life = island();
+    let (row, col) = a_land_cell(&life);
+
+    // Put the audited water stock at the largest finite value. A further
+    // positive f32-sized operator injection is then rounded away.
+    life.materials
+        .inject(Material::Water, f64::MAX, &mut life.physical.ledger)
+        .expect("the maximum finite water seed fits");
+    let stock_before = life.materials.stock_kg(Material::Water);
+    let flux_entries_before = life.physical.ledger.entries().len();
+    let audits_before = life.audits_closed;
+    let replay_entries_before = life.replay_log().entries().len();
+    let digest_before = life.state_digest();
+
+    let action = InterventionAction::InjectResource {
+        resource_type: ResourceType::Water,
+        amount: 1.0,
+        location: at(&life, row, col),
+    };
+    match life.apply_command(IslandCommand::Intervention(Box::new(action))) {
+        Err(CommandError::Intervention(IslandInterventionError::Material(
+            MaterialError::InvalidAmount {
+                material: Material::Water,
+                ..
+            },
+        ))) => {}
+        other => panic!("unrepresentable water injection must be refused, got {other:?}"),
+    }
+
+    assert_eq!(life.materials.stock_kg(Material::Water), stock_before);
+    assert_eq!(life.physical.ledger.entries().len(), flux_entries_before);
+    assert_eq!(life.audits_closed, audits_before);
+    assert_eq!(life.replay_log().entries().len(), replay_entries_before);
+    assert_eq!(life.state_digest(), digest_before);
 }
 
 #[test]

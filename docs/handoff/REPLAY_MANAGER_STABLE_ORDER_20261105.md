@@ -114,3 +114,14 @@ The first added invalid-name test encoded literal backslash-plus-letter sequence
 
 - Commit: `7bb89f037ee8f9f785a5536326b9c5c939de08ed`.
 - The exact-head formatting run on the preceding commit is not evidence for this corrected test input. A new exact-head workflow is required.
+
+
+## Final exact-head verification and merge (2026-11-05)
+
+- PR [#82](https://github.com/dylmarriner/Maer-ken-island/pull/82) was marked ready after the review thread was resolved and the current PR head was rechecked.
+- Exact-head workflow [#41964789372](https://github.com/dylmarriner/Maer-ken-island/actions/runs/41964789372) passed on `71fb6c11431634ef02d4aa87dd9b423d6a69b99d`: formatting, Clippy, fast Rust tests, week/year reference-pack acceptance, desktop application, installed backend, web dashboard, computer service, repository scripts and dependency audit.
+- Nightly slow tests were skipped by design.
+- PR #82 was squash-merged as `2a2bde992a4d3ef96f3cb60f774f792bbc00adf1`.
+- The CodeRabbit exact-head merge-gate thread was resolved before merge. No unresolved review threads remained.
+- Local Cargo checks were not run because the custom OpenCommander session terminated; the merge decision used exact-head hosted CI and review evidence.
+- No simulation constants, canonical digests, snapshot formats, append-only logs, LLM behavior or live systems changed.

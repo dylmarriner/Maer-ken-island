@@ -16,6 +16,9 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+#[cfg(unix)]
+use std::os::unix::fs::OpenOptionsExt;
+
 use mk_core::canon::CanonLocked;
 use mk_island::IslandScenario;
 use serde::{Deserialize, Serialize};
@@ -41,7 +44,13 @@ fn create_replay_temp(path: &Path) -> std::io::Result<(PathBuf, File)> {
 
     for sequence in 0..MAX_ATTEMPTS {
         let temp = path.with_extension(format!("tmp-{process_id}-{sequence}"));
-        match OpenOptions::new().write(true).create_new(true).open(&temp) {
+        let mut options = OpenOptions::new();
+        options.write(true).create_new(true);
+        // A replay may contain private world or human data; do not rely on the
+        // process umask to prevent disclosure to other local users.
+        #[cfg(unix)]
+        options.mode(0o600);
+        match options.open(&temp) {
             Ok(file) => return Ok((temp, file)),
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
             Err(error) => return Err(error),
@@ -125,6 +134,20 @@ impl std::fmt::Display for ReplaySequenceExhausted {
     }
 }
 impl std::error::Error for ReplaySequenceExhausted {}
+
+/// Replay scenario digests are 32 bytes expressed as canonical lowercase hex.
+/// Refuse malformed metadata before publishing a file or accepting imported state.
+fn validate_scenario_digest(digest: &str) -> Result<(), IslandReplayError> {
+    if digest.len() == 64
+        && digest
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        Ok(())
+    } else {
+        Err(IslandReplayError::InvalidScenarioDigest)
+    }
+}
 
 impl IslandReplayLog {
     /// An empty log for a scenario.
@@ -211,9 +234,11 @@ impl IslandReplayLog {
 
     /// Read a log from a regular file, refusing inputs larger than the offline budget.
     pub fn load(path: &Path) -> Result<Self, IslandReplayError> {
-        let metadata = std::fs::metadata(path)
+        // Reject symlinks before opening. On Unix O_NOFOLLOW below also closes
+        // the replacement race between checking the path and opening it.
+        let metadata = std::fs::symlink_metadata(path)
             .map_err(|e| IslandReplayError::Io(path.display().to_string(), e))?;
-        if !metadata.is_file() {
+        if !metadata.file_type().is_file() {
             return Err(IslandReplayError::Io(
                 path.display().to_string(),
                 std::io::Error::new(
@@ -229,8 +254,28 @@ impl IslandReplayLog {
             });
         }
 
-        let file =
-            File::open(path).map_err(|e| IslandReplayError::Io(path.display().to_string(), e))?;
+        let mut options = OpenOptions::new();
+        options.read(true);
+        #[cfg(unix)]
+        options.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
+        let file = options
+            .open(path)
+            .map_err(|e| IslandReplayError::Io(path.display().to_string(), e))?;
+        // Check the opened handle too: the file could have been replaced
+        // between the path-level inspection and open, including by a FIFO.
+        if !file
+            .metadata()
+            .map_err(|e| IslandReplayError::Io(path.display().to_string(), e))?
+            .is_file()
+        {
+            return Err(IslandReplayError::Io(
+                path.display().to_string(),
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "replay source must be a regular file",
+                ),
+            ));
+        }
         let mut bytes = Vec::new();
         file.take(MAX_REPLAY_LOG_BYTES + 1)
             .read_to_end(&mut bytes)
@@ -247,12 +292,19 @@ impl IslandReplayLog {
         if log.version != REPLAY_LOG_VERSION {
             return Err(IslandReplayError::Version(log.version));
         }
+        validate_scenario_digest(&log.scenario_digest)?;
         log.rebuild_sequence_index();
         Ok(log)
     }
 
     /// Write a log atomically, refusing output larger than the offline budget.
     pub fn save(&self, path: &Path) -> Result<(), IslandReplayError> {
+        // Validate metadata before creating a temporary file or replacing an
+        // existing replay. Import and export must obey the same boundary.
+        if self.version != REPLAY_LOG_VERSION {
+            return Err(IslandReplayError::Version(self.version));
+        }
+        validate_scenario_digest(&self.scenario_digest)?;
         let (temp, mut file) = create_replay_temp(path)
             .map_err(|e| IslandReplayError::Io(path.display().to_string(), e))?;
         let mut exceeded = false;
@@ -296,6 +348,8 @@ pub enum IslandReplayError {
     NotALog(String, String),
     /// A log written by a format this build does not know.
     Version(u32),
+    /// The scenario fingerprint must be 64 canonical lowercase hexadecimal characters.
+    InvalidScenarioDigest,
     /// A replay file exceeds the bounded offline import/export size.
     TooLarge {
         path: String,
@@ -332,6 +386,12 @@ impl std::fmt::Display for IslandReplayError {
                 f,
                 "that log is format {v}; this build reads {REPLAY_LOG_VERSION}"
             ),
+            Self::InvalidScenarioDigest => {
+                write!(
+                    f,
+                    "replay scenario digest must be 64 lowercase hexadecimal characters"
+                )
+            }
             Self::TooLarge { path, limit_bytes } => {
                 write!(f, "{path} exceeds the {limit_bytes}-byte replay log limit")
             }
@@ -377,6 +437,9 @@ pub fn replay_island(
     if log.version != REPLAY_LOG_VERSION {
         return Err(IslandReplayError::Version(log.version));
     }
+    // Direct in-memory logs bypass load(): enforce the same canonical
+    // scenario identity boundary before scanning entries or bootstrapping.
+    validate_scenario_digest(&log.scenario_digest)?;
 
     // Validate the requested replay horizon before bootstrapping. A duplicate
     // (tick, sequence) pair has no deterministic command order, even if the

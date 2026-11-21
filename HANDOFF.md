@@ -1,5 +1,7 @@
 # Handoff
 
+**Dated historical handoff:** Entries below describe the repository at their stated November dates, not live PR status. As of 2026-11-22, replay PR #75 is merged; PRs #76 and #136 remain under fresh CI verification. Check GitHub before treating older draft or pending statuses as current.
+
 Updated 2026-11-08 against `main` after PR #123 merged as `f62afa24fbc6e22bcdf36042a65cbddb4fc8df1d`. This is the front door for whoever picks the island up next, human or agent.
 
 **What is left to do, and what each item needs, is in [`WORK_REMAINING.md`](WORK_REMAINING.md).**
@@ -143,7 +145,7 @@ cargo run -p island -- serve --scenario fixtures/island/default_scenario.json   
 ## Things that will bite you
 
 - **The week digest.** `WEEK_DIGEST` in `crates/mk_engine/tests/island_life_acceptance.rs`
-  (`29ed53bd7769eb3025e70135bab8b7ea07718e26e7fca4cbf77ab379d62b7784`) pins one simulated week. Any change to what the founders or their world do
+  (`61ffaa6a559b5a8f503b7b6c707ca5f8cf634be9eebec64a1af6652706c2478a`) pins one simulated week. Any change to what the founders or their world do
   moves it. Re-pin only after the audit and the reference-pack checks pass, and say in the
   commit that behaviour changed.
 - **The planetary topology pin** (`e4ece246…73e2`, `tests/topology_hash_baseline.rs`) must not move
