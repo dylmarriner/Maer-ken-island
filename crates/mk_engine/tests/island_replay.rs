@@ -344,7 +344,7 @@ fn recording_the_last_available_sequence_then_exhaustion_is_fail_closed() {
 fn replay_refuses_duplicate_tick_sequence_positions() {
     let log = IslandReplayLog::from_entries(
         REPLAY_LOG_VERSION,
-        "not-this-scenario".to_string(),
+        "b".repeat(64),
         vec![
             IslandReplayEntry {
                 tick: 5,
