@@ -13,7 +13,7 @@ A structurally valid replay log can contain a command at an extremely distant ti
 - Add a default per-call replay horizon of 600,000 human ticks. The canonical scenario uses 60-second ticks, so the default permits a full year (525,600 ticks) plus margin.
 - Return `ReplayBudgetExceeded` before island bootstrap when an included command exceeds the default horizon.
 - Add `replay_island_with_budget` for callers that intentionally need a longer replay and explicitly choose a higher absolute tick ceiling.
-- Keep full-log header and command-sequence validation before filtering to `until_tick`; future commands do not consume the current partial replay's execution budget.
+- Preserve canonical log-header validation and horizon-scoped duplicate-position checks before execution. Imported sparse sequence numbers remain valid; future commands do not consume a partial replay's execution budget.
 
 The budget is an execution guard, not a change to the serialized log format or simulation state. Longer histories should use a verified snapshot or explicitly raise the budget.
 
@@ -31,7 +31,7 @@ No local Rust test pass is claimed. Exact-head CI must compile and execute the n
 
 1. Verify fast Rust tests, Clippy, formatting, desktop and backend jobs on this branch.
 2. Run the required week/year reference-pack tests and fixed-seed replay digest checks.
-3. Rebase this follow-up after PRs #73–#75 are accepted, then rerun exact-head CI.
+3. Keep this follow-up stacked on #75 until that PR merges; retarget to main and rerun exact-head CI.
 4. Keep the default limit aligned with supported replay budgets; do not re-pin the week digest for this execution-only guard.
 
 No simulation state, snapshot format, real-world constants, owner governance, production infrastructure or SCOS state was changed.

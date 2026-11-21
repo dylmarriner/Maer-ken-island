@@ -40,6 +40,15 @@ pub enum LabourError {
     MissingReference(String),
     /// A load above what a body of this mass can carry.
     OverLoad { carried_kg: f64, max_kg: f64 },
+    /// A persisted or planned cross-cut exceeds the bounded materialisation size.
+    CrossCutLimitExceeded {
+        requested_pieces: u32,
+        maximum_pieces: u32,
+    },
+    /// A public haul-planning call supplied a malformed persisted or in-memory log.
+    InvalidTimberLogState,
+    /// A persisted haul job has impossible progress or malformed task inputs.
+    InvalidHaulJobState,
 }
 
 impl std::fmt::Display for LabourError {
@@ -52,6 +61,20 @@ impl std::fmt::Display for LabourError {
                     "a load of {carried_kg:.1} kg exceeds the {max_kg:.1} kg limit"
                 )
             }
+            Self::InvalidTimberLogState => write!(
+                f,
+                "haul planning requires a finite, positive timber log with conserved physical state"
+            ),
+            Self::InvalidHaulJobState => {
+                write!(f, "persisted haul job has invalid progress or task data")
+            }
+            Self::CrossCutLimitExceeded {
+                requested_pieces,
+                maximum_pieces,
+            } => write!(
+                f,
+                "cross-cut requires {requested_pieces} pieces; safe maximum is {maximum_pieces}"
+            ),
         }
     }
 }

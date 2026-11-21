@@ -10,7 +10,7 @@ The replay budget guarded included commands but not the requested `until_tick`. 
 
 ## Change
 
-- Validate the complete log header and sequence contract first.
+- Validate the canonical log header and reject duplicate command positions within the requested horizon; do not restore obsolete contiguous-sequence requirements.
 - Reject `until_tick > max_replay_ticks` before island bootstrap.
 - Preserve partial replay when a future command lies beyond the requested tick.
 - Generalize the error text so it describes both a requested horizon and a command tick.
@@ -28,7 +28,7 @@ Source and regression are committed to PR #76. Exact-head GitHub Actions must pa
 - Verify the new exact-head fast tests, Clippy, formatting, desktop and backend checks.
 - Run the required week/year reference-pack tests and fixed-seed replay digest audit.
 - Reconcile the existing canonical week-digest disagreement before any re-pin.
-- Keep PR #76 stacked on #75 → #74 → #73; do not merge out of order.
+- Keep PR #76 stacked on #75 until the corrected parent merges; retarget to main and verify before merging.
 
 No simulation state, snapshot format, replay-log serialization, real-world constants, owner governance, production infrastructure or SCOS state changed.
 

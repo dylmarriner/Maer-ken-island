@@ -31,9 +31,10 @@
 //! (the island's species are not seeded yet; Task 1b).
 
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
+use std::fmt;
 
-use super::timber::Log;
+use super::timber::{Log, MAX_CROSS_CUT_PIECES};
 use mk_core::flux::{FluxEntry, FluxKind, Ledger, Reservoir};
 
 use super::ecology::RegionalEcologyState;
@@ -78,6 +79,12 @@ pub const ALL_MATERIALS: [Material; 10] = [
     Material::Water,
     Material::Gold,
 ];
+
+/// Food amounts below one nanogram are numerical meal residuals, not a
+/// meaningful harvest. They may be below the next representable PlantFood
+/// stock increment; in that case a completed forage trip may return zero
+/// without debiting ecology or booking a material transfer.
+const NEGLIGIBLE_FORAGE_KG: f64 = 1.0e-12;
 
 /// What a kilogram of a material is made of.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -253,6 +260,20 @@ pub enum MaterialError {
         have_kg: f64,
         need_kg: f64,
     },
+    /// A supplied amount or resulting stock quantity is negative or non-finite.
+    InvalidAmount {
+        material: Material,
+        amount_kg: f64,
+    },
+    /// A cell's area is not finite and strictly positive.
+    InvalidCellArea {
+        area_m2: f64,
+    },
+    /// A source reservoir value or its area conversion is negative or non-finite.
+    InvalidSourceState {
+        material: Material,
+        value: f64,
+    },
     /// The material cannot be used this way.
     WrongMaterial(Material),
     NoSuchHuman(String),
@@ -311,7 +332,7 @@ struct Structure {
 }
 
 /// Everything the economy holds as physical material.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Default, PartialEq, Serialize)]
 pub struct MaterialLedger {
     stock: BTreeMap<Material, f64>,
     structures: BTreeMap<u64, Structure>,
@@ -325,6 +346,114 @@ pub struct MaterialLedger {
     logs: BTreeMap<u64, Log>,
     #[serde(default)]
     next_log: u64,
+    /// IDs reserved for pending cross-cut materialisation. Consumed ids are
+    /// removed and never become reservable again. Omit the empty set so
+    /// snapshots without a pending cut retain their prior representation.
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    reserved_log_ids: BTreeSet<u64>,
+}
+
+#[derive(Deserialize)]
+struct MaterialLedgerSnapshot {
+    stock: BTreeMap<Material, f64>,
+    structures: BTreeMap<u64, Structure>,
+    bodies: BTreeMap<String, Body>,
+    next_structure: u64,
+    /// Snapshots written before logs existed have no log map.
+    #[serde(default)]
+    logs: BTreeMap<u64, Log>,
+    /// Snapshots written before logs existed have no allocator watermark.
+    #[serde(default)]
+    next_log: u64,
+    /// Older snapshots have no pending cross-cut reservations.
+    #[serde(default)]
+    reserved_log_ids: BTreeSet<u64>,
+}
+
+impl<'de> Deserialize<'de> for MaterialLedger {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let snapshot = MaterialLedgerSnapshot::deserialize(deserializer)?;
+        for (id, log) in &snapshot.logs {
+            if *id == 0 || log.id != *id {
+                return Err(serde::de::Error::custom(format!(
+                    "material ledger log key {id} does not match its one-based log id"
+                )));
+            }
+            if !log.has_valid_physical_state() {
+                return Err(serde::de::Error::custom(format!(
+                    "material ledger log {id} has invalid physical state"
+                )));
+            }
+        }
+
+        // next_log is the exclusive allocator watermark. It must remain above
+        // every materialised id so a restored allocator can never reuse a log.
+        if let Some(highest_log_id) = snapshot.logs.keys().next_back().copied() {
+            if snapshot.next_log <= highest_log_id {
+                return Err(serde::de::Error::custom(format!(
+                    "material ledger next_log {} does not exceed highest materialised log id {highest_log_id}",
+                    snapshot.next_log
+                )));
+            }
+        }
+
+        // Pending reservations are allocated ids that have not yet become logs.
+        // Reject zero, already-materialised and out-of-watermark ids at restore,
+        // before a malformed snapshot can reach the single-writer simulation.
+        for id in &snapshot.reserved_log_ids {
+            if *id == 0 {
+                return Err(serde::de::Error::custom(
+                    "material ledger reserved log ids must be one-based",
+                ));
+            }
+            if snapshot.logs.contains_key(id) {
+                return Err(serde::de::Error::custom(format!(
+                    "material ledger reserved log id {id} is already materialised"
+                )));
+            }
+            if *id >= snapshot.next_log {
+                return Err(serde::de::Error::custom(format!(
+                    "material ledger reserved log id {id} is outside allocator watermark {}",
+                    snapshot.next_log
+                )));
+            }
+        }
+
+        Ok(Self {
+            stock: snapshot.stock,
+            structures: snapshot.structures,
+            bodies: snapshot.bodies,
+            next_structure: snapshot.next_structure,
+            logs: snapshot.logs,
+            next_log: snapshot.next_log,
+            reserved_log_ids: snapshot.reserved_log_ids,
+        })
+    }
+}
+
+impl fmt::Debug for MaterialLedger {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Keep the pre-reservation debug representation byte-for-byte stable
+        // while no cut is pending. IslandLife::state_digest hashes this
+        // representation; a new empty bookkeeping field must not repin the
+        // simulation's canonical week digest. Pending ids remain visible
+        // because they change which future cross-cuts are valid.
+        let mut debug = f.debug_struct("MaterialLedger");
+        debug
+            .field("stock", &self.stock)
+            .field("structures", &self.structures)
+            .field("bodies", &self.bodies)
+            .field("next_structure", &self.next_structure)
+            .field("logs", &self.logs)
+            .field("next_log", &self.next_log);
+        if !self.reserved_log_ids.is_empty() {
+            debug.field("reserved_log_ids", &self.reserved_log_ids);
+        }
+        debug.finish()
+    }
 }
 
 fn flow(ledger: &mut Ledger, kind: FluxKind, from: Reservoir, to: Reservoir, amount: f64) {
@@ -367,24 +496,152 @@ impl MaterialLedger {
         if !matches!(c.origin, Origin::Mineral) || c.carbon_per_kg != 0.0 || c.water_per_kg != 0.0 {
             return Err(MaterialError::WrongMaterial(m));
         }
-        self.add(m, kg.max(0.0));
+        let resulting_stock = Self::checked_stock_addition_result(m, self.stock_kg(m), kg)?;
+        self.stock.insert(m, resulting_stock);
         Ok(())
+    }
+
+    fn validate_amount(m: Material, kg: f64) -> Result<(), MaterialError> {
+        if !kg.is_finite() || kg < 0.0 {
+            return Err(MaterialError::InvalidAmount {
+                material: m,
+                amount_kg: kg,
+            });
+        }
+        Ok(())
+    }
+
+    /// Validate a stock inflow and return the exact resulting inventory.
+    ///
+    /// Finite positive inputs can still disappear when added to a much larger
+    /// binary64 stock. Callers must not book their carbon/water flux unless the
+    /// material inventory actually increases by the requested amount.
+    fn checked_stock_addition_result(
+        m: Material,
+        have: f64,
+        kg: f64,
+    ) -> Result<f64, MaterialError> {
+        Self::validate_amount(m, kg)?;
+        if !have.is_finite() || have < 0.0 {
+            return Err(MaterialError::InvalidAmount {
+                material: m,
+                amount_kg: have,
+            });
+        }
+        let resulting_stock = have + kg;
+        if !resulting_stock.is_finite() || (kg > 0.0 && resulting_stock <= have) {
+            return Err(MaterialError::InvalidAmount {
+                material: m,
+                amount_kg: resulting_stock,
+            });
+        }
+        Ok(resulting_stock)
+    }
+
+    fn checked_gather_stock_addition_result(
+        &self,
+        material: Material,
+        kg: f64,
+    ) -> Result<Option<f64>, MaterialError> {
+        let have = self.stock_kg(material);
+        Self::validate_source_value(material, have)?;
+        Self::validate_amount(material, kg)?;
+        match Self::checked_stock_addition_result(material, have, kg) {
+            Ok(resulting_stock) => Ok(Some(resulting_stock)),
+            Err(MaterialError::InvalidAmount { .. })
+                if material == Material::PlantFood && kg <= NEGLIGIBLE_FORAGE_KG =>
+            {
+                // The foraging caller still completes the trip and practices
+                // the skill, but no source, stock or flux is mutated.
+                Ok(None)
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    fn validate_cell_area(area_m2: f64) -> Result<(), MaterialError> {
+        if !area_m2.is_finite() || area_m2 <= 0.0 {
+            return Err(MaterialError::InvalidCellArea { area_m2 });
+        }
+        Ok(())
+    }
+
+    fn validate_source_value(m: Material, value: f64) -> Result<(), MaterialError> {
+        if !value.is_finite() || value < 0.0 {
+            return Err(MaterialError::InvalidSourceState { material: m, value });
+        }
+        Ok(())
+    }
+
+    /// Validate a source-reservoir debit and return its exact remaining quantity.
+    ///
+    /// A finite debit can disappear when subtracted from a much larger finite
+    /// source. Never book an inflow to material stock unless the source itself
+    /// decreases by the amount represented by the transfer.
+    fn checked_source_debit_result(
+        m: Material,
+        have: f64,
+        debit: f64,
+    ) -> Result<f64, MaterialError> {
+        Self::validate_source_value(m, have)?;
+        Self::validate_amount(m, debit)?;
+        if have < debit {
+            return Err(MaterialError::InvalidSourceState {
+                material: m,
+                value: debit,
+            });
+        }
+        let remaining = have - debit;
+        if !remaining.is_finite() || remaining < 0.0 || (debit > 0.0 && remaining >= have) {
+            return Err(MaterialError::InvalidSourceState {
+                material: m,
+                value: remaining,
+            });
+        }
+        Ok(remaining)
     }
 
     fn add(&mut self, m: Material, kg: f64) {
         *self.stock.entry(m).or_insert(0.0) += kg;
     }
 
-    fn take(&mut self, m: Material, kg: f64) -> Result<(), MaterialError> {
-        let have = self.stock_kg(m);
-        if have + 1e-12 < kg {
+    /// Validate an exact withdrawal and return the resulting stock.
+    ///
+    /// The old availability tolerance could accept a request slightly larger
+    /// than stock, then clamp the debit to the available amount. Callers book
+    /// the requested amount in their flux/body transfer, so that clamp creates
+    /// matter on paper. Exact availability is required for every withdrawal.
+    fn checked_withdrawal_result(m: Material, have: f64, kg: f64) -> Result<f64, MaterialError> {
+        Self::validate_amount(m, kg)?;
+        if !have.is_finite() || have < 0.0 {
+            return Err(MaterialError::InvalidAmount {
+                material: m,
+                amount_kg: have,
+            });
+        }
+        if have < kg {
             return Err(MaterialError::Insufficient {
                 material: m,
                 have_kg: have,
                 need_kg: kg,
             });
         }
-        self.add(m, -kg.min(have));
+        let resulting_stock = have - kg;
+        if !resulting_stock.is_finite()
+            || resulting_stock < 0.0
+            || (kg > 0.0 && resulting_stock >= have)
+        {
+            return Err(MaterialError::InvalidAmount {
+                material: m,
+                amount_kg: resulting_stock,
+            });
+        }
+        Ok(resulting_stock)
+    }
+
+    fn take(&mut self, m: Material, kg: f64) -> Result<(), MaterialError> {
+        let resulting_stock = Self::checked_withdrawal_result(m, self.stock_kg(m), kg)?;
+        self.stock.insert(m, resulting_stock);
         Ok(())
     }
 
@@ -428,15 +685,25 @@ impl MaterialLedger {
         if c.origin != Origin::Biotic || c.carbon_per_kg <= 0.0 {
             return Err(MaterialError::WrongMaterial(material));
         }
-        let held_kgc = ecology.biomass_kgc_m2.get(cell.0, cell.1) * cell_area_m2;
-        let kg = kg_wanted.max(0.0).min(held_kgc / c.carbon_per_kg);
+        Self::validate_amount(material, kg_wanted)?;
+        Self::validate_cell_area(cell_area_m2)?;
+        let biomass_kgc_m2 = *ecology.biomass_kgc_m2.get(cell.0, cell.1);
+        Self::validate_source_value(material, biomass_kgc_m2)?;
+        let held_kgc = biomass_kgc_m2 * cell_area_m2;
+        Self::validate_source_value(material, held_kgc)?;
+        let available_kg = held_kgc / c.carbon_per_kg;
+        Self::validate_source_value(material, available_kg)?;
+        let kg = kg_wanted.min(available_kg);
         if kg <= 0.0 {
             return Err(MaterialError::NothingToHarvest);
         }
+        let Some(resulting_stock) = self.checked_gather_stock_addition_result(material, kg)? else {
+            return Ok(0.0);
+        };
         let kgc = kg * c.carbon_per_kg;
         let biomass = ecology.biomass_kgc_m2.get_mut(cell.0, cell.1);
         *biomass = (*biomass - kgc / cell_area_m2).max(0.0);
-        self.add(material, kg);
+        self.stock.insert(material, resulting_stock);
         flow(
             ledger,
             FluxKind::Carbon,
@@ -459,6 +726,8 @@ impl MaterialLedger {
         cell_area_m2: f64,
         ledger: &mut Ledger,
     ) -> Result<f64, MaterialError> {
+        Self::validate_amount(Material::PlantFood, kg_wanted)?;
+        Self::validate_cell_area(cell_area_m2)?;
         if ecology.edible.is_none() {
             return self.gather_biotic(
                 Material::PlantFood,
@@ -471,21 +740,30 @@ impl MaterialLedger {
         }
         let c = composition(Material::PlantFood);
         let i = ecology.biomass_kgc_m2.grid_to_linear_index(cell.0, cell.1);
+        let biomass_kgc_m2 = *ecology.biomass_kgc_m2.get(cell.0, cell.1);
+        Self::validate_source_value(Material::PlantFood, biomass_kgc_m2)?;
         let edible = ecology.edible.as_mut().expect("checked above");
-        let held_kgc_m2 = edible
-            .at(i)
-            .min(*ecology.biomass_kgc_m2.get(cell.0, cell.1));
-        let kg = kg_wanted
-            .max(0.0)
-            .min(held_kgc_m2 * cell_area_m2 / c.carbon_per_kg);
+        let edible_kgc_m2 = edible.at(i);
+        Self::validate_source_value(Material::PlantFood, edible_kgc_m2)?;
+        let held_kgc_m2 = edible_kgc_m2.min(biomass_kgc_m2);
+        let held_kgc = held_kgc_m2 * cell_area_m2;
+        Self::validate_source_value(Material::PlantFood, held_kgc)?;
+        let available_kg = held_kgc / c.carbon_per_kg;
+        Self::validate_source_value(Material::PlantFood, available_kg)?;
+        let kg = kg_wanted.min(available_kg);
         if kg <= 0.0 {
             return Err(MaterialError::NothingToHarvest);
         }
+        let Some(resulting_stock) =
+            self.checked_gather_stock_addition_result(Material::PlantFood, kg)?
+        else {
+            return Ok(0.0);
+        };
         let kgc = kg * c.carbon_per_kg;
         edible.take(i, kgc / cell_area_m2);
         let biomass = ecology.biomass_kgc_m2.get_mut(cell.0, cell.1);
         *biomass = (*biomass - kgc / cell_area_m2).max(0.0);
-        self.add(Material::PlantFood, kg);
+        self.stock.insert(Material::PlantFood, resulting_stock);
         flow(
             ledger,
             FluxKind::Carbon,
@@ -508,14 +786,25 @@ impl MaterialLedger {
         cell_area_m2: f64,
         ledger: &mut Ledger,
     ) -> Result<f64, MaterialError> {
+        Self::validate_amount(Material::Water, kg)?;
+        Self::validate_cell_area(cell_area_m2)?;
         let soil = *hydrology.soil_water.get(cell.0, cell.1);
+        Self::validate_source_value(Material::Water, soil.moisture_fraction)?;
+        Self::validate_source_value(Material::Water, soil.storage_mm)?;
         if soil.moisture_fraction < SOIL_DRINKABLE_FRACTION {
             return Err(MaterialError::DryCell);
         }
-        let take = kg.max(0.0).min(soil.storage_mm.max(0.0) * cell_area_m2);
+        let available_kg = soil.storage_mm * cell_area_m2;
+        Self::validate_source_value(Material::Water, available_kg)?;
+        let take = kg.min(available_kg);
         if take <= 0.0 {
             return Err(MaterialError::DryCell);
         }
+        let resulting_stock = Self::checked_stock_addition_result(
+            Material::Water,
+            self.stock_kg(Material::Water),
+            take,
+        )?;
         let storage_mm = soil.storage_mm - take / cell_area_m2;
         hydrology.soil_water.set(
             cell.0,
@@ -525,7 +814,7 @@ impl MaterialLedger {
                 storage_mm,
             },
         );
-        self.add(Material::Water, take);
+        self.stock.insert(Material::Water, resulting_stock);
         flow(
             ledger,
             FluxKind::Water,
@@ -548,13 +837,48 @@ impl MaterialLedger {
         cell_area_m2: f64,
         ledger: &mut Ledger,
     ) -> f64 {
+        Self::validate_amount(Material::Water, kg)
+            .expect("roof-water capture requires a finite non-negative amount");
+        Self::validate_cell_area(cell_area_m2)
+            .expect("roof-water capture requires a finite positive cell area");
         let soil = *hydrology.soil_water.get(cell.0, cell.1);
-        let take = kg.max(0.0).min(soil.storage_mm.max(0.0) * cell_area_m2);
+        Self::validate_source_value(Material::Water, soil.storage_mm)
+            .expect("roof-water capture requires valid soil-water storage");
+        let available = soil.storage_mm * cell_area_m2;
+        assert!(
+            available.is_finite(),
+            "roof-water availability must remain finite"
+        );
+        let take = kg.min(available);
         if take <= 0.0 {
             return 0.0;
         }
-        set_soil_storage(hydrology, cell, soil.storage_mm - take / cell_area_m2);
-        self.add(Material::Water, take);
+
+        let removed_mm = take / cell_area_m2;
+        let remaining_soil_mm = soil.storage_mm - removed_mm;
+        assert!(
+            removed_mm.is_finite()
+                && removed_mm > 0.0
+                && remaining_soil_mm.is_finite()
+                && remaining_soil_mm >= 0.0
+                && remaining_soil_mm < soil.storage_mm,
+            "roof-water source debit must remain representable in soil storage"
+        );
+        let resulting_stock = Self::checked_stock_addition_result(
+            Material::Water,
+            self.stock_kg(Material::Water),
+            take,
+        )
+        .expect("captured roof water must increase the water inventory representably");
+        let _resulting_water = Self::checked_stock_addition_result(
+            Material::Water,
+            self.stock_of(Reservoir::MaterialWater),
+            take,
+        )
+        .expect("captured roof water must increase the audited material-water stock");
+
+        set_soil_storage(hydrology, cell, remaining_soil_mm);
+        self.stock.insert(Material::Water, resulting_stock);
         flow(
             ledger,
             FluxKind::Water,
@@ -599,9 +923,27 @@ impl MaterialLedger {
     /// and the brash and roots went to detritus there. Returns the kg of
     /// wood added.
     pub fn receive_felled_wood(&mut self, usable_carbon_kgc: f64, ledger: &mut Ledger) -> f64 {
-        let kgc = usable_carbon_kgc.max(0.0);
+        assert!(
+            usable_carbon_kgc.is_finite() && usable_carbon_kgc >= 0.0,
+            "felled wood must carry finite, non-negative carbon"
+        );
+        let kgc = usable_carbon_kgc;
         let kg = kgc / composition(Material::Wood).carbon_per_kg;
-        self.add(Material::Wood, kg);
+        assert!(
+            kgc == 0.0 || kg > 0.0,
+            "positive felled-wood carbon must remain representable as wood mass"
+        );
+        let resulting_stock =
+            Self::checked_stock_addition_result(Material::Wood, self.stock_kg(Material::Wood), kg)
+                .expect("felled wood must increase the wood inventory representably");
+        let _resulting_carbon = Self::checked_stock_addition_result(
+            Material::Wood,
+            self.stock_of(Reservoir::MaterialCarbon),
+            kgc,
+        )
+        .expect("felled wood carbon must increase the audited material-carbon stock");
+
+        self.stock.insert(Material::Wood, resulting_stock);
         flow(
             ledger,
             FluxKind::Carbon,
@@ -627,7 +969,51 @@ impl MaterialLedger {
         cell_area_m2: f64,
         ledger: &mut Ledger,
     ) -> u64 {
-        log.id = self.reserve_log_ids(1);
+        assert!(
+            log.has_valid_physical_state(),
+            "cannot receive a felled log with invalid physical state"
+        );
+        Self::validate_cell_area(cell_area_m2)
+            .expect("felled-log receipt requires a finite positive cell area");
+        let water = log.water_kg;
+        let soil = *hydrology.soil_water.get(cell.0, cell.1);
+        Self::validate_source_value(Material::Water, soil.storage_mm)
+            .expect("felled-log receipt requires valid soil-water storage");
+        let available_soil_water_kg = soil.storage_mm * cell_area_m2;
+        assert!(
+            available_soil_water_kg.is_finite(),
+            "felled-log soil-water availability must remain finite"
+        );
+        let from_soil = water.min(available_soil_water_kg);
+        let removed_mm = from_soil / cell_area_m2;
+        assert!(
+            removed_mm.is_finite(),
+            "felled-log soil-water debit must remain finite"
+        );
+        assert!(
+            from_soil == 0.0 || removed_mm > 0.0,
+            "positive felled-log soil-water transfer must have a representable source depth"
+        );
+        let remaining_soil_mm =
+            Self::checked_source_debit_result(Material::Water, soil.storage_mm, removed_mm)
+                .expect("felled-log soil-water debit must decrease source storage representably");
+
+        let _resulting_carbon = Self::checked_stock_addition_result(
+            Material::Wood,
+            self.stock_of(Reservoir::MaterialCarbon),
+            log.carbon_kgc,
+        )
+        .expect("felled-log carbon must increase the audited material-carbon stock");
+        let _resulting_water = Self::checked_stock_addition_result(
+            Material::Water,
+            self.stock_of(Reservoir::MaterialWater),
+            water,
+        )
+        .expect("felled-log water must increase the audited material-water stock");
+
+        // All physical and aggregate-stock checks precede ID allocation,
+        // hydrology mutation and append-only flux recording.
+        log.id = self.allocate_log_id();
         flow(
             ledger,
             FluxKind::Carbon,
@@ -635,10 +1021,7 @@ impl MaterialLedger {
             Reservoir::MaterialCarbon,
             log.carbon_kgc,
         );
-        let water = log.water_kg.max(0.0);
-        let held = hydrology.soil_water.get(cell.0, cell.1).storage_mm.max(0.0);
-        let from_soil = water.min(held * cell_area_m2);
-        set_soil_storage(hydrology, cell, held - from_soil / cell_area_m2);
+        set_soil_storage(hydrology, cell, remaining_soil_mm);
         flow(
             ledger,
             FluxKind::Water,
@@ -658,11 +1041,74 @@ impl MaterialLedger {
         id
     }
 
-    /// Reserve `n` consecutive log ids; returns the first.
+    /// First log id that has not yet been allocated or reserved.
+    ///
+    /// Planning is single-writer and may inspect this value before reserving
+    /// the exact piece range required by the selected haul plan.
+    pub fn next_log_id(&self) -> u64 {
+        self.next_log.max(1)
+    }
+
+    /// Allocate one id for a log that is materialised immediately.
+    fn allocate_log_id(&mut self) -> u64 {
+        let id = self.next_log_id();
+        self.next_log = id.checked_add(1).expect("log id space exhausted");
+        id
+    }
+
+    /// Reserve `n` consecutive ids for a future cross-cut; returns the first.
+    /// A successful cross-cut consumes the pending ids. Refused cuts leave
+    /// them pending so the original planned operation can be retried.
     pub fn reserve_log_ids(&mut self, n: u64) -> u64 {
-        let first = self.next_log.max(1);
-        self.next_log = first + n;
+        assert!(n > 0, "cross-cut reservation must contain at least one id");
+        assert!(
+            n <= u64::from(MAX_CROSS_CUT_PIECES),
+            "cross-cut reservation exceeds safety bound"
+        );
+        let first = self.next_log_id();
+        let end = first.checked_add(n).expect("log id space exhausted");
+        self.next_log = end;
+        self.reserved_log_ids.extend(first..end);
         first
+    }
+
+    /// Reconstruct a pending range from an active persisted haul task.
+    ///
+    /// IslandLife snapshots written before reservation tracking have the
+    /// monotonic allocator watermark and the active CrossCut task, but not
+    /// this ledger's pending-id set. Only the owning haul-task path calls
+    /// this crate-private migration helper; direct ledger callers still need
+    /// an explicitly pending reservation.
+    pub(crate) fn restore_pending_cross_cut_ids(
+        &mut self,
+        source_id: u64,
+        pieces: u32,
+        first_id: u64,
+    ) -> bool {
+        if pieces == 0 || pieces > MAX_CROSS_CUT_PIECES {
+            return false;
+        }
+        let Some(end_exclusive) = first_id.checked_add(u64::from(pieces)) else {
+            return false;
+        };
+        if first_id == 0
+            || !self.logs.contains_key(&source_id)
+            || end_exclusive > self.next_log
+            || self.logs.range(first_id..end_exclusive).next().is_some()
+        {
+            return false;
+        }
+
+        let already_pending = self.reserved_log_ids.range(first_id..end_exclusive).count();
+        if already_pending == pieces as usize {
+            return true;
+        }
+        if already_pending != 0 {
+            return false;
+        }
+
+        self.reserved_log_ids.extend(first_id..end_exclusive);
+        true
     }
 
     /// Every log and piece, by id.
@@ -727,11 +1173,146 @@ impl MaterialLedger {
             .filter(|l| l.dry_kg > 0.0 && l.moisture_content() <= threshold)
             .map(|l| l.id)
             .collect();
-        let mut added = 0.0;
-        for id in seasoned {
-            let log = self.logs.remove(&id).expect("listed above");
+        if seasoned.is_empty() {
+            return 0.0;
+        }
+
+        // Preflight the complete deterministic batch before removing any log.
+        // Summing one log at a time into the live stock can silently lose an
+        // individual piece when the existing Wood inventory is much larger.
+        let mut total_kg = 0.0;
+        let mut compensation_kg = 0.0;
+        let mut total_water_kg = 0.0;
+        let mut compensation_water_kg = 0.0;
+        for id in &seasoned {
+            let log = self.logs.get(id).expect("seasoned id was collected above");
+            assert!(
+                log.has_valid_physical_state(),
+                "cannot season a log with invalid physical state"
+            );
             let kg = log.carbon_kgc / composition(Material::Wood).carbon_per_kg;
-            self.add(Material::Wood, kg);
+            assert!(
+                kg.is_finite() && (log.carbon_kgc == 0.0 || kg > 0.0),
+                "seasoned-log carbon must remain representable as wood mass"
+            );
+            let next_kg = total_kg + kg;
+            compensation_kg += if total_kg >= kg {
+                (total_kg - next_kg) + kg
+            } else {
+                (kg - next_kg) + total_kg
+            };
+            assert!(
+                next_kg.is_finite() && compensation_kg.is_finite(),
+                "seasoned-log wood batch must remain finite"
+            );
+            total_kg = next_kg;
+
+            let next_water = total_water_kg + log.water_kg;
+            compensation_water_kg += if total_water_kg >= log.water_kg {
+                (total_water_kg - next_water) + log.water_kg
+            } else {
+                (log.water_kg - next_water) + total_water_kg
+            };
+            assert!(
+                next_water.is_finite() && compensation_water_kg.is_finite(),
+                "seasoned-log water batch must remain finite"
+            );
+            total_water_kg = next_water;
+        }
+        let summed_kg = total_kg;
+        let summed_water_kg = total_water_kg;
+        let total_kg = summed_kg + compensation_kg;
+        let total_water_kg = summed_water_kg + compensation_water_kg;
+        // Neumaier's correction can be positive or negative. A negative
+        // correction may round back to the naive sum, which is still the
+        // correctly rounded binary64 batch total; its sign is not a failure.
+        assert!(
+            total_kg.is_finite() && total_kg > 0.0,
+            "seasoned-log wood batch must remain a positive finite quantity"
+        );
+        assert!(
+            total_water_kg.is_finite() && total_water_kg >= 0.0,
+            "seasoned-log water batch must remain a finite non-negative quantity"
+        );
+
+        let resulting_wood = Self::checked_stock_addition_result(
+            Material::Wood,
+            self.stock_kg(Material::Wood),
+            total_kg,
+        )
+        .expect("seasoned logs must increase the wood inventory representably");
+        // Predict the exact post-operation aggregates in the same iteration
+        // order used by stock_of. A mere decrease is insufficient: at large
+        // binary64 stocks, removing 1.5 kg can change the rounded aggregate by
+        // 2 kg, which would not match the per-log flux entries.
+        let remaining_log_carbon = self
+            .logs
+            .iter()
+            .filter(|(id, _)| seasoned.binary_search(*id).is_err())
+            .map(|(_, log)| log.carbon_kgc)
+            .sum::<f64>();
+        let remaining_log_water = self
+            .logs
+            .iter()
+            .filter(|(id, _)| seasoned.binary_search(*id).is_err())
+            .map(|(_, log)| log.water_kg)
+            .sum::<f64>();
+
+        let mut resulting_material_stock = self.stock.clone();
+        resulting_material_stock.insert(Material::Wood, resulting_wood);
+        let carbon_after = resulting_material_stock
+            .iter()
+            .map(|(material, kg)| kg * composition(*material).carbon_per_kg)
+            .sum::<f64>()
+            + self
+                .structures
+                .values()
+                .map(|structure| structure.kg * composition(structure.material).carbon_per_kg)
+                .sum::<f64>()
+            + remaining_log_carbon;
+        let carbon_before = self.stock_of(Reservoir::MaterialCarbon);
+        let carbon_delta = carbon_after - carbon_before;
+        let carbon_tolerance = 1e-9 * (1.0 + carbon_delta.abs());
+        assert!(
+            carbon_after.is_finite()
+                && carbon_delta.is_finite()
+                && carbon_delta.abs() <= carbon_tolerance,
+            "seasoning must preserve the audited material-carbon stock"
+        );
+
+        let body_water = self.bodies.values().map(|body| body.water_kg).sum::<f64>();
+        let water_before = self.stock_of(Reservoir::MaterialWater);
+        let water_after = self.stock_kg(Material::Water) + body_water + remaining_log_water;
+        let water_delta = water_after - water_before;
+        // life::net sums the one water flux per seasoned log in id order.
+        // Match that same simple sum when preflighting the audit boundary.
+        let booked_water = seasoned
+            .iter()
+            .map(|id| {
+                self.logs
+                    .get(id)
+                    .expect("seasoned id remains present")
+                    .water_kg
+            })
+            .sum::<f64>();
+        let water_residual = water_delta + booked_water;
+        let water_tolerance = 1e-9 * (1.0 + water_delta.abs());
+        assert!(
+            water_after.is_finite()
+                && water_after >= 0.0
+                && (total_water_kg == 0.0 || water_after < water_before)
+                && water_delta.is_finite()
+                && booked_water.is_finite()
+                && water_residual.is_finite()
+                && water_residual.abs() <= water_tolerance,
+            "seasoned-log water removal must match the audited material-water flux"
+        );
+
+        for id in seasoned {
+            let log = self
+                .logs
+                .remove(&id)
+                .expect("preflighted log remains present");
             flow(
                 ledger,
                 FluxKind::Water,
@@ -739,18 +1320,45 @@ impl MaterialLedger {
                 Reservoir::Atmosphere,
                 log.water_kg,
             );
-            added += kg;
         }
-        added
+        self.stock.insert(Material::Wood, resulting_wood);
+        total_kg
     }
 
     /// Cross-cut log `id` into `pieces` with ids from `first_id`: the log
     /// becomes its pieces, nothing gained or lost.
     pub fn cross_cut_log(&mut self, id: u64, pieces: u32, first_id: u64) -> bool {
-        let Some(log) = self.logs.remove(&id) else {
+        let Some(log) = self.logs.get(&id).cloned() else {
             return false;
         };
-        for piece in log.cross_cut(pieces, first_id) {
+        if !log.has_valid_physical_state() {
+            return false;
+        }
+        if pieces == 0 || pieces > MAX_CROSS_CUT_PIECES {
+            return false;
+        }
+        // MaterialLedger log ids are one-based. Validate the complete destination
+        // range before removing the source: an invalid or colliding range must
+        // never overwrite another log or leave the source partially consumed.
+        let Some(end_exclusive) = first_id.checked_add(u64::from(pieces)) else {
+            return false;
+        };
+        if first_id == 0
+            // next_log is the exclusive end of ids already allocated/reserved.
+            // It cannot distinguish a pending reservation from an old id whose
+            // log was later removed, so require every id to remain pending.
+            || end_exclusive > self.next_log
+            || self.reserved_log_ids.range(first_id..end_exclusive).count() != pieces as usize
+            || self.logs.range(first_id..end_exclusive).next().is_some()
+        {
+            return false;
+        }
+
+        let split = log.cross_cut(pieces, first_id);
+        self.logs.remove(&id);
+        for piece in split {
+            let was_reserved = self.reserved_log_ids.remove(&piece.id);
+            debug_assert!(was_reserved, "cross-cut ids were validated as reserved");
             self.logs.insert(piece.id, piece);
         }
         true
@@ -767,8 +1375,10 @@ impl MaterialLedger {
         if !matches!(c.origin, Origin::Fossil | Origin::Carbonate) {
             return Err(MaterialError::WrongMaterial(material));
         }
-        let kg = kg.max(0.0);
-        self.add(material, kg);
+        Self::validate_amount(material, kg)?;
+        let resulting_stock =
+            Self::checked_stock_addition_result(material, self.stock_kg(material), kg)?;
+        self.stock.insert(material, resulting_stock);
         flow(
             ledger,
             FluxKind::Carbon,
@@ -792,6 +1402,12 @@ impl MaterialLedger {
         if population.count == 0 || meat_kg <= 0.0 {
             return Err(MaterialError::NoAnimals);
         }
+        Self::validate_amount(Material::Meat, meat_kg)?;
+        let resulting_stock = Self::checked_stock_addition_result(
+            Material::Meat,
+            self.stock_kg(Material::Meat),
+            meat_kg,
+        )?;
         let animals = meat_kg / (population.body_mass_kg * EDIBLE_FRACTION);
         population.fractional_deaths += animals;
         let deaths = (population.fractional_deaths.floor() as u64).min(population.count);
@@ -799,7 +1415,7 @@ impl MaterialLedger {
         population.fractional_deaths -= deaths as f64;
         let total_c = animals * population.body_mass_kg * WHOLE_BODY_CARBON_FRACTION;
         let meat_c = meat_kg * composition(Material::Meat).carbon_per_kg;
-        self.add(Material::Meat, meat_kg);
+        self.stock.insert(Material::Meat, resulting_stock);
         flow(
             ledger,
             FluxKind::Carbon,
@@ -856,9 +1472,22 @@ impl MaterialLedger {
         limestone_kg: f64,
         ledger: &mut Ledger,
     ) -> Result<f64, MaterialError> {
-        self.take(Material::Limestone, limestone_kg)?;
+        Self::validate_amount(Material::Limestone, limestone_kg)?;
+        Self::checked_withdrawal_result(
+            Material::Limestone,
+            self.stock_kg(Material::Limestone),
+            limestone_kg,
+        )?;
+        let quicklime_kg = limestone_kg * QUICKLIME_PER_LIMESTONE;
+        let resulting_quicklime_stock = Self::checked_stock_addition_result(
+            Material::Quicklime,
+            self.stock_kg(Material::Quicklime),
+            quicklime_kg,
+        )?;
         let kgc = limestone_kg * composition(Material::Limestone).carbon_per_kg;
-        self.add(Material::Quicklime, limestone_kg * QUICKLIME_PER_LIMESTONE);
+        self.take(Material::Limestone, limestone_kg)?;
+        self.stock
+            .insert(Material::Quicklime, resulting_quicklime_stock);
         flow(
             ledger,
             FluxKind::Carbon,
@@ -883,13 +1512,21 @@ impl MaterialLedger {
         wood_kg: f64,
         ledger: &mut Ledger,
     ) -> Result<f64, MaterialError> {
-        self.take(Material::Wood, wood_kg)?;
+        Self::validate_amount(Material::Wood, wood_kg)?;
+        Self::checked_withdrawal_result(Material::Wood, self.stock_kg(Material::Wood), wood_kg)?;
         let wood = composition(Material::Wood);
         let dry = wood_kg * (1.0 - wood.water_per_kg);
         let char_kg = CHARCOAL_YIELD_BY_DRY_MASS * dry;
+        let resulting_charcoal_stock = Self::checked_stock_addition_result(
+            Material::Charcoal,
+            self.stock_kg(Material::Charcoal),
+            char_kg,
+        )?;
+        self.take(Material::Wood, wood_kg)?;
         let char_c = char_kg * composition(Material::Charcoal).carbon_per_kg;
         let released = wood_kg * wood.carbon_per_kg - char_c;
-        self.add(Material::Charcoal, char_kg);
+        self.stock
+            .insert(Material::Charcoal, resulting_charcoal_stock);
         flow(
             ledger,
             FluxKind::Carbon,
@@ -915,32 +1552,81 @@ impl MaterialLedger {
         outputs: &[(Material, f64)],
         ledger: &mut Ledger,
     ) -> Result<(), MaterialError> {
-        let c = |list: &[(Material, f64)]| {
-            list.iter()
+        // Validate every amount and aggregate repeated inputs before touching
+        // stock. Checking duplicate inputs independently can otherwise pass
+        // each availability check and then fail halfway through the debits.
+        let mut required = BTreeMap::<Material, f64>::new();
+        for (m, kg) in inputs {
+            Self::validate_amount(*m, *kg)?;
+            let total = required.entry(*m).or_insert(0.0);
+            let combined = *total + *kg;
+            if !combined.is_finite() || (*kg > 0.0 && combined <= *total) {
+                return Err(MaterialError::InvalidAmount {
+                    material: *m,
+                    amount_kg: combined,
+                });
+            }
+            *total = combined;
+        }
+        // Aggregate outputs before mutation just as inputs are aggregated.
+        // Sequential small additions can each round away even when their sum
+        // is representable (for example, two 1 kg additions at 2^53 kg).
+        let mut produced = BTreeMap::<Material, f64>::new();
+        for (m, kg) in outputs {
+            Self::validate_amount(*m, *kg)?;
+            let total = produced.entry(*m).or_insert(0.0);
+            let combined = *total + *kg;
+            if !combined.is_finite() || (*kg > 0.0 && combined <= *total) {
+                return Err(MaterialError::InvalidAmount {
+                    material: *m,
+                    amount_kg: combined,
+                });
+            }
+            *total = combined;
+        }
+
+        let carbon = |stock: &BTreeMap<Material, f64>| {
+            stock
+                .iter()
                 .map(|(m, kg)| kg * composition(*m).carbon_per_kg)
                 .sum::<f64>()
         };
-        let (in_c, out_c) = (c(inputs), c(outputs));
+        let (in_c, out_c) = (carbon(&required), carbon(&produced));
         if out_c > in_c + 1e-9 {
             return Err(MaterialError::CreatesCarbon {
                 out_kgc: out_c,
                 in_kgc: in_c,
             });
         }
-        for (m, kg) in inputs {
-            if self.stock_kg(*m) + 1e-12 < *kg {
-                return Err(MaterialError::Insufficient {
-                    material: *m,
-                    have_kg: self.stock_kg(*m),
-                    need_kg: *kg,
-                });
-            }
+        // Preflight every withdrawal before touching any stock. A positive
+        // amount can be finite and affordable yet round away when subtracted
+        // from a much larger binary64 inventory. Reject the whole recipe so
+        // the later carbon/water flux cannot claim matter left in stock.
+        let mut projected_stock = self.stock.clone();
+        for (m, kg) in &required {
+            let have = projected_stock.get(m).copied().unwrap_or(0.0);
+            let resulting_stock = Self::checked_withdrawal_result(*m, have, *kg)?;
+            projected_stock.insert(*m, resulting_stock);
         }
-        for (m, kg) in inputs {
-            self.take(*m, *kg)?;
+
+        // Preflight the exact output additions against the post-debit stock.
+        // Finite inputs can still overflow an existing finite inventory when
+        // added, so reject the whole recipe before the first debit.
+        for (m, kg) in &produced {
+            let have = projected_stock.get(m).copied().unwrap_or(0.0);
+            let resulting_stock = Self::checked_stock_addition_result(*m, have, *kg)?;
+            projected_stock.insert(*m, resulting_stock);
         }
-        for (m, kg) in outputs {
-            self.add(*m, *kg);
+
+        for (m, kg) in required {
+            self.take(m, kg)?;
+        }
+        for m in produced.keys() {
+            let resulting_stock = projected_stock
+                .get(m)
+                .copied()
+                .expect("preflighted output stock");
+            self.stock.insert(*m, resulting_stock);
         }
         flow(
             ledger,
@@ -962,19 +1648,60 @@ impl MaterialLedger {
     /// reservoir: the audit still closes on the tick it lands, and the
     /// inflow stays visible and attributable in the ledger rather than
     /// appearing as matter the island made from nothing.
-    pub fn inject(&mut self, m: Material, kg: f64, ledger: &mut Ledger) -> f64 {
-        let kg = kg.max(0.0);
-        if kg == 0.0 {
-            return 0.0;
+    /// Validate an operator inflow without changing stock, fluxes or audit state.
+    ///
+    /// The intervention adapter calls this before opening its audited transaction:
+    /// a rejected request must not count as a closed audit or enter the replay log.
+    pub(crate) fn validate_injection(&self, m: Material, kg: f64) -> Result<(), MaterialError> {
+        self.injection_carbon_kgc(m, kg).map(|_| ())
+    }
+
+    fn injection_carbon_kgc(&self, m: Material, kg: f64) -> Result<f64, MaterialError> {
+        // Operator inflows are still physical stock changes: reject invalid
+        // requests and overflow before touching inventory or the flux ledger.
+        Self::validate_amount(m, kg)?;
+        let current_stock = self.stock_kg(m);
+        if !current_stock.is_finite() || current_stock < 0.0 {
+            return Err(MaterialError::InvalidAmount {
+                material: m,
+                amount_kg: current_stock,
+            });
         }
+        let resulting_stock = current_stock + kg;
+        if !resulting_stock.is_finite() || (kg > 0.0 && resulting_stock <= current_stock) {
+            return Err(MaterialError::InvalidAmount {
+                material: m,
+                amount_kg: resulting_stock,
+            });
+        }
+        let carbon_kgc = kg * composition(m).carbon_per_kg;
+        if !carbon_kgc.is_finite() {
+            return Err(MaterialError::InvalidAmount {
+                material: m,
+                amount_kg: carbon_kgc,
+            });
+        }
+        Ok(carbon_kgc)
+    }
+
+    pub fn inject(
+        &mut self,
+        m: Material,
+        kg: f64,
+        ledger: &mut Ledger,
+    ) -> Result<f64, MaterialError> {
+        let carbon_kgc = self.injection_carbon_kgc(m, kg)?;
+        if kg == 0.0 {
+            return Ok(0.0);
+        }
+
         self.add(m, kg);
-        let composition = composition(m);
         flow(
             ledger,
             FluxKind::Carbon,
             Reservoir::OperatorIntervention,
             Reservoir::MaterialCarbon,
-            kg * composition.carbon_per_kg,
+            carbon_kgc,
         );
         if m == Material::Water {
             // Only `Material::Water` counts toward `MaterialWater`; water
@@ -988,7 +1715,7 @@ impl MaterialLedger {
                 kg,
             );
         }
-        kg
+        Ok(kg)
     }
 
     /// Draw `kg` of water from a cell: standing water first, then a small
@@ -1001,27 +1728,56 @@ impl MaterialLedger {
         cell_area_m2: f64,
         ledger: &mut Ledger,
     ) -> Result<f64, MaterialError> {
+        Self::validate_amount(Material::Water, kg)?;
+        Self::validate_cell_area(cell_area_m2)?;
         let (r, c) = cell;
-        let standing_kg = hydrology.surface_water.get(r, c).max(0.0) * cell_area_m2;
-        let river_kg =
-            hydrology.runoff.get(r, c).max(0.0) * cell_area_m2 * RIVER_WITHDRAWAL_FRACTION;
-        let take = kg.max(0.0).min(standing_kg + river_kg);
+        let surface_water = *hydrology.surface_water.get(r, c);
+        let runoff = *hydrology.runoff.get(r, c);
+        Self::validate_source_value(Material::Water, surface_water)?;
+        Self::validate_source_value(Material::Water, runoff)?;
+        let standing_kg = surface_water * cell_area_m2;
+        let river_kg = runoff * cell_area_m2 * RIVER_WITHDRAWAL_FRACTION;
+        Self::validate_source_value(Material::Water, standing_kg)?;
+        Self::validate_source_value(Material::Water, river_kg)?;
+        let available_kg = standing_kg + river_kg;
+        Self::validate_source_value(Material::Water, available_kg)?;
+        let take = kg.min(available_kg);
         if take <= 0.0 {
             return Err(MaterialError::DryCell);
         }
+        // Split the transfer deterministically, then preflight both source
+        // reservoirs and the destination inventory before mutating any of them.
         let from_standing = take.min(standing_kg);
         let from_river = take - from_standing;
-        hydrology.surface_water.set(
-            r,
-            c,
-            hydrology.surface_water.get(r, c) - from_standing / cell_area_m2,
-        );
-        hydrology.runoff.set(
-            r,
-            c,
-            hydrology.runoff.get(r, c) - from_river / (cell_area_m2 * RIVER_WITHDRAWAL_FRACTION),
-        );
-        self.add(Material::Water, take);
+        let river_area_factor = cell_area_m2 * RIVER_WITHDRAWAL_FRACTION;
+        if !river_area_factor.is_finite() || river_area_factor <= 0.0 {
+            return Err(MaterialError::InvalidCellArea {
+                area_m2: cell_area_m2,
+            });
+        }
+        let standing_debit = from_standing / cell_area_m2;
+        let river_debit = from_river / river_area_factor;
+        if (from_standing > 0.0 && standing_debit == 0.0)
+            || (from_river > 0.0 && river_debit == 0.0)
+        {
+            return Err(MaterialError::InvalidSourceState {
+                material: Material::Water,
+                value: 0.0,
+            });
+        }
+        let remaining_surface =
+            Self::checked_source_debit_result(Material::Water, surface_water, standing_debit)?;
+        let remaining_runoff =
+            Self::checked_source_debit_result(Material::Water, runoff, river_debit)?;
+        let resulting_stock = Self::checked_stock_addition_result(
+            Material::Water,
+            self.stock_kg(Material::Water),
+            take,
+        )?;
+
+        hydrology.surface_water.set(r, c, remaining_surface);
+        hydrology.runoff.set(r, c, remaining_runoff);
+        self.stock.insert(Material::Water, resulting_stock);
         flow(
             ledger,
             FluxKind::Water,

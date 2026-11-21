@@ -61,8 +61,14 @@ pub enum CommandError {
     Create(CreateHumanError),
     /// The island refused the intervention, or has no meaning for it.
     Intervention(IslandInterventionError),
-    /// The command would mutate the island but its replay sequence is exhausted.
+    /// The replay log cannot assign another unique sequence for this tick.
     ReplaySequenceExhausted { tick: u64 },
+    /// A replayed command would move the per-tick sequence backwards.
+    ReplaySequenceOutOfOrder {
+        tick: u64,
+        expected_at_least: u64,
+        received: u64,
+    },
 }
 
 impl std::fmt::Display for CommandError {
@@ -70,9 +76,16 @@ impl std::fmt::Display for CommandError {
         match self {
             Self::Create(e) => write!(f, "{e}"),
             Self::Intervention(e) => write!(f, "{e}"),
-            Self::ReplaySequenceExhausted { tick } => write!(
+            Self::ReplaySequenceExhausted { tick } => {
+                write!(f, "replay command sequence exhausted at tick {tick}")
+            }
+            Self::ReplaySequenceOutOfOrder {
+                tick,
+                expected_at_least,
+                received,
+            } => write!(
                 f,
-                "cannot apply a command at tick {tick}: replay sequence is exhausted"
+                "replay command sequence {received} at tick {tick} is below the next sequence {expected_at_least}"
             ),
         }
     }

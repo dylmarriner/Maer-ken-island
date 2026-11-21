@@ -10,10 +10,14 @@
 //! That is what makes the digest worth printing. A run that could not be
 //! reproduced would be a number about one afternoon on one machine.
 
-use std::fs::{self, OpenOptions};
-use std::io::{self, Read, Write};
-use std::path::Path;
+use std::collections::BTreeMap;
+use std::fs::{File, OpenOptions};
+use std::io::{Read, Write};
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
+
+#[cfg(unix)]
+use std::os::unix::fs::OpenOptionsExt;
 
 use mk_core::canon::CanonLocked;
 use mk_island::IslandScenario;
@@ -26,14 +30,69 @@ use super::life::{IslandLife, IslandLifeError};
 /// than guessed at, for the same reason a snapshot is.
 pub const REPLAY_LOG_VERSION: u32 = 1;
 
-/// Maximum serialized replay-log size accepted from disk (128 MiB). This
-/// bounds memory use when loading corrupt or untrusted replay paths.
-pub const MAX_REPLAY_LOG_BYTES: u64 = 128 * 1024 * 1024;
+/// Replay files are bounded so an imported or corrupted log cannot consume
+/// unbounded memory or disk while it is loaded or saved.
+pub const MAX_REPLAY_LOG_BYTES: u64 = 64 * 1024 * 1024;
 
-/// Default per-call replay horizon, measured in human ticks from tick zero.
-/// The default scenario uses 60-second ticks, so this allows a year-long
-/// replay plus margin. Longer histories require an explicit execution budget.
+/// Default replay horizon in human ticks. A one-year replay at 60-second
+/// cadence fits; longer runs must opt in to an explicit budget.
 pub const MAX_REPLAY_TICKS: u64 = 600_000;
+
+/// Reserve a fresh sibling temporary file without following or replacing an existing path.
+///
+/// The bounded suffix search handles concurrent saves in one process and fails
+/// closed if stale files occupy every candidate.
+fn create_replay_temp(path: &Path) -> std::io::Result<(PathBuf, File)> {
+    const MAX_ATTEMPTS: u32 = 32;
+    let process_id = std::process::id();
+
+    for sequence in 0..MAX_ATTEMPTS {
+        let temp = path.with_extension(format!("tmp-{process_id}-{sequence}"));
+        let mut options = OpenOptions::new();
+        options.write(true).create_new(true);
+        // A replay may contain private world or human data; do not rely on the
+        // process umask to prevent disclosure to other local users.
+        #[cfg(unix)]
+        options.mode(0o600);
+        match options.open(&temp) {
+            Ok(file) => return Ok((temp, file)),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(error),
+        }
+    }
+
+    Err(std::io::Error::new(
+        std::io::ErrorKind::AlreadyExists,
+        "could not allocate a unique replay temporary file",
+    ))
+}
+
+struct LimitedWriter<'a, W> {
+    inner: W,
+    written: u64,
+    limit_bytes: u64,
+    exceeded: &'a mut bool,
+}
+
+impl<W: Write> Write for LimitedWriter<'_, W> {
+    fn write(&mut self, buffer: &[u8]) -> std::io::Result<usize> {
+        if buffer.len() as u64 > self.limit_bytes.saturating_sub(self.written) {
+            *self.exceeded = true;
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "replay log exceeds configured size limit",
+            ));
+        }
+
+        let written = self.inner.write(buffer)?;
+        self.written += written as u64;
+        Ok(written)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.inner.flush()
+    }
+}
 
 /// One command, and exactly when it was applied.
 ///
@@ -55,263 +114,235 @@ pub struct IslandReplayLog {
     /// The scenario this log belongs to. Replaying it against a different
     /// island would reproduce nothing, so the log says which one it is.
     pub scenario_digest: String,
-    pub entries: Vec<IslandReplayEntry>,
+    /// Append-only command history. Callers receive a read-only slice so the
+    /// runtime sequence index cannot be invalidated by out-of-band mutation.
+    entries: Vec<IslandReplayEntry>,
+    /// Highest recorded sequence for each tick. Derived runtime state only:
+    /// it is rebuilt from entries and never enters the persisted log format.
+    #[serde(skip)]
+    sequence_max_by_tick: BTreeMap<u64, u64>,
+    /// Serde leaves the skipped index empty; the first append rebuilds it once.
+    #[serde(skip)]
+    sequence_index_ready: bool,
+}
+
+/// A same-tick command sequence cannot advance beyond the largest stored value.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ReplaySequenceExhausted {
+    pub tick: u64,
+}
+
+impl std::fmt::Display for ReplaySequenceExhausted {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "replay command sequence exhausted at tick {}", self.tick)
+    }
+}
+impl std::error::Error for ReplaySequenceExhausted {}
+
+/// Replay scenario digests are 32 bytes expressed as canonical lowercase hex.
+/// Refuse malformed metadata before publishing a file or accepting imported state.
+fn validate_scenario_digest(digest: &str) -> Result<(), IslandReplayError> {
+    if digest.len() == 64
+        && digest
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        Ok(())
+    } else {
+        Err(IslandReplayError::InvalidScenarioDigest)
+    }
 }
 
 impl IslandReplayLog {
     /// An empty log for a scenario.
     pub fn new(scenario_digest: String) -> Self {
-        Self {
-            version: REPLAY_LOG_VERSION,
+        Self::from_entries(REPLAY_LOG_VERSION, scenario_digest, Vec::new())
+    }
+
+    /// Construct an in-memory log from supplied entries without validating
+    /// replay semantics. Replay performs the same version, scenario and
+    /// duplicate-position checks for loaded and in-memory logs.
+    pub fn from_entries(
+        version: u32,
+        scenario_digest: String,
+        entries: Vec<IslandReplayEntry>,
+    ) -> Self {
+        let mut log = Self {
+            version,
             scenario_digest,
-            entries: Vec::new(),
+            entries,
+            sequence_max_by_tick: BTreeMap::new(),
+            sequence_index_ready: false,
+        };
+        log.rebuild_sequence_index();
+        log
+    }
+
+    /// Read the append-only history without allowing callers to invalidate
+    /// the per-tick sequence index.
+    pub fn entries(&self) -> &[IslandReplayEntry] {
+        &self.entries
+    }
+
+    fn rebuild_sequence_index(&mut self) {
+        let mut index = BTreeMap::<u64, u64>::new();
+        for entry in &self.entries {
+            index
+                .entry(entry.tick)
+                .and_modify(|last| *last = (*last).max(entry.sequence))
+                .or_insert(entry.sequence);
+        }
+        self.sequence_max_by_tick = index;
+        self.sequence_index_ready = true;
+    }
+
+    fn next_sequence(&mut self, tick: u64) -> Result<u64, ReplaySequenceExhausted> {
+        if !self.sequence_index_ready {
+            self.rebuild_sequence_index();
+        }
+        match self.sequence_max_by_tick.get(&tick).copied() {
+            None => Ok(0),
+            Some(last) => last.checked_add(1).ok_or(ReplaySequenceExhausted { tick }),
         }
     }
 
-    /// The next zero-based sequence for `tick`, or `None` if it is exhausted.
-    ///
-    /// Logs can be loaded from disk, so a sequence may already be `u64::MAX`.
-    /// Saturating that value would append a duplicate and create a log which
-    /// cannot be replayed. Refuse instead, before the caller mutates the island.
-    fn next_sequence(&self, tick: u64) -> Option<u64> {
-        self.entries
-            .iter()
-            .filter(|entry| entry.tick == tick)
-            .map(|entry| entry.sequence)
-            .max()
-            .map_or(Some(0), |sequence| sequence.checked_add(1))
-    }
-
-    /// Append a command applied at `tick`.
-    pub fn record(&mut self, tick: u64, command: IslandCommand) -> Result<(), IslandReplayError> {
-        let sequence = self
-            .next_sequence(tick)
-            .ok_or(IslandReplayError::SequenceExhausted { tick })?;
-        self.record_with_sequence(tick, sequence, command);
-        Ok(())
-    }
-
-    /// Append with a sequence reserved before the command changes world state.
     fn record_with_sequence(&mut self, tick: u64, sequence: u64, command: IslandCommand) {
+        if !self.sequence_index_ready {
+            self.rebuild_sequence_index();
+        }
         self.entries.push(IslandReplayEntry {
             tick,
             sequence,
             command,
         });
+        self.sequence_max_by_tick
+            .entry(tick)
+            .and_modify(|last| *last = (*last).max(sequence))
+            .or_insert(sequence);
     }
 
-    /// Read a log from a file.
+    /// Append a command applied at `tick`.
+    ///
+    /// The per-tick maximum is maintained incrementally, so appending N
+    /// commands does not rescan the retained history N times. Refuse sequence
+    /// exhaustion rather than reusing `u64::MAX`.
+    pub fn record(
+        &mut self,
+        tick: u64,
+        command: IslandCommand,
+    ) -> Result<(), ReplaySequenceExhausted> {
+        let sequence = self.next_sequence(tick)?;
+        self.record_with_sequence(tick, sequence, command);
+        Ok(())
+    }
+
+    /// Read a log from a regular file, refusing inputs larger than the offline budget.
     pub fn load(path: &Path) -> Result<Self, IslandReplayError> {
-        let path_name = path.display().to_string();
-        let path_metadata = fs::symlink_metadata(path)
-            .map_err(|error| IslandReplayError::Io(path_name.clone(), error))?;
-        if !path_metadata.file_type().is_file() {
-            return Err(IslandReplayError::NotALog(
-                path_name.clone(),
-                "replay source must be a regular file, not a symlink or special file".to_string(),
+        // Reject symlinks before opening. On Unix O_NOFOLLOW below also closes
+        // the replacement race between checking the path and opening it.
+        let metadata = std::fs::symlink_metadata(path)
+            .map_err(|e| IslandReplayError::Io(path.display().to_string(), e))?;
+        if !metadata.file_type().is_file() {
+            return Err(IslandReplayError::Io(
+                path.display().to_string(),
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "replay source must be a regular file",
+                ),
             ));
         }
-        if path_metadata.len() > MAX_REPLAY_LOG_BYTES {
+        if metadata.len() > MAX_REPLAY_LOG_BYTES {
             return Err(IslandReplayError::TooLarge {
-                path: path_name.clone(),
-                bytes: path_metadata.len(),
-                max_bytes: MAX_REPLAY_LOG_BYTES,
+                path: path.display().to_string(),
+                limit_bytes: MAX_REPLAY_LOG_BYTES,
             });
         }
 
         let mut options = OpenOptions::new();
         options.read(true);
-        // O_NOFOLLOW closes the metadata/open symlink race on Unix. O_NONBLOCK
-        // prevents a raced FIFO from hanging the process before file-type validation.
         #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
-        }
+        options.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
         let file = options
             .open(path)
-            .map_err(|error| IslandReplayError::Io(path_name.clone(), error))?;
-        let opened_metadata = file
+            .map_err(|e| IslandReplayError::Io(path.display().to_string(), e))?;
+        // Check the opened handle too: the file could have been replaced
+        // between the path-level inspection and open, including by a FIFO.
+        if !file
             .metadata()
-            .map_err(|error| IslandReplayError::Io(path_name.clone(), error))?;
-        if !opened_metadata.is_file() {
-            return Err(IslandReplayError::NotALog(
-                path_name.clone(),
-                "opened replay source is not a regular file".to_string(),
+            .map_err(|e| IslandReplayError::Io(path.display().to_string(), e))?
+            .is_file()
+        {
+            return Err(IslandReplayError::Io(
+                path.display().to_string(),
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "replay source must be a regular file",
+                ),
             ));
         }
-
-        let size = opened_metadata.len();
-        if size > MAX_REPLAY_LOG_BYTES {
-            return Err(IslandReplayError::TooLarge {
-                path: path_name.clone(),
-                bytes: size,
-                max_bytes: MAX_REPLAY_LOG_BYTES,
-            });
-        }
-
-        // Read at most one byte beyond the limit as well: the file may grow
-        // after metadata was inspected, and that must not bypass the bound.
-        let mut bytes = Vec::with_capacity(size as usize);
-        let read = file
-            .take(MAX_REPLAY_LOG_BYTES + 1)
+        let mut bytes = Vec::new();
+        file.take(MAX_REPLAY_LOG_BYTES + 1)
             .read_to_end(&mut bytes)
-            .map_err(|error| IslandReplayError::Io(path_name.clone(), error))?;
-        if read as u64 > MAX_REPLAY_LOG_BYTES {
+            .map_err(|e| IslandReplayError::Io(path.display().to_string(), e))?;
+        if bytes.len() as u64 > MAX_REPLAY_LOG_BYTES {
             return Err(IslandReplayError::TooLarge {
-                path: path_name,
-                bytes: read as u64,
-                max_bytes: MAX_REPLAY_LOG_BYTES,
+                path: path.display().to_string(),
+                limit_bytes: MAX_REPLAY_LOG_BYTES,
             });
         }
 
-        let log: Self = serde_json::from_slice(&bytes)
-            .map_err(|e| IslandReplayError::NotALog(path_name, e.to_string()))?;
-        validate_replay_log_header(&log)?;
-        ordered_replay_entries(log.entries.iter())?;
+        let mut log: Self = serde_json::from_slice(&bytes)
+            .map_err(|e| IslandReplayError::NotALog(path.display().to_string(), e.to_string()))?;
+        if log.version != REPLAY_LOG_VERSION {
+            return Err(IslandReplayError::Version(log.version));
+        }
+        validate_scenario_digest(&log.scenario_digest)?;
+        log.rebuild_sequence_index();
         Ok(log)
     }
 
-    /// Write a log atomically, using a unique temporary file for each writer.
-    ///
-    /// Exclusive file creation matters even with a single simulation writer: a
-    /// stale temp file or concurrent save must never be truncated before rename.
+    /// Write a log atomically, refusing output larger than the offline budget.
     pub fn save(&self, path: &Path) -> Result<(), IslandReplayError> {
-        // Measure first so oversized input keeps its stable error without allocating the JSON.
-        // For in-bound logs, validate the header before command ordering, matching load/replay.
-        let serialized_bytes = measure_replay_log(self, path, MAX_REPLAY_LOG_BYTES)?;
-        validate_replay_log_header(self)?;
-        ordered_replay_entries(self.entries.iter())?;
-        let text = materialize_replay_log(self, path, serialized_bytes)?;
-
-        let mut candidate = None;
-        for sequence in 0..128 {
-            let temp = path.with_extension(format!("tmp-{}-{sequence}", std::process::id()));
-            let mut options = OpenOptions::new();
-            options.write(true).create_new(true);
-            // Replay logs contain names, birth timestamps and physical details.
-            // Do not expose those records to other local users by default.
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::OpenOptionsExt;
-                options.mode(0o600);
-            }
-            match options.open(&temp) {
-                Ok(file) => {
-                    candidate = Some((temp, file));
-                    break;
-                }
-                Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
-                Err(error) => return Err(IslandReplayError::Io(path.display().to_string(), error)),
-            }
+        // Validate metadata before creating a temporary file or replacing an
+        // existing replay. Import and export must obey the same boundary.
+        if self.version != REPLAY_LOG_VERSION {
+            return Err(IslandReplayError::Version(self.version));
         }
-
-        let Some((temp, mut file)) = candidate else {
-            return Err(IslandReplayError::Io(
-                path.display().to_string(),
-                io::Error::new(
-                    io::ErrorKind::AlreadyExists,
-                    "could not allocate a unique temporary replay file",
-                ),
-            ));
+        validate_scenario_digest(&self.scenario_digest)?;
+        let (temp, mut file) = create_replay_temp(path)
+            .map_err(|e| IslandReplayError::Io(path.display().to_string(), e))?;
+        let mut exceeded = false;
+        let serialized = {
+            let mut writer = LimitedWriter {
+                inner: &mut file,
+                written: 0,
+                limit_bytes: MAX_REPLAY_LOG_BYTES,
+                exceeded: &mut exceeded,
+            };
+            serde_json::to_writer_pretty(&mut writer, self)
         };
-
-        if let Err(error) = file.write_all(&text).and_then(|()| file.sync_all()) {
+        if let Err(error) = serialized {
             drop(file);
-            let _ = fs::remove_file(&temp);
-            return Err(IslandReplayError::Io(path.display().to_string(), error));
+            std::fs::remove_file(&temp).ok();
+            if exceeded {
+                return Err(IslandReplayError::TooLarge {
+                    path: path.display().to_string(),
+                    limit_bytes: MAX_REPLAY_LOG_BYTES,
+                });
+            }
+            return Err(IslandReplayError::NotALog(
+                path.display().to_string(),
+                error.to_string(),
+            ));
         }
+
         drop(file);
-
-        if let Err(error) = fs::rename(&temp, path) {
-            let _ = fs::remove_file(&temp);
-            return Err(IslandReplayError::Io(path.display().to_string(), error));
-        }
-
-        // The file's contents are synced before rename. On Unix, sync the
-        // containing directory as well so the new name survives a crash or
-        // power loss; atomic rename alone guarantees visibility, not durability.
-        if let Err(error) = sync_parent_directory(path) {
+        if let Err(error) = std::fs::rename(&temp, path) {
+            std::fs::remove_file(&temp).ok();
             return Err(IslandReplayError::Io(path.display().to_string(), error));
         }
         Ok(())
     }
-}
-
-/// Count serialized bytes without first allocating the entire JSON document.
-#[derive(Default)]
-struct CountingWriter {
-    bytes: u64,
-}
-
-impl Write for CountingWriter {
-    fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
-        self.bytes = self.bytes.checked_add(buffer.len() as u64).ok_or_else(|| {
-            io::Error::new(io::ErrorKind::InvalidData, "replay log size overflow")
-        })?;
-        Ok(buffer.len())
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
-}
-
-/// Preserve the exact TooLarge byte count while keeping the first serialization pass
-/// allocation-free. The JSON is materialized only after it is known to fit the bound.
-fn measure_replay_log(
-    log: &IslandReplayLog,
-    path: &Path,
-    max_bytes: u64,
-) -> Result<u64, IslandReplayError> {
-    let path_name = path.display().to_string();
-    let mut counter = CountingWriter::default();
-    serde_json::to_writer_pretty(&mut counter, log)
-        .map_err(|error| IslandReplayError::NotALog(path_name.clone(), error.to_string()))?;
-
-    if counter.bytes > max_bytes {
-        return Err(IslandReplayError::TooLarge {
-            path: path_name,
-            bytes: counter.bytes,
-            max_bytes,
-        });
-    }
-
-    Ok(counter.bytes)
-}
-
-/// Materialize only after the bounded counting pass and semantic validation.
-fn materialize_replay_log(
-    log: &IslandReplayLog,
-    path: &Path,
-    measured_bytes: u64,
-) -> Result<Vec<u8>, IslandReplayError> {
-    let text = serde_json::to_vec_pretty(log).map_err(|error| {
-        IslandReplayError::NotALog(path.display().to_string(), error.to_string())
-    })?;
-    if text.len() as u64 != measured_bytes {
-        return Err(IslandReplayError::NotALog(
-            path.display().to_string(),
-            "replay log changed size between validation and serialization".to_string(),
-        ));
-    }
-    Ok(text)
-}
-
-#[cfg(unix)]
-fn sync_parent_directory(path: &Path) -> io::Result<()> {
-    let parent = path
-        .parent()
-        .filter(|parent| !parent.as_os_str().is_empty())
-        .unwrap_or_else(|| Path::new("."));
-    fs::File::open(parent)?.sync_all()
-}
-
-#[cfg(not(unix))]
-fn sync_parent_directory(_path: &Path) -> io::Result<()> {
-    // Portable directory handles are not exposed by std on every platform.
-    // The staged file itself is still synced before the atomic rename.
-    Ok(())
 }
 
 /// Why a replay did not happen, or did not finish.
@@ -319,30 +350,24 @@ fn sync_parent_directory(_path: &Path) -> io::Result<()> {
 pub enum IslandReplayError {
     Io(String, std::io::Error),
     NotALog(String, String),
-    /// The scenario fingerprint must be a canonical 32-byte lowercase hexadecimal digest.
+    /// A log written by a format this build does not know.
+    Version(u32),
+    /// The scenario fingerprint must be 64 canonical lowercase hexadecimal characters.
     InvalidScenarioDigest,
-    /// A replay file exceeded the bounded input size accepted by this build.
+    /// A replay file exceeds the bounded offline import/export size.
     TooLarge {
         path: String,
-        bytes: u64,
-        max_bytes: u64,
+        limit_bytes: u64,
     },
-    /// A requested replay would advance beyond the per-call execution budget.
+    /// A replay request would exceed the caller's tick budget.
     ReplayBudgetExceeded {
         tick: u64,
         max_ticks: u64,
     },
-    /// A log written by a format this build does not know.
-    Version(u32),
-    /// A tick's command sequence is duplicated or skips an expected entry.
-    InvalidSequence {
+    /// Two commands claim the same ordering position within one tick.
+    DuplicateSequence {
         tick: u64,
-        expected: u64,
-        actual: u64,
-    },
-    /// No further same-tick command can be recorded without duplicating a sequence.
-    SequenceExhausted {
-        tick: u64,
+        sequence: u64,
     },
     /// The log belongs to a different scenario. Replaying it here would
     /// reproduce nothing and look like it had.
@@ -366,37 +391,26 @@ impl std::fmt::Display for IslandReplayError {
         match self {
             Self::Io(path, e) => write!(f, "{path}: {e}"),
             Self::NotALog(path, why) => write!(f, "{path} is not a replay log: {why}"),
-            Self::InvalidScenarioDigest => write!(
-                f,
-                "the scenario digest must be 64 lowercase hexadecimal characters"
-            ),
-            Self::TooLarge {
-                path,
-                bytes,
-                max_bytes,
-            } => write!(
-                f,
-                "{path} is {bytes} bytes; replay logs are limited to {max_bytes} bytes"
-            ),
-            Self::ReplayBudgetExceeded { tick, max_ticks } => write!(
-                f,
-                "replay tick {tick} exceeds the per-call limit of {max_ticks} ticks; replay from a snapshot or explicitly raise the budget"
-            ),
             Self::Version(v) => write!(
                 f,
                 "that log is format {v}; this build reads {REPLAY_LOG_VERSION}"
             ),
-            Self::InvalidSequence {
-                tick,
-                expected,
-                actual,
-            } => write!(
+            Self::InvalidScenarioDigest => {
+                write!(
+                    f,
+                    "replay scenario digest must be 64 lowercase hexadecimal characters"
+                )
+            }
+            Self::TooLarge { path, limit_bytes } => {
+                write!(f, "{path} exceeds the {limit_bytes}-byte replay log limit")
+            }
+            Self::ReplayBudgetExceeded { tick, max_ticks } => write!(
                 f,
-                "the command at tick {tick} has sequence {actual}; expected {expected}"
+                "replay tick {tick} exceeds the per-call limit of {max_ticks} ticks; replay from a snapshot or explicitly raise the budget"
             ),
-            Self::SequenceExhausted { tick } => write!(
+            Self::DuplicateSequence { tick, sequence } => write!(
                 f,
-                "the command sequence at tick {tick} is exhausted; refusing to record a duplicate"
+                "replay log contains duplicate command sequence {sequence} at tick {tick}"
             ),
             Self::WrongScenario { log, scenario } => write!(
                 f,
@@ -418,57 +432,6 @@ impl std::fmt::Display for IslandReplayError {
 
 impl std::error::Error for IslandReplayError {}
 
-/// Sort commands into replay order and reject duplicate or missing same-tick sequence IDs.
-///
-/// The same structural rule applies at every file boundary: saving must not write an
-/// invalid log, loading must not return one, and replay must not guess at command order.
-fn ordered_replay_entries<'a>(
-    entries: impl IntoIterator<Item = &'a IslandReplayEntry>,
-) -> Result<Vec<&'a IslandReplayEntry>, IslandReplayError> {
-    let mut ordered: Vec<&IslandReplayEntry> = entries.into_iter().collect();
-    ordered.sort_by_key(|entry| (entry.tick, entry.sequence));
-
-    let mut current_tick: Option<u64> = None;
-    let mut expected_sequence = 0_u64;
-    for entry in &ordered {
-        if current_tick != Some(entry.tick) {
-            current_tick = Some(entry.tick);
-            expected_sequence = 0;
-        }
-        if entry.sequence != expected_sequence {
-            return Err(IslandReplayError::InvalidSequence {
-                tick: entry.tick,
-                expected: expected_sequence,
-                actual: entry.sequence,
-            });
-        }
-        expected_sequence = expected_sequence
-            .checked_add(1)
-            .ok_or(IslandReplayError::SequenceExhausted { tick: entry.tick })?;
-    }
-    Ok(ordered)
-}
-
-fn validate_scenario_digest(digest: &str) -> Result<(), IslandReplayError> {
-    if digest.len() == 64
-        && digest
-            .bytes()
-            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
-    {
-        Ok(())
-    } else {
-        Err(IslandReplayError::InvalidScenarioDigest)
-    }
-}
-
-/// Validate the format version and scenario identity shared by file and in-memory boundaries.
-fn validate_replay_log_header(log: &IslandReplayLog) -> Result<(), IslandReplayError> {
-    if log.version != REPLAY_LOG_VERSION {
-        return Err(IslandReplayError::Version(log.version));
-    }
-    validate_scenario_digest(&log.scenario_digest)
-}
-
 /// Run a scenario forward to `until_tick`, applying the log as it goes.
 ///
 /// Commands are applied at the start of the tick they were recorded at, in
@@ -484,10 +447,9 @@ pub fn replay_island(
     replay_island_with_budget(canon, scenario, log, until_tick, MAX_REPLAY_TICKS)
 }
 
-/// Replay with an explicit absolute tick ceiling for intentional long histories.
-/// The default API is bounded so a tiny log with a far-future command cannot
-/// trigger an effectively unbounded simulation loop. Raising the ceiling is an
-/// explicit caller decision; structural validation still covers the complete log.
+/// Replay with an explicit absolute tick ceiling for intentionally longer
+/// histories. This preserves the modern sparse-sequence and horizon-scoped
+/// validation semantics of the parent replay engine.
 pub fn replay_island_with_budget(
     canon: Arc<CanonLocked>,
     scenario: IslandScenario,
@@ -495,22 +457,42 @@ pub fn replay_island_with_budget(
     until_tick: u64,
     max_replay_ticks: u64,
 ) -> Result<IslandLife, IslandReplayError> {
-    // Direct callers can construct an in-memory log without passing through load().
-    // Validate the same header and complete sequence contract before allocating an island.
-    validate_replay_log_header(log)?;
-    let ordered = ordered_replay_entries(log.entries.iter())?;
-    // Bound the requested horizon as well as commands. Otherwise an empty log
-    // (or a log whose commands are all earlier) could still advance indefinitely.
+    // File loading checks the format version, but public in-memory logs can be
+    // constructed directly. Apply the same fail-fast contract before the
+    // scenario is bootstrapped or any entry is interpreted.
+    if log.version != REPLAY_LOG_VERSION {
+        return Err(IslandReplayError::Version(log.version));
+    }
+    // Direct in-memory logs bypass load(): enforce the same canonical
+    // scenario identity boundary before scanning entries or bootstrapping.
+    validate_scenario_digest(&log.scenario_digest)?;
+
+    // Validate the requested replay horizon before bootstrapping. A duplicate
+    // (tick, sequence) pair has no deterministic command order, even if the
+    // caller has reordered the underlying vector.
+    let mut entries: Vec<&IslandReplayEntry> = log
+        .entries()
+        .iter()
+        .filter(|entry| entry.tick <= until_tick)
+        .collect();
+    entries.sort_by_key(|entry| (entry.tick, entry.sequence));
+    for pair in entries.windows(2) {
+        if pair[0].tick == pair[1].tick && pair[0].sequence == pair[1].sequence {
+            return Err(IslandReplayError::DuplicateSequence {
+                tick: pair[0].tick,
+                sequence: pair[0].sequence,
+            });
+        }
+    }
+
+    // Validate replay metadata and command ordering before enforcing the
+    // requested horizon, but never start an unbounded simulation.
     if until_tick > max_replay_ticks {
         return Err(IslandReplayError::ReplayBudgetExceeded {
             tick: until_tick,
             max_ticks: max_replay_ticks,
         });
     }
-    let entries = ordered
-        .into_iter()
-        .filter(|entry| entry.tick <= until_tick)
-        .collect::<Vec<_>>();
     let mut life = IslandLife::bootstrap(scenario, canon).map_err(IslandReplayError::Island)?;
 
     let here = life.scenario_digest_hex();
@@ -521,12 +503,13 @@ pub fn replay_island_with_budget(
         });
     }
 
+    // The validated entries are now in deterministic (tick, sequence) order.
     let step = life.scenario.cadences.human_seconds;
     for entry in entries {
         while life.tick < entry.tick {
             life.advance(step).map_err(IslandReplayError::Island)?;
         }
-        life.apply_command(entry.command.clone())
+        life.apply_command_with_sequence(entry.command.clone(), entry.sequence)
             .map_err(|e| IslandReplayError::Refused {
                 tick: entry.tick,
                 sequence: entry.sequence,
@@ -540,27 +523,47 @@ pub fn replay_island_with_budget(
 }
 
 impl IslandLife {
-    /// Do what was asked, and remember that it was asked.
+    /// Append a successfully applied command and advance the live per-tick sequence index.
+    fn record_command(&mut self, sequence: u64, command: IslandCommand) {
+        self.replay_log
+            .record_with_sequence(self.tick, sequence, command);
+        self.replay_sequence_by_tick.insert(self.tick, sequence);
+    }
+
+    /// The next sequence a live command can use at the current tick.
+    fn next_command_sequence(&self) -> Result<u64, CommandError> {
+        match self.replay_sequence_by_tick.get(&self.tick).copied() {
+            Some(last) => last
+                .checked_add(1)
+                .ok_or(CommandError::ReplaySequenceExhausted { tick: self.tick }),
+            None => Ok(0),
+        }
+    }
+
+    /// Apply a command while preserving the sequence recorded by a replay log.
     ///
-    /// The log is appended before the command's effect is returned, so a
-    /// command that applied is always in the record — a run whose log were
-    /// missing its last entry would replay to a different island and give
-    /// no sign of it.
-    pub fn apply_command(&mut self, command: IslandCommand) -> Result<Applied, CommandError> {
-        // Reserve the sequence before applying anything. A loaded log may
-        // contain u64::MAX for this tick; rejecting here keeps a failed
-        // recording from leaving an unlogged world mutation behind.
-        let sequence = self
-            .replay_log
-            .next_sequence(self.tick)
-            .ok_or(CommandError::ReplaySequenceExhausted { tick: self.tick })?;
+    /// Gaps are valid in an imported log, but moving backwards is not. The
+    /// check happens before the command can mutate the island.
+    fn apply_command_with_sequence(
+        &mut self,
+        command: IslandCommand,
+        sequence: u64,
+    ) -> Result<Applied, CommandError> {
+        let expected_at_least = self.next_command_sequence()?;
+        if sequence < expected_at_least {
+            return Err(CommandError::ReplaySequenceOutOfOrder {
+                tick: self.tick,
+                expected_at_least,
+                received: sequence,
+            });
+        }
+
         match &command {
             IslandCommand::CreateHuman(request) => {
                 let made = self
                     .create_human((**request).clone())
                     .map_err(CommandError::Create)?;
-                self.replay_log
-                    .record_with_sequence(self.tick, sequence, command);
+                self.record_command(sequence, command);
                 Ok(Applied::Created(made))
             }
             IslandCommand::Intervention(action) => {
@@ -568,19 +571,23 @@ impl IslandLife {
                 // the island refuses never happened and must not be in a
                 // log that claims to reproduce the run.
                 let outcome = self.intervene(action).map_err(CommandError::Intervention)?;
-                self.replay_log
-                    .record_with_sequence(self.tick, sequence, command);
+                self.record_command(sequence, command);
                 Ok(Applied::Intervened(outcome))
             }
             IslandCommand::Control(control) => {
-                // Nothing in the world moves. It is recorded because a
-                // replay should be able to say what the operator did.
+                // Nothing in the world moves. It is recorded because a replay
+                // should be able to say what the operator did.
                 let _: &ControlCommand = control;
-                self.replay_log
-                    .record_with_sequence(self.tick, sequence, command);
+                self.record_command(sequence, command);
                 Ok(Applied::Noted)
             }
         }
+    }
+
+    /// Apply a live command using the next contiguous sequence for this tick.
+    pub fn apply_command(&mut self, command: IslandCommand) -> Result<Applied, CommandError> {
+        let sequence = self.next_command_sequence()?;
+        self.apply_command_with_sequence(command, sequence)
     }
 
     /// Everything that has reached this island from outside.
@@ -598,27 +605,27 @@ impl IslandLife {
 }
 
 #[cfg(test)]
-mod replay_serialization_tests {
-    use super::*;
-    use std::path::Path;
+mod bounded_writer_tests {
+    use super::LimitedWriter;
+    use std::io::{Cursor, Write};
 
     #[test]
-    fn serialized_size_is_counted_exactly_before_output_allocation() {
-        let log = IslandReplayLog::new("0".repeat(64));
-        let expected = serde_json::to_vec_pretty(&log).unwrap();
-        let exact_size = expected.len() as u64;
+    fn limited_writer_never_writes_past_its_limit() {
+        let mut exceeded = false;
+        let bytes = {
+            let mut writer = LimitedWriter {
+                inner: Cursor::new(Vec::new()),
+                written: 0,
+                limit_bytes: 4,
+                exceeded: &mut exceeded,
+            };
 
-        let error =
-            measure_replay_log(&log, Path::new("replay-test.json"), exact_size - 1).unwrap_err();
-        assert!(matches!(
-            error,
-            IslandReplayError::TooLarge { bytes, max_bytes, .. }
-                if bytes == exact_size && max_bytes == exact_size - 1
-        ));
+            writer.write_all(b"1234").expect("the limit is inclusive");
+            assert!(writer.write_all(b"5").is_err());
+            writer.inner.into_inner()
+        };
 
-        let measured = measure_replay_log(&log, Path::new("replay-test.json"), exact_size).unwrap();
-        let accepted =
-            materialize_replay_log(&log, Path::new("replay-test.json"), measured).unwrap();
-        assert_eq!(accepted, expected, "the exact size limit is inclusive");
+        assert!(exceeded);
+        assert_eq!(bytes.as_slice(), b"1234");
     }
 }

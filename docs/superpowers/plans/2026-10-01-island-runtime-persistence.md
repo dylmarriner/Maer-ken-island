@@ -186,6 +186,7 @@ worth the records.
 - Interventions are applied through the upstream executor's logic adapted to `IslandWorldState`; actions with no island meaning (planetary climate edits, orbit changes) return `CommandError::NotSupportedOnIsland` and are listed in `UPSTREAM.md`.
 
 - [x] **Step 1:** Write a log with interventions and controls at repeated ticks and assert stable `(tick, sequence)` order.
+- [x] Follow-up: public in-memory logs allocate max+1 across reordered same-tick entries and reject sequence exhaustion; the live single-writer `IslandLife` path uses a runtime-only per-tick index so command recording does not rescan the append-only history. The index is absent from snapshots and the canonical digest; see PR #123 and its exact-head acceptance gate.
 - [x] **Step 2:** Run uninterrupted execution and replay from the same seed and log; assert identical final `state_hash`.
 - [x] **Step 3:** Save halfway, load, continue replay; assert the same final hash.
 - [x] **Step 4:** Run `cargo test -p mk_engine --test island_replay`; PASS. The FAIL half was not done as written, as in Tasks 3 and 3b: the tests and the module were written together.

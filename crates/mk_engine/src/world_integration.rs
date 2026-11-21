@@ -192,11 +192,20 @@ pub(crate) fn spin_up_climate(
 pub static PLANETARY_WORLD_CONSTRUCTIONS: std::sync::atomic::AtomicUsize =
     std::sync::atomic::AtomicUsize::new(0);
 
+/// Current persisted schema for the inherited planetary `WorldState`.
+/// This metadata is deliberately outside the subsystem hash chain.
+pub const WORLD_STATE_SNAPSHOT_SCHEMA_VERSION: u32 = 1;
+
 /// Complete world state for Phase 5
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorldState {
     /// Current tick
     pub tick: Tick,
+
+    /// Persisted state schema version; older snapshots deserialize as version 0.
+    /// This is persistence metadata, not simulation state or a replay-hash input.
+    #[serde(default)]
+    pub snapshot_schema_version: u32,
 
     /// Canon locked parameters
     pub canon: Arc<CanonLocked>,
@@ -618,6 +627,7 @@ impl WorldState {
         );
         let mut world = Self {
             tick,
+            snapshot_schema_version: WORLD_STATE_SNAPSHOT_SCHEMA_VERSION,
             canon: Arc::clone(&canon),
             canon_derived: Arc::clone(&canon_derived),
             hash_chain,
@@ -2467,7 +2477,65 @@ impl WorldState {
     /// The payload is JSON, the same encoding `io::snapshot` persists:
     /// `WorldState` carries `serde_json::Value` fields (human profiles),
     /// which bincode can serialize but not deserialize.
+    /// Validate persisted-state compatibility before a snapshot is exposed to replay.
+    ///
+    /// Schema 0 predates the geographic-range invariant. It may be upgraded only
+    /// when the saved physical state already satisfies current invariants; invalid
+    /// legacy ranges cannot be reconstructed losslessly and are rejected rather
+    /// than silently clamped.
+    pub(crate) fn validate_snapshot_schema(&mut self) -> Result<(), String> {
+        match self.snapshot_schema_version {
+            0 => {
+                let species = &self.biosphere_state.species;
+                let has_speciation_history = !self.deep_time.last_speciation_times.is_empty();
+                let evolved = self.deep_time.step_index > 0
+                    || self.deep_time.current_time_years > 0.0
+                    || has_speciation_history;
+                let all_ranges_lost = !species.is_empty()
+                    && species.iter().all(|entry| {
+                        entry.geographic_range.is_finite() && entry.geographic_range >= 1.0
+                    });
+                // The old drift floor ran before speciation. A newly-created child
+                // could therefore retain a fractional range while its evolved
+                // parents had already been floored to 1.0. Schema 0 has no
+                // parent-child provenance, so this mixed state cannot be migrated
+                // losslessly when speciation history is present.
+                let ambiguous_post_speciation_ranges = has_speciation_history
+                    && species.iter().any(|entry| {
+                        entry.geographic_range.is_finite()
+                            && entry.geographic_range > 0.0
+                            && entry.geographic_range < 1.0
+                    });
+                if evolved && (all_ranges_lost || ambiguous_post_speciation_ranges) {
+                    return Err(concat!(
+                        "legacy snapshot schema 0 is incompatible: the previous geographic-range ",
+                        "drift floor erased fractional ranges; lossless migration is impossible"
+                    )
+                    .to_string());
+                }
+                self.deep_time.validate(species).map_err(|error| {
+                    format!("legacy snapshot schema 0 is incompatible: {error}")
+                })?;
+                self.snapshot_schema_version = WORLD_STATE_SNAPSHOT_SCHEMA_VERSION;
+                Ok(())
+            }
+            WORLD_STATE_SNAPSHOT_SCHEMA_VERSION => {
+                self.deep_time.validate(&self.biosphere_state.species)
+            }
+            version => Err(format!(
+                "snapshot schema version {version} is not supported; current version is {}",
+                WORLD_STATE_SNAPSHOT_SCHEMA_VERSION
+            )),
+        }
+    }
+
     pub fn create_snapshot(&self) -> Result<WorldSnapshot, SnapshotError> {
+        if self.snapshot_schema_version != WORLD_STATE_SNAPSHOT_SCHEMA_VERSION {
+            return Err(SnapshotError::SerializationError(format!(
+                "world state schema version {} is not current; expected {}",
+                self.snapshot_schema_version, WORLD_STATE_SNAPSHOT_SCHEMA_VERSION
+            )));
+        }
         let serialized = serde_json::to_vec(self)
             .map_err(|e| SnapshotError::SerializationError(e.to_string()))?;
 
@@ -2490,9 +2558,25 @@ impl WorldState {
         }
         let mut loaded: WorldState = serde_json::from_slice(&snapshot.data)
             .map_err(|e| SnapshotError::DeserializationError(e.to_string()))?;
+        if loaded.tick != snapshot.tick {
+            return Err(SnapshotError::DeserializationError(format!(
+                "snapshot envelope tick {} does not match persisted world tick {}",
+                snapshot.tick, loaded.tick
+            )));
+        }
+        let stored_canon_digest = loaded.canon_derived.canon_digest;
         mk_core::canon::validator::validate_canon(&loaded.canon)
             .map_err(|e| SnapshotError::DeserializationError(format!("invalid canon: {e}")))?;
-        loaded.canon_derived = Arc::new(mk_core::canon::CanonDerived::from(&loaded.canon));
+        loaded
+            .validate_snapshot_schema()
+            .map_err(SnapshotError::DeserializationError)?;
+        let recomputed_canon_derived = mk_core::canon::CanonDerived::from(&loaded.canon);
+        if stored_canon_digest != recomputed_canon_derived.canon_digest {
+            return Err(SnapshotError::DeserializationError(
+                "snapshot canon digest does not match persisted canon".to_string(),
+            ));
+        }
+        loaded.canon_derived = Arc::new(recomputed_canon_derived);
         Ok(loaded)
     }
 
@@ -2517,6 +2601,9 @@ impl WorldState {
         self.biosphere_state
             .validate()
             .map_err(ValidationError::BiosphereError)?;
+        self.deep_time
+            .validate(&self.biosphere_state.species)
+            .map_err(ValidationError::DeepTimeError)?;
 
         Ok(())
     }
@@ -2593,6 +2680,8 @@ pub enum ValidationError {
     HashChainBreak,
     #[error("biosphere error: {0}")]
     BiosphereError(String),
+    #[error("deep-time error: {0}")]
+    DeepTimeError(String),
     #[error("NaN value in field: {0}")]
     NaNValue(String),
     #[error("infinite value in field: {0}")]
@@ -2785,6 +2874,216 @@ mod snapshot_tests {
             WorldState::from_snapshot(&snapshot),
             Err(SnapshotError::DigestMismatch)
         ));
+    }
+
+    #[test]
+    fn snapshot_with_mismatched_envelope_tick_is_rejected() {
+        let world = WorldState::new(Arc::new(CanonLocked::default()), [18u8; 32]);
+        let mut snapshot = world.create_snapshot().expect("snapshot is created");
+        snapshot.tick += 1;
+
+        let error = WorldState::from_snapshot(&snapshot).expect_err("mismatched envelope tick");
+        assert!(
+            matches!(error, SnapshotError::DeserializationError(ref message)
+                if message.contains("snapshot envelope tick 1 does not match persisted world tick 0")),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn snapshot_with_mismatched_canon_digest_is_rejected() {
+        let world = WorldState::new(Arc::new(CanonLocked::default()), [17u8; 32]);
+        let current = world.create_snapshot().expect("snapshot is created");
+        let mut value: serde_json::Value =
+            serde_json::from_slice(&current.data).expect("snapshot JSON");
+        value["canon_derived"]["canon_digest"] =
+            serde_json::to_value([0u8; 32]).expect("zero canon digest");
+        let data = serde_json::to_vec(&value).expect("snapshot JSON");
+        let digest = blake3::hash(&data).into();
+        let snapshot = WorldSnapshot {
+            tick: current.tick,
+            data,
+            digest,
+        };
+
+        let error = WorldState::from_snapshot(&snapshot).expect_err("mismatched canon digest");
+        assert!(
+            matches!(error, SnapshotError::DeserializationError(ref message)
+                if message.contains("snapshot canon digest does not match persisted canon")),
+            "unexpected error: {error}"
+        );
+    }
+
+    fn legacy_snapshot(
+        world: &WorldState,
+        schema_version: Option<u64>,
+        invalid_geographic_range: bool,
+    ) -> WorldSnapshot {
+        let current = world.create_snapshot().expect("current snapshot");
+        let mut value: serde_json::Value =
+            serde_json::from_slice(&current.data).expect("snapshot JSON");
+        value
+            .as_object_mut()
+            .expect("world state object")
+            .remove("snapshot_schema_version");
+        if let Some(version) = schema_version {
+            value["snapshot_schema_version"] = serde_json::json!(version);
+        }
+        if invalid_geographic_range {
+            let species = value["biosphere_state"]["species"]
+                .as_array_mut()
+                .expect("persisted founding species");
+            let species_43 = species
+                .iter_mut()
+                .find(|species| species["species_id"].as_u64() == Some(43))
+                .expect("species 43");
+            species_43["geographic_range"] = serde_json::json!(1.0175);
+        }
+        let data = serde_json::to_vec(&value).expect("legacy snapshot JSON");
+        let digest = blake3::hash(&data).into();
+        WorldSnapshot {
+            tick: current.tick,
+            data,
+            digest,
+        }
+    }
+
+    #[test]
+    fn valid_legacy_snapshot_upgrades_schema_without_changing_replay_state() {
+        let world = WorldState::new(Arc::new(CanonLocked::default()), [13u8; 32]);
+        let snapshot = legacy_snapshot(&world, None, false);
+        let mut restored = WorldState::from_snapshot(&snapshot).expect("valid legacy snapshot");
+        assert_eq!(
+            restored.snapshot_schema_version,
+            WORLD_STATE_SNAPSHOT_SCHEMA_VERSION
+        );
+        assert_eq!(restored.hash_chain.current, world.hash_chain.current);
+
+        let mut original = world;
+        original.step_world(1).expect("original step");
+        restored.step_world(1).expect("restored step");
+        assert_eq!(restored.hash_chain.current, original.hash_chain.current);
+    }
+
+    fn legacy_mixed_speciation_snapshot(world: &WorldState) -> WorldSnapshot {
+        let current = world.create_snapshot().expect("current snapshot");
+        let mut value: serde_json::Value =
+            serde_json::from_slice(&current.data).expect("snapshot JSON");
+        value
+            .as_object_mut()
+            .expect("world state object")
+            .remove("snapshot_schema_version");
+        let species = value["biosphere_state"]["species"]
+            .as_array_mut()
+            .expect("persisted founding species");
+        for entry in species.iter_mut() {
+            entry["geographic_range"] = serde_json::json!(1.0);
+        }
+        let parent = species
+            .iter()
+            .find(|entry| entry["species_id"].as_u64() == Some(43))
+            .expect("speciation parent")
+            .clone();
+        let child_id = species
+            .iter()
+            .filter_map(|entry| entry["species_id"].as_u64())
+            .max()
+            .expect("founding species id")
+            + 1;
+        let mut child = parent;
+        child["species_id"] = serde_json::json!(child_id);
+        child["species_name"] = serde_json::json!("Legacy speciation child");
+        child["geographic_range"] = serde_json::json!(0.5);
+        species.push(child);
+        value["deep_time"]["step_index"] = serde_json::json!(1);
+        value["deep_time"]["current_time_years"] = serde_json::json!(1.0);
+        value["deep_time"]["last_speciation_times"] = serde_json::json!([[43, 0.0]]);
+        let data = serde_json::to_vec(&value).expect("mixed legacy snapshot JSON");
+        let digest = blake3::hash(&data).into();
+        WorldSnapshot {
+            tick: current.tick,
+            data,
+            digest,
+        }
+    }
+
+    #[test]
+    fn evolved_legacy_snapshot_with_mixed_speciation_ranges_is_rejected() {
+        let world = WorldState::new(Arc::new(CanonLocked::default()), [19u8; 32]);
+        let snapshot = legacy_mixed_speciation_snapshot(&world);
+        let error =
+            WorldState::from_snapshot(&snapshot).expect_err("ambiguous mixed legacy ranges");
+        assert!(
+            error
+                .to_string()
+                .contains("legacy snapshot schema 0 is incompatible"),
+            "unexpected error: {error}"
+        );
+        assert!(error
+            .to_string()
+            .contains("lossless migration is impossible"));
+    }
+
+    #[test]
+    fn legacy_snapshot_with_invalid_geographic_range_is_rejected_at_load() {
+        let world = WorldState::new(Arc::new(CanonLocked::default()), [14u8; 32]);
+        let snapshot = legacy_snapshot(&world, None, true);
+        let error = WorldState::from_snapshot(&snapshot).expect_err("invalid legacy range");
+        assert!(
+            error
+                .to_string()
+                .contains("legacy snapshot schema 0 is incompatible"),
+            "unexpected error: {error}"
+        );
+        assert!(error.to_string().contains("Species 43"));
+    }
+
+    #[test]
+    fn evolved_legacy_snapshot_with_erased_fractional_ranges_is_rejected() {
+        let world = WorldState::new(Arc::new(CanonLocked::default()), [16u8; 32]);
+        let current = world.create_snapshot().expect("current snapshot");
+        let mut value: serde_json::Value =
+            serde_json::from_slice(&current.data).expect("snapshot JSON");
+        value
+            .as_object_mut()
+            .expect("world state object")
+            .remove("snapshot_schema_version");
+        value["deep_time"]["step_index"] = serde_json::json!(1);
+        for species in value["biosphere_state"]["species"]
+            .as_array_mut()
+            .expect("persisted founding species")
+        {
+            species["geographic_range"] = serde_json::json!(1.0);
+        }
+        let data = serde_json::to_vec(&value).expect("legacy snapshot JSON");
+        let digest = blake3::hash(&data).into();
+        let snapshot = WorldSnapshot {
+            tick: current.tick,
+            data,
+            digest,
+        };
+
+        let error = WorldState::from_snapshot(&snapshot).expect_err("lossy legacy state");
+        assert!(
+            error
+                .to_string()
+                .contains("previous geographic-range drift floor erased fractional ranges"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn future_snapshot_schema_is_rejected_before_state_is_exposed() {
+        let world = WorldState::new(Arc::new(CanonLocked::default()), [15u8; 32]);
+        let snapshot = legacy_snapshot(
+            &world,
+            Some(WORLD_STATE_SNAPSHOT_SCHEMA_VERSION as u64 + 1),
+            false,
+        );
+        let error = WorldState::from_snapshot(&snapshot).expect_err("future schema");
+        assert!(error
+            .to_string()
+            .contains("snapshot schema version 2 is not supported"));
     }
 }
 

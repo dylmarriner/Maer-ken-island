@@ -3,11 +3,53 @@
 //! agree with the formulas they quote.
 
 use mk_engine::validation::{
-    default_reference_dir, Confidence, ReferenceDomain, ReferenceLibrary, ReferencePack,
+    default_reference_dir, Confidence, ReferenceDomain, ReferenceItem, ReferenceLibrary,
+    ReferencePack, ReferenceValue,
 };
 
 fn library() -> ReferenceLibrary {
     ReferenceLibrary::load(&default_reference_dir()).expect("reference packs load")
+}
+
+fn range_item(key: &str, min: f64, max: f64, typical: Option<f64>) -> ReferenceItem {
+    ReferenceItem {
+        key: key.into(),
+        description: "Synthetic range used to test midpoint arithmetic".into(),
+        unit: "unit".into(),
+        source: "test".into(),
+        confidence: Confidence::High,
+        value: ReferenceValue::Range { min, max, typical },
+        note: None,
+    }
+}
+
+#[test]
+fn range_midpoint_stays_finite_for_valid_extreme_bounds() {
+    let positive_min = f64::MAX * 0.75;
+    let positive = range_item("positive", positive_min, f64::MAX, None);
+    let positive_midpoint = positive.central().expect("range has a central value");
+    assert!(positive_midpoint.is_finite());
+    assert!(positive_midpoint >= positive_min && positive_midpoint <= f64::MAX);
+    assert_eq!(
+        positive_midpoint,
+        positive_min + (f64::MAX - positive_min) * 0.5,
+    );
+
+    let negative_max = -f64::MAX * 0.75;
+    let negative = range_item("negative", -f64::MAX, negative_max, None);
+    let negative_midpoint = negative.central().expect("range has a central value");
+    assert!(negative_midpoint.is_finite());
+    assert!(negative_midpoint >= -f64::MAX && negative_midpoint <= negative_max);
+
+    let spanning_zero = range_item("spanning_zero", -f64::MAX, f64::MAX, None);
+    assert_eq!(spanning_zero.central(), Some(0.0));
+
+    let smallest_subnormal = f64::from_bits(1);
+    let subnormal = range_item("subnormal", smallest_subnormal, smallest_subnormal, None);
+    assert_eq!(subnormal.central(), Some(smallest_subnormal));
+
+    let explicit = range_item("explicit", positive_min, f64::MAX, Some(f64::MAX * 0.9));
+    assert_eq!(explicit.central(), Some(f64::MAX * 0.9));
 }
 
 /// Items each domain must provide (`docs/superpowers/plans/2026-10-02-island-phase0c-canon-and-realism.md`, Task 3).
@@ -395,5 +437,77 @@ fn constants_taken_from_the_packs_still_agree_with_them() {
             (lo..=hi).contains(&value),
             "{what}: the model uses {value}, outside the pack's {lo}-{hi}"
         );
+    }
+}
+
+#[test]
+fn range_midpoint_preserves_rounding_for_adjacent_subnormals() {
+    let one_ulp = f64::from_bits(1);
+    let two_ulps = f64::from_bits(2);
+    let three_ulps = f64::from_bits(3);
+
+    // 1.5 ulps rounds to the even 2-ulp representation.
+    let positive = range_item("positive_subnormal", one_ulp, two_ulps, None);
+    assert_eq!(positive.central(), Some(two_ulps));
+
+    // -2.5 ulps rounds to the even -2-ulp representation.
+    let negative = range_item("negative_subnormal", -three_ulps, -two_ulps, None);
+    assert_eq!(negative.central(), Some(-two_ulps));
+
+    // The exact midpoint is half an ulp, which rounds to positive zero.
+    let spanning_zero = range_item("subnormal_spanning_zero", -one_ulp, two_ulps, None);
+    assert_eq!(spanning_zero.central(), Some(0.0));
+}
+
+#[test]
+fn range_midpoint_avoids_double_rounding_for_wide_exponent_gaps() {
+    // min = 3 * 2^969 and max = 2^1023. Halving the rounded difference
+    // loses one ulp; the exact midpoint rounds to the next representable value.
+    let min = f64::from_bits(0x7c98_0000_0000_0000);
+    let max = f64::from_bits(0x7fe0_0000_0000_0000);
+    let expected = f64::from_bits(0x7fd0_0000_0000_0001);
+
+    let positive = range_item("positive_wide_gap", min, max, None);
+    assert_eq!(positive.central(), Some(expected));
+
+    let negative = range_item("negative_wide_gap", -max, -min, None);
+    assert_eq!(negative.central(), Some(-expected));
+}
+
+#[test]
+fn range_midpoint_rounds_small_subnormal_pairs_to_even() {
+    // Exhaustively cover a small subnormal neighbourhood. Subnormal bit
+    // patterns are integer multiples of the smallest representable value, so
+    // the exact midpoint rounds to round-to-nearest, ties-to-even on the sum.
+    for lower in 0..=64_u64 {
+        for upper in lower..=64_u64 {
+            let sum = lower + upper;
+            let floor = sum / 2;
+            let rounded = floor + if sum % 2 == 1 && floor % 2 == 1 { 1 } else { 0 };
+
+            let positive = range_item(
+                "positive_subnormal_pair",
+                f64::from_bits(lower),
+                f64::from_bits(upper),
+                None,
+            );
+            assert_eq!(
+                positive.central().unwrap().to_bits(),
+                rounded,
+                "positive subnormal endpoints {lower} and {upper}",
+            );
+
+            let negative = range_item(
+                "negative_subnormal_pair",
+                -f64::from_bits(upper),
+                -f64::from_bits(lower),
+                None,
+            );
+            assert_eq!(
+                negative.central().unwrap().to_bits(),
+                (1_u64 << 63) | rounded,
+                "negative subnormal endpoints -{upper} and -{lower}",
+            );
+        }
     }
 }

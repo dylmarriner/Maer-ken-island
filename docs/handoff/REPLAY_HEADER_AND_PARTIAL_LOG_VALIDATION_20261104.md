@@ -1,8 +1,8 @@
 # Replay header and complete-log validation
 
-**Date:** 2026-11-04  
-**Repository:** `dylmarriner/Maer-ken-island`  
-**PR:** #75, stacked on #74 → #73  
+**Date:** 2026-11-04
+**Repository:** `dylmarriner/Maer-ken-island`
+**PR:** #75, stacked on #74 → #73
 **Branch:** `fix/replay-inmemory-digest-validation-20261104`
 
 ## Change
