@@ -614,7 +614,7 @@ fn replay_file_security_refuses_symlinked_log_source() {
     let dir = tempfile::tempdir().unwrap();
     let real = dir.path().join("real.json");
     let link = dir.path().join("redirect.json");
-    IslandReplayLog::new("scenario".into()).save(&real).unwrap();
+    IslandReplayLog::new("a".repeat(64)).save(&real).unwrap();
     symlink(&real, &link).unwrap();
 
     assert!(
@@ -632,7 +632,7 @@ fn replay_file_security_saves_owner_only_permissions() {
 
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("private.json");
-    IslandReplayLog::new("scenario".into()).save(&path).unwrap();
+    IslandReplayLog::new("a".repeat(64)).save(&path).unwrap();
     let permissions = std::fs::metadata(&path).unwrap().permissions().mode();
     assert_eq!(permissions & 0o077, 0, "saved replay must be owner-only");
     assert_eq!(permissions & 0o600, 0o600, "owner may read and write");
@@ -673,4 +673,43 @@ fn a_shuffled_log_still_reproduces_the_run() {
         hex(live.state_digest()),
         "a reordered log reproduced a different island"
     );
+}
+
+#[test]
+fn replay_boundary_save_rejects_unsupported_version_without_clobbering() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("existing-replay.json");
+    let original = b"existing-file-must-remain";
+    std::fs::write(&path, original).unwrap();
+    let log = IslandReplayLog::from_entries(REPLAY_LOG_VERSION + 1, "a".repeat(64), vec![]);
+    assert!(matches!(
+        log.save(&path),
+        Err(IslandReplayError::Version(_))
+    ));
+    assert_eq!(std::fs::read(&path).unwrap(), original);
+}
+
+#[test]
+fn replay_boundary_save_rejects_noncanonical_digest_without_clobbering() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("existing-replay.json");
+    let original = b"existing-file-must-remain";
+    std::fs::write(&path, original).unwrap();
+    for digest in ["short".to_string(), "A".repeat(64), "g".repeat(64)] {
+        let log = IslandReplayLog::new(digest);
+        assert!(
+            log.save(&path).is_err(),
+            "a malformed digest must fail before saving"
+        );
+        assert_eq!(std::fs::read(&path).unwrap(), original);
+    }
+}
+
+#[test]
+fn replay_boundary_load_rejects_noncanonical_digest() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("invalid-digest.json");
+    let log = IslandReplayLog::new("A".repeat(64));
+    std::fs::write(&path, serde_json::to_vec(&log).unwrap()).unwrap();
+    assert!(IslandReplayLog::load(&path).is_err());
 }

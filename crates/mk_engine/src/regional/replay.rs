@@ -135,6 +135,20 @@ impl std::fmt::Display for ReplaySequenceExhausted {
 }
 impl std::error::Error for ReplaySequenceExhausted {}
 
+/// Replay scenario digests are 32 bytes expressed as canonical lowercase hex.
+/// Refuse malformed metadata before publishing a file or accepting imported state.
+fn validate_scenario_digest(digest: &str) -> Result<(), IslandReplayError> {
+    if digest.len() == 64
+        && digest
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        Ok(())
+    } else {
+        Err(IslandReplayError::InvalidScenarioDigest)
+    }
+}
+
 impl IslandReplayLog {
     /// An empty log for a scenario.
     pub fn new(scenario_digest: String) -> Self {
@@ -278,12 +292,19 @@ impl IslandReplayLog {
         if log.version != REPLAY_LOG_VERSION {
             return Err(IslandReplayError::Version(log.version));
         }
+        validate_scenario_digest(&log.scenario_digest)?;
         log.rebuild_sequence_index();
         Ok(log)
     }
 
     /// Write a log atomically, refusing output larger than the offline budget.
     pub fn save(&self, path: &Path) -> Result<(), IslandReplayError> {
+        // Validate metadata before creating a temporary file or replacing an
+        // existing replay. Import and export must obey the same boundary.
+        if self.version != REPLAY_LOG_VERSION {
+            return Err(IslandReplayError::Version(self.version));
+        }
+        validate_scenario_digest(&self.scenario_digest)?;
         let (temp, mut file) = create_replay_temp(path)
             .map_err(|e| IslandReplayError::Io(path.display().to_string(), e))?;
         let mut exceeded = false;
@@ -327,6 +348,8 @@ pub enum IslandReplayError {
     NotALog(String, String),
     /// A log written by a format this build does not know.
     Version(u32),
+    /// The scenario fingerprint must be 64 canonical lowercase hexadecimal characters.
+    InvalidScenarioDigest,
     /// A replay file exceeds the bounded offline import/export size.
     TooLarge {
         path: String,
@@ -363,6 +386,12 @@ impl std::fmt::Display for IslandReplayError {
                 f,
                 "that log is format {v}; this build reads {REPLAY_LOG_VERSION}"
             ),
+            Self::InvalidScenarioDigest => {
+                write!(
+                    f,
+                    "replay scenario digest must be 64 lowercase hexadecimal characters"
+                )
+            }
             Self::TooLarge { path, limit_bytes } => {
                 write!(f, "{path} exceeds the {limit_bytes}-byte replay log limit")
             }

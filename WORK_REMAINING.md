@@ -1,3 +1,7 @@
+## Replay PR #74 reconciliation — 18 November 2026
+
+- The 65 unpublished replay commits have been pushed and preserved as a clean backup-drive worktree. An isolated PR #74 reconciliation retains modern sparse sequence/indexing, file-size and no-follow protections, and adds replay import/save version and canonical scenario-digest preflights. Three new tests failed before the fix and passed afterward; the two existing file-security tests also passed. See `docs/handoff/REPLAY_65_COMMIT_RECONCILIATION_20261118.md`. Exact-head GitHub CI remains required before merge.
+
 ## Replay security integration — 15 November 2026
 
 - PR #73 was reconciled against `main` without restoring the older incompatible replay parser or contiguous sequence rules. The existing 64 MiB bound, duplicate-position checks and sparse sequence semantics are retained. Unix replay load now rejects symlinks and verifies the opened descriptor; saved replay files are created owner-only (0600). The two new regression tests failed before the fix and passed after it. All 21 `island_replay` tests and 3 CI-profile script tests pass locally on AMD. See `docs/handoff/REPLAY_SECURITY_RECONCILIATION_20261115.md`; merge only after exact-head CI passes.
