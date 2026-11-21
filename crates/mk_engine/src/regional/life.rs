@@ -5685,6 +5685,15 @@ mod tests {
         if quickest.method != timber::HaulMethod::OnFoot {
             let mut elsewhere = quickest.clone();
             elsewhere.log_id = u64::MAX;
+            // Occupy the vehicle without falsely claiming the log under test.
+            // The previous fixture reused the selected log's load/drive manifest,
+            // so the new ownership guard correctly refused every second plan.
+            elsewhere.tasks = std::collections::VecDeque::from(vec![timber::HaulTask {
+                action: timber::HaulAction::Walk,
+                duration_s: 60.0,
+                met: 1.0,
+                ends_at_m: at,
+            }]);
             life.hauling.insert("Elsewhere".into(), elsewhere);
             let next = life
                 .plan_haul("Gem-D", at, &body, &BTreeMap::new())
