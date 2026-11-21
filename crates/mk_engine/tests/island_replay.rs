@@ -544,7 +544,7 @@ fn default_budget_covers_canonical_island_year_plus_ten_percent() {
     let period_s = canon["orbital_period_s"].as_f64().unwrap();
     let cadence_s = scenario["cadences"]["human_seconds"].as_u64().unwrap() as f64;
     let year_ticks = (period_s / cadence_s).ceil() as u64;
-    let margin_ticks = (year_ticks + 9) / 10;
+    let margin_ticks = year_ticks.div_ceil(10);
     assert!(
         MAX_REPLAY_TICKS >= year_ticks + margin_ticks,
         "default replay budget {} cannot cover {} canonical ticks plus {} margin",
