@@ -970,7 +970,7 @@ impl MaterialLedger {
         ledger: &mut Ledger,
     ) -> u64 {
         assert!(
-            log.has_valid_physical_state(),
+            log.has_valid_unallocated_physical_state(),
             "cannot receive a felled log with invalid physical state"
         );
         Self::validate_cell_area(cell_area_m2)

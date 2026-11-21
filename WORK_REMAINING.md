@@ -10,6 +10,16 @@
 
 - PR #73 was reconciled against `main` without restoring the older incompatible replay parser or contiguous sequence rules. The existing 64 MiB bound, duplicate-position checks and sparse sequence semantics are retained. Unix replay load now rejects symlinks and verifies the opened descriptor; saved replay files are created owner-only (0600). The two new regression tests failed before the fix and passed after it. All 21 `island_replay` tests and 3 CI-profile script tests pass locally on AMD. See `docs/handoff/REPLAY_SECURITY_RECONCILIATION_20261115.md`; merge only after exact-head CI passes.
 
+## D40 exact-head CI correction — 15 November 2026
+
+- PR #136 exact-head workflow #43678835386 passed all listed CI jobs except fast Rust tests (905 passed, 2 failed). The two failures were test fixtures that used an unregistered zero-ID log in a cross-cut preview and expected an outdated panic message; physical validation was not relaxed.
+- Both fixed tests passed locally on AMD. See `docs/handoff/D40_EXACT_HEAD_FAST_TEST_CORRECTION_20261115.md`. The revised PR head still requires its own complete CI pass before merge.
+
+## Integration verification status — 15 November 2026
+
+- PR #134 (material conservation) and PR #135 (atomic material ingestion) have merged into `main`; PR #137 patched bundled SQLite. Earlier draft/pending statements below are historical records, not the current merge state.
+- PR #136 two-person saw and Ute cross-cut was integrated against those changes on AMD. The `receive_felled_log` pre-allocation identity mismatch was reproduced and fixed without relaxing persisted log ID validation. Local material-flow suite: 70/70 passed; full saw-to-Ute snapshot/restore acceptance: passed. See `docs/handoff/D40_PREALLOCATION_LOG_VALIDATION_20261115.md`. Re-run full CI against the exact updated PR head before merging.
+
 ## Latest PR #134 engineering and verification status — 9 November 2026
 
 ## Latest felled-log soil-depth underflow correction — 9 November 2026
@@ -20,6 +30,30 @@
 - Production commit: `0acf469543f519cf8c2f616eda5a3f8341bac8f8`; test commit: `ec352e3e84cef47f522429fa6cb013a680743896`; handoff: `398ee70ac1b4b1c3201e5d98122da3aa2cc3f6b3`.
 - Fresh exact-head CI is required. The prior workflow did not complete its required tests; no local Cargo pass is claimed while custom OpenCommander is rate-limited.
 - Next: verify the complete PR #135 matrix, then reconcile #134/#135 before merge; continue D40 saw cross-cut/ute transport and route modelling.
+
+## Latest haul-planning vehicle-state validation — 9 November 2026
+
+- PR #136 now rejects malformed public `RoadVehicle` and `TrackedMachine` inputs before constructing a haul plan: zero IDs, negative/non-finite fuel, and non-positive/non-finite burn rates fail with typed `LabourError::InvalidVehicleState`. Zero fuel remains valid but cannot power a haul.
+- Regression `haul_planning_rejects_malformed_road_and_tracked_vehicle_state` covers all invalid categories for both vehicle classes.
+- Production commit: `8947bfe8bd5c686670a161b5fba86120a32ee215`; tests: `b50d4d4278e56edebf08bcf2b2d630efd65a7d12`; handoff: `docs/handoff/HAUL_PLANNING_VEHICLE_STATE_VALIDATION_20261109.md`.
+- No fuel coefficients, routes, snapshots, replay hashes, RNG, material ledger or reference data changed.
+- First exact-head workflow [#42576631488](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42576631488) failed only the rustfmt gate on multiline test-fixture formatting; Clippy and fast tests were skipped, and downstream desktop/backend/reference jobs were cancelled after the branch advanced. Applied exact rustfmt output in `0442a7201006fd3918b90d5bce62f197bc69e400`.
+- Fresh corrected-head workflow [#42577138058](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42577138058) is queued; do not claim the new vehicle guard verified until its required jobs pass.
+
+## Latest D40 full Ute acceptance verification — 9 November 2026
+
+- Workflow [#42569859195](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42569859195) completed successfully for its required jobs: Rust formatting, Clippy, fast tests, week/year reference packs, desktop build/tests/render/input/frame-cost acceptance, installed backend build/smoke, web dashboard, computer service, repository scripts and dependency audit. Nightly slow tests were skipped by design.
+- This verifies the source-equivalent D40 test head `00a76298ad05744adb5002d736e79b36f86d6f42`; the later commits in that PR at the time were handoff-only. It does not verify the new vehicle-state guard added after this workflow.
+- D40's full two-person saw → snapshot/restore → Ute load/drive/unload acceptance is green. Terrain-aware routes and persistent vehicle positions remain open.
+
+## Latest D40 acceptance-test correction — 9 November 2026
+
+- PR [#136](https://github.com/dylmarriner/Maer-ken-island/pull/136) adds the full 20 m log → two-founder saw cross-cut → snapshot/restore → Ute load/drive/unload acceptance path, with exact length, dry-mass, carbon and water conservation, founder labour energy, reserved piece IDs, stored-piece locations and fuel assertions.
+- Exact-head workflow #42564181241 passed formatting/Clippy, then reported 897 passed / 1 failed. The only failure was an arbitrary 100 × 60-second test cap shorter than the persisted pack-derived saw duration.
+- The test now advances the restored crew cut by its exact remaining duration and advances each Ute task to its own recorded boundary, bounded by the persisted task count. This changes the test harness only; no production simulation duration, cadence, RNG, material calculation, snapshot or replay format changed.
+- Source/test correction: `0b46fbda85ab6621585d5d6866ea59a625c46213`; exact rustfmt correction: `2255b67bc2e6cb5161ca7a395be95ea0f4f4d2cd`.
+- Fresh workflow [#42569859195](https://github.com/dylmarriner/Maer-ken-island/actions/runs/42569859195), on source-equivalent head `00a76298ad05744adb5002d736e79b36f86d6f42), passed formatting, Clippy, week/year reference packs, desktop build/tests, installed backend, dashboard, computer service, repository scripts and dependency audit. Fast Rust tests and desktop render/interaction/performance acceptance were still running at last inspection; do not mark D40 complete.
+- Handoff: `docs/handoff/D40_FULL_UTE_CROSSCUT_RESTORE_ACCEPTANCE_20261109.md`. PR #136 remains draft. Next: finish workflow #42569859195, fix any real failures without weakening assertions, then continue terrain-aware Ute route modelling and D31's sourced soil-nutrient model.
 
 ## Latest exact-head formatting correction — 9 November 2026
 
@@ -214,8 +248,10 @@ the log's last water is booked to the air at that moment rather than when the wo
   tree of their own takes the other end of the shed's saw at a tree one other founder fells,
   and two at one tree fell it at the pack's two-person crosscut time (`labour/productivity.json`, 8-25 min for
   30 cm; FAO Forest Harvesting Case Study 18 measured two-cutter crosscut crews at 1.11-1.99
-  m³/h). Left: cross-cutting a log for the ute with the saw rather than the axe.
-  - 2026-11-08: public haul planning now rejects malformed source logs with a typed error before split materialisation; the two-person saw workflow for log cross-cutting remains open.
+  m³/h). Already-felled log cross-cutting for Ute transport is implemented 2026-11-09; left: terrain-aware Ute routes and persistent vehicle positions.
+  - 2026-11-08: public haul planning rejects malformed source logs with a typed error before split materialisation.
+  - 2026-11-09: the Ute plan can use the shed's two-person crosscut saw when a second gathering founder is available; one persisted crew task owns the material split, both founders' bodies are charged separately, and a partner who leaves work falls back to the axe. Regression: regional::life::tests::two_founders_cross_cut_a_ute_log_with_the_saw_and_both_pay_energy.
+  - 2026-11-09: restore now reconstructs and validates pending cross-cut ID ranges before accepting a snapshot, rejecting missing/mismatched source logs instead of allowing a later task-completion panic. Regressions cover missing/mismatched sources, duplicate assistant claims, and an assistant who owns another active haul. `persisted_saw_crew_resumes_after_snapshot_restore_and_conserves_material` advances a crew cut halfway, snapshots/restores, finishes the remaining work, and checks exact length, dry-mass, carbon and water totals plus single reservation of the piece-ID range. Fresh exact-head CI is required.
 - **Excavator rigging (done 2026-10-23, D40):** the CAT 330 has no grapple, so its operator
   slings each log by hand before the pick-up and frees it after the set-down, at Borz & Mititelu
   2022's measured hook and unhook times for hand-rigged winch logs (13.59 s and 9.30 s, 278 logs,
@@ -900,3 +936,14 @@ PR #129 now also preflights resulting stock totals, not only individual finite/n
 - Test commit: `e9aeb11d3d168aa54ee8751245c4e06289ebec1d`; handoff update: `497b6a04d910e1b7e434466f28c0089d9b5e0349`.
 - PR #135 remains draft. Run exact-head formatting, Clippy, fast tests, desktop/backend and week/year reference-pack acceptance before review/merge.
 - The remaining no-Result ingestion paths are tracked in PR #135: `receive_felled_wood`, `receive_felled_log`, `capture_roof_water` and `season_stored_logs`.
+
+## D40 two-person Ute cross-cut — 9 November 2026
+
+- [x] The Ute haul plan can select the two-person crosscut saw when a second gathering founder is available and the crew cut is faster than the axe plan.
+- [x] Persist one primary crew task; charge the partner's own MET/energy separately without duplicating material mutation.
+- [x] Fall back to the axe if the partner leaves gathering/outdoors work; regression now removes the partner from the work site and verifies the persisted task becomes a solo CrossCut.
+- [x] Reserve each selected saw assistant for one crew in the current work tick; a later primary cannot claim a founder already assigned to an earlier crew.
+- [x] Regression covers deterministic partner selection, Ute selection, ID reservation, both founders' energy, and exclusion of an already assigned assistant.
+- [ ] Verify exact-head Rust, desktop and installed-backend CI.
+- [ ] Add full-duration cross-cut completion/conservation and interruption/restart acceptance.
+- [ ] Continue terrain-aware routes and vehicle positions.
