@@ -34,6 +34,12 @@ pub const REPLAY_LOG_VERSION: u32 = 1;
 /// unbounded memory or disk while it is loaded or saved.
 pub const MAX_REPLAY_LOG_BYTES: u64 = 64 * 1024 * 1024;
 
+/// Default replay horizon in human ticks. The canonical local orbital year
+/// spans 37,349,219 seconds, or 622,487 ticks at a 60-second cadence. This
+/// ceiling allows a full local year plus over 10 percent margin; longer
+/// replays require an explicitly selected budget.
+pub const MAX_REPLAY_TICKS: u64 = 700_000;
+
 /// Reserve a fresh sibling temporary file without following or replacing an existing path.
 ///
 /// The bounded suffix search handles concurrent saves in one process and fails
@@ -355,6 +361,11 @@ pub enum IslandReplayError {
         path: String,
         limit_bytes: u64,
     },
+    /// A replay request would exceed the caller's tick budget.
+    ReplayBudgetExceeded {
+        tick: u64,
+        max_ticks: u64,
+    },
     /// Two commands claim the same ordering position within one tick.
     DuplicateSequence {
         tick: u64,
@@ -395,6 +406,10 @@ impl std::fmt::Display for IslandReplayError {
             Self::TooLarge { path, limit_bytes } => {
                 write!(f, "{path} exceeds the {limit_bytes}-byte replay log limit")
             }
+            Self::ReplayBudgetExceeded { tick, max_ticks } => write!(
+                f,
+                "replay tick {tick} exceeds the per-call limit of {max_ticks} ticks; replay from a snapshot or explicitly raise the budget"
+            ),
             Self::DuplicateSequence { tick, sequence } => write!(
                 f,
                 "replay log contains duplicate command sequence {sequence} at tick {tick}"
@@ -431,6 +446,19 @@ pub fn replay_island(
     log: &IslandReplayLog,
     until_tick: u64,
 ) -> Result<IslandLife, IslandReplayError> {
+    replay_island_with_budget(canon, scenario, log, until_tick, MAX_REPLAY_TICKS)
+}
+
+/// Replay with an explicit absolute tick ceiling for intentionally longer
+/// histories. This preserves the modern sparse-sequence and horizon-scoped
+/// validation semantics of the parent replay engine.
+pub fn replay_island_with_budget(
+    canon: Arc<CanonLocked>,
+    scenario: IslandScenario,
+    log: &IslandReplayLog,
+    until_tick: u64,
+    max_replay_ticks: u64,
+) -> Result<IslandLife, IslandReplayError> {
     // File loading checks the format version, but public in-memory logs can be
     // constructed directly. Apply the same fail-fast contract before the
     // scenario is bootstrapped or any entry is interpreted.
@@ -459,6 +487,14 @@ pub fn replay_island(
         }
     }
 
+    // Validate replay metadata and command ordering before enforcing the
+    // requested horizon, but never start an unbounded simulation.
+    if until_tick > max_replay_ticks {
+        return Err(IslandReplayError::ReplayBudgetExceeded {
+            tick: until_tick,
+            max_ticks: max_replay_ticks,
+        });
+    }
     let mut life = IslandLife::bootstrap(scenario, canon).map_err(IslandReplayError::Island)?;
 
     let here = life.scenario_digest_hex();

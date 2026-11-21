@@ -16,8 +16,9 @@ use mk_engine::regional::commands::{ControlCommand, IslandCommand};
 use mk_engine::regional::create_human::{CreateLocation, IslandCreateHuman};
 use mk_engine::regional::life::IslandLife;
 use mk_engine::regional::replay::{
-    replay_island, IslandReplayEntry, IslandReplayError, IslandReplayLog, ReplaySequenceExhausted,
-    MAX_REPLAY_LOG_BYTES, REPLAY_LOG_VERSION,
+    replay_island, replay_island_with_budget, IslandReplayEntry, IslandReplayError,
+    IslandReplayLog, ReplaySequenceExhausted, MAX_REPLAY_LOG_BYTES, MAX_REPLAY_TICKS,
+    REPLAY_LOG_VERSION,
 };
 use mk_island::IslandScenario;
 
@@ -527,6 +528,79 @@ fn a_log_from_another_island_is_refused() {
         Err(other) => panic!("the wrong refusal for a foreign log: {other}"),
         Ok(_) => panic!("a foreign log was accepted"),
     }
+}
+
+#[test]
+fn default_budget_covers_canonical_island_year_plus_ten_percent() {
+    // Derive this contract from the actual island's orbital period and
+    // human cadence. An Earth-year assumption is too short for Maer-Ken.
+    let canon: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(repo("fixtures/island/canon.json")).unwrap())
+            .unwrap();
+    let scenario: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(repo("fixtures/island/default_scenario.json")).unwrap(),
+    )
+    .unwrap();
+    let period_s = canon["orbital_period_s"].as_f64().unwrap();
+    let cadence_s = scenario["cadences"]["human_seconds"].as_u64().unwrap() as f64;
+    let year_ticks = (period_s / cadence_s).ceil() as u64;
+    let margin_ticks = year_ticks.div_ceil(10);
+    assert!(
+        MAX_REPLAY_TICKS >= year_ticks + margin_ticks,
+        "default replay budget {} cannot cover {} canonical ticks plus {} margin",
+        MAX_REPLAY_TICKS,
+        year_ticks,
+        margin_ticks
+    );
+}
+
+#[test]
+fn replay_refuses_a_far_future_command_before_bootstrapping() {
+    let requested_tick = MAX_REPLAY_TICKS + 1;
+    let log = IslandReplayLog::from_entries(
+        REPLAY_LOG_VERSION,
+        "b".repeat(64),
+        vec![IslandReplayEntry {
+            tick: requested_tick,
+            sequence: 0,
+            command: IslandCommand::Control(ControlCommand::Pause),
+        }],
+    );
+
+    assert!(matches!(
+        replay_island(canon(), scenario(), &log, requested_tick),
+        Err(IslandReplayError::ReplayBudgetExceeded { tick, max_ticks })
+            if tick == requested_tick && max_ticks == MAX_REPLAY_TICKS
+    ));
+}
+
+#[test]
+fn partial_replay_before_far_future_commands_remains_bounded() {
+    let log = IslandReplayLog::from_entries(
+        REPLAY_LOG_VERSION,
+        island().scenario_digest_hex(),
+        vec![IslandReplayEntry {
+            tick: MAX_REPLAY_TICKS + 1,
+            sequence: 0,
+            command: IslandCommand::Control(ControlCommand::Pause),
+        }],
+    );
+
+    let replayed = replay_island(canon(), scenario(), &log, 0)
+        .expect("a partial replay before future commands remains bounded");
+    assert_eq!(replayed.tick, 0);
+}
+
+#[test]
+fn replay_refuses_requested_horizon_beyond_explicit_budget() {
+    let log = IslandReplayLog::new("b".repeat(64));
+    assert!(matches!(
+        replay_island_with_budget(canon(), scenario(), &log, 2, 1),
+        Err(IslandReplayError::ReplayBudgetExceeded {
+            tick: 2,
+            max_ticks: 1
+        })
+    ));
 }
 
 /// An oversized replay file is refused from its metadata before its contents are read.
