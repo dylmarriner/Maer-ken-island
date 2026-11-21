@@ -988,6 +988,10 @@ impl IslandLife {
             snapshot.hauling.keys().cloned().collect();
         let mut claimed_log_ids = std::collections::BTreeSet::new();
         let mut claimed_saw_partners = std::collections::BTreeSet::new();
+        // Track exclusive destination ranges so separate restored jobs cannot
+        // consume one another's reserved pieces, even when the ledger already
+        // considers both ranges pending.
+        let mut claimed_cross_cut_ranges = std::collections::BTreeMap::<u64, u64>::new();
         let mut ute_claimed = false;
         let mut excavator_claimed = false;
         for (owner_id, job) in &snapshot.hauling {
@@ -1011,38 +1015,45 @@ impl IslandLife {
                         log_id,
                         pieces,
                         first_id,
-                    } => {
-                        if *log_id != job.log_id
-                            || !materials.restore_pending_cross_cut_ids(*log_id, *pieces, *first_id)
-                        {
-                            return Err(IslandLifeError::Labour(LabourError::InvalidHaulJobState));
-                        }
                     }
-                    timber::HaulAction::CrossCutCrew {
+                    | timber::HaulAction::CrossCutCrew {
                         log_id,
                         pieces,
                         first_id,
-                        partner_id,
                         ..
                     } => {
+                        let Some(end_exclusive) = first_id.checked_add(u64::from(*pieces)) else {
+                            return Err(IslandLifeError::Labour(LabourError::InvalidHaulJobState));
+                        };
+                        // Check predecessor and successor intervals without allocating
+                        // one entry per piece. Overlapping/repeated claims are invalid.
+                        let overlaps_predecessor = claimed_cross_cut_ranges
+                            .range(..=*first_id)
+                            .next_back()
+                            .is_some_and(|(_, prior_end)| *prior_end > *first_id);
+                        let overlaps_successor = claimed_cross_cut_ranges
+                            .range(*first_id..end_exclusive)
+                            .next()
+                            .is_some();
                         if *log_id != job.log_id
+                            || overlaps_predecessor
+                            || overlaps_successor
                             || !materials.restore_pending_cross_cut_ids(*log_id, *pieces, *first_id)
                         {
                             return Err(IslandLifeError::Labour(LabourError::InvalidHaulJobState));
                         }
-                        if snapshot.humans.registry.get_human(partner_id).is_none() {
-                            return Err(IslandLifeError::Labour(LabourError::InvalidHaulJobState));
-                        }
-                        if active_haul_owners.contains(partner_id)
-                            || !claimed_saw_partners.insert(partner_id.clone())
-                        {
-                            return Err(IslandLifeError::Labour(LabourError::InvalidHaulJobState));
-                        }
-                        if partner_id == owner_id {
-                            return Err(IslandLifeError::Labour(LabourError::InvalidHaulJobState));
-                        }
+                        claimed_cross_cut_ranges.insert(*first_id, end_exclusive);
                     }
                     _ => {}
+                }
+                if let timber::HaulAction::CrossCutCrew { partner_id, .. } = &task.action {
+                    if snapshot.humans.registry.get_human(partner_id).is_none()
+                        || active_haul_owners.contains(partner_id)
+                        || !claimed_saw_partners.insert(partner_id.clone())
+                        || partner_id == owner_id
+                    {
+                        return Err(IslandLifeError::Labour(LabourError::InvalidHaulJobState));
+                    }
                 }
             }
             match job.method {
@@ -2097,8 +2108,35 @@ impl IslandLife {
         body: &LabourBody,
         assigned_saw_assistants: &BTreeMap<String, (String, f64, f64)>,
     ) -> Result<Option<timber::HaulJob>, IslandLifeError> {
-        let claimed: std::collections::BTreeSet<u64> =
+        let mut claimed: std::collections::BTreeSet<u64> =
             self.hauling.values().map(|j| j.log_id).collect();
+        // After a cross-cut the original source log is gone, but the primary
+        // still owns every piece referenced by its outstanding haul tasks.
+        // Keep an assistant from re-claiming those pieces on the next tick.
+        for job in self.hauling.values() {
+            for task in &job.tasks {
+                match &task.action {
+                    timber::HaulAction::Drive { logs, .. }
+                    | timber::HaulAction::Load { logs, .. }
+                    | timber::HaulAction::Unload { logs } => {
+                        claimed.extend(logs.iter().copied());
+                    }
+                    timber::HaulAction::CrossCut { log_id, .. }
+                    | timber::HaulAction::CrossCutCrew { log_id, .. }
+                    | timber::HaulAction::CarryToStore { log_id }
+                    | timber::HaulAction::Lift { log_id, .. }
+                    | timber::HaulAction::SetDown { log_id } => {
+                        claimed.insert(*log_id);
+                    }
+                    timber::HaulAction::Track {
+                        log: Some(log_id), ..
+                    } => {
+                        claimed.insert(*log_id);
+                    }
+                    _ => {}
+                }
+            }
+        }
         let Some(log) = self
             .materials
             .logs()
@@ -5138,6 +5176,113 @@ mod tests {
             area,
             &mut ledger,
         )
+    }
+
+    #[test]
+    fn restore_rejects_overlapping_cross_cut_piece_ranges_across_solo_jobs() {
+        let scenario =
+            IslandScenario::load(&repo("fixtures/island/default_scenario.json")).unwrap();
+        let canon = Arc::new(CanonLocked::load(&repo("fixtures/island/canon.json")).unwrap());
+        let mut life =
+            IslandLife::bootstrap(scenario, canon.clone()).expect("the island bootstraps");
+        let source_a = add_test_ground_log(&mut life);
+        let source_b = add_test_ground_log(&mut life);
+        let first_id = life.materials.reserve_log_ids(3);
+        let make_job = |source, first| timber::HaulJob {
+            log_id: source,
+            method: timber::HaulMethod::OnFoot,
+            tasks: std::collections::VecDeque::from(vec![timber::HaulTask {
+                action: timber::HaulAction::CrossCut {
+                    log_id: source,
+                    pieces: 2,
+                    first_id: first,
+                },
+                duration_s: 60.0,
+                met: 3.0,
+                ends_at_m: (0.0, 0.0),
+            }]),
+            worked_s: 0.0,
+        };
+        let mut snapshot = life.snapshot();
+        snapshot
+            .hauling
+            .insert("Gem-D".into(), make_job(source_a, first_id));
+        snapshot
+            .hauling
+            .insert("Gem-K".into(), make_job(source_b, first_id + 1));
+        assert!(matches!(
+            IslandLife::restore(canon, snapshot),
+            Err(IslandLifeError::Labour(LabourError::InvalidHaulJobState))
+        ));
+    }
+
+    #[test]
+    fn restore_rejects_repeated_cross_cut_piece_claims_in_one_job() {
+        let scenario =
+            IslandScenario::load(&repo("fixtures/island/default_scenario.json")).unwrap();
+        let canon = Arc::new(CanonLocked::load(&repo("fixtures/island/canon.json")).unwrap());
+        let mut life =
+            IslandLife::bootstrap(scenario, canon.clone()).expect("the island bootstraps");
+        let source_id = add_test_ground_log(&mut life);
+        let first_id = life.materials.reserve_log_ids(2);
+        let repeated = timber::HaulTask {
+            action: timber::HaulAction::CrossCut {
+                log_id: source_id,
+                pieces: 2,
+                first_id,
+            },
+            duration_s: 60.0,
+            met: 3.0,
+            ends_at_m: (0.0, 0.0),
+        };
+        let mut snapshot = life.snapshot();
+        snapshot.hauling.insert(
+            "Gem-D".into(),
+            timber::HaulJob {
+                log_id: source_id,
+                method: timber::HaulMethod::OnFoot,
+                tasks: std::collections::VecDeque::from(vec![repeated.clone(), repeated]),
+                worked_s: 0.0,
+            },
+        );
+        assert!(matches!(
+            IslandLife::restore(canon, snapshot),
+            Err(IslandLifeError::Labour(LabourError::InvalidHaulJobState))
+        ));
+    }
+
+    #[test]
+    fn active_haul_manifest_prevents_another_founder_claiming_ground_pieces() {
+        let scenario =
+            IslandScenario::load(&repo("fixtures/island/default_scenario.json")).unwrap();
+        let canon = Arc::new(CanonLocked::load(&repo("fixtures/island/canon.json")).unwrap());
+        let mut life = IslandLife::bootstrap(scenario, canon).expect("the island bootstraps");
+        let source_id = add_test_ground_log(&mut life);
+        let claimed_piece = add_test_ground_log(&mut life);
+        let available_log = add_test_ground_log(&mut life);
+        life.hauling.insert(
+            "Gem-K".into(),
+            timber::HaulJob {
+                log_id: source_id,
+                method: timber::HaulMethod::OnFoot,
+                tasks: std::collections::VecDeque::from(vec![timber::HaulTask {
+                    action: timber::HaulAction::CarryToStore {
+                        log_id: claimed_piece,
+                    },
+                    duration_s: 60.0,
+                    met: 3.0,
+                    ends_at_m: (0.0, 0.0),
+                }]),
+                worked_s: 0.0,
+            },
+        );
+        let body = LabourBody::from_human(life.humans.registry.get_human("Gem-D").unwrap());
+        let at = life.haul_site().unwrap().garage_m;
+        let plan = life
+            .plan_haul("Gem-D", at, &body, &BTreeMap::new())
+            .unwrap()
+            .expect("the unrelated ground log remains available");
+        assert_eq!(plan.log_id, available_log);
     }
 
     #[test]
