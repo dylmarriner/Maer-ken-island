@@ -13,6 +13,7 @@ The replay budget guarded included commands but not the requested `until_tick`. 
 - Validate the canonical log header and reject duplicate command positions within the requested horizon; do not restore obsolete contiguous-sequence requirements.
 - Reject `until_tick > max_replay_ticks` before island bootstrap.
 - Preserve partial replay when a future command lies beyond the requested tick.
+- CLI callers can now opt in to longer histories with island replay --tick-budget N, without disabling the bounded default.
 - Generalize the error text so it describes both a requested horizon and a command tick.
 
 ## Regression

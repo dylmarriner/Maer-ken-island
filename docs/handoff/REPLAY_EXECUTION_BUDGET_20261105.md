@@ -10,7 +10,7 @@ A structurally valid replay log can contain a command at an extremely distant ti
 
 ## Change
 
-- Add a default per-call replay horizon of 600,000 human ticks. The canonical scenario uses 60-second ticks, so the default permits a full year (525,600 ticks) plus margin.
+- Add a default per-call replay horizon of 700,000 human ticks. The canonical orbital period is 37,349,219 seconds: at a 60-second human cadence, a full local year needs 622,487 ticks, leaving over 10% margin. This deliberately does not use an Earth year.
 - Return `ReplayBudgetExceeded` before island bootstrap when an included command exceeds the default horizon.
 - Add `replay_island_with_budget` for callers that intentionally need a longer replay and explicitly choose a higher absolute tick ceiling.
 - Preserve canonical log-header validation and horizon-scoped duplicate-position checks before execution. Imported sparse sequence numbers remain valid; future commands do not consume a partial replay's execution budget.

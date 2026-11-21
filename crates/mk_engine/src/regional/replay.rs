@@ -34,9 +34,11 @@ pub const REPLAY_LOG_VERSION: u32 = 1;
 /// unbounded memory or disk while it is loaded or saved.
 pub const MAX_REPLAY_LOG_BYTES: u64 = 64 * 1024 * 1024;
 
-/// Default replay horizon in human ticks. A one-year replay at 60-second
-/// cadence fits; longer runs must opt in to an explicit budget.
-pub const MAX_REPLAY_TICKS: u64 = 600_000;
+/// Default replay horizon in human ticks. The canonical local orbital year
+/// spans 37,349,219 seconds, or 622,487 ticks at a 60-second cadence. This
+/// ceiling allows a full local year plus over 10 percent margin; longer
+/// replays require an explicitly selected budget.
+pub const MAX_REPLAY_TICKS: u64 = 700_000;
 
 /// Reserve a fresh sibling temporary file without following or replacing an existing path.
 ///

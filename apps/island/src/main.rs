@@ -20,7 +20,7 @@ island serve   --frontend-only --backend <url> [--bind 0.0.0.0:3000]
 island export  --to <dir> [--backend <url>]
 island run     (--scenario <path> | --snapshot <path>) [--steps <n>] [--dt <seconds>]
                [--save <path>] [--save-root <dir>]
-island replay  --scenario <path> --log <path> [--until <tick>]
+island replay  --scenario <path> --log <path> [--until <tick>] [--tick-budget <n>]
 island inspect --snapshot <path> [--scenario <path>]
 
 serve    the dashboard: the overview at /, the roster at /people, the island
@@ -89,6 +89,8 @@ replay   a recorded run, printing the digest it reaches. It should be the
   --scenario PATH  the scenario the log was recorded against
   --log PATH       the log to replay
   --until TICK     stop at this tick (default: the log's last command)
+  --tick-budget N  maximum replay ticks (default 700000); explicitly increase
+                   for longer histories
 
 export   write the dashboard out as plain files, for any web server. The
          pages, the stylesheet, the scripts and a config.js naming the
@@ -209,6 +211,11 @@ fn headless_replay(args: &[String]) {
                 usage()
             })
         }),
+        number(
+            args,
+            "--tick-budget",
+            mk_engine::regional::replay::MAX_REPLAY_TICKS,
+        ),
     ));
 }
 

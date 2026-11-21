@@ -12,7 +12,7 @@ use std::sync::Arc;
 use mk_core::canon::CanonLocked;
 use mk_engine::io::{load_island_snapshot, save_island_snapshot};
 use mk_engine::regional::life::IslandLife;
-use mk_engine::regional::replay::{replay_island, IslandReplayLog};
+use mk_engine::regional::replay::{replay_island_with_budget, IslandReplayLog};
 use mk_island::IslandScenario;
 
 /// Hex for a digest, the form every other tool in the project prints.
@@ -195,7 +195,12 @@ pub fn commands_from_phase_0b(
 /// original run printed. A replay that reached somewhere else would mean
 /// the island depends on something the log does not record, and the digest
 /// would stop being a statement about the world.
-pub fn replay(scenario_path: &Path, log_path: &Path, until: Option<u64>) -> Result<(), String> {
+pub fn replay(
+    scenario_path: &Path,
+    log_path: &Path,
+    until: Option<u64>,
+    tick_budget: u64,
+) -> Result<(), String> {
     let scenario = IslandScenario::load(scenario_path).map_err(|e| e.to_string())?;
     let canon = canon_for(scenario_path, &scenario)?;
     let log = IslandReplayLog::load(log_path).map_err(|e| e.to_string())?;
@@ -205,7 +210,7 @@ pub fn replay(scenario_path: &Path, log_path: &Path, until: Option<u64>) -> Resu
     println!("  commands  {}", log.entries().len());
     println!("  to tick   {until}");
 
-    let life = replay_island(Arc::new(canon), scenario, &log, until)
+    let life = replay_island_with_budget(Arc::new(canon), scenario, &log, until, tick_budget)
         .map_err(|e| format!("the replay stopped: {e}"))?;
 
     println!("  digest    {}", hex(life.state_digest()));
