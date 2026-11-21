@@ -437,6 +437,9 @@ pub fn replay_island(
     if log.version != REPLAY_LOG_VERSION {
         return Err(IslandReplayError::Version(log.version));
     }
+    // Direct in-memory logs bypass load(): enforce the same canonical
+    // scenario identity boundary before scanning entries or bootstrapping.
+    validate_scenario_digest(&log.scenario_digest)?;
 
     // Validate the requested replay horizon before bootstrapping. A duplicate
     // (tick, sequence) pair has no deterministic command order, even if the

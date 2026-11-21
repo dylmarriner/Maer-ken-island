@@ -1,3 +1,7 @@
+## Replay PR #75 in-memory preflight — 18 November 2026
+
+- The PR #75 stack now uses the updated PR #74 replay loader and adds canonical scenario digest validation for direct in-memory `replay_island` calls before command scanning or bootstrap. The targeted regression failed before the fix and passed afterward; the valid foreign-island mismatch acceptance and three inherited replay-file boundary tests also passed. See `docs/handoff/REPLAY_INMEMORY_RECONCILIATION_20261118.md`. Exact-head CI is still required before merge.
+
 ## Replay PR #74 reconciliation — 18 November 2026
 
 - The 65 unpublished replay commits have been pushed and preserved as a clean backup-drive worktree. An isolated PR #74 reconciliation retains modern sparse sequence/indexing, file-size and no-follow protections, and adds replay import/save version and canonical scenario-digest preflights. Three new tests failed before the fix and passed afterward; the two existing file-security tests also passed. See `docs/handoff/REPLAY_65_COMMIT_RECONCILIATION_20261118.md`. Exact-head GitHub CI remains required before merge.
